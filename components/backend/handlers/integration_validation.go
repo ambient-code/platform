@@ -202,8 +202,8 @@ func TestGitLabConnection(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"valid": true, "message": "GitLab connection successful"})
 }
 
-// ValidateCodeRabbitAPIKey checks if a CodeRabbit API key is valid
-func ValidateCodeRabbitAPIKey(ctx context.Context, apiKey string) error {
+// validateCodeRabbitAPIKeyImpl is the default implementation
+func validateCodeRabbitAPIKeyImpl(ctx context.Context, apiKey string) error {
 	if apiKey == "" {
 		return fmt.Errorf("API key is empty")
 	}
@@ -228,6 +228,9 @@ func ValidateCodeRabbitAPIKey(ctx context.Context, apiKey string) error {
 
 	return nil
 }
+
+// ValidateCodeRabbitAPIKey is mockable for testing
+var ValidateCodeRabbitAPIKey = validateCodeRabbitAPIKeyImpl
 
 // TestCodeRabbitConnection handles POST /api/auth/coderabbit/test
 func TestCodeRabbitConnection(c *gin.Context) {
