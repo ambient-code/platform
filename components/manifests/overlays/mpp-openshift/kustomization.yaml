@@ -12,6 +12,7 @@ resources:
 - ambient-control-plane.yaml
 - ambient-api-server-route.yaml
 - ambient-control-plane-sa.yaml
+- ambient-control-plane-rbac.yaml
 - ambient-tenant-ingress-netpol.yaml
 
 patches:
