@@ -2,6 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: ambient-api-server-auth
+  namespace: ambient-code--runtime-int
   labels:
     app: ambient-api-server
     component: auth
@@ -16,6 +17,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: ambient-api-server
+  namespace: ambient-code--runtime-int
   labels:
     app: ambient-api-server
 ---
@@ -23,6 +25,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ambient-api-server
+  namespace: ambient-code--runtime-int
   labels:
     app: ambient-api-server
     component: api
@@ -145,6 +148,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: ambient-api-server
+  namespace: ambient-code--runtime-int
   labels:
     app: ambient-api-server
     component: api

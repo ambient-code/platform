@@ -1,0 +1,9 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ambient-control-plane-tenant-namespaces
+  namespace: ambient-code--config
+rules:
+  - apiGroups: ["tenant.paas.redhat.com"]
+    resources: ["tenantnamespaces"]
+    verbs: ["get", "list", "watch", "create", "delete"]
