@@ -7,7 +7,6 @@ metadata:
     component: api
     shard: internal
 spec:
-  host: ambient-api-server-ambient-code--runtime-int.internal-router-shard.mpp-w2-preprod.cfln.p1.openshiftapps.com
   to:
     kind: Service
     name: ambient-api-server
