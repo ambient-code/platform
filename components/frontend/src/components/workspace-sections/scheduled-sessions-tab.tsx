@@ -1,7 +1,7 @@
 "use client";
 
 import { formatDistanceToNow } from "date-fns";
-import { Plus, RefreshCw, MoreVertical, Play, Pause, PlayCircle, Trash2, Calendar, Loader2, AlertCircle } from "lucide-react";
+import { Plus, RefreshCw, MoreVertical, Play, Pause, Pencil, PlayCircle, Trash2, Calendar, Loader2, AlertCircle } from "lucide-react";
 import { getCronDescription } from "@/lib/cron";
 
 import { Button } from "@/components/ui/button";
@@ -182,6 +182,12 @@ export function SchedulesSection({ projectName }: SchedulesSectionProps) {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              <DropdownMenuItem asChild>
+                                <Link href={`/projects/${projectName}/scheduled-sessions/${ss.name}/edit`}>
+                                  <Pencil className="h-4 w-4 mr-2" />
+                                  Edit
+                                </Link>
+                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleTrigger(ss.name)}>
                                 <PlayCircle className="h-4 w-4 mr-2" />
                                 Trigger Now

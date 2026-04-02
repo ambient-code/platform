@@ -19,7 +19,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
 
-	"ambient-code-operator/internal/handlers"
 	"ambient-code-operator/internal/types"
 )
 
@@ -143,9 +142,17 @@ func tryReuseLastSession(dynamicClient dynamic.Interface, namespace, scheduledSe
 	}
 }
 
-// sendFollowUpPrompt sends a prompt to a running session via the runner's AG-UI endpoint.
+// sendFollowUpPrompt sends a prompt to a running session via the backend's AG-UI proxy.
+// This ensures events are persisted and broadcast to the UI.
 func sendFollowUpPrompt(namespace, sessionName, prompt string) error {
-	runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:%d/", sessionName, namespace, handlers.DefaultRunnerPort)
+	backendNS := os.Getenv("BACKEND_NAMESPACE")
+	if backendNS == "" {
+		backendNS = "ambient-code"
+	}
+	backendURL := fmt.Sprintf(
+		"http://backend-service.%s.svc.cluster.local:8080/api/projects/%s/agentic-sessions/%s/agui/run",
+		backendNS, namespace, sessionName,
+	)
 
 	input := map[string]interface{}{
 		"threadId": sessionName,
@@ -164,24 +171,31 @@ func sendFollowUpPrompt(namespace, sessionName, prompt string) error {
 		return fmt.Errorf("failed to marshal run input: %v", err)
 	}
 
-	req, err := http.NewRequest("POST", runnerURL, bytes.NewReader(body))
+	// Read the service account token for backend auth
+	token, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token")
+	if err != nil {
+		return fmt.Errorf("failed to read service account token: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", backendURL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+string(token))
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to send request to runner: %v", err)
+		return fmt.Errorf("failed to send request to backend: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("runner returned status %d", resp.StatusCode)
+		return fmt.Errorf("backend returned status %d", resp.StatusCode)
 	}
 
-	log.Printf("Successfully sent follow-up prompt to session %s (status %d)", sessionName, resp.StatusCode)
+	log.Printf("Successfully sent follow-up prompt to session %s via backend (status %d)", sessionName, resp.StatusCode)
 	return nil
 }
 

@@ -7,6 +7,7 @@ import {
   Loader2,
   MoreVertical,
   Pause,
+  Pencil,
   Play,
   PlayCircle,
   Trash2,
@@ -162,6 +163,10 @@ export default function ScheduledSessionDetailPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => router.push(`/projects/${encodeURIComponent(projectName)}/scheduled-sessions/${encodeURIComponent(scheduledSessionName)}/edit`)}>
+                <Pencil className="h-4 w-4 mr-2" />
+                Edit
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={handleSuspendResume}>
                 {scheduledSession.suspend ? (
                   <>
