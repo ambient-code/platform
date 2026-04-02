@@ -275,10 +275,10 @@ jobs:
             AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}" \
             STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ github.sha }}"
 
-      - name: Pin OPERATOR_IMAGE on backend for scheduled session triggers
+      - name: Pin OPERATOR_IMAGE in operator-config ConfigMap
         run: |
-          oc set env deployment/backend-api -n ambient-code -c backend-api \
-            OPERATOR_IMAGE="quay.io/ambient_code/vteam_operator:${{ github.sha }}"
+          oc patch configmap operator-config -n ambient-code --type=merge \
+            -p "{\"data\":{\"OPERATOR_IMAGE\":\"quay.io/ambient_code/vteam_operator:${{ github.sha }}\"}}"
 
       - name: Update agent registry ConfigMap with pinned image tags
         run: |
@@ -350,10 +350,10 @@ jobs:
             AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}" \
             STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ github.sha }}"
 
-      - name: Pin OPERATOR_IMAGE on backend for scheduled session triggers
+      - name: Pin OPERATOR_IMAGE in operator-config ConfigMap
         run: |
-          oc set env deployment/backend-api -n ambient-code -c backend-api \
-            OPERATOR_IMAGE="quay.io/ambient_code/vteam_operator:${{ github.sha }}"
+          oc patch configmap operator-config -n ambient-code --type=merge \
+            -p "{\"data\":{\"OPERATOR_IMAGE\":\"quay.io/ambient_code/vteam_operator:${{ github.sha }}\"}}"
 
       - name: Update agent registry ConfigMap with pinned image tags
         run: |

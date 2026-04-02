@@ -104,13 +104,7 @@ spec:
               name: google-workflow-app-secret
               key: BACKEND_URL
               optional: true
-        # Operator image for scheduled session trigger jobs
-        - name: OPERATOR_IMAGE
-          valueFrom:
-            configMapKeyRef:
-              name: operator-config
-              key: OPERATOR_IMAGE
-              optional: true
+        # OPERATOR_IMAGE for scheduled session triggers is set by CI via oc set env
         # OOTB Workflows Configuration
         - name: OOTB_WORKFLOWS_REPO
           value: "https://github.com/ambient-code/workflows.git"
