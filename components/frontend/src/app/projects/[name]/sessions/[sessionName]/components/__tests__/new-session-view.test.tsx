@@ -42,9 +42,14 @@ vi.mock('../workflow-selector', () => ({
 
 vi.mock('../modals/add-context-modal', () => ({
   AddContextModal: ({ onAddRepository }: { open: boolean; onAddRepository: (url: string, branch: string, autoPush?: boolean) => Promise<void> }) => (
-    <span data-testid="add-repo-btn" role="none" onClick={() => onAddRepository('https://github.com/org/platform.git', '')}>
-      Add repo
-    </span>
+    <>
+      <span data-testid="add-repo-btn" role="none" onClick={() => onAddRepository('https://github.com/org/platform.git', '')}>
+        Add repo
+      </span>
+      <span data-testid="add-repo-with-branch-btn" role="none" onClick={() => onAddRepository('https://github.com/org/other.git', 'develop', true)}>
+        Add repo with branch
+      </span>
+    </>
   ),
 }));
 
@@ -111,6 +116,43 @@ describe('NewSessionView', () => {
     fireEvent.change(textarea, { target: { value: 'some text' } });
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true });
     expect(defaultProps.onCreateSession).not.toHaveBeenCalled();
+  });
+
+  it('includes branch and autoPush in onCreateSession when repo is added with branch', () => {
+    render(<NewSessionView {...defaultProps} />);
+
+    // Add a repo with branch via the mock AddContextModal
+    fireEvent.click(screen.getByTestId('add-repo-with-branch-btn'));
+
+    // Type a prompt and submit
+    const textarea = screen.getByPlaceholderText("Describe what you'd like to work on...");
+    fireEvent.change(textarea, { target: { value: 'Fix a bug' } });
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+
+    expect(defaultProps.onCreateSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'Fix a bug',
+        repos: [
+          { url: 'https://github.com/org/other.git', branch: 'develop', autoPush: true },
+        ],
+      })
+    );
+  });
+
+  it('omits branch from repos when no branch is specified', () => {
+    render(<NewSessionView {...defaultProps} />);
+
+    // Add a repo without branch
+    fireEvent.click(screen.getByTestId('add-repo-btn'));
+
+    const textarea = screen.getByPlaceholderText("Describe what you'd like to work on...");
+    fireEvent.change(textarea, { target: { value: 'Fix a bug' } });
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+
+    const call = defaultProps.onCreateSession.mock.calls[0][0];
+    expect(call.repos).toHaveLength(1);
+    expect(call.repos[0].url).toBe('https://github.com/org/platform.git');
+    expect(call.repos[0].branch).toBeUndefined();
   });
 
   it('removes a pending repo badge when the X button is clicked', () => {
