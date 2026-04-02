@@ -1,5 +1,9 @@
 name: Issue Triage
 
+concurrency:
+  group: issue-triage
+  cancel-in-progress: false
+
 on:
   # Daily: weekdays at 8am UTC
   schedule:

@@ -12,12 +12,16 @@ on:
   # Manual: for batch run
   workflow_dispatch:
 
+concurrency:
+  group: pr-fixer-batch
+  cancel-in-progress: false
+
 permissions:
   contents: read
   pull-requests: read
 
 jobs:
-  # -- Single PR: triggered by label, comment, or manual dispatch --
+  # -- Single PR: triggered by @ambient-fix comment --
   fix-single:
     if: >-
       github.event_name == 'issue_comment'
@@ -33,8 +37,7 @@ jobs:
         id: pr
         run: echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
 
-      - name: Check PR is not a fork (issue_comment)
-        if: github.event_name == 'issue_comment'
+      - name: Check PR is not a fork
         id: fork_check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -45,24 +48,6 @@ jobs:
             echo "skip=true" >> $GITHUB_OUTPUT
           else
             echo "skip=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Check for existing session
-        if: steps.fork_check.outputs.skip != 'true'
-        id: existing
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Read PR body and extract session_id from frontmatter
-          BODY=$(gh pr view ${{ steps.pr.outputs.number }} --repo "${{ github.repository }}" --json body --jq '.body')
-          SESSION_ID=$(echo "$BODY" | grep -oP 'acp:session_id=\K[^ ]+' | head -1 || echo "")
-          SOURCE=$(echo "$BODY" | grep -oP 'source=\K[^ ]+' | head -1 || echo "")
-          echo "session_id=$SESSION_ID" >> $GITHUB_OUTPUT
-          echo "source=$SOURCE" >> $GITHUB_OUTPUT
-          if [ -n "$SESSION_ID" ]; then
-            echo "Found existing session: $SESSION_ID"
-          else
-            echo "No existing session found — will create new one"
           fi
 
       - name: Fix PR
@@ -86,7 +71,7 @@ jobs:
             3. Push fixes to the PR branch.
             4. Ensure the PR body contains this frontmatter as the first line
                (read your session ID from the AGENTIC_SESSION_NAME environment variable):
-               <!-- acp:session_id=$AGENTIC_SESSION_NAME source=${{ steps.existing.outputs.source || 'unknown' }} last_action=<ISO8601_NOW> retry_count=0 -->
+               <!-- acp:session_id=$AGENTIC_SESSION_NAME source=unknown last_action=<ISO8601_NOW> retry_count=0 -->
             5. Do not merge. Do not close. Do not force-push.
             6. If the PR is fundamentally broken beyond repair, add a comment explaining the situation and stop.
           repos: >-
@@ -130,7 +115,7 @@ jobs:
 
             ## Find PRs
 
-            Run: gh pr list --repo ${{ github.repository }} --state open --label ai-managed --search "draft:false"
+            Run: gh pr list --repo ${{ github.repository }} --state open --label ai-managed --search "draft:false" --limit 200
 
             For each PR:
 
@@ -170,7 +155,10 @@ jobs:
               4. Write frontmatter: <!-- acp:session_id=$AGENTIC_SESSION_NAME source=<KEY> last_action=<NOW> retry_count=0 -->
               5. If broken beyond repair, comment and stop."
 
-            After sending: increment retry_count and update last_action in frontmatter.
+            After sending:
+            - If the PR is still broken (CI failing, conflicts unresolved, reviews unaddressed), increment retry_count.
+            - If the PR is healthy (CI passing, no open review threads, no conflicts), reset retry_count to 0.
+            - Update last_action in frontmatter.
 
             ## Rules
             - No-op if nothing changed. Do not interact with the session.
