@@ -15,6 +15,18 @@ resources:
 - ambient-control-plane-rbac.yaml
 - ambient-tenant-ingress-netpol.yaml
 
+replacements:
+- source:
+    kind: ServiceAccount
+    name: ambient-control-plane
+    fieldPath: metadata.namespace
+  targets:
+  - select:
+      kind: RoleBinding
+      name: ambient-control-plane-tenant-namespaces
+    fieldPaths:
+    - subjects.0.namespace
+
 patches:
 - path: ambient-api-server-args-patch.yaml
   target:
