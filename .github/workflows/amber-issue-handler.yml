@@ -1,655 +1,290 @@
-# Amber Issue-to-PR Handler
+# Amber Handler
 #
-# This workflow automates issue resolution via the Amber background agent.
+# Single workflow for all Amber AI automation.
 #
 # TRIGGERS:
-# - Issue labeled with: amber:auto-fix, amber:refactor, amber:test-coverage
-# - Issue comment containing: /amber execute or @amber
+# - Issue labeled with: amber:auto-fix
+# - Comment containing @amber on an issue or PR (members/owners/collaborators only)
+# - Cron: every 30 min weekdays (batch PR management)
+# - Manual dispatch (batch PR management)
 #
 # BEHAVIOR:
-# - Checks for existing open PR for the issue (prevents duplicate PRs)
-# - Creates or updates feature branch: amber/issue-{number}-{sanitized-title}
-# - Runs Claude Code to implement changes
-# - Creates PR or pushes to existing PR
-#
-# SECURITY:
-# - Validates branch names against injection attacks
-# - Uses strict regex matching for PR lookup
-# - Handles race conditions when PRs are closed during execution
+# - On an issue (label or @amber): creates ACP session to investigate and fix, creates PR with amber:managed + frontmatter
+# - On a PR (@amber): creates ACP session to follow instruction or fix CI/conflicts/reviews
+# - Batch cron: orchestrator manages all amber:managed PRs (session reuse, change detection, circuit breaker)
 
-name: Amber Issue-to-PR Handler
+name: Amber Handler
 
 on:
   issues:
-    types: [labeled, opened]
+    types: [labeled]
   issue_comment:
     types: [created]
+  schedule:
+    - cron: '*/30 * * * 1-5'
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   issues: write
   pull-requests: write
-  id-token: write  # Required for OIDC token (Bedrock/Vertex/Foundry/OAuth)
 
 jobs:
-  amber-handler:
+  # -- Issue: labeled amber:auto-fix --
+  handle-issue-label:
+    if: >-
+      github.event_name == 'issues'
+      && github.event.label.name == 'amber:auto-fix'
+    concurrency:
+      group: amber-issue-${{ github.event.issue.number }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
-    timeout-minutes: 30  # Issue #7: Prevent runaway jobs
-    # Only run for specific labels, commands, or @amber mentions
-    if: |
-      (github.event.label.name == 'amber:auto-fix' ||
-       github.event.label.name == 'amber:refactor' ||
-       github.event.label.name == 'amber:test-coverage' ||
-       contains(github.event.comment.body, '/amber execute') ||
-       contains(github.event.comment.body, '@amber'))
-
+    timeout-minutes: 30
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Determine Amber action type
-        id: action-type
+      - name: Resolve issue details
+        id: issue
         env:
-          LABEL_NAME: ${{ github.event.label.name }}
-          COMMENT_BODY: ${{ github.event.comment.body }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Parse label or comment to determine action
-          if [[ "$LABEL_NAME" == "amber:auto-fix" ]]; then
-            echo "type=auto-fix" >> $GITHUB_OUTPUT
-            echo "severity=low" >> $GITHUB_OUTPUT
-          elif [[ "$LABEL_NAME" == "amber:refactor" ]]; then
-            echo "type=refactor" >> $GITHUB_OUTPUT
-            echo "severity=medium" >> $GITHUB_OUTPUT
-          elif [[ "$LABEL_NAME" == "amber:test-coverage" ]]; then
-            echo "type=test-coverage" >> $GITHUB_OUTPUT
-            echo "severity=medium" >> $GITHUB_OUTPUT
-          elif [[ "$COMMENT_BODY" == *"/amber execute"* ]] || [[ "$COMMENT_BODY" == *"@amber"* ]]; then
-            # Treat @amber mentions same as /amber execute - let Claude figure out the intent
-            echo "type=execute-proposal" >> $GITHUB_OUTPUT
-            echo "severity=medium" >> $GITHUB_OUTPUT
-          else
-            echo "type=unknown" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-
-      - name: Extract issue details
-        id: issue-details
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const issue = context.payload.issue;
-
-            // Parse issue body for Amber-compatible context
-            const body = issue.body || '';
-
-            // Extract file paths mentioned in issue
-            const filePattern = /(?:File|Path):\s*`?([^\s`]+)`?/gi;
-            const files = [...body.matchAll(filePattern)].map(m => m[1]);
-
-            // Extract specific instructions
-            const instructionPattern = /(?:Instructions?|Task):\s*\n([\s\S]*?)(?:\n#{2,}|\n---|\n\*\*|$)/i;
-            const instructionMatch = body.match(instructionPattern);
-            const instructions = instructionMatch ? instructionMatch[1].trim() : '';
-
-            // Set outputs
-            core.setOutput('issue_number', issue.number);
-            core.setOutput('issue_title', issue.title);
-            core.setOutput('issue_body', body);
-            core.setOutput('files', JSON.stringify(files));
-            core.setOutput('instructions', instructions || issue.title);
-
-            console.log('Parsed issue:', {
-              number: issue.number,
-              title: issue.title,
-              files: files,
-              instructions: instructions || issue.title
-            });
-
-      - name: Create Amber agent prompt
-        id: create-prompt
-        env:
-          ISSUE_NUMBER: ${{ steps.issue-details.outputs.issue_number }}
-          ISSUE_TITLE: ${{ steps.issue-details.outputs.issue_title }}
-          ISSUE_INSTRUCTIONS: ${{ steps.issue-details.outputs.instructions }}
-          ISSUE_FILES: ${{ steps.issue-details.outputs.files }}
-          ACTION_TYPE: ${{ steps.action-type.outputs.type }}
-          ACTION_SEVERITY: ${{ steps.action-type.outputs.severity }}
-        run: |
-          cat > /tmp/amber-prompt.md <<'EOF'
-          # Amber Agent Task: Issue #${ISSUE_NUMBER}
-
-          **Action Type:** ${ACTION_TYPE}
-          **Severity:** ${ACTION_SEVERITY}
-
-          ## Issue Details
-          **Title:** ${ISSUE_TITLE}
-
-          **Instructions:**
-          ${ISSUE_INSTRUCTIONS}
-
-          **Files to modify (if specified):**
-          ${ISSUE_FILES}
-
-          ## Your Mission
-
-          Based on the action type, perform the following:
-
-          ### For `auto-fix` type:
-          1. Identify the specific linting/formatting issues mentioned
-          2. Run appropriate formatters (gofmt, black, prettier, etc.)
-          3. Fix any trivial issues (unused imports, spacing, etc.)
-          4. Ensure all changes pass existing tests
-          5. Create a clean commit with conventional format
-
-          ### For `refactor` type:
-          1. Analyze the current code structure
-          2. Implement the refactoring as described in the issue
-          3. Ensure backward compatibility (no breaking changes)
-          4. Add/update tests to cover refactored code
-          5. Verify all existing tests still pass
-
-          ### For `test-coverage` type:
-          1. Analyze current test coverage for specified files
-          2. Identify untested code paths
-          3. Write contract tests following project standards (see CLAUDE.md)
-          4. Ensure tests follow table-driven test pattern (Go) or pytest patterns (Python)
-          5. Verify all new tests pass
-
-          ### For `execute-proposal` type:
-          1. Read the full issue body for the proposed implementation
-          2. Execute the changes as specified in the proposal
-          3. Follow the risk assessment and rollback plan provided
-          4. Ensure all testing strategies are implemented
-
-          ## Requirements
-
-          - Follow all standards in `CLAUDE.md`
-          - Use conventional commit format: `type(scope): message`
-          - Run all linters BEFORE committing:
-            - Go: `gofmt -w .`, `golangci-lint run`
-            - Python: `black .`, `isort .`, `flake8`
-            - TypeScript: `npm run lint`
-          - Ensure ALL tests pass: `make test`
-          - Create branch following pattern: `amber/issue-${ISSUE_NUMBER}-{description}`
-
-          ## Success Criteria
-
-          - All linters pass with 0 warnings
-          - All existing tests pass
-          - New code follows project conventions
-          - Commit message is clear and follows conventional format
-          - Changes are focused on issue scope (no scope creep)
-
-          ## Output Format
-
-          After completing the work, provide:
-          1. **Summary of changes** (2-3 sentences)
-          2. **Files modified** (list with line count changes)
-          3. **Test results** (pass/fail for each test suite)
-          4. **Linting results** (confirm all pass)
-          5. **Commit SHA**
-
-          Ready to execute!
-          EOF
-
-          # Substitute environment variables
-          envsubst < /tmp/amber-prompt.md > amber-prompt.md
-
-          echo "prompt_file=amber-prompt.md" >> $GITHUB_OUTPUT
+          NUMBER="${{ github.event.issue.number }}"
+          TITLE=$(gh issue view "$NUMBER" --repo "${{ github.repository }}" --json title --jq '.title')
+          echo "number=$NUMBER" >> $GITHUB_OUTPUT
+          echo "title=$TITLE" >> $GITHUB_OUTPUT
 
       - name: Check for existing PR
-        id: check-existing-pr
+        id: existing
         env:
-          ISSUE_NUMBER: ${{ steps.issue-details.outputs.issue_number }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Validate issue number is numeric to prevent injection
-          if ! [[ "$ISSUE_NUMBER" =~ ^[0-9]+$ ]]; then
-            echo "Error: Invalid issue number format"
-            exit 1
-          fi
-
-          # Check if there's already an open PR for this issue using stricter matching
-          # Search for PRs that reference this issue and filter by body containing exact "Closes #N" pattern
-          EXISTING_PR=$(gh pr list --state open --json number,headRefName,body --jq \
-            ".[] | select(.body | test(\"Closes #${ISSUE_NUMBER}($|[^0-9])\")) | {number, headRefName}" \
-            2>/dev/null | head -1 || echo "")
-
-          if [ -n "$EXISTING_PR" ] && [ "$EXISTING_PR" != "null" ] && [ "$EXISTING_PR" != "{}" ]; then
-            PR_NUMBER=$(echo "$EXISTING_PR" | jq -r '.number')
-            EXISTING_BRANCH=$(echo "$EXISTING_PR" | jq -r '.headRefName')
-
-            # Validate branch name format to prevent command injection
-            if ! [[ "$EXISTING_BRANCH" =~ ^[a-zA-Z0-9/_.-]+$ ]]; then
-              echo "Error: Invalid branch name format in existing PR"
-              echo "existing_pr=false" >> $GITHUB_OUTPUT
-              exit 0
-            fi
-
-            echo "existing_pr=true" >> $GITHUB_OUTPUT
-            echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
-            echo "existing_branch=$EXISTING_BRANCH" >> $GITHUB_OUTPUT
-            echo "Found existing PR #$PR_NUMBER on branch $EXISTING_BRANCH"
+          NUMBER="${{ steps.issue.outputs.number }}"
+          EXISTING=$(gh pr list --repo "${{ github.repository }}" --state open --label "amber:managed" --json number,body --jq ".[] | select(.body | test(\"source=.*#${NUMBER}\")) | .number" | head -1 || echo "")
+          if [ -n "$EXISTING" ]; then
+            echo "Found existing amber:managed PR #$EXISTING for issue #$NUMBER — skipping"
+            echo "skip=true" >> $GITHUB_OUTPUT
           else
-            echo "existing_pr=false" >> $GITHUB_OUTPUT
-            echo "No existing PR found for issue #${ISSUE_NUMBER}"
+            echo "skip=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create or checkout feature branch
-        id: create-branch
+      - name: Create session
+        if: steps.existing.outputs.skip != 'true'
+        id: session
+        uses: ambient-code/ambient-action@v0.0.3
+        with:
+          api-url: ${{ secrets.AMBIENT_API_URL }}
+          api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
+          project: ${{ secrets.AMBIENT_PROJECT }}
+          prompt: |
+            You are investigating and fixing a GitHub issue.
+
+            Source: #${{ steps.issue.outputs.number }} — ${{ steps.issue.outputs.title }}
+            URL: https://github.com/${{ github.repository }}/issues/${{ steps.issue.outputs.number }}
+
+            ## Instructions
+
+            1. Read the issue and understand the problem.
+            2. Explore the codebase to find the relevant code.
+            3. Implement a fix. Write tests if the area has existing test coverage.
+            4. Create a PR with a clear description. Include this frontmatter as the
+               first line of the PR body (read your session ID from the
+               AGENTIC_SESSION_NAME environment variable):
+               <!-- acp:session_id=$AGENTIC_SESSION_NAME source=#${{ steps.issue.outputs.number }} last_action=<ISO8601_NOW> retry_count=0 -->
+            5. Add the `amber:managed` label to the PR.
+            6. Ensure CI passes. If it fails, investigate and fix.
+            7. Do not merge. Leave the PR open for human review.
+          repos: >-
+            [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
+          model: claude-opus-4-6
+          wait: 'true'
+          timeout: '60'
+
+      - name: Post-session labels and comment
+        if: steps.existing.outputs.skip != 'true'
         env:
-          ISSUE_NUMBER: ${{ steps.issue-details.outputs.issue_number }}
-          ISSUE_TITLE: ${{ steps.issue-details.outputs.issue_title }}
-          EXISTING_PR: ${{ steps.check-existing-pr.outputs.existing_pr }}
-          EXISTING_BRANCH: ${{ steps.check-existing-pr.outputs.existing_branch }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SESSION_NAME: ${{ steps.session.outputs.session-name }}
+          SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
         run: |
-          git config user.name "Amber Agent"
-          git config user.email "amber@ambient-code.ai"
-
-          # Validate issue number format
-          if ! [[ "$ISSUE_NUMBER" =~ ^[0-9]+$ ]]; then
-            echo "Error: Invalid issue number format"
-            exit 1
+          gh issue edit ${{ steps.issue.outputs.number }} --repo "${{ github.repository }}" --add-label "amber:triaged" || true
+          if [ -n "$SESSION_NAME" ]; then
+            gh issue comment ${{ steps.issue.outputs.number }} --repo "${{ github.repository }}" --body "Session \`$SESSION_NAME\` created (phase: $SESSION_PHASE). PR will have the \`amber:managed\` label."
           fi
 
-          checkout_branch() {
-            local branch="$1"
-            local is_existing="$2"
-
-            # Validate branch name format (alphanumeric, slashes, dashes, dots, underscores only)
-            if ! [[ "$branch" =~ ^[a-zA-Z0-9/_.-]+$ ]]; then
-              echo "Error: Invalid branch name format: $branch"
-              return 1
-            fi
-
-            echo "Attempting to checkout branch: $branch"
-            if git fetch origin "$branch" 2>/dev/null; then
-              git checkout -B "$branch" "origin/$branch"
-              echo "Checked out existing remote branch: $branch"
-            elif [ "$is_existing" == "true" ]; then
-              # Race condition: PR existed but branch was deleted
-              echo "Warning: Branch $branch no longer exists on remote (PR may have been closed)"
-              return 1
-            else
-              echo "Creating new branch: $branch"
-              git checkout -b "$branch"
-            fi
-            return 0
-          }
-
-          if [ "$EXISTING_PR" == "true" ] && [ -n "$EXISTING_BRANCH" ]; then
-            # Try to checkout existing PR branch with race condition handling
-            if ! checkout_branch "$EXISTING_BRANCH" "true"; then
-              echo "Existing PR branch unavailable, falling back to new branch creation"
-              # Fall through to create new branch
-              EXISTING_PR="false"
-            else
-              BRANCH_NAME="$EXISTING_BRANCH"
-            fi
-          fi
-
-          if [ "$EXISTING_PR" != "true" ]; then
-            # Create new branch with sanitized title
-            # Sanitization: lowercase, replace non-alphanumeric with dash, collapse dashes, trim
-            SANITIZED_TITLE=$(echo "$ISSUE_TITLE" \
-              | tr '[:upper:]' '[:lower:]' \
-              | sed 's/[^a-z0-9-]/-/g' \
-              | sed 's/--*/-/g' \
-              | sed 's/^-//' \
-              | sed 's/-$//' \
-              | cut -c1-50)
-
-            BRANCH_NAME="amber/issue-${ISSUE_NUMBER}-${SANITIZED_TITLE}"
-
-            # Validate the generated branch name
-            if ! [[ "$BRANCH_NAME" =~ ^[a-zA-Z0-9/_.-]+$ ]]; then
-              echo "Error: Generated branch name is invalid: $BRANCH_NAME"
-              exit 1
-            fi
-
-            checkout_branch "$BRANCH_NAME" "false" || exit 1
-          fi
-
-          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
-          echo "Using branch: $BRANCH_NAME"
-
-      - name: Read prompt file
-        id: read-prompt
-        run: |
-          PROMPT_CONTENT=$(cat amber-prompt.md)
-          # Use heredoc to safely handle multiline content
-          echo "prompt<<EOF" >> $GITHUB_OUTPUT
-          cat amber-prompt.md >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Install Claude Code CLI
-        run: |
-          npm install -g @anthropic-ai/claude-code
-
-      - name: Execute Amber agent via Claude Code
-        id: amber-execute
+      - name: Session summary
+        if: always() && steps.existing.outputs.skip != 'true'
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          SESSION_NAME: ${{ steps.session.outputs.session-name }}
+          SESSION_UID: ${{ steps.session.outputs.session-uid }}
+          SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
         run: |
-          # Run Claude Code with full tool access (you make the rules!)
-          cat amber-prompt.md | claude --print --dangerously-skip-permissions || true
-          echo "Claude Code execution completed"
-
-      - name: Check if changes were made
-        id: check-changes
-        run: |
-          # Check if there are any new commits on this branch vs main
-          CURRENT_BRANCH=$(git branch --show-current)
-          COMMITS_AHEAD=$(git rev-list --count origin/main.."$CURRENT_BRANCH" 2>/dev/null || echo "0")
-
-          if [ "$COMMITS_AHEAD" -eq 0 ]; then
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-            echo "No changes made by Amber (no new commits)"
+          echo "### Amber — Issue #${{ steps.issue.outputs.number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -n "$SESSION_NAME" ]; then
+            echo "- **Session**: \`$SESSION_NAME\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Phase**: \`$SESSION_PHASE\`" >> $GITHUB_STEP_SUMMARY
           else
-            COMMIT_SHA=$(git rev-parse HEAD)
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-            echo "branch_name=$CURRENT_BRANCH" >> $GITHUB_OUTPUT
-            echo "commit_sha=$COMMIT_SHA" >> $GITHUB_OUTPUT
-            echo "Changes committed on branch $CURRENT_BRANCH (commit: ${COMMIT_SHA:0:7})"
-            echo "Commits ahead of main: $COMMITS_AHEAD"
+            echo "- **Status**: Failed to create session" >> $GITHUB_STEP_SUMMARY
           fi
 
-      - name: Report no changes
-        if: steps.check-changes.outputs.has_changes == 'false'
+  # -- @amber comment on an issue or PR --
+  handle-comment:
+    if: >-
+      github.event_name == 'issue_comment'
+      && contains(github.event.comment.body, '@amber')
+      && (github.event.comment.author_association == 'MEMBER'
+          || github.event.comment.author_association == 'OWNER'
+          || github.event.comment.author_association == 'COLLABORATOR')
+    concurrency:
+      group: amber-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Resolve context
+        id: context
         env:
-          ISSUE_NUMBER: ${{ steps.issue-details.outputs.issue_number }}
-          ACTION_TYPE: ${{ steps.action-type.outputs.type }}
-          RUN_ID: ${{ github.run_id }}
-          GITHUB_SERVER_URL: ${{ github.server_url }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const issueNumber = parseInt(process.env.ISSUE_NUMBER);
-            const actionType = process.env.ACTION_TYPE;
-            const runId = process.env.RUN_ID;
-            const serverUrl = process.env.GITHUB_SERVER_URL;
-            const repository = process.env.GITHUB_REPOSITORY;
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issueNumber,
-              body: `✅ Amber reviewed this issue but found no changes were needed.
-
-            **Action Type:** ${actionType}
-
-            **Possible reasons:**
-            - Files are already properly formatted
-            - No linting issues found
-            - The requested changes may have already been applied
-
-            If you believe changes are still needed, please provide more specific instructions or file paths in the issue description.
-
-            ---
-            🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`
-            });
-
-      - name: Push branch to remote
-        if: steps.check-changes.outputs.has_changes == 'true'
-        env:
-          BRANCH_NAME: ${{ steps.check-changes.outputs.branch_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git push -u origin "$BRANCH_NAME"
-          echo "Pushed branch $BRANCH_NAME to remote"
+          NUMBER="${{ github.event.issue.number }}"
+          echo "number=$NUMBER" >> $GITHUB_OUTPUT
 
-      - name: Validate changes align with issue intent
-        if: steps.check-changes.outputs.has_changes == 'true'
-        env:
-          ISSUE_NUMBER: ${{ steps.issue-details.outputs.issue_number }}
-          RUN_ID: ${{ github.run_id }}
-          GITHUB_SERVER_URL: ${{ github.server_url }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          EXISTING_PR: ${{ steps.check-existing-pr.outputs.existing_pr }}
-          EXISTING_PR_NUMBER: ${{ steps.check-existing-pr.outputs.pr_number }}
-        uses: actions/github-script@v8
+          if [ -n "${{ github.event.issue.pull_request }}" ]; then
+            echo "type=pr" >> $GITHUB_OUTPUT
+            echo "url=https://github.com/${{ github.repository }}/pull/$NUMBER" >> $GITHUB_OUTPUT
+
+            IS_FORK=$(gh pr view "$NUMBER" --repo "${{ github.repository }}" --json isCrossRepository --jq '.isCrossRepository')
+            echo "is_fork=$IS_FORK" >> $GITHUB_OUTPUT
+          else
+            echo "type=issue" >> $GITHUB_OUTPUT
+            echo "url=https://github.com/${{ github.repository }}/issues/$NUMBER" >> $GITHUB_OUTPUT
+            echo "is_fork=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create session
+        if: steps.context.outputs.is_fork != 'true'
+        id: session
+        uses: ambient-code/ambient-action@v0.0.3
         with:
-          script: |
-            const { execFile } = require('child_process');
-            const { promisify } = require('util');
-            const execFileAsync = promisify(execFile);
+          api-url: ${{ secrets.AMBIENT_API_URL }}
+          api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
+          project: ${{ secrets.AMBIENT_PROJECT }}
+          prompt: |
+            Context: ${{ steps.context.outputs.type }} #${{ steps.context.outputs.number }}
+            URL: ${{ steps.context.outputs.url }}
 
-            const issueNumber = parseInt(process.env.ISSUE_NUMBER);
-            const runId = process.env.RUN_ID;
-            const serverUrl = process.env.GITHUB_SERVER_URL;
-            const repository = process.env.GITHUB_REPOSITORY;
-            const existingPr = process.env.EXISTING_PR === 'true';
-            const existingPrNumber = process.env.EXISTING_PR_NUMBER;
+            ${{ github.event.comment.body }}
+          repos: >-
+            [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
+          model: claude-opus-4-6
+          wait: 'true'
+          timeout: '60'
 
-            // Safely get git diff (no shell injection risk with execFile)
-            const { stdout: diff } = await execFileAsync('git', ['diff', 'HEAD~1', '--stat']);
-
-            const nextSteps = existingPr
-              ? `- Review that changes match the issue description\n- Verify no scope creep or unintended modifications\n- Changes pushed to existing PR #${existingPrNumber}`
-              : `- Review that changes match the issue description\n- Verify no scope creep or unintended modifications\n- A PR will be created shortly for formal review`;
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issueNumber,
-              body: `## Amber Change Summary\n\nThe following files were modified:\n\n\`\`\`\n${diff}\n\`\`\`\n\n**Next Steps:**\n${nextSteps}\n\n---\n🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`
-            });
-
-      - name: Create or Update Pull Request
-        if: steps.check-changes.outputs.has_changes == 'true'
+      - name: Session summary
+        if: always() && steps.context.outputs.is_fork != 'true'
         env:
-          BRANCH_NAME: ${{ steps.check-changes.outputs.branch_name }}
-          COMMIT_SHA: ${{ steps.check-changes.outputs.commit_sha }}
-          ISSUE_NUMBER: ${{ steps.issue-details.outputs.issue_number }}
-          ISSUE_TITLE: ${{ steps.issue-details.outputs.issue_title }}
-          ACTION_TYPE: ${{ steps.action-type.outputs.type }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-          GITHUB_SERVER_URL: ${{ github.server_url }}
-          EXISTING_PR: ${{ steps.check-existing-pr.outputs.existing_pr }}
-          EXISTING_PR_NUMBER: ${{ steps.check-existing-pr.outputs.pr_number }}
-        uses: actions/github-script@v8
+          SESSION_NAME: ${{ steps.session.outputs.session-name }}
+          SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
+        run: |
+          echo "### Amber — ${{ steps.context.outputs.type }} #${{ steps.context.outputs.number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -n "$SESSION_NAME" ]; then
+            echo "- **Session**: \`$SESSION_NAME\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Phase**: \`$SESSION_PHASE\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Status**: Failed to create session" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # -- Batch: manage all amber:managed PRs --
+  batch-pr-fixer:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    concurrency:
+      group: amber-batch
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Run PR fixer orchestrator
+        id: session
+        uses: ambient-code/ambient-action@v0.0.3
         with:
-          script: |
-            const branchName = process.env.BRANCH_NAME;
-            const commitSha = process.env.COMMIT_SHA;
-            const issueNumber = parseInt(process.env.ISSUE_NUMBER);
-            const issueTitle = process.env.ISSUE_TITLE;
-            const actionType = process.env.ACTION_TYPE;
-            const repository = process.env.GITHUB_REPOSITORY;
-            const runId = process.env.RUN_ID;
-            const serverUrl = process.env.GITHUB_SERVER_URL;
-            const existingPr = process.env.EXISTING_PR === 'true';
-            const existingPrNumber = process.env.EXISTING_PR_NUMBER ? parseInt(process.env.EXISTING_PR_NUMBER) : null;
+          api-url: ${{ secrets.AMBIENT_API_URL }}
+          api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
+          project: ${{ secrets.AMBIENT_PROJECT }}
+          prompt: |
+            You are a PR fixer orchestrator. Manage all open amber:managed PRs.
 
-            // Helper function for retrying API calls with exponential backoff
-            // Retries on: 5xx errors, network errors (no status), JSON parse errors
-            async function retryWithBackoff(fn, maxRetries = 3, initialDelay = 1000) {
-              for (let i = 0; i < maxRetries; i++) {
-                try {
-                  return await fn();
-                } catch (error) {
-                  const isLastAttempt = i === maxRetries - 1;
-                  // Retry on: network errors (undefined status), 5xx errors, or specific error patterns
-                  const isRetriable = !error.status || error.status >= 500;
+            ## Find PRs
 
-                  if (isLastAttempt || !isRetriable) {
-                    throw error;
-                  }
+            Run: gh pr list --repo ${{ github.repository }} --state open --label "amber:managed" --search "draft:false" --limit 200
 
-                  const delay = initialDelay * Math.pow(2, i);
-                  const errorMsg = error.message || 'Unknown error';
-                  const errorStatus = error.status || 'network error';
-                  console.log(`Attempt ${i + 1} failed (${errorStatus}: ${errorMsg}), retrying in ${delay}ms...`);
-                  await new Promise(resolve => setTimeout(resolve, delay));
-                }
-              }
-              // Defensive: Should never reach here due to throw in loop, but explicit for clarity
-              throw new Error('retryWithBackoff: max retries exceeded');
-            }
+            For each PR:
 
-            // Helper function to safely add a comment with fallback logging
-            async function safeComment(issueNum, body, description) {
-              try {
-                await retryWithBackoff(async () => {
-                  return await github.rest.issues.createComment({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: issueNum,
-                    body: body
-                  });
-                });
-                console.log(`Successfully added comment: ${description}`);
-              } catch (commentError) {
-                // Log but don't fail the workflow for comment failures
-                console.log(`Warning: Failed to add comment (${description}): ${commentError.message}`);
-                console.log(`Comment body was: ${body.substring(0, 200)}...`);
-              }
-            }
+            ## 1. Read frontmatter
+            Parse <!-- acp:session_id=<ID> source=<KEY> last_action=<TIMESTAMP> retry_count=<N> --> from the PR body.
+            If no frontmatter: create a new Fix PR session, update the PR body with frontmatter. Continue.
 
-            try {
-              // If PR already exists, just add a comment about the new push
-              if (existingPr && existingPrNumber) {
-                console.log(`PR #${existingPrNumber} already exists, adding update comment`);
+            ## 2. Circuit breaker
+            If retry_count >= 3: comment "AI was unable to resolve after 3 attempts. Needs human attention.",
+            add amber:needs-human label, remove amber:managed label. Skip.
 
-                // Add comment to PR about the new commit (with fallback)
-                await safeComment(
-                  existingPrNumber,
-                  `🤖 **Amber pushed additional changes**
+            ## 3. Check for changes since last_action
+            Ignore commits authored by the bot. Only look for:
+            - New commits by someone other than the bot
+            - New or updated review comments
+            - New CI failures
+            - Merge conflicts from base branch changes
 
-            - **Commit:** ${commitSha.substring(0, 7)}
-            - **Action Type:** ${actionType}
+            If nothing changed → skip entirely.
 
-            New changes have been pushed to this PR. Please review the updated code.
+            ## 4. Something changed — act
+            - CI failing → send message to existing session with CI logs
+            - New review comments → send message with the comments
+            - Merge conflicts → send message to rebase
+            - New external commits → send message to review and ensure CI passes
 
-            ---
-            🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`,
-                  `PR #${existingPrNumber} update notification`
-                );
+            ## 5. Session management
+            Before sending a message, check session status:
+            - Running → send the message
+            - Stopped → restart (reuse), then send
+            - Not found → create new session with this prompt:
+              "You are maintaining an open pull request.
+              PR: <URL>  Source issue: <KEY> (if known)
+              1. Check out the PR branch.
+              2. Resolve merge conflicts, fix CI failures, address review comments.
+              3. Push fixes. Do not merge/close/force-push.
+              4. Write frontmatter: <!-- acp:session_id=$AGENTIC_SESSION_NAME source=<KEY> last_action=<NOW> retry_count=0 -->
+              5. If broken beyond repair, comment and stop."
 
-                // Also notify on the issue (with fallback)
-                await safeComment(
-                  issueNumber,
-                  `🤖 Amber pushed additional changes to the existing PR #${existingPrNumber}.\n\n---\n🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`,
-                  `Issue #${issueNumber} update notification`
-                );
+            After sending:
+            - If the PR is still broken (CI failing, conflicts unresolved, reviews unaddressed), increment retry_count.
+            - If the PR is healthy (CI passing, no open review threads, no conflicts), reset retry_count to 0.
+            - Update last_action in frontmatter.
 
-                console.log(`Updated existing PR #${existingPrNumber}`);
-                return;
-              }
+            ## Rules
+            - No-op if nothing changed. Do not interact with the session.
+            - Use real ACP session IDs from AGENTIC_SESSION_NAME env var.
+            - Send messages to existing sessions, don't recreate.
+            - Ignore bot's own commits.
+            - Do not merge PRs.
 
-              // Create new PR
-              const pr = await github.rest.pulls.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title: `[Amber] Fix: ${issueTitle}`,
-                head: branchName,
-                base: 'main',
-                body: `## Automated Fix by Amber Agent
+            All child sessions use model claude-opus-4-6.
+          repos: >-
+            [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
+          model: claude-opus-4-6
+          wait: 'true'
+          timeout: '60'
 
-            This PR addresses issue #${issueNumber} using the Amber background agent.
-
-            ### Changes Summary
-            - **Action Type:** ${actionType}
-            - **Commit:** ${commitSha.substring(0, 7)}
-            - **Triggered by:** Issue label/command
-
-            ### Pre-merge Checklist
-            - [ ] All linters pass
-            - [ ] All tests pass
-            - [ ] Changes follow project conventions (CLAUDE.md)
-            - [ ] No scope creep beyond issue description
-
-            ### Reviewer Notes
-            This PR was automatically generated. Please review:
-            1. Code quality and adherence to standards
-            2. Test coverage for changes
-            3. No unintended side effects
-
-            ---
-            🤖 Generated with [Amber Background Agent](https://github.com/${repository}/blob/main/docs/amber-automation.md)
-
-            Closes #${issueNumber}`
-              });
-
-              // Add labels with retry logic for transient API failures (non-critical)
-              try {
-                await retryWithBackoff(async () => {
-                  return await github.rest.issues.addLabels({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: pr.data.number,
-                    labels: ['amber-generated', 'auto-fix', actionType]
-                  });
-                });
-              } catch (labelError) {
-                console.log(`Warning: Failed to add labels to PR #${pr.data.number}: ${labelError.message}`);
-              }
-
-              // Link PR back to issue (with fallback)
-              await safeComment(
-                issueNumber,
-                `🤖 Amber has created a pull request to address this issue: #${pr.data.number}\n\nThe changes are ready for review. All automated checks will run on the PR.\n\n---\n🔍 [View AI decision process](${serverUrl}/${repository}/actions/runs/${runId}) (logs available for 90 days)`,
-                `Issue #${issueNumber} PR link notification`
-              );
-
-              console.log('Created PR:', pr.data.html_url);
-            } catch (error) {
-              console.error('Failed to create/update PR:', error);
-              core.setFailed(`PR creation/update failed: ${error.message}`);
-
-              // Notify on issue about failure (with fallback - best effort)
-              await safeComment(
-                issueNumber,
-                `⚠️ Amber completed changes but failed to create a pull request.\n\n**Error:** ${error.message}\n\nChanges committed to \`${branchName}\`. A maintainer can manually create the PR.`,
-                `Issue #${issueNumber} PR failure notification`
-              );
-            }
-
-      - name: Report failure
-        if: failure()
+      - name: Session summary
+        if: always()
         env:
-          ISSUE_NUMBER: ${{ steps.issue-details.outputs.issue_number }}
-          ACTION_TYPE: ${{ steps.action-type.outputs.type }}
-          RUN_ID: ${{ github.run_id }}
-          GITHUB_SERVER_URL: ${{ github.server_url }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const issueNumber = parseInt(process.env.ISSUE_NUMBER);
-            const actionType = process.env.ACTION_TYPE || 'unknown';
-            const runId = process.env.RUN_ID;
-            const serverUrl = process.env.GITHUB_SERVER_URL;
-            const repository = process.env.GITHUB_REPOSITORY;
-
-            // Validate issue number before attempting comment
-            if (!issueNumber || isNaN(issueNumber)) {
-              console.log('Error: Invalid issue number, cannot post failure comment');
-              return;
-            }
-
-            try {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issueNumber,
-                body: `⚠️ Amber encountered an error while processing this issue.
-
-            **Action Type:** ${actionType}
-            **Workflow Run:** ${serverUrl}/${repository}/actions/runs/${runId}
-
-            Please review the workflow logs for details. You may need to:
-            1. Check if the issue description provides sufficient context
-            2. Verify the specified files exist
-            3. Ensure the changes are feasible for automation
-
-            Manual intervention may be required for complex changes.`
-              });
-              console.log(`Posted failure comment to issue #${issueNumber}`);
-            } catch (commentError) {
-              console.log(`Warning: Failed to post failure comment to issue #${issueNumber}: ${commentError.message}`);
-            }
+          SESSION_NAME: ${{ steps.session.outputs.session-name }}
+          SESSION_UID: ${{ steps.session.outputs.session-uid }}
+          SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
+        run: |
+          echo "### Amber — Batch PR Fixer" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -n "$SESSION_NAME" ]; then
+            echo "- **Session**: \`$SESSION_NAME\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Phase**: \`$SESSION_PHASE\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Status**: Failed to create session" >> $GITHUB_STEP_SUMMARY
+          fi
