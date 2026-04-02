@@ -104,7 +104,7 @@ spec:
               name: google-workflow-app-secret
               key: BACKEND_URL
               optional: true
-        # Operator image for scheduled session trigger jobs
+        # Operator image for scheduled session trigger jobs (CI pins via ConfigMap)
         - name: OPERATOR_IMAGE
           valueFrom:
             configMapKeyRef:

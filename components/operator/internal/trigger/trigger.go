@@ -143,9 +143,9 @@ func tryReuseLastSession(dynamicClient dynamic.Interface, namespace, scheduledSe
 	}
 }
 
-// sendFollowUpPrompt sends a prompt to a running session via the runner's AG-UI /run endpoint.
+// sendFollowUpPrompt sends a prompt to a running session via the runner's AG-UI endpoint.
 func sendFollowUpPrompt(namespace, sessionName, prompt string) error {
-	runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:%d/run", sessionName, namespace, handlers.DefaultRunnerPort)
+	runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:%d/", sessionName, namespace, handlers.DefaultRunnerPort)
 
 	input := map[string]interface{}{
 		"threadId": sessionName,

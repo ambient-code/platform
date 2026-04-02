@@ -457,13 +457,13 @@ jobs:
             oc set env deployment/agentic-operator -n ambient-code -c agentic-operator $ARGS
           fi
 
-      - name: Pin OPERATOR_IMAGE on backend for scheduled session triggers
+      - name: Pin OPERATOR_IMAGE in operator-config ConfigMap
         run: |
           RELEASE_TAG="${{ needs.release.outputs.new_tag }}"
           BUILT="${{ steps.built.outputs.names }}"
           if echo ",$BUILT," | grep -q ",operator,"; then
-            oc set env deployment/backend-api -n ambient-code -c backend-api \
-              OPERATOR_IMAGE="quay.io/ambient_code/vteam_operator:${RELEASE_TAG}"
+            oc patch configmap operator-config -n ambient-code --type=merge \
+              -p "{\"data\":{\"OPERATOR_IMAGE\":\"quay.io/ambient_code/vteam_operator:${RELEASE_TAG}\"}}"
           fi
 
       - name: Update agent registry ConfigMap with release image tags

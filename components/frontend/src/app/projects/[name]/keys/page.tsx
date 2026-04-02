@@ -21,17 +21,7 @@ import { useKeys, useCreateKey, useDeleteKey } from '@/services/queries';
 import { toast } from 'sonner';
 import type { CreateKeyRequest } from '@/services/api/keys';
 import { ROLE_DEFINITIONS } from '@/lib/role-colors';
-
-const EXPIRATION_OPTIONS = [
-  { value: '86400', label: '1 day' },
-  { value: '604800', label: '7 days' },
-  { value: '2592000', label: '30 days' },
-  { value: '7776000', label: '90 days' },
-  { value: '31536000', label: '1 year' },
-  { value: 'none', label: 'No expiration' },
-] as const;
-
-const DEFAULT_EXPIRATION = '7776000'; // 90 days
+import { EXPIRATION_OPTIONS, DEFAULT_EXPIRATION } from '@/lib/constants';
 
 export default function ProjectKeysPage() {
   const params = useParams();
@@ -60,7 +50,7 @@ export default function ProjectKeysPage() {
       name: newKeyName.trim(),
       description: newKeyDesc.trim() || undefined,
       role: newKeyRole,
-      expirationSeconds: newKeyExpiration !== 'none' ? Number(newKeyExpiration) : undefined,
+      expirationSeconds: Number(newKeyExpiration),
     };
 
     createKeyMutation.mutate(
@@ -303,7 +293,7 @@ export default function ProjectKeysPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="key-expiration">Token Lifetime</Label>
-              <Select value={newKeyExpiration} onValueChange={setNewKeyExpiration}>
+              <Select value={newKeyExpiration} onValueChange={setNewKeyExpiration} disabled={createKeyMutation.isPending}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select lifetime" />
                 </SelectTrigger>
@@ -315,9 +305,6 @@ export default function ProjectKeysPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                How long the token remains valid. Choose &quot;No expiration&quot; for long-lived service keys.
-              </p>
             </div>
           </div>
           <DialogFooter>

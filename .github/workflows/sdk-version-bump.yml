@@ -1,0 +1,166 @@
+name: SDK Version Bump
+
+on:
+  schedule:
+    # Run daily at 9 AM UTC
+    - cron: '0 9 * * *'
+
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package to check'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - claude-agent-sdk
+          - anthropic
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sdk-version-bump
+  cancel-in-progress: true
+
+jobs:
+  check-and-bump:
+    name: Check & Bump SDK Versions
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Check for SDK updates
+        id: check
+        run: |
+          PACKAGE_ARG="${{ inputs.package || 'all' }}"
+          python scripts/sdk-version-bump.py --check-only --package "$PACKAGE_ARG"
+          EXIT_CODE=$?
+
+          if [ "$EXIT_CODE" -eq 2 ]; then
+            echo "updates_available=true" >> "$GITHUB_OUTPUT"
+          elif [ "$EXIT_CODE" -eq 0 ]; then
+            echo "updates_available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Script failed with exit code $EXIT_CODE"
+            exit 1
+          fi
+
+      - name: Check for existing PR
+        if: steps.check.outputs.updates_available == 'true'
+        id: existing_pr
+        run: |
+          # Check if there's already an open PR from this workflow
+          EXISTING=$(gh pr list \
+            --head "automated/sdk-version-bump" \
+            --state open \
+            --json number \
+            --jq 'length')
+
+          if [ "$EXISTING" -gt "0" ]; then
+            echo "pr_exists=true" >> "$GITHUB_OUTPUT"
+            PR_NUM=$(gh pr list \
+              --head "automated/sdk-version-bump" \
+              --state open \
+              --json number \
+              --jq '.[0].number')
+            echo "pr_number=$PR_NUM" >> "$GITHUB_OUTPUT"
+            echo "Existing PR #$PR_NUM found - will update it"
+          else
+            echo "pr_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Apply updates
+        if: steps.check.outputs.updates_available == 'true'
+        id: apply
+        run: |
+          PACKAGE_ARG="${{ inputs.package || 'all' }}"
+          python scripts/sdk-version-bump.py --package "$PACKAGE_ARG"
+
+          # Read outputs
+          PR_TITLE=$(cat .sdk-bump-output/pr-title.txt)
+          echo "pr_title=$PR_TITLE" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update PR
+        if: steps.check.outputs.updates_available == 'true'
+        run: |
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          BRANCH="automated/sdk-version-bump"
+
+          # Create or reset the branch
+          git checkout -B "$BRANCH"
+
+          # Stage changes
+          git add components/runners/ambient-runner/pyproject.toml
+          git add components/runners/ambient-runner/uv.lock
+
+          # Commit
+          PR_TITLE="${{ steps.apply.outputs.pr_title }}"
+          git commit -m "$PR_TITLE
+
+          Automated SDK version bump.
+
+          Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+
+          # Force push (we own this branch)
+          git push --force origin "$BRANCH"
+
+          # Create or update PR (use --body-file to avoid arg length limits)
+          if [ "${{ steps.existing_pr.outputs.pr_exists }}" == "true" ]; then
+            PR_NUM="${{ steps.existing_pr.outputs.pr_number }}"
+            gh pr edit "$PR_NUM" \
+              --title "$PR_TITLE" \
+              --body-file .sdk-bump-output/pr-body.md
+            echo "Updated existing PR #$PR_NUM"
+          else
+            gh pr create \
+              --title "$PR_TITLE" \
+              --body-file .sdk-bump-output/pr-body.md \
+              --base main \
+              --head "$BRANCH" \
+              --label "dependencies,automated"
+            echo "Created new PR"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "${{ steps.check.outputs.updates_available }}" == "true" ]; then
+            {
+              echo "## SDK Version Bump"
+              echo "Updates applied and PR created/updated."
+              echo ""
+              cat .sdk-bump-output/pr-body.md 2>/dev/null || true
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## SDK Version Bump"
+              echo "All tracked SDKs are up to date. No action needed."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Clean up output directory
+        if: always()
+        run: rm -rf .sdk-bump-output

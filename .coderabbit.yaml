@@ -155,7 +155,7 @@ reviews:
           3. Expensive work inside loops (API calls, JSON parsing, regex compilation).
           4. Unbounded growth: caches, watchers, buffers without eviction/limits.
           5. Missing pagination/limits on List operations or API endpoints.
-          6. Frontend: unnecessary rerenders, missing memoization, unvirtualized large lists, missing dependency arrays, unbounded localStorage, sessionStorage or Cookies. Blocking HTTP requests. 
+          6. Frontend: unnecessary rerenders, missing memoization, unvirtualized large lists, missing dependency arrays, unbounded localStorage, sessionStorage or Cookies. Blocking HTTP requests.
 
           Per issue: file, lines, risk, fix category. If clean, mark PASSED.
 
