@@ -97,7 +97,7 @@ func NewMPPNamespaceProvisioner(kube *KubeClient, configNamespace string, logger
 	}
 }
 
-const mppNamespacePrefix = "ambient-code--z-"
+const mppNamespacePrefix = "ambient-code--"
 
 func (p *MPPNamespaceProvisioner) instanceID(namespaceName string) string {
 	if len(namespaceName) > len(mppNamespacePrefix) && namespaceName[:len(mppNamespacePrefix)] == mppNamespacePrefix {
