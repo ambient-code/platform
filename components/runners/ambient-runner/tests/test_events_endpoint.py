@@ -95,7 +95,9 @@ class TestEventsEndpointAsyncDelivery:
     how GRPCSessionListener would deliver events in production.
     """
 
-    async def _stream_events(self, app, path: str, active_streams: dict, events_to_put: list) -> str:
+    async def _stream_events(
+        self, app, path: str, active_streams: dict, events_to_put: list
+    ) -> str:
         """Open SSE stream and concurrently feed events into the endpoint's registered queue."""
         collected = []
 
@@ -129,8 +131,10 @@ class TestEventsEndpointAsyncDelivery:
         app = _make_app(bridge)
 
         body = await self._stream_events(
-            app, "/events/t-async-fin", active_streams,
-            [make_text_start(), make_run_finished()]
+            app,
+            "/events/t-async-fin",
+            active_streams,
+            [make_text_start(), make_run_finished()],
         )
         assert "RUN_FINISHED" in body
 
@@ -140,11 +144,11 @@ class TestEventsEndpointAsyncDelivery:
         app = _make_app(bridge)
 
         from ag_ui.core import RunErrorEvent
+
         run_error = RunErrorEvent(message="test error", code="TEST")
 
         body = await self._stream_events(
-            app, "/events/t-async-err", active_streams,
-            [run_error]
+            app, "/events/t-async-err", active_streams, [run_error]
         )
         assert "RUN_ERROR" in body
 
@@ -157,8 +161,7 @@ class TestEventsEndpointAsyncDelivery:
         snapshot.type = EventType.MESSAGES_SNAPSHOT
 
         body = await self._stream_events(
-            app, "/events/t-async-snap", active_streams,
-            [snapshot, make_run_finished()]
+            app, "/events/t-async-snap", active_streams, [snapshot, make_run_finished()]
         )
         assert "MESSAGES_SNAPSHOT" not in body
         assert "RUN_FINISHED" in body
@@ -169,8 +172,10 @@ class TestEventsEndpointAsyncDelivery:
         app = _make_app(bridge)
 
         body = await self._stream_events(
-            app, "/events/t-async-text", active_streams,
-            [make_text_start(), make_text_content(), make_run_finished()]
+            app,
+            "/events/t-async-text",
+            active_streams,
+            [make_text_start(), make_text_content(), make_run_finished()],
         )
         assert "TEXT_MESSAGE_START" in body
         assert "TEXT_MESSAGE_CONTENT" in body
@@ -181,8 +186,7 @@ class TestEventsEndpointAsyncDelivery:
         app = _make_app(bridge)
 
         await self._stream_events(
-            app, "/events/t-async-cleanup", active_streams,
-            [make_run_finished()]
+            app, "/events/t-async-cleanup", active_streams, [make_run_finished()]
         )
         assert "t-async-cleanup" not in active_streams
 

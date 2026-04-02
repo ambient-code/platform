@@ -165,7 +165,10 @@ class GRPCSessionListener:
                 exc.code(),
                 exc.details(),
             )
-            if exc.code() == grpc.StatusCode.UNAUTHENTICATED and self._grpc_client is not None:
+            if (
+                exc.code() == grpc.StatusCode.UNAUTHENTICATED
+                and self._grpc_client is not None
+            ):
                 logger.warning(
                     "[GRPC LISTENER] UNAUTHENTICATED — reconnecting with fresh token: session=%s",
                     self._session_id,
@@ -291,7 +294,9 @@ class GRPCSessionListener:
             run_id,
         )
 
-        active_streams: dict[str, asyncio.Queue] = getattr(self._bridge, "_active_streams", {})
+        active_streams: dict[str, asyncio.Queue] = getattr(
+            self._bridge, "_active_streams", {}
+        )
         run_queue = active_streams.get(thread_id)
 
         try:
@@ -313,9 +318,7 @@ class GRPCSessionListener:
                 exc,
                 exc_info=True,
             )
-            _synthesize_run_error(
-                thread_id, str(exc), active_streams, writer
-            )
+            _synthesize_run_error(thread_id, str(exc), active_streams, writer)
         finally:
             if run_queue is not None and active_streams.get(thread_id) is run_queue:
                 active_streams.pop(thread_id, None)

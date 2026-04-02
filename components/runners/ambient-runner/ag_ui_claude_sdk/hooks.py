@@ -22,12 +22,14 @@ from ag_ui.core import CustomEvent, EventType
 logger = logging.getLogger(__name__)
 
 # Default hook event names to register (only what the UI consumes).
-_DEFAULT_HOOKS = frozenset({
-    "SubagentStart",
-    "SubagentStop",
-    "Notification",
-    "Stop",
-})
+_DEFAULT_HOOKS = frozenset(
+    {
+        "SubagentStart",
+        "SubagentStop",
+        "Notification",
+        "Stop",
+    }
+)
 
 # Keys stripped from payloads (internal paths the frontend should not see).
 _SANITIZE_KEYS = frozenset({"transcript_path", "cwd"})
@@ -51,7 +53,9 @@ async def _forward_hook_as_custom_event(
     event_name = hook_input.get("hook_event_name", "unknown")
     payload = {k: v for k, v in hook_input.items() if k not in _SANITIZE_KEYS}
 
-    logger.debug("[Hook] %s fired (agent_id=%s)", event_name, hook_input.get("agent_id", "n/a"))
+    logger.debug(
+        "[Hook] %s fired (agent_id=%s)", event_name, hook_input.get("agent_id", "n/a")
+    )
 
     await queue.put(
         CustomEvent(

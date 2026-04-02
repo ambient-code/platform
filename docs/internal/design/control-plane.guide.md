@@ -3,6 +3,7 @@
 **Date:** 2026-03-22
 **Status:** Living Document
 **Spec:** `control-plane.spec.md` — CP architecture, runner structure, message streams, proposed changes
+**Dev Context:** `.claude/context/control-plane-development.md` — build commands, known invariants, pre-commit checklists, runner architecture
 
 ---
 
@@ -23,106 +24,11 @@ Changes to these components are independent of the api-server pipeline (no opena
 
 ---
 
-## Repository Layout
-
-```
-platform-control-plane/
-├── components/
-│   ├── ambient-control-plane/         ← CP (Go)
-│   │   ├── cmd/ambient-control-plane/main.go
-│   │   ├── internal/
-│   │   │   ├── config/config.go       ← env-based config
-│   │   │   ├── watcher/watcher.go     ← gRPC WatchManager
-│   │   │   ├── informer/informer.go   ← list+watch Informer
-│   │   │   ├── kubeclient/kubeclient.go
-│   │   │   └── reconciler/
-│   │   │       ├── kube_reconciler.go ← session pod provisioner
-│   │   │       ├── shared.go          ← SDKClientFactory, constants
-│   │   │       ├── project_reconciler.go
-│   │   │       ├── project_settings_reconciler.go
-│   │   │       ├── tally.go
-│   │   │       └── tally_reconciler.go
-│   │   ├── go.mod                     ← replace directives for local SDK
-│   │   └── Dockerfile
-│   │
-│   └── runners/ambient-runner/        ← Runner (Python)
-│       ├── ambient_runner/
-│       │   ├── app.py                 ← FastAPI factory + lifespan
-│       │   ├── _grpc_client.py        ← codegen — AmbientGRPCClient
-│       │   ├── _session_messages_api.py ← codegen — SessionMessagesAPI
-│       │   ├── bridge.py              ← PlatformBridge base class
-│       │   ├── bridges/claude/
-│       │   │   ├── bridge.py          ← ClaudeBridge
-│       │   │   └── grpc_transport.py  ← GRPCSessionListener + GRPCMessageWriter
-│       │   ├── endpoints/
-│       │   │   ├── run.py             ← POST /
-│       │   │   ├── events.py          ← GET /events/{thread_id}  ← NEW
-│       │   │   └── ...
-│       │   └── middleware/
-│       │       └── grpc_push.py       ← HTTP path fire-and-forget push
-│       └── pyproject.toml
-│
-├── Makefile                           ← build-runner, build-control-plane, local-reload-*
-└── docs/internal/design/
-    ├── control-plane.spec.md          ← YOU ARE HERE (spec)
-    └── control-plane.guide.md         ← YOU ARE HERE (guide)
-```
-
+> **Build commands, known invariants, and pre-commit checklists** → see `.claude/context/control-plane-development.md`
 
 IMPORTANT!!! **ONLY PUSH TO quay.io/vteam-*:mgt-001**  ensure the tag is *only* mgt-001
 This is important! we are bypassing the build process by pushing directly to quay.io.  this is risky
 so *only* push with tag mgt-001
-
-
-
----
-
-## Build Commands
-
-### CP (Go)
-
-```bash
-# From repo root — use podman build directly (make build-control-plane uses wrong image name)
-podman build --no-cache -f components/ambient-control-plane/Dockerfile -t localhost/ambient_control_plane:latest components
-
-# Push to running kind cluster
-CLUSTER_CTR=$(podman ps --format '{{.Names}}' | grep 'control-plane' | head -1)
-podman exec ${CLUSTER_CTR} ctr --namespace=k8s.io images rm localhost/ambient_control_plane:latest 2>/dev/null || true
-podman save localhost/ambient_control_plane:latest | \
-  podman exec -i ${CLUSTER_CTR} ctr --namespace=k8s.io images import -
-kubectl rollout restart deployment/ambient-control-plane -n ambient-code
-kubectl rollout status deployment/ambient-control-plane -n ambient-code --timeout=90s
-```
-
-### Runner (Python)
-
-```bash
-# From components/runners/ — always --no-cache to pick up Python source changes
-cd components/runners && podman build --no-cache -t localhost/vteam_claude_runner:latest -f ambient-runner/Dockerfile .
-
-# Push to running kind cluster
-CLUSTER_CTR=$(podman ps --format '{{.Names}}' | grep 'control-plane' | head -1)
-podman save localhost/vteam_claude_runner:latest | \
-  podman exec -i ${CLUSTER_CTR} ctr --namespace=k8s.io images import -
-# No deployment restart needed — new image used on next session pod creation
-```
-
-### Lint + Test
-
-```bash
-# CP
-cd components/ambient-control-plane
-go build ./...
-go vet ./...
-gofmt -l .
-
-# Runner
-cd components/runners/ambient-runner
-uv venv && uv pip install -e .
-python -m pytest tests/
-ruff format .
-ruff check .
-```
 
 ---
 
@@ -148,7 +54,7 @@ acpctl messages -f hang                      CLI          closed      replaced g
 acpctl send -f                               CLI          closed      added --follow flag; calls streamMessages after push
 assistant payload JSON blob (grpc_transport)  Runner       closed      _write_message() now pushes plain text (Run 8)
 TenantSA RBAC race on namespace re-create    CP           open        see Known Races below
-Runner credential fetch → /credentials/{id}/token  Runner    open        blocked on Wave 4 BE (Credential CRUD + /token endpoint); see Wave 5 below
+Runner credential fetch → /credentials/{id}/token  Runner    open        Credential Kind live (PR #1110); CP integration + runner update pending (Wave 5)
 ```
 
 ---
@@ -367,8 +273,6 @@ curl -N http://localhost:8000/api/ambient/v1/sessions/{id}/events
 
 **File:** `components/runners/ambient-runner/ambient_runner/platform/auth.py`
 
-**Blocked on:** Wave 4 BE (Credential CRUD + `GET /credentials/{id}/token` endpoint live in ambient-api-server)
-
 **What to do:**
 
 1. The CP must inject a `CREDENTIAL_IDS` env var into the runner pod — a JSON-encoded map of `provider → credential_id` resolved for this session. Resolution follows the RBAC scope resolver (agent → project → global, narrower wins per provider). The CP must read visible credentials from the api-server and build this map before pod creation.
@@ -536,22 +440,7 @@ cannot create resource "secrets" in API group "" in the namespace "ambient-code-
 
 ---
 
-## Known Invariants
-
-These rules apply to all CP and Runner changes:
-
-**CP:**
-- Never call `panic()` — return `fmt.Errorf` with context
-- All K8s child resources (pod, secret, service, service account) must have session labels (`sessionLabels(session.ID, session.ProjectID)`)
-- `imagePullPolicy` is `IfNotPresent` for `localhost/` images, `Always` otherwise — kind's containerd has no registry at localhost so `Always` causes `ErrImagePull`
-- Phase updates via `sdk.Sessions().UpdateStatus()` — never write K8s CR status directly
-- Use `k8serrors.IsAlreadyExists(err)` and `k8serrors.IsNotFound(err)` for idempotent operations
-
-**Runner:**
-- `_setup_platform()` is called eagerly in lifespan when `AMBIENT_GRPC_URL` is set — do not call it again in `bridge.run()`
-- `_active_streams` is the SSE fan-out dict — always `pop` on exit regardless of how the turn ends
-- gRPC push errors are logged and swallowed — never propagate to `bridge.run()` caller
-- `ruff format .` and `ruff check .` must pass before pushing runner image
+> **Known invariants** → see `.claude/context/control-plane-development.md`
 
 ---
 

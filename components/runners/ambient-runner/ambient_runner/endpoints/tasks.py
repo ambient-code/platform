@@ -55,7 +55,11 @@ async def stop_task(task_id: str, request: Request):
     completed_event = CustomEvent(
         type=EventType.CUSTOM,
         name="task:completed",
-        value={"task_id": task_id, "status": "stopped", "summary": "Task stopped by user"},
+        value={
+            "task_id": task_id,
+            "status": "stopped",
+            "summary": "Task stopped by user",
+        },
     )
 
     sm = getattr(bridge, "_session_manager", None)
@@ -126,9 +130,7 @@ async def get_task_output(task_id: str, request: Request):
         )
 
     if resolved.stat().st_size > _MAX_OUTPUT_BYTES:
-        raise HTTPException(
-            status_code=413, detail="Transcript too large"
-        )
+        raise HTTPException(status_code=413, detail="Transcript too large")
 
     try:
         entries = []

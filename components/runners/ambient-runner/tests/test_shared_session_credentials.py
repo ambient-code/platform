@@ -181,7 +181,11 @@ class TestTokenFiles:
 
                 async def _creds(ctx, ctype):
                     if ctype == "github":
-                        return {"token": "gh-mid-run-token", "userName": "user", "email": "u@example.com"}
+                        return {
+                            "token": "gh-mid-run-token",
+                            "userName": "user",
+                            "email": "u@example.com",
+                        }
                     return {}
 
                 mock_fetch.side_effect = _creds
@@ -204,7 +208,11 @@ class TestTokenFiles:
 
                 async def _creds(ctx, ctype):
                     if ctype == "gitlab":
-                        return {"token": "gl-mid-run-token", "userName": "user", "email": "u@example.com"}
+                        return {
+                            "token": "gl-mid-run-token",
+                            "userName": "user",
+                            "email": "u@example.com",
+                        }
                     return {}
 
                 mock_fetch.side_effect = _creds
@@ -224,8 +232,12 @@ class TestTokenFiles:
         _GITLAB_TOKEN_FILE.write_text("old-gl-token")
         try:
             clear_runtime_credentials()
-            assert not _GITHUB_TOKEN_FILE.exists(), "GitHub token file should be removed"
-            assert not _GITLAB_TOKEN_FILE.exists(), "GitLab token file should be removed"
+            assert not _GITHUB_TOKEN_FILE.exists(), (
+                "GitHub token file should be removed"
+            )
+            assert not _GITLAB_TOKEN_FILE.exists(), (
+                "GitLab token file should be removed"
+            )
         finally:
             self._cleanup()
 
@@ -249,10 +261,16 @@ class TestTokenFiles:
             async def _creds(ctx, ctype):
                 if ctype == "github":
                     call_num[0] += 1
-                    return {"token": f"gh-token-{call_num[0]}", "userName": "u", "email": "u@e.com"}
+                    return {
+                        "token": f"gh-token-{call_num[0]}",
+                        "userName": "u",
+                        "email": "u@e.com",
+                    }
                 return {}
 
-            with patch("ambient_runner.platform.auth._fetch_credential", side_effect=_creds):
+            with patch(
+                "ambient_runner.platform.auth._fetch_credential", side_effect=_creds
+            ):
                 ctx = _make_context()
                 await populate_runtime_credentials(ctx)
                 assert _GITHUB_TOKEN_FILE.read_text() == "gh-token-1"
@@ -282,27 +300,32 @@ class TestFetchCredentialHeaders:
         _CredentialHandler.response_body = {"token": "gh-token-for-userB"}
         _CredentialHandler.captured_headers = {}
 
+        cred_id = "cred-github-001"
         try:
             with patch.dict(
                 os.environ,
                 {
                     "BACKEND_API_URL": f"http://127.0.0.1:{port}/api",
-                    "PROJECT_NAME": "test-project",
                     "BOT_TOKEN": "fake-bot-token",
+                    "CREDENTIAL_IDS": json.dumps({"github": cred_id}),
                 },
             ):
                 ctx = _make_context(
                     current_user_id="userB@example.com",
                     current_user_name="User B",
                 )
-                # Set caller token — runner uses this instead of BOT_TOKEN
                 ctx.caller_token = "Bearer userB-oauth-token"
                 result = await _fetch_credential(ctx, "github")
 
             assert result.get("token") == "gh-token-for-userB"
-            assert _CredentialHandler.captured_headers.get("X-Runner-Current-User") == "userB@example.com"
-            # Should use caller token, not BOT_TOKEN
-            assert "Bearer userB-oauth-token" in _CredentialHandler.captured_headers.get("Authorization", "")
+            assert (
+                _CredentialHandler.captured_headers.get("X-Runner-Current-User")
+                == "userB@example.com"
+            )
+            assert (
+                "Bearer userB-oauth-token"
+                in _CredentialHandler.captured_headers.get("Authorization", "")
+            )
         finally:
             server.server_close()
             thread.join(timeout=2)
@@ -318,24 +341,35 @@ class TestFetchCredentialHeaders:
         _CredentialHandler.response_body = {"token": "owner-token"}
         _CredentialHandler.captured_headers = {}
 
+        cred_id = "cred-github-002"
         try:
             with patch.dict(
                 os.environ,
                 {
                     "BACKEND_API_URL": f"http://127.0.0.1:{port}/api",
-                    "PROJECT_NAME": "test-project",
                     "BOT_TOKEN": "fake-bot-token",
+                    "CREDENTIAL_IDS": json.dumps({"github": cred_id}),
                 },
             ):
                 ctx = _make_context()  # no current_user_id
                 result = await _fetch_credential(ctx, "github")
 
             assert result.get("token") == "owner-token"
-            # Header should NOT be present
             assert "X-Runner-Current-User" not in _CredentialHandler.captured_headers
         finally:
             server.server_close()
             thread.join(timeout=2)
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_when_no_credential_id_for_provider(self, monkeypatch):
+        """Verify graceful skip when CREDENTIAL_IDS does not contain the requested provider."""
+        monkeypatch.setenv("BACKEND_API_URL", "http://127.0.0.1:1/api")
+        monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"gitlab": "some-id"}))
+
+        ctx = _make_context(current_user_id="user-123")
+        result = await _fetch_credential(ctx, "github")
+
+        assert result == {}
 
     @pytest.mark.asyncio
     async def test_returns_empty_when_backend_unavailable(self):
@@ -344,7 +378,7 @@ class TestFetchCredentialHeaders:
             os.environ,
             {
                 "BACKEND_API_URL": "http://127.0.0.1:1/api",
-                "PROJECT_NAME": "test-project",
+                "CREDENTIAL_IDS": json.dumps({"github": "cred-unreachable"}),
             },
         ):
             ctx = _make_context(current_user_id="user-123")
@@ -368,18 +402,21 @@ class TestCredentialLifecycle:
         # We need to handle multiple requests (github, google, jira, gitlab)
         call_count = [0]
         responses = {
-            "/github": {"token": "gh-tok"},
-            "/google": {},
-            "/jira": {"apiToken": "jira-tok", "url": "https://jira.example.com", "email": "j@example.com"},
-            "/gitlab": {"token": "gl-tok"},
+            "cred-gh": {"token": "gh-tok"},
+            "cred-google": {},
+            "cred-jira": {
+                "token": "jira-tok",
+                "url": "https://jira.example.com",
+                "email": "j@example.com",
+            },
+            "cred-gl": {"token": "gl-tok"},
         }
 
         class MultiHandler(BaseHTTPRequestHandler):
             def do_GET(self):
                 call_count[0] += 1
-                # Extract credential type from URL path
-                for key, resp in responses.items():
-                    if key in self.path:
+                for cred_id, resp in responses.items():
+                    if cred_id in self.path:
                         self.send_response(200)
                         self.send_header("Content-Type", "application/json")
                         self.end_headers()
@@ -393,16 +430,27 @@ class TestCredentialLifecycle:
 
         server = HTTPServer(("127.0.0.1", 0), MultiHandler)
         port = server.server_address[1]
-        thread = Thread(target=lambda: [server.handle_request() for _ in range(4)], daemon=True)
+        thread = Thread(
+            target=lambda: [server.handle_request() for _ in range(4)], daemon=True
+        )
         thread.start()
+
+        credential_ids = json.dumps(
+            {
+                "github": "cred-gh",
+                "google": "cred-google",
+                "jira": "cred-jira",
+                "gitlab": "cred-gl",
+            }
+        )
 
         try:
             with patch.dict(
                 os.environ,
                 {
                     "BACKEND_API_URL": f"http://127.0.0.1:{port}/api",
-                    "PROJECT_NAME": "test-project",
                     "BOT_TOKEN": "fake-bot",
+                    "CREDENTIAL_IDS": credential_ids,
                 },
             ):
                 ctx = _make_context(current_user_id="userB")
@@ -428,7 +476,15 @@ class TestCredentialLifecycle:
             server.server_close()
             thread.join(timeout=2)
             # Cleanup any leaked env vars
-            for key in ["GITHUB_TOKEN", "GITLAB_TOKEN", "JIRA_API_TOKEN", "JIRA_URL", "JIRA_EMAIL", "GIT_USER_NAME", "GIT_USER_EMAIL"]:
+            for key in [
+                "GITHUB_TOKEN",
+                "GITLAB_TOKEN",
+                "JIRA_API_TOKEN",
+                "JIRA_URL",
+                "JIRA_EMAIL",
+                "GIT_USER_NAME",
+                "GIT_USER_EMAIL",
+            ]:
                 os.environ.pop(key, None)
 
 
@@ -439,40 +495,61 @@ class TestCredentialLifecycle:
 
 class TestFetchCredentialAuthFailures:
     @pytest.mark.asyncio
-    async def test_raises_permission_error_on_401_without_caller_token(self, monkeypatch):
+    async def test_raises_permission_error_on_401_without_caller_token(
+        self, monkeypatch
+    ):
         """_fetch_credential raises PermissionError when backend returns 401 with BOT_TOKEN."""
         monkeypatch.setenv("BACKEND_API_URL", "http://backend.svc.cluster.local/api")
-        monkeypatch.setenv("PROJECT_NAME", "test-project")
         monkeypatch.setenv("BOT_TOKEN", "bot-token")
+        monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"github": "cred-gh-001"}))
 
         ctx = _make_context(session_id="sess-1")
-        # No caller token — uses BOT_TOKEN directly
 
-        err = HTTPError("http://backend.svc.cluster.local/api/...", 401, "Unauthorized", {}, BytesIO(b""))
+        err = HTTPError(
+            "http://backend.svc.cluster.local/api/...",
+            401,
+            "Unauthorized",
+            {},
+            BytesIO(b""),
+        )
         with patch("urllib.request.urlopen", side_effect=err):
-            with pytest.raises(PermissionError, match="authentication failed with HTTP 401"):
+            with pytest.raises(
+                PermissionError, match="authentication failed with HTTP 401"
+            ):
                 await _fetch_credential(ctx, "github")
 
     @pytest.mark.asyncio
-    async def test_raises_permission_error_on_403_without_caller_token(self, monkeypatch):
+    async def test_raises_permission_error_on_403_without_caller_token(
+        self, monkeypatch
+    ):
         """_fetch_credential raises PermissionError when backend returns 403 with BOT_TOKEN."""
         monkeypatch.setenv("BACKEND_API_URL", "http://backend.svc.cluster.local/api")
-        monkeypatch.setenv("PROJECT_NAME", "test-project")
         monkeypatch.setenv("BOT_TOKEN", "bot-token")
+        monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"google": "cred-google-001"}))
 
         ctx = _make_context(session_id="sess-1")
 
-        err = HTTPError("http://backend.svc.cluster.local/api/...", 403, "Forbidden", {}, BytesIO(b""))
+        err = HTTPError(
+            "http://backend.svc.cluster.local/api/...",
+            403,
+            "Forbidden",
+            {},
+            BytesIO(b""),
+        )
         with patch("urllib.request.urlopen", side_effect=err):
-            with pytest.raises(PermissionError, match="authentication failed with HTTP 403"):
+            with pytest.raises(
+                PermissionError, match="authentication failed with HTTP 403"
+            ):
                 await _fetch_credential(ctx, "google")
 
     @pytest.mark.asyncio
-    async def test_raises_permission_error_when_caller_and_bot_both_fail(self, monkeypatch):
+    async def test_raises_permission_error_when_caller_and_bot_both_fail(
+        self, monkeypatch
+    ):
         """_fetch_credential raises PermissionError when caller token 401s and BOT_TOKEN also fails."""
         monkeypatch.setenv("BACKEND_API_URL", "http://backend.svc.cluster.local/api")
-        monkeypatch.setenv("PROJECT_NAME", "test-project")
         monkeypatch.setenv("BOT_TOKEN", "bot-token")
+        monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"github": "cred-gh-002"}))
 
         ctx = _make_context(session_id="sess-1", current_user_id="user@example.com")
         ctx.caller_token = "Bearer expired-caller-token"
@@ -481,14 +558,17 @@ class TestFetchCredentialAuthFailures:
         fallback_err = HTTPError("http://...", 403, "Forbidden", {}, BytesIO(b""))
 
         with patch("urllib.request.urlopen", side_effect=[caller_err, fallback_err]):
-            with pytest.raises(PermissionError, match="caller token expired and BOT_TOKEN fallback also failed"):
+            with pytest.raises(
+                PermissionError,
+                match="caller token expired and BOT_TOKEN fallback also failed",
+            ):
                 await _fetch_credential(ctx, "github")
 
     @pytest.mark.asyncio
     async def test_does_not_raise_on_non_auth_http_errors(self, monkeypatch):
         """_fetch_credential returns {} for non-auth HTTP errors (404, 500, etc.)."""
         monkeypatch.setenv("BACKEND_API_URL", "http://backend.svc.cluster.local/api")
-        monkeypatch.setenv("PROJECT_NAME", "test-project")
+        monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"github": "cred-gh-003"}))
 
         ctx = _make_context(session_id="sess-1")
 
@@ -499,11 +579,13 @@ class TestFetchCredentialAuthFailures:
         assert result == {}
 
     @pytest.mark.asyncio
-    async def test_caller_token_fallback_succeeds_when_bot_token_works(self, monkeypatch):
+    async def test_caller_token_fallback_succeeds_when_bot_token_works(
+        self, monkeypatch
+    ):
         """_fetch_credential returns data when caller token 401s but BOT_TOKEN fallback succeeds."""
         monkeypatch.setenv("BACKEND_API_URL", "http://backend.svc.cluster.local/api")
-        monkeypatch.setenv("PROJECT_NAME", "test-project")
         monkeypatch.setenv("BOT_TOKEN", "valid-bot-token")
+        monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"github": "cred-gh-004"}))
 
         ctx = _make_context(session_id="sess-1", current_user_id="user@example.com")
         ctx.caller_token = "Bearer expired-caller-token"
@@ -511,7 +593,9 @@ class TestFetchCredentialAuthFailures:
         caller_err = HTTPError("http://...", 401, "Unauthorized", {}, BytesIO(b""))
 
         mock_response = MagicMock()
-        mock_response.read.return_value = json.dumps({"token": "gh-tok-via-bot"}).encode()
+        mock_response.read.return_value = json.dumps(
+            {"token": "gh-tok-via-bot"}
+        ).encode()
         mock_response.__enter__ = lambda s: s
         mock_response.__exit__ = MagicMock(return_value=False)
 
@@ -540,8 +624,13 @@ class TestPopulateRuntimeCredentialsAuthFailures:
                 raise PermissionError("github authentication failed with HTTP 401")
             return {}
 
-        with patch("ambient_runner.platform.auth._fetch_credential", side_effect=_fail_github):
-            with pytest.raises(PermissionError, match="Credential refresh failed due to authentication errors"):
+        with patch(
+            "ambient_runner.platform.auth._fetch_credential", side_effect=_fail_github
+        ):
+            with pytest.raises(
+                PermissionError,
+                match="Credential refresh failed due to authentication errors",
+            ):
                 await populate_runtime_credentials(ctx)
 
     @pytest.mark.asyncio
@@ -555,7 +644,9 @@ class TestPopulateRuntimeCredentialsAuthFailures:
         async def _fail_all(context, cred_type):
             raise PermissionError(f"{cred_type} authentication failed with HTTP 401")
 
-        with patch("ambient_runner.platform.auth._fetch_credential", side_effect=_fail_all):
+        with patch(
+            "ambient_runner.platform.auth._fetch_credential", side_effect=_fail_all
+        ):
             with pytest.raises(PermissionError) as exc_info:
                 await populate_runtime_credentials(ctx)
 
@@ -583,10 +674,13 @@ class TestPopulateRuntimeCredentialsAuthFailures:
 class TestRefreshCredentialsTool:
     def _make_tool_decorator(self):
         """Create a mock sdk_tool decorator that preserves the function."""
+
         def mock_tool(name, description, schema):
             def decorator(func):
                 return func
+
             return decorator
+
         return mock_tool
 
     @pytest.mark.asyncio
@@ -595,7 +689,9 @@ class TestRefreshCredentialsTool:
         from ambient_runner.bridges.claude.tools import create_refresh_credentials_tool
 
         mock_context = MagicMock()
-        tool_fn = create_refresh_credentials_tool(mock_context, self._make_tool_decorator())
+        tool_fn = create_refresh_credentials_tool(
+            mock_context, self._make_tool_decorator()
+        )
 
         with patch(
             "ambient_runner.platform.auth.populate_runtime_credentials",
@@ -613,14 +709,19 @@ class TestRefreshCredentialsTool:
         from ambient_runner.bridges.claude.tools import create_refresh_credentials_tool
 
         mock_context = MagicMock()
-        tool_fn = create_refresh_credentials_tool(mock_context, self._make_tool_decorator())
+        tool_fn = create_refresh_credentials_tool(
+            mock_context, self._make_tool_decorator()
+        )
 
-        with patch(
-            "ambient_runner.platform.auth.populate_runtime_credentials",
-            new_callable=AsyncMock,
-        ), patch(
-            "ambient_runner.platform.utils.get_active_integrations",
-            return_value=["github", "jira"],
+        with (
+            patch(
+                "ambient_runner.platform.auth.populate_runtime_credentials",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "ambient_runner.platform.utils.get_active_integrations",
+                return_value=["github", "jira"],
+            ),
         ):
             result = await tool_fn({})
 

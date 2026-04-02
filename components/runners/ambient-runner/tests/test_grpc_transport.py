@@ -161,7 +161,9 @@ class TestGRPCSessionListenerFiltering:
                 pass
 
     async def test_user_message_triggers_bridge_run(self):
-        payload = _make_runner_payload(thread_id="t-1", run_id="r-1", content="do the thing")
+        payload = _make_runner_payload(
+            thread_id="t-1", run_id="r-1", content="do the thing"
+        )
         msgs = [_make_session_message("user", payload, seq=1)]
         client = _make_grpc_client(messages=msgs)
         bridge = _make_bridge()
@@ -195,7 +197,9 @@ class TestGRPCSessionListenerFiltering:
 
     async def test_user_message_run_called_with_correct_thread_id(self):
         """bridge.run() must receive input_data with thread_id from the message payload."""
-        payload = _make_runner_payload(thread_id="t-specific", run_id="r-42", content="hello")
+        payload = _make_runner_payload(
+            thread_id="t-specific", run_id="r-42", content="hello"
+        )
         msgs = [_make_session_message("user", payload, seq=5)]
         client = _make_grpc_client(messages=msgs)
         bridge = _make_bridge()
@@ -256,7 +260,11 @@ class TestGRPCSessionListenerFiltering:
             assert len(msgs_in_input) == 1
             msg = msgs_in_input[0]
             role = msg["role"] if isinstance(msg, dict) else getattr(msg, "role", None)
-            content = msg["content"] if isinstance(msg, dict) else getattr(msg, "content", None)
+            content = (
+                msg["content"]
+                if isinstance(msg, dict)
+                else getattr(msg, "content", None)
+            )
             assert role == "user"
             assert content == "not-json"
         finally:

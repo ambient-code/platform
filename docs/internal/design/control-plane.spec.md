@@ -376,7 +376,6 @@ The runner calls `GET /api/ambient/v1/credentials/{id}/token` for each provider 
 { "provider": "github", "token": "github_pat_...", "url": "https://github.com" }
 { "provider": "jira",   "token": "ATATT3x...",     "url": "https://myco.atlassian.net", "email": "bot@myco.com" }
 { "provider": "google", "token": "{\"type\":\"service_account\", ...}" }
-{ "provider": "other",  "token": "...", "url": "https://my-service.example.com" }
 ```
 
 `token` is always present. `url` and `email` are included when set on the Credential. The runner maps each response to environment variables and on-disk files consumed by Claude Code and its tools.
@@ -396,7 +395,7 @@ The runner calls `GET /api/ambient/v1/credentials/{id}/token` for each provider 
 |-----|-------|---------|
 | `CREDENTIAL_IDS` | JSON map `{provider: id}` | Resolved credential IDs for this session; runner uses to call `/credentials/{id}/token` |
 
-Status: 🔲 planned — blocked on Credential Kind (ambient-model.spec.md Wave 4 BE)
+Status: ✅ implemented — Credential Kind live (PR #1110); CP integration pending (Wave 5)
 
 ---
 

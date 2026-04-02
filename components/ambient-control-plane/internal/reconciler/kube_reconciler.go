@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -38,7 +39,6 @@ type KubeReconcilerConfig struct {
 	RunnerLogLevel        string
 	CPRuntimeNamespace    string
 }
-
 
 type SimpleKubeReconciler struct {
 	factory     *SDKClientFactory
@@ -150,7 +150,19 @@ func (r *SimpleKubeReconciler) provisionSession(ctx context.Context, session typ
 		return fmt.Errorf("ensuring service account: %w", err)
 	}
 
-	if err := r.ensurePod(ctx, namespace, session, sessionLabel, sdk); err != nil {
+	credentialIDs, err := r.resolveCredentialIDs(ctx, sdk)
+	if err != nil {
+		r.logger.Warn().Err(err).Str("session_id", session.ID).Msg("credential resolution failed; continuing without credentials")
+		credentialIDs = map[string]string{}
+	}
+
+	if len(credentialIDs) > 0 {
+		if err := r.ensureCredentialRoleBindings(ctx, namespace, serviceAccountName(session.ID), credentialIDs); err != nil {
+			return fmt.Errorf("ensuring credential role bindings: %w", err)
+		}
+	}
+
+	if err := r.ensurePod(ctx, namespace, session, sessionLabel, sdk, credentialIDs); err != nil {
 		return fmt.Errorf("ensuring pod: %w", err)
 	}
 
@@ -203,7 +215,6 @@ func (r *SimpleKubeReconciler) cleanupSession(ctx context.Context, session types
 
 	return nil
 }
-
 
 func (r *SimpleKubeReconciler) ensureService(ctx context.Context, namespace string, session types.Session, labelSelector string) error {
 	name := serviceName(session.ID)
@@ -361,7 +372,7 @@ func (r *SimpleKubeReconciler) ensureServiceAccount(ctx context.Context, namespa
 	return nil
 }
 
-func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, session types.Session, labelSelector string, sdk *sdkclient.Client) error {
+func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, session types.Session, labelSelector string, sdk *sdkclient.Client, credentialIDs map[string]string) error {
 	name := podName(session.ID)
 
 	if _, err := r.nsKube().GetPod(ctx, namespace, name); err == nil {
@@ -394,7 +405,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 				},
 			},
 			"volumeMounts": r.buildVolumeMounts(),
-			"env":          r.buildEnv(ctx, session, sdk, secretName, useMCPSidecar),
+			"env":          r.buildEnv(ctx, session, sdk, secretName, useMCPSidecar, credentialIDs),
 			"resources": map[string]interface{}{
 				"requests": map[string]interface{}{
 					"cpu":    "500m",
@@ -536,7 +547,7 @@ func (r *SimpleKubeReconciler) ensureVertexSecret(ctx context.Context, namespace
 	return nil
 }
 
-func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Session, sdk *sdkclient.Client, credSecretName string, useMCPSidecar bool) []interface{} {
+func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Session, sdk *sdkclient.Client, credSecretName string, useMCPSidecar bool, credentialIDs map[string]string) []interface{} {
 	useVertex := "0"
 	if r.cfg.VertexEnabled {
 		useVertex = "1"
@@ -603,7 +614,73 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 		env = append(env, envVar("REPOS_JSON", fmt.Sprintf(`[{"url":%q}]`, session.RepoURL)))
 	}
 
+	if len(credentialIDs) > 0 {
+		raw, err := json.Marshal(credentialIDs)
+		if err == nil {
+			env = append(env, envVar("CREDENTIAL_IDS", string(raw)))
+		}
+	}
+
 	return env
+}
+
+func (r *SimpleKubeReconciler) resolveCredentialIDs(ctx context.Context, sdk *sdkclient.Client) (map[string]string, error) {
+	result := map[string]string{}
+
+	it := sdk.Credentials().ListAll(ctx, &types.ListOptions{Size: 100})
+	for it.Next() {
+		cred := it.Item()
+		if cred.Provider == "" || cred.ID == "" {
+			continue
+		}
+		if _, already := result[cred.Provider]; !already {
+			result[cred.Provider] = cred.ID
+		}
+	}
+	if err := it.Err(); err != nil {
+		return nil, fmt.Errorf("listing credentials: %w", err)
+	}
+
+	r.logger.Info().Int("count", len(result)).Msg("resolved credential IDs for session")
+	return result, nil
+}
+
+func (r *SimpleKubeReconciler) ensureCredentialRoleBindings(ctx context.Context, namespace, saName string, credentialIDs map[string]string) error {
+	for provider, credID := range credentialIDs {
+		name := fmt.Sprintf("%s-credential-%s", saName, provider)
+		rb := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "rbac.authorization.k8s.io/v1",
+				"kind":       "RoleBinding",
+				"metadata": map[string]interface{}{
+					"name":      name,
+					"namespace": namespace,
+				},
+				"roleRef": map[string]interface{}{
+					"apiGroup": "rbac.authorization.k8s.io",
+					"kind":     "ClusterRole",
+					"name":     "credential:token-reader",
+				},
+				"subjects": []interface{}{
+					map[string]interface{}{
+						"kind":      "ServiceAccount",
+						"name":      saName,
+						"namespace": namespace,
+					},
+				},
+			},
+		}
+		if _, err := r.nsKube().CreateRoleBinding(ctx, namespace, rb); err != nil && !k8serrors.IsAlreadyExists(err) {
+			return fmt.Errorf("creating credential role binding %s for provider %s (id=%s): %w", name, provider, credID, err)
+		}
+		r.logger.Debug().
+			Str("role_binding", name).
+			Str("namespace", namespace).
+			Str("provider", provider).
+			Str("credential_id", credID).
+			Msg("credential token-reader role binding ensured")
+	}
+	return nil
 }
 
 func (r *SimpleKubeReconciler) assembleInitialPrompt(ctx context.Context, session types.Session, sdk *sdkclient.Client) string {

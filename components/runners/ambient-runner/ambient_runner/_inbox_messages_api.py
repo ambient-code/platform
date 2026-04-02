@@ -189,7 +189,16 @@ class _InboxMessageProto:
       8: updated_at  (Timestamp, wire 2)
     """
 
-    __slots__ = ("id", "agent_id", "from_agent_id", "from_name", "body", "read", "created_at", "updated_at")
+    __slots__ = (
+        "id",
+        "agent_id",
+        "from_agent_id",
+        "from_name",
+        "body",
+        "read",
+        "created_at",
+        "updated_at",
+    )
 
     def __init__(self) -> None:
         self.id: str = ""
