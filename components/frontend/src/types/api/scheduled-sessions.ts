@@ -17,6 +17,7 @@ export type ScheduledSession = {
   activeCount: number;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
+  reuseLastSession: boolean;
 };
 
 export type CreateScheduledSessionRequest = {
@@ -24,6 +25,7 @@ export type CreateScheduledSessionRequest = {
   schedule: string;
   sessionTemplate: CreateAgenticSessionRequest;
   suspend?: boolean;
+  reuseLastSession?: boolean;
 };
 
 export type UpdateScheduledSessionRequest = {
@@ -31,4 +33,5 @@ export type UpdateScheduledSessionRequest = {
   schedule?: string;
   sessionTemplate?: CreateAgenticSessionRequest;
   suspend?: boolean;
+  reuseLastSession?: boolean;
 };

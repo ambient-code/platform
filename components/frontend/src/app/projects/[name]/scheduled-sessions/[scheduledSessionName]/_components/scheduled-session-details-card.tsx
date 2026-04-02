@@ -74,6 +74,10 @@ export function ScheduledSessionDetailsCard({
             <dt className="text-muted-foreground">Active Sessions</dt>
             <dd>{scheduledSession.activeCount}</dd>
           </div>
+          <div>
+            <dt className="text-muted-foreground">Session Reuse</dt>
+            <dd>{scheduledSession.reuseLastSession ? "Reuse last session" : "New session each run"}</dd>
+          </div>
           {(runnerLabel || modelDisplay) && (
             <div>
               <dt className="text-muted-foreground">Runner / Model</dt>
