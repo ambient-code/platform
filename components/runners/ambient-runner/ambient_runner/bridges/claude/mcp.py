@@ -28,6 +28,8 @@ DEFAULT_ALLOWED_TOOLS = [
     "Edit",
     "MultiEdit",
     "WebSearch",
+    "Skill",
+    "Agent",
 ]
 
 
