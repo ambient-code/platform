@@ -40,6 +40,8 @@ import { DEFAULT_RUNNER_TYPE_ID } from "@/services/api/runner-types";
 import type { WorkflowSelection } from "@/types/workflow";
 import type { SessionRepo } from "@/types/api/sessions";
 import { INACTIVITY_TIMEOUT_TOOLTIP } from "@/lib/constants";
+import { Label } from "@/components/ui/label";
+import { useWorkspaceFlag } from "@/services/queries/use-feature-flags-admin";
 import { toast } from "sonner";
 
 const SCHEDULE_PRESETS = [
@@ -65,6 +67,7 @@ const formSchema = z.object({
       (val) => !val?.trim() || (!isNaN(Number(val)) && Number(val) >= 0 && Number.isInteger(Number(val))),
       { message: "Must be a non-negative integer" }
     ),
+  reuseLastSession: z.boolean().optional(),
 }).refine(
   (data) => {
     if (data.schedulePreset === "custom") {
@@ -91,6 +94,7 @@ export default function CreateScheduledSessionPage() {
   const createMutation = useCreateScheduledSession();
   const { data: runnerTypes, isLoading: runnerTypesLoading, isError: runnerTypesError, refetch: refetchRunnerTypes } = useRunnerTypes(projectName);
   const { data: ootbWorkflows = [], isLoading: workflowsLoading } = useOOTBWorkflows(projectName);
+  const { enabled: reuseFeatureEnabled } = useWorkspaceFlag(projectName, "scheduled-session.reuse.enabled");
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -102,6 +106,7 @@ export default function CreateScheduledSessionPage() {
       runnerType: DEFAULT_RUNNER_TYPE_ID,
       model: "",
       inactivityTimeout: "",
+      reuseLastSession: false,
     },
   });
 
@@ -184,6 +189,7 @@ export default function CreateScheduledSessionPage() {
         data: {
           displayName: values.displayName?.trim() || undefined,
           schedule,
+          reuseLastSession: values.reuseLastSession,
           sessionTemplate: {
             initialPrompt: values.initialPrompt,
             runnerType: values.runnerType,
@@ -292,6 +298,43 @@ export default function CreateScheduledSessionPage() {
                     </div>
                   )}
                 </div>
+              )}
+
+              {reuseFeatureEnabled && (
+                <FormField
+                  control={form.control}
+                  name="reuseLastSession"
+                  render={({ field }) => (
+                    <FormItem>
+                      <div className="flex items-center space-x-2">
+                        <FormControl>
+                          <Checkbox
+                            id="reuse-last-session"
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            disabled={createMutation.isPending}
+                          />
+                        </FormControl>
+                        <div className="flex items-center gap-1.5">
+                          <Label htmlFor="reuse-last-session" className="cursor-pointer">
+                            Reuse last session
+                          </Label>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger type="button" aria-label="Reuse last session help">
+                                <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-xs">
+                                <p>Instead of creating a new session each time, reuse the most recent one. If the session is still running, the prompt is sent as a follow-up message. If it has stopped, it is resumed with the prompt.</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               )}
             </CardContent>
           </Card>

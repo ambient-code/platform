@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"ambient-code-operator/internal/config"
@@ -27,12 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	intstr "k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/util/retry"
-)
-
-// Track which pods are currently being monitored to prevent duplicate goroutines
-var (
-	monitoredPods   = make(map[string]bool)
-	monitoredPodsMu sync.Mutex
 )
 
 // handleAgenticSessionEvent is the legacy reconciliation function containing all session
@@ -391,19 +384,9 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		podName := fmt.Sprintf("%s-runner", name)
 		_, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), podName, v1.GetOptions{})
 		if err == nil {
-			// Pod exists, start monitoring if not already running
-			monitorKey := fmt.Sprintf("%s/%s", sessionNamespace, podName)
-			monitoredPodsMu.Lock()
-			alreadyMonitoring := monitoredPods[monitorKey]
-			if !alreadyMonitoring {
-				monitoredPods[monitorKey] = true
-				monitoredPodsMu.Unlock()
-				log.Printf("Resuming monitoring for existing pod %s (session in Creating phase)", podName)
-				go monitorPod(podName, name, sessionNamespace)
-			} else {
-				monitoredPodsMu.Unlock()
-				log.Printf("Pod %s already being monitored, skipping duplicate", podName)
-			}
+			// Pod exists and session is in Creating phase — controller-runtime
+			// reconciler will handle monitoring via reconcileCreating/reconcileRunning.
+			log.Printf("Pod %s exists for Creating session %s, controller-runtime will reconcile", podName, name)
 			return nil
 		} else if errors.IsNotFound(err) {
 			// Pod doesn't exist but phase is Creating - check if this is due to a stop request
@@ -785,7 +768,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		stateSyncImage = runtime.Sandbox.StateSyncImage
 	}
 
-	runnerPort := int32(defaultRunnerPort)
+	runnerPort := int32(DefaultRunnerPort)
 	if runtime != nil && runtime.Container.Port > 0 {
 		runnerPort = int32(runtime.Container.Port)
 	}
@@ -819,7 +802,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		},
 		Limits: corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("2000m"),
-			corev1.ResourceMemory: resource.MustParse("4Gi"),
+			corev1.ResourceMemory: resource.MustParse("8Gi"),
 		},
 	}
 	if runtime != nil && runtime.Container.Resources != nil {
@@ -858,6 +841,17 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	if runtime != nil && len(runtime.Container.Env) > 0 {
 		for k, v := range runtime.Container.Env {
 			registryEnvVars = append(registryEnvVars, corev1.EnvVar{Name: k, Value: v})
+		}
+	}
+
+	// Apply annotation-based override to the runner token secret name if present.
+	// The variable was declared above at first use (line 585); this overrides the
+	// default name when the session CR carries the runner-token-secret annotation.
+	if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {
+		if anns, ok := meta["annotations"].(map[string]interface{}); ok {
+			if v, ok := anns["ambient-code.io/runner-token-secret"].(string); ok && strings.TrimSpace(v) != "" {
+				runnerTokenSecretName = strings.TrimSpace(v)
+			}
 		}
 	}
 
@@ -912,6 +906,9 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 						{Name: "AWS_ACCESS_KEY_ID", Value: s3AccessKey},
 						{Name: "AWS_SECRET_ACCESS_KEY", Value: s3SecretKey},
 						// NOTE: GIT_USER_NAME and GIT_USER_EMAIL removed - auto-derived from GitHub/GitLab token via API
+						// Backend API URL so init container can fetch git tokens for cloning private repos
+						{Name: "BACKEND_API_URL", Value: fmt.Sprintf("http://backend-service.%s.svc.cluster.local:8080/api", appConfig.BackendNamespace)},
+						{Name: "PROJECT_NAME", Value: sessionNamespace},
 					}
 
 					// Add repos JSON if present
@@ -933,22 +930,12 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 						}
 					}
 
-					// Add GitHub token for private repos
-					secretName := ""
-					if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {
-						if anns, ok := meta["annotations"].(map[string]interface{}); ok {
-							if v, ok := anns["ambient-code.io/runner-token-secret"].(string); ok && strings.TrimSpace(v) != "" {
-								secretName = strings.TrimSpace(v)
-							}
-						}
-					}
-					if secretName == "" {
-						secretName = fmt.Sprintf("ambient-runner-token-%s", name)
-					}
+					// Inject BOT_TOKEN for the init container (runs once at pod startup
+					// with a freshly minted token, so env var injection is sufficient here).
 					base = append(base, corev1.EnvVar{
 						Name: "BOT_TOKEN",
 						ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+							LocalObjectReference: corev1.LocalObjectReference{Name: runnerTokenSecretName},
 							Key:                  "k8s-token",
 						}},
 					})
@@ -1132,33 +1119,19 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 					log.Printf("Session %s: passing PARENT_SESSION_ID=%s to runner", name, parentSessionID)
 				}
 
-				// Add IS_RESUME if this session has been started before
-				if status, found, _ := unstructured.NestedMap(currentObj.Object, "status"); found {
+				// Add IS_RESUME if this session has been started before,
+				// unless force-execute-prompt is set (scheduled session reuse wants the prompt to run).
+				forceExecutePrompt := annotations["ambient-code.io/force-execute-prompt"] == "true"
+				if forceExecutePrompt {
+					log.Printf("Session %s: force-execute-prompt annotation set, skipping IS_RESUME", name)
+					_ = clearAnnotation(sessionNamespace, name, "ambient-code.io/force-execute-prompt")
+				} else if status, found, _ := unstructured.NestedMap(currentObj.Object, "status"); found {
 					if startTime, ok := status["startTime"].(string); ok && startTime != "" {
 						base = append(base, corev1.EnvVar{Name: "IS_RESUME", Value: "true"})
 						log.Printf("Session %s: marking as resume (IS_RESUME=true, startTime=%s)", name, startTime)
 					}
 				}
 
-				// Inject runner token secret
-				secretName := ""
-				if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {
-					if anns, ok := meta["annotations"].(map[string]interface{}); ok {
-						if v, ok := anns["ambient-code.io/runner-token-secret"].(string); ok && strings.TrimSpace(v) != "" {
-							secretName = strings.TrimSpace(v)
-						}
-					}
-				}
-				if secretName == "" {
-					secretName = fmt.Sprintf("ambient-runner-token-%s", name)
-				}
-				base = append(base, corev1.EnvVar{
-					Name: "BOT_TOKEN",
-					ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-						Key:                  "k8s-token",
-					}},
-				})
 				// Add CR-provided envs last (override base when same key)
 				if spec, ok := currentObj.Object["spec"].(map[string]interface{}); ok {
 					if repos, ok := spec["repos"].([]interface{}); ok && len(repos) > 0 {
@@ -1350,7 +1323,31 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	// This ensures fresh tokens for long-running sessions and automatic refresh
 	log.Printf("Session %s will fetch credentials at runtime from backend API", name)
 
-	// Do not mount runner Secret volume; runner fetches tokens on demand
+	// Mount the runner-token Secret as a file so kubelet automatically refreshes
+	// it when the Secret is updated (env vars are frozen at pod start and cannot
+	// reflect token rotations for long-running sessions).
+	pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+		Name: "runner-token",
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: runnerTokenSecretName,
+				Items: []corev1.KeyToPath{
+					{Key: "k8s-token", Path: "bot-token"},
+				},
+			},
+		},
+	})
+	for i := range pod.Spec.Containers {
+		if pod.Spec.Containers[i].Name == "ambient-code-runner" {
+			pod.Spec.Containers[i].VolumeMounts = append(pod.Spec.Containers[i].VolumeMounts, corev1.VolumeMount{
+				Name:      "runner-token",
+				MountPath: "/var/run/secrets/ambient",
+				ReadOnly:  true,
+			})
+			log.Printf("Mounted runner-token secret to /var/run/secrets/ambient in runner container for session %s", name)
+			break
+		}
+	}
 
 	// Create the pod
 	createdPod, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Create(context.TODO(), pod, v1.CreateOptions{})
@@ -1400,9 +1397,13 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 
 	// Create session Service pointing to the runner's FastAPI server
 	// Backend proxies both AG-UI and content requests to this service endpoint
+	svcName := fmt.Sprintf("session-%s", name)
+	if len(svcName) > 63 {
+		return fmt.Errorf("session name %q too long: derived Service name %q is %d chars (max 63)", name, svcName, len(svcName))
+	}
 	aguiSvc := &corev1.Service{
 		ObjectMeta: v1.ObjectMeta{
-			Name:      fmt.Sprintf("session-%s", name),
+			Name:      svcName,
 			Namespace: sessionNamespace,
 			Labels: map[string]string{
 				"app":             "ambient-code",
@@ -1430,21 +1431,11 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	if _, serr := config.K8sClient.CoreV1().Services(sessionNamespace).Create(context.TODO(), aguiSvc, v1.CreateOptions{}); serr != nil && !errors.IsAlreadyExists(serr) {
 		log.Printf("Failed to create AG-UI service for %s: %v", name, serr)
 	} else {
-		log.Printf("Created AG-UI service session-%s for AgenticSession %s", name, name)
+		log.Printf("Created AG-UI service %s for AgenticSession %s", svcName, name)
 	}
 
-	// Start monitoring the pod (only if not already being monitored)
-	monitorKey := fmt.Sprintf("%s/%s", sessionNamespace, podName)
-	monitoredPodsMu.Lock()
-	alreadyMonitoring := monitoredPods[monitorKey]
-	if !alreadyMonitoring {
-		monitoredPods[monitorKey] = true
-		monitoredPodsMu.Unlock()
-		go monitorPod(podName, name, sessionNamespace)
-	} else {
-		monitoredPodsMu.Unlock()
-		log.Printf("Pod %s already being monitored, skipping duplicate goroutine", podName)
-	}
+	// Pod created — controller-runtime reconciler will handle monitoring
+	// via reconcileCreating (pod startup) and reconcileRunning (steady state).
 
 	return nil
 }
@@ -1819,228 +1810,6 @@ func reconcileActiveWorkflowWithPatch(sessionNamespace, sessionName string, spec
 	})
 
 	return nil
-}
-
-func monitorPod(podName, sessionName, sessionNamespace string) {
-	monitorKey := fmt.Sprintf("%s/%s", sessionNamespace, podName)
-
-	// Remove from monitoring map when this goroutine exits
-	defer func() {
-		monitoredPodsMu.Lock()
-		delete(monitoredPods, monitorKey)
-		monitoredPodsMu.Unlock()
-		log.Printf("Stopped monitoring pod %s (goroutine exiting)", podName)
-	}()
-
-	log.Printf("Starting pod monitoring for %s (session: %s/%s)", podName, sessionNamespace, sessionName)
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		// Create status accumulator for this tick - all updates batched into single API call
-		statusPatch := NewStatusPatch(sessionNamespace, sessionName)
-
-		gvr := types.GetAgenticSessionResource()
-		sessionObj, err := config.DynamicClient.Resource(gvr).Namespace(sessionNamespace).Get(context.TODO(), sessionName, v1.GetOptions{})
-		if err != nil {
-			if errors.IsNotFound(err) {
-				log.Printf("AgenticSession %s deleted; stopping job monitoring", sessionName)
-				return
-			}
-			log.Printf("Failed to fetch AgenticSession %s: %v", sessionName, err)
-			continue
-		}
-
-		// Check if session was stopped or is stopping - exit monitor loop immediately
-		// This prevents the monitor from overwriting phase=Stopping with phase=Failed
-		// when the pod exits with non-zero (e.g. state-sync exit 137 during termination)
-		sessionStatus, _, _ := unstructured.NestedMap(sessionObj.Object, "status")
-		if sessionStatus != nil {
-			if currentPhase, ok := sessionStatus["phase"].(string); ok {
-				if currentPhase == "Stopped" || currentPhase == "Stopping" {
-					log.Printf("AgenticSession %s phase is %s; stopping pod monitoring", sessionName, currentPhase)
-					return
-				}
-			}
-		}
-		// Also check desired-phase annotation as a belt-and-braces guard
-		// (the annotation is set before phase transitions, so catches early race)
-		sessionAnnotations := sessionObj.GetAnnotations()
-		if sessionAnnotations != nil {
-			if dp := strings.TrimSpace(sessionAnnotations["ambient-code.io/desired-phase"]); dp == "Stopped" {
-				log.Printf("AgenticSession %s has desired-phase=Stopped; stopping pod monitoring", sessionName)
-				return
-			}
-		}
-
-		// Check inactivity timeout for running sessions
-		if shouldAutoStop(sessionObj) {
-			log.Printf("[Inactivity] Session %s/%s: idle beyond timeout, triggering auto-stop", sessionNamespace, sessionName)
-			if err := triggerInactivityStop(sessionNamespace, sessionName); err != nil {
-				log.Printf("[Inactivity] Failed to auto-stop %s/%s: %v", sessionNamespace, sessionName, err)
-				continue // Retry on next tick instead of abandoning the monitor
-			}
-			return
-		}
-
-		if err := ensureFreshRunnerToken(context.TODO(), sessionObj); err != nil {
-			log.Printf("Failed to refresh runner token for %s/%s: %v", sessionNamespace, sessionName, err)
-		}
-
-		pod, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), podName, v1.GetOptions{})
-		if err != nil {
-			if errors.IsNotFound(err) {
-				log.Printf("Pod %s deleted; stopping monitor", podName)
-				return
-			}
-			log.Printf("Error fetching pod %s: %v", podName, err)
-			continue
-		}
-		// Note: We don't store pod name in status (pods are ephemeral, can be recreated)
-		// Use k8s-resources endpoint or kubectl for live pod info
-
-		if pod.Spec.NodeName != "" {
-			statusPatch.AddCondition(conditionUpdate{Type: conditionPodScheduled, Status: "True", Reason: "Scheduled", Message: fmt.Sprintf("Scheduled on %s", pod.Spec.NodeName)})
-		} else {
-			surfacePodSchedulingFailure(pod, statusPatch)
-		}
-
-		if pod.Status.Phase == corev1.PodSucceeded {
-			statusPatch.SetField("phase", "Completed")
-			statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
-			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "Completed", Message: "Session finished"})
-			_ = statusPatch.Apply()
-			_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
-			return
-		}
-
-		if pod.Status.Phase == corev1.PodFailed {
-			// Collect detailed error message from pod and containers
-			errorMsg := pod.Status.Message
-			if errorMsg == "" {
-				errorMsg = pod.Status.Reason
-			}
-
-			// Check init containers for errors
-			for _, initStatus := range pod.Status.InitContainerStatuses {
-				if initStatus.State.Terminated != nil && initStatus.State.Terminated.ExitCode != 0 {
-					msg := fmt.Sprintf("Init container %s failed (exit %d): %s",
-						initStatus.Name,
-						initStatus.State.Terminated.ExitCode,
-						initStatus.State.Terminated.Message)
-					if initStatus.State.Terminated.Reason != "" {
-						msg = fmt.Sprintf("%s - %s", msg, initStatus.State.Terminated.Reason)
-					}
-					errorMsg = msg
-					break
-				}
-				if initStatus.State.Waiting != nil && initStatus.State.Waiting.Reason != "" {
-					errorMsg = fmt.Sprintf("Init container %s: %s - %s",
-						initStatus.Name,
-						initStatus.State.Waiting.Reason,
-						initStatus.State.Waiting.Message)
-					break
-				}
-			}
-
-			// Check main containers for errors if init passed
-			if errorMsg == "" || errorMsg == "PodFailed" {
-				for _, containerStatus := range pod.Status.ContainerStatuses {
-					if containerStatus.State.Terminated != nil && containerStatus.State.Terminated.ExitCode != 0 {
-						errorMsg = fmt.Sprintf("Container %s failed (exit %d): %s - %s",
-							containerStatus.Name,
-							containerStatus.State.Terminated.ExitCode,
-							containerStatus.State.Terminated.Reason,
-							containerStatus.State.Terminated.Message)
-						break
-					}
-					if containerStatus.State.Waiting != nil {
-						errorMsg = fmt.Sprintf("Container %s: %s - %s",
-							containerStatus.Name,
-							containerStatus.State.Waiting.Reason,
-							containerStatus.State.Waiting.Message)
-						break
-					}
-				}
-			}
-
-			if errorMsg == "" {
-				errorMsg = "Pod failed with unknown error"
-			}
-
-			log.Printf("Pod %s failed: %s", podName, errorMsg)
-			statusPatch.SetField("phase", "Failed")
-			statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
-			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "PodFailed", Message: errorMsg})
-			_ = statusPatch.Apply()
-			_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
-			return
-		}
-
-		runner := getContainerStatusByName(pod, "ambient-code-runner")
-		if runner == nil {
-			// Apply any accumulated changes (e.g., PodScheduled) before continuing
-			_ = statusPatch.Apply()
-			continue
-		}
-
-		if runner.State.Running != nil {
-			statusPatch.SetField("phase", "Running")
-			statusPatch.AddCondition(conditionUpdate{Type: conditionRunnerStarted, Status: "True", Reason: "ContainerRunning", Message: "Runner container is executing"})
-			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "True", Reason: "Running", Message: "Session is running"})
-			_ = statusPatch.Apply()
-			continue
-		}
-
-		if runner.State.Waiting != nil {
-			waiting := runner.State.Waiting
-			errorStates := map[string]bool{"ImagePullBackOff": true, "ErrImagePull": true, "CrashLoopBackOff": true, "CreateContainerConfigError": true, "InvalidImageName": true}
-			if errorStates[waiting.Reason] {
-				msg := fmt.Sprintf("Runner waiting: %s - %s", waiting.Reason, waiting.Message)
-				statusPatch.SetField("phase", "Failed")
-				statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
-				statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: waiting.Reason, Message: msg})
-				_ = statusPatch.Apply()
-				_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
-				return
-			}
-		}
-
-		if runner.State.Terminated != nil {
-			term := runner.State.Terminated
-			now := time.Now().UTC().Format(time.RFC3339)
-
-			statusPatch.SetField("completionTime", now)
-			switch term.ExitCode {
-			case 0:
-				statusPatch.SetField("phase", "Completed")
-				statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "Completed", Message: "Runner finished"})
-			case 2:
-				msg := fmt.Sprintf("Runner exited due to prerequisite failure: %s", term.Message)
-				statusPatch.SetField("phase", "Failed")
-				statusPatch.AddCondition(conditionUpdate{
-					Type:    conditionReady,
-					Status:  "False",
-					Reason:  "PrerequisiteFailed",
-					Message: msg,
-				})
-			default:
-				msg := fmt.Sprintf("Runner exited with code %d: %s", term.ExitCode, term.Reason)
-				if term.Message != "" {
-					msg = fmt.Sprintf("%s - %s", msg, term.Message)
-				}
-				statusPatch.SetField("phase", "Failed")
-				statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "RunnerExit", Message: msg})
-			}
-
-			_ = statusPatch.Apply()
-			_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
-			return
-		}
-
-		// Apply any accumulated changes at end of tick
-		_ = statusPatch.Apply()
-	}
 }
 
 // getContainerStatusByName returns the ContainerStatus for a given container name
@@ -2428,11 +2197,19 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 
 	// Create ServiceAccount
 	saName := fmt.Sprintf("ambient-session-%s", sessionName)
+	saAnnotations := map[string]string{}
+	// Propagate the session owner's userId so the backend middleware
+	// (resolveServiceAccountFromToken) can resolve the human identity
+	// when this SA creates child sessions or calls credential APIs.
+	if ownerUID, found, _ := unstructured.NestedString(session.Object, "spec", "userContext", "userId"); found && ownerUID != "" {
+		saAnnotations["ambient-code.io/created-by-user-id"] = ownerUID
+	}
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: v1.ObjectMeta{
 			Name:            saName,
 			Namespace:       sessionNamespace,
 			Labels:          map[string]string{"app": "ambient-runner"},
+			Annotations:     saAnnotations,
 			OwnerReferences: []v1.OwnerReference{ownerRef},
 		},
 	}
@@ -2441,6 +2218,29 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 			return fmt.Errorf("create SA: %w", err)
 		}
 		log.Printf("[TokenProvision] ServiceAccount %s already exists", saName)
+		// Ensure the annotation is present on pre-existing SAs (e.g., restarts).
+		// Skip the update if the annotation is already correct.
+		if len(saAnnotations) > 0 {
+			existingSA, getErr := config.K8sClient.CoreV1().ServiceAccounts(sessionNamespace).Get(context.TODO(), saName, v1.GetOptions{})
+			if getErr != nil {
+				return fmt.Errorf("get SA for annotation update: %w", getErr)
+			}
+			needsUpdate := false
+			if existingSA.Annotations == nil {
+				existingSA.Annotations = make(map[string]string)
+			}
+			for k, v := range saAnnotations {
+				if existingSA.Annotations[k] != v {
+					existingSA.Annotations[k] = v
+					needsUpdate = true
+				}
+			}
+			if needsUpdate {
+				if _, updErr := config.K8sClient.CoreV1().ServiceAccounts(sessionNamespace).Update(context.TODO(), existingSA, v1.UpdateOptions{}); updErr != nil {
+					return fmt.Errorf("update SA annotations: %w", updErr)
+				}
+			}
+		}
 	}
 
 	// Create Role with least-privilege permissions

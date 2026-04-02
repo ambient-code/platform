@@ -89,7 +89,7 @@ jobs:
 
       - name: Checkout & label
         if: steps.analyze.outputs.action == 'fix'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: refs/pull/${{ matrix.pr }}/head
           fetch-depth: 0

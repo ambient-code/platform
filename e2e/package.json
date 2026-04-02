@@ -18,7 +18,7 @@
   "author": "vTeam",
   "license": "MIT",
   "devDependencies": {
-    "@cypress/code-coverage": "^3.14.7",
+    "@cypress/code-coverage": "^4.0.3",
     "@types/node": "^20.10.0",
     "cypress": "^13.6.0",
     "dotenv": "^16.4.5",

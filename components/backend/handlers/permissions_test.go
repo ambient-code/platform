@@ -848,6 +848,131 @@ var _ = Describe("Permissions Handler", Ordered, Label(test_constants.LabelUnit,
 		})
 	})
 
+	Context("CreateProjectKey Expiration Validation", func() {
+		It("Should reject missing expirationSeconds", func() {
+			requestBody := map[string]interface{}{
+				"name": "test-key",
+				"role": "edit",
+			}
+
+			ginContext := httpUtils.CreateTestGinContext("POST", "/api/projects/test-project/keys", requestBody)
+			ginContext.Params = gin.Params{
+				{Key: "projectName", Value: "test-project"},
+			}
+			httpUtils.SetAuthHeader("test-token")
+			ginContext.Set("userID", "test-user")
+
+			CreateProjectKey(ginContext)
+
+			httpUtils.AssertHTTPStatus(http.StatusBadRequest)
+			httpUtils.AssertErrorMessage("expirationSeconds is required")
+		})
+
+		It("Should reject zero expirationSeconds", func() {
+			requestBody := map[string]interface{}{
+				"name":              "test-key",
+				"role":              "edit",
+				"expirationSeconds": 0,
+			}
+
+			ginContext := httpUtils.CreateTestGinContext("POST", "/api/projects/test-project/keys", requestBody)
+			ginContext.Params = gin.Params{
+				{Key: "projectName", Value: "test-project"},
+			}
+			httpUtils.SetAuthHeader("test-token")
+			ginContext.Set("userID", "test-user")
+
+			CreateProjectKey(ginContext)
+
+			httpUtils.AssertHTTPStatus(http.StatusBadRequest)
+			httpUtils.AssertErrorMessage("expirationSeconds is required")
+		})
+
+		It("Should reject negative expirationSeconds", func() {
+			requestBody := map[string]interface{}{
+				"name":              "test-key",
+				"role":              "edit",
+				"expirationSeconds": -1,
+			}
+
+			ginContext := httpUtils.CreateTestGinContext("POST", "/api/projects/test-project/keys", requestBody)
+			ginContext.Params = gin.Params{
+				{Key: "projectName", Value: "test-project"},
+			}
+			httpUtils.SetAuthHeader("test-token")
+			ginContext.Set("userID", "test-user")
+
+			CreateProjectKey(ginContext)
+
+			httpUtils.AssertHTTPStatus(http.StatusBadRequest)
+			httpUtils.AssertErrorMessage("expirationSeconds is required")
+		})
+
+		It("Should reject expirationSeconds exceeding 1 year", func() {
+			requestBody := map[string]interface{}{
+				"name":              "test-key",
+				"role":              "edit",
+				"expirationSeconds": 31536001,
+			}
+
+			ginContext := httpUtils.CreateTestGinContext("POST", "/api/projects/test-project/keys", requestBody)
+			ginContext.Params = gin.Params{
+				{Key: "projectName", Value: "test-project"},
+			}
+			httpUtils.SetAuthHeader("test-token")
+			ginContext.Set("userID", "test-user")
+
+			CreateProjectKey(ginContext)
+
+			httpUtils.AssertHTTPStatus(http.StatusBadRequest)
+			httpUtils.AssertErrorMessage("must not exceed 31536000")
+		})
+
+		It("Should accept expirationSeconds at exactly 1 year", func() {
+			requestBody := map[string]interface{}{
+				"name":              "test-key",
+				"role":              "edit",
+				"expirationSeconds": 31536000,
+			}
+
+			ginContext := httpUtils.CreateTestGinContext("POST", "/api/projects/test-project/keys", requestBody)
+			ginContext.Params = gin.Params{
+				{Key: "projectName", Value: "test-project"},
+			}
+			httpUtils.SetAuthHeader("test-token")
+			ginContext.Set("userID", "test-user")
+
+			CreateProjectKey(ginContext)
+
+			// Should pass validation and proceed to SA creation (not 400)
+			status := httpUtils.GetResponseRecorder().Code
+			Expect(status).NotTo(Equal(http.StatusBadRequest),
+				"Valid 1-year expiration should not be rejected")
+		})
+
+		It("Should accept valid 90-day expirationSeconds", func() {
+			requestBody := map[string]interface{}{
+				"name":              "test-key",
+				"role":              "edit",
+				"expirationSeconds": 7776000,
+			}
+
+			ginContext := httpUtils.CreateTestGinContext("POST", "/api/projects/test-project/keys", requestBody)
+			ginContext.Params = gin.Params{
+				{Key: "projectName", Value: "test-project"},
+			}
+			httpUtils.SetAuthHeader("test-token")
+			ginContext.Set("userID", "test-user")
+
+			CreateProjectKey(ginContext)
+
+			// Should pass validation and proceed to SA creation (not 400)
+			status := httpUtils.GetResponseRecorder().Code
+			Expect(status).NotTo(Equal(http.StatusBadRequest),
+				"Valid 90-day expiration should not be rejected")
+		})
+	})
+
 	Context("Resource Label Verification", func() {
 		It("Should create resources with proper ambient-code labels", func() {
 			requestBody := map[string]interface{}{

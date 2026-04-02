@@ -4,11 +4,34 @@ kind: Kustomization
 namespace: ambient-code
 
 # Add Grafana on top of base observability stack
+# To add a new dashboard: drop a .json file into dashboards/, add a configMapGenerator entry,
+# and add the volume/volumeMount in grafana-deployment-patch.yaml
 
 resources:
-  - ../../otel-collector.yaml
-  - ../../servicemonitor.yaml
-  - ../../grafana.yaml
+  - ../../base/
+  - grafana.yaml
+  - grafana-rbac.yaml
 
-patchesStrategicMerge:
-  - grafana-datasource-patch.yaml
+patches:
+  - path: grafana-datasource-patch.yaml
+  - path: grafana-deployment-patch.yaml
+
+configMapGenerator:
+  - name: grafana-dashboard-operator
+    files:
+      - dashboards/ambient-operator-dashboard.json
+  - name: grafana-dashboard-cluster
+    files:
+      - dashboards/k8s-cluster-monitoring.json
+  - name: grafana-dashboard-nodes
+    files:
+      - dashboards/k8s-nodes.json
+  - name: grafana-dashboard-namespace
+    files:
+      - dashboards/k8s-namespace.json
+  - name: grafana-dashboard-pods
+    files:
+      - dashboards/k8s-pods.json
+
+generatorOptions:
+  disableNameSuffixHash: true

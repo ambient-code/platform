@@ -104,7 +104,7 @@ spec:
               name: google-workflow-app-secret
               key: BACKEND_URL
               optional: true
-        # Operator image for scheduled session trigger jobs
+        # Operator image for scheduled session trigger jobs (CI pins via ConfigMap)
         - name: OPERATOR_IMAGE
           valueFrom:
             configMapKeyRef:
@@ -210,11 +210,11 @@ spec:
               optional: true
         resources:
           requests:
-            cpu: 100m
-            memory: 256Mi
+            cpu: 200m
+            memory: 512Mi
           limits:
-            cpu: 500m
-            memory: 768Mi
+            cpu: "1"
+            memory: 1536Mi
         livenessProbe:
           httpGet:
             path: /health

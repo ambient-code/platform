@@ -24,6 +24,7 @@ describe('ExplorerPanel', () => {
     onTabChange: vi.fn(),
     onClose: vi.fn(),
     projectName: 'test-project',
+    sessionName: 'test-session',
     // Files tab props
     directoryOptions: [],
     selectedDirectory: { type: 'artifacts' as const, name: 'Shared Artifacts', path: 'artifacts' },

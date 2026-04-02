@@ -340,6 +340,17 @@ func (r *AgenticSessionReconciler) reconcileRunning(ctx context.Context, session
 		// Non-fatal, continue
 	}
 
+	// Check inactivity timeout — auto-stop idle sessions
+	if handlers.ShouldAutoStop(session) {
+		logger.Info("Session idle beyond inactivity timeout, triggering auto-stop",
+			"name", name, "namespace", namespace)
+		if err := handlers.TriggerInactivityStop(namespace, name); err != nil {
+			logger.Error(err, "Failed to auto-stop for inactivity", "name", name)
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
+
 	// Requeue to continue monitoring
 	return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 }

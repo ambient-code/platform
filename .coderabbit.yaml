@@ -1,0 +1,306 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+# =============================================================================
+# General
+# =============================================================================
+language: en-US # default
+tone_instructions: >-
+  Prefer concise responses (high information density, low fluff).
+  This is a Kubernetes-native AI automation platform built with Go, NextJS, and Python.
+early_access: false # default
+enable_free_tier: false
+
+# =============================================================================
+# Reviews
+# =============================================================================
+reviews:
+  profile: chill # default
+  request_changes_workflow: false # default
+  high_level_summary: true # default
+  high_level_summary_instructions: "" # default
+  high_level_summary_placeholder: "@coderabbitai summary" # default
+  high_level_summary_in_walkthrough: false # default
+  auto_title_placeholder: "@coderabbitai" # default
+  auto_title_instructions: "" # default
+  review_status: true # default
+  review_details: false # default
+  commit_status: false
+  fail_commit_status: false # default
+  collapse_walkthrough: true # default
+  changed_files_summary: true # default
+  sequence_diagrams: true # default
+  estimate_code_review_effort: false
+  assess_linked_issues: true # default
+  related_issues: true # default
+  related_prs: true # default
+  suggested_labels: true # default
+  labeling_instructions: [] # default
+  auto_apply_labels: false # default
+  suggested_reviewers: false
+  auto_assign_reviewers: false # default
+  in_progress_fortune: false
+  poem: false
+  enable_prompt_for_ai_agents: true # default
+  abort_on_close: true # default
+  disable_cache: false # default
+
+  slop_detection:
+    enabled: true # default
+
+  # ---------------------------------------------------------------------------
+  # Path filters
+  # ---------------------------------------------------------------------------
+  path_filters:
+    - "!**/vendor/**"
+    - "!**/zz_generated*"
+    - "!**/pkg/api/openapi/**"
+    - "!**/*.pb.go"
+    - "!**/node_modules/**"
+    - "!**/.next/**"
+    - "!**/go.sum"
+    - "!**/package-lock.json"
+
+  # ---------------------------------------------------------------------------
+  # Path instructions
+  # ---------------------------------------------------------------------------
+  path_instructions:
+    - path: "**/*"
+      instructions: |
+        - Flag only errors, security risks, or functionality-breaking problems.
+        - Limit to 3-5 comments max; group similar issues; mention repeated patterns once.
+        - No style, formatting, or refactoring suggestions. If nothing is broken, approve briefly.
+
+    - path: "components/{backend,operator}/**/*.go"
+      instructions: |
+        - User-facing API ops MUST use GetK8sClientsForRequest(c), never the backend service account.
+        - No panic() -- return fmt.Errorf with context.
+        - Reconcile loops (operator) must be idempotent.
+
+    - path: "components/frontend/src/**/*.{ts,tsx}"
+      instructions: |
+        - No 'any' types -- use proper types, 'unknown', or generic constraints.
+        - Verify loading/error states and error handling in React Query hooks.
+
+    - path: "components/runners/ambient-runner/**/*.py"
+      instructions: |
+        - Check subprocess handling, timeout management, and that secrets are not logged.
+
+    - path: "components/manifests/**/*.yaml"
+      instructions: |
+        - RBAC must follow least-privilege. Resource limits/requests required on containers.
+
+    - path: ".github/workflows/**/*.{yml,yaml}"
+      instructions: |
+        - Pin action versions to SHA. Verify secrets are not exposed and permissions are scoped.
+
+  # ---------------------------------------------------------------------------
+  # Auto review
+  # ---------------------------------------------------------------------------
+  auto_review:
+    enabled: true # default
+    description_keyword: "" # default
+    auto_incremental_review: true # default
+    auto_pause_after_reviewed_commits: 5 # default
+    drafts: false # default
+    labels: [] # default
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT MERGE"
+    ignore_usernames:
+      - "dependabot[bot]"
+      - "renovate[bot]"
+    base_branches:
+      - ".*"
+
+  # ---------------------------------------------------------------------------
+  # Finishing touches
+  # ---------------------------------------------------------------------------
+  finishing_touches:
+    docstrings:
+      enabled: true # default
+    unit_tests:
+      enabled: true # default
+    simplify:
+      enabled: true
+
+  # ---------------------------------------------------------------------------
+  # Pre-merge checks
+  # ---------------------------------------------------------------------------
+  pre_merge_checks:
+    override_requested_reviewers_only: false # default
+
+    docstrings:
+      mode: warning # default
+      threshold: 80 # default
+
+    title:
+      mode: warning
+      requirements: >-
+        Conventional Commits format: type(scope): description.
+        Types: feat, fix, chore, docs, refactor, test, ci, perf.
+
+    description:
+      mode: warning # default
+
+    issue_assessment:
+      mode: warning # default
+
+    custom_checks:
+      - name: "Performance and Algorithmic Complexity"
+        mode: error
+        instructions: |
+          BLOCKING. Flag only meaningful performance regressions:
+          1. O(n^2)+ algorithms on non-trivial inputs (handlers, K8s list operations).
+          2. N+1 patterns: list-then-query-per-item (K8s API, DB).
+          3. Expensive work inside loops (API calls, JSON parsing, regex compilation).
+          4. Unbounded growth: caches, watchers, buffers without eviction/limits.
+          5. Missing pagination/limits on List operations or API endpoints.
+          6. Frontend: unnecessary rerenders, missing memoization, unvirtualized large lists, missing dependency arrays, unbounded localStorage, sessionStorage or Cookies. Blocking HTTP requests.
+
+          Per issue: file, lines, risk, fix category. If clean, mark PASSED.
+
+      - name: "Security and Secret Handling"
+        mode: error
+        instructions: |
+          BLOCKING. Flag:
+          1. Secrets/tokens logged in plaintext or hardcoded in source.
+          2. Missing auth/authz on API endpoints.
+          3. Backend service account used where GetK8sClientsForRequest is required.
+          4. Injection vulnerabilities (SQL, command, path traversal).
+          5. Sensitive data leaked in API responses, WebSocket messages, or logs.
+          6. K8s Secrets missing OwnerReferences.
+
+          Per violation: file, lines, risk. If clean, mark PASSED.
+
+      - name: "Kubernetes Resource Safety"
+        mode: warning
+        instructions: |
+          Flag:
+          1. Child resources (Jobs, Secrets, PVCs) missing OwnerReferences.
+          2. Missing resource limits/requests on containers.
+          3. Overly permissive RBAC (wildcard verbs/resources).
+          4. Missing namespace scoping or pod security context.
+
+          If clean, mark PASSED.
+
+  # ---------------------------------------------------------------------------
+  # Tools
+  # ---------------------------------------------------------------------------
+  tools:
+    # Enabled (all default to true; listed for completeness)
+    golangci-lint:
+      enabled: true # default
+    eslint:
+      enabled: true # default
+    ruff:
+      enabled: true # default
+    hadolint:
+      enabled: true # default
+    actionlint:
+      enabled: true # default
+    shellcheck:
+      enabled: true # default
+    yamllint:
+      enabled: true # default
+    markdownlint:
+      enabled: true # default
+    buf:
+      enabled: true # default
+    gitleaks:
+      enabled: true # default
+    trufflehog:
+      enabled: true # default
+    checkov:
+      enabled: true # default
+    trivy:
+      enabled: true # default
+    github-checks:
+      enabled: true # default
+      timeout_ms: 90000 # default
+    languagetool:
+      enabled: true # default
+    opengrep:
+      enabled: true # default
+    semgrep:
+      enabled: true # default
+    checkmake:
+      enabled: true # default
+    dotenvLint:
+      enabled: true # default
+    osvScanner:
+      enabled: true # default
+
+    # Disabled -- overlap with preferred linters
+    biome:
+      enabled: false # conflicts with eslint
+    oxc:
+      enabled: false # conflicts with eslint
+    flake8:
+      enabled: false # conflicts with ruff
+    pylint:
+      enabled: false # conflicts with ruff
+
+# =============================================================================
+# Chat
+# =============================================================================
+chat:
+  auto_reply: false
+  art: false
+  allow_non_org_members: false
+  integrations:
+    jira:
+      usage: auto # default
+    linear:
+      usage: auto # default
+
+# =============================================================================
+# Knowledge base
+# =============================================================================
+knowledge_base:
+  opt_out: false # default
+  web_search:
+    enabled: false
+  code_guidelines:
+    enabled: true # default
+    filePatterns: [] # default
+  learnings:
+    scope: global
+  issues:
+    scope: auto # default
+  pull_requests:
+    scope: auto # default
+  jira:
+    usage: auto # default
+    project_keys: [] # default
+  linear:
+    usage: auto # default
+    team_keys: [] # default
+  mcp:
+    usage: auto # default
+    disabled_servers: [] # default
+  linked_repositories: [] # default
+
+# =============================================================================
+# Code generation
+# =============================================================================
+code_generation:
+  docstrings:
+    language: en-US # default
+    path_instructions: [] # default
+  unit_tests:
+    path_instructions: [] # default
+
+# =============================================================================
+# Issue enrichment
+# =============================================================================
+issue_enrichment:
+  auto_enrich:
+    enabled: true
+  planning:
+    enabled: true # default
+    auto_planning:
+      enabled: true # default
+      labels: [] # default
+  labeling:
+    labeling_instructions: [] # default
+    auto_apply_labels: false # default

@@ -74,7 +74,7 @@ class GeminiCLIBridge(PlatformBridge):
             tracing="langfuse" if has_tracing else None,
         )
 
-    async def run(self, input_data: RunAgentInput) -> AsyncIterator[BaseEvent]:
+    async def run(self, input_data: RunAgentInput, **kwargs) -> AsyncIterator[BaseEvent]:
         """Full run lifecycle: lazy setup -> session worker -> tracing."""
         # 1. Lazy platform setup
         await self._ensure_ready()
@@ -120,10 +120,15 @@ class GeminiCLIBridge(PlatformBridge):
             self._adapter = GeminiCLIAdapter()
 
         async with self._session_manager.get_lock(thread_id):
-            from ambient_runner.middleware import tracing_middleware
+            from ambient_runner.middleware import (
+                secret_redaction_middleware,
+                tracing_middleware,
+            )
 
             wrapped_stream = tracing_middleware(
-                self._adapter.run(input_data, line_stream=_line_stream_with_capture()),
+                secret_redaction_middleware(
+                    self._adapter.run(input_data, line_stream=_line_stream_with_capture()),
+                ),
                 obs=self._obs,
                 model=self._configured_model,
                 prompt=user_msg,

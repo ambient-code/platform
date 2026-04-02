@@ -12,6 +12,7 @@ resources:
 - ambient-api-server-service.yml
 - unleash-deployment.yaml
 - agent-registry-configmap.yaml
+- limitrange.yaml
 
 configMapGenerator:
 - name: ambient-models

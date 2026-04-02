@@ -26,6 +26,9 @@ class RunnerContext:
     workspace_path: str
     environment: Dict[str, str] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    current_user_id: str = ""
+    current_user_name: str = ""
+    caller_token: str = ""
 
     def __post_init__(self) -> None:
         """Store explicit overrides for precedence in get_env(); keep environment populated for backward compatibility."""
@@ -48,3 +51,9 @@ class RunnerContext:
     def get_metadata(self, key: str, default: Any = None) -> Any:
         """Get a metadata value."""
         return self.metadata.get(key, default)
+
+    def set_current_user(self, user_id: str, user_name: str = "", token: str = "") -> None:
+        """Set the current user for per-message credential scoping."""
+        self.current_user_id = user_id
+        self.current_user_name = user_name
+        self.caller_token = token

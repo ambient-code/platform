@@ -29,6 +29,7 @@ export default defineConfig({
             { slug: 'getting-started' },
             { slug: 'getting-started/quickstart-ui' },
             { slug: 'getting-started/concepts' },
+            { slug: 'getting-started/cli' },
           ],
         },
         {
@@ -39,6 +40,7 @@ export default defineConfig({
             { slug: 'concepts/integrations' },
             { slug: 'concepts/context-and-artifacts' },
             { slug: 'concepts/workflows' },
+            { slug: 'concepts/scheduled-sessions' },
           ],
         },
         {
@@ -53,10 +55,23 @@ export default defineConfig({
           ],
         },
         {
+          label: 'Features',
+          items: [
+            { slug: 'features/session-sharing' },
+          ],
+        },
+        {
+          label: 'Guides',
+          items: [
+            { slug: 'guides/migrating-shared-sessions' },
+          ],
+        },
+        {
           label: 'Extensions',
           items: [
             { slug: 'extensions/github-action' },
             { slug: 'extensions/mcp-server' },
+            { slug: 'extensions/public-api' },
           ],
         },
         {

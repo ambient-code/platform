@@ -3,23 +3,30 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MessageSquare, X } from "lucide-react";
-import type { FileTab, ActiveTab } from "../hooks/use-file-tabs";
+import { StatusIcon } from "@/lib/task-utils";
+import type { FileTab, TaskTab, ActiveTab } from "../hooks/use-file-tabs";
 
 type ContentTabsProps = {
   openTabs: FileTab[];
+  taskTabs?: TaskTab[];
   activeTab: ActiveTab;
   onSwitchToChat: () => void;
   onSwitchToFile: (path: string) => void;
+  onSwitchToTask?: (taskId: string) => void;
   onCloseFile: (path: string) => void;
+  onCloseTask?: (taskId: string) => void;
   rightActions?: React.ReactNode;
 };
 
 export function ContentTabs({
   openTabs,
+  taskTabs,
   activeTab,
   onSwitchToChat,
   onSwitchToFile,
+  onSwitchToTask,
   onCloseFile,
+  onCloseTask,
   rightActions,
 }: ContentTabsProps) {
   const isChatActive = activeTab.type === "chat";
@@ -70,6 +77,44 @@ export function ContentTabs({
                 onClick={(e) => {
                   e.stopPropagation();
                   onCloseFile(tab.path);
+                }}
+              >
+                <X className="w-3 h-3" />
+                <span className="sr-only">Close {tab.name}</span>
+              </Button>
+            </div>
+          );
+        })}
+
+        {/* Task tabs — closable, with status icon */}
+        {taskTabs?.map((tab) => {
+          const isActive =
+            activeTab.type === "task" && activeTab.taskId === tab.taskId;
+          return (
+            <div
+              key={`task-${tab.taskId}`}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-sm text-sm transition-colors whitespace-nowrap group",
+                isActive
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => onSwitchToTask?.(tab.taskId)}
+                className="pl-3 py-1.5 font-medium inline-flex items-center gap-1.5"
+              >
+                <StatusIcon status={tab.status} className="h-3.5 w-3.5 flex-shrink-0" />
+                <span className="truncate max-w-[120px]">{tab.name}</span>
+              </button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 mr-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCloseTask?.(tab.taskId);
                 }}
               >
                 <X className="w-3 h-3" />

@@ -5,6 +5,7 @@ This adapter wraps the Claude Agent SDK and produces AG-UI protocol events,
 enabling Claude-powered agents to work with any AG-UI compatible frontend.
 """
 
+import asyncio
 import os
 import logging
 import json
@@ -32,6 +33,7 @@ from ag_ui.core import (
     ToolCallResultEvent,
     StateSnapshotEvent,
     MessagesSnapshotEvent,
+    CustomEvent,
 )
 
 from .reasoning_events import (
@@ -137,7 +139,7 @@ class ClaudeAgentAdapter:
     Forwarded Props Support:
         Per-run overrides for execution control without changing agent identity.
         Whitelisted keys include: resume, fork_session, model, temperature, max_tokens,
-        max_thinking_tokens, max_turns, max_budget_usd, output_format, etc.
+        thinking, max_thinking_tokens, max_turns, max_budget_usd, output_format, etc.
 
         Example:
             RunAgentInput(
@@ -238,6 +240,20 @@ class ClaudeAgentAdapter:
         self._halted: bool = False
         # Tool call ID that caused the halt (so we can emit TOOL_CALL_RESULT on next run)
         self._halted_tool_call_id: Optional[str] = None
+
+        # Hook event queue: hook callbacks push CustomEvents here, the SSE
+        # stream drains them between SDK messages.
+        self._hook_event_queue: asyncio.Queue = asyncio.Queue()
+
+        # Background task registry (task_id -> info dict).
+        # Populated from TaskStarted/TaskProgress/TaskNotification messages.
+        self._task_registry: Dict[str, Dict[str, Any]] = {}
+
+        # task_id -> output file path (from TaskNotificationMessage / SubagentStop hook)
+        self._task_outputs: Dict[str, str] = {}
+
+        # Track last run ID for synthetic between-run parentage
+        self._last_run_id: Optional[str] = None
 
     @property
     def halted(self) -> bool:
@@ -386,6 +402,9 @@ class ClaudeAgentAdapter:
                 message_stream,
             ):
                 yield event
+
+            # Track last run ID for between-run synthetic parentage
+            self._last_run_id = run_id
 
             # Emit RUN_FINISHED with result data from ResultMessage
             yield RunFinishedEvent(
@@ -562,16 +581,120 @@ class ClaudeAgentAdapter:
         # NOTE: Session resumption (--resume) is the platform's responsibility.
         # The platform can pass resume=<session_id> via the options dict.
 
+        # Register hook matchers so SDK lifecycle events are forwarded as
+        # AG-UI CustomEvents via the _hook_event_queue.
+        from .hooks import build_hooks_dict
+
+        agui_hooks = build_hooks_dict(self._hook_event_queue)
+        if agui_hooks:
+            existing_hooks = merged_kwargs.get("hooks") or {}
+            # Merge: append our matchers to any pre-existing ones per event.
+            merged = dict(existing_hooks)
+            for event_name, matchers in agui_hooks.items():
+                merged[event_name] = [*merged.get(event_name, []), *matchers]
+            merged_kwargs["hooks"] = merged
+
         # Create the options object
         logger.debug(f"Creating ClaudeAgentOptions with merged kwargs: {merged_kwargs}")
         return ClaudeAgentOptions(**merged_kwargs)
+
+    # ── Shared task event helpers ──
+
+    def _emit_task_event(self, message: Any) -> "CustomEvent":
+        """Dispatch any task message to the appropriate handler."""
+        from claude_agent_sdk import (
+            TaskStartedMessage,
+            TaskProgressMessage,
+            TaskNotificationMessage,
+        )
+        if isinstance(message, TaskStartedMessage):
+            return self._emit_task_started(message)
+        elif isinstance(message, TaskProgressMessage):
+            return self._emit_task_progress(message)
+        elif isinstance(message, TaskNotificationMessage):
+            return self._emit_task_notification(message)
+        raise TypeError(f"Not a task message: {type(message).__name__}")
+
+    def drain_hook_events(self) -> list:
+        """Drain all pending hook CustomEvents from the queue.
+
+        Also captures transcript paths from SubagentStart/Stop hooks
+        for the /tasks/{id}/output endpoint.
+        """
+        events = []
+        while not self._hook_event_queue.empty():
+            try:
+                hook_event = self._hook_event_queue.get_nowait()
+                # Capture transcript paths from subagent hooks
+                if hasattr(hook_event, "name"):
+                    val = getattr(hook_event, "value", {}) or {}
+                    agent_id = val.get("agent_id")
+                    if hook_event.name == "hook:SubagentStart" and agent_id:
+                        sid = val.get("session_id", "")
+                        if sid:
+                            from pathlib import Path
+                            base = Path.home() / ".claude" / "projects"
+                            if base.exists():
+                                expected = f"agent-{agent_id}.jsonl"
+                                for p in base.rglob(expected):
+                                    self._task_outputs.setdefault(agent_id, str(p))
+                                    break
+                    elif hook_event.name == "hook:SubagentStop" and agent_id:
+                        transcript = val.get("agent_transcript_path")
+                        if transcript:
+                            self._task_outputs[agent_id] = transcript
+                events.append(hook_event)
+            except asyncio.QueueEmpty:
+                break
+        return events
+
+    def _emit_task_started(self, message: Any) -> "CustomEvent":
+        task_info = {
+            "task_id": message.task_id,
+            "description": getattr(message, "description", ""),
+            "task_type": getattr(message, "task_type", ""),
+            "session_id": getattr(message, "session_id", ""),
+            "status": "running",
+        }
+        self._task_registry[message.task_id] = task_info
+        return CustomEvent(type=EventType.CUSTOM, name="task:started", value=task_info)
+
+    def _emit_task_progress(self, message: Any) -> "CustomEvent":
+        usage = getattr(message, "usage", None)
+        progress_value = {
+            "task_id": message.task_id,
+            "description": getattr(message, "description", ""),
+            "usage": dict(usage) if usage else None,
+            "last_tool_name": getattr(message, "last_tool_name", None),
+        }
+        existing = self._task_registry.get(message.task_id, {})
+        existing.update(progress_value)
+        self._task_registry[message.task_id] = existing
+        return CustomEvent(type=EventType.CUSTOM, name="task:progress", value=progress_value)
+
+    def _emit_task_notification(self, message: Any) -> "CustomEvent":
+        usage = getattr(message, "usage", None)
+        output_file = getattr(message, "output_file", None)
+        notification_value = {
+            "task_id": message.task_id,
+            "status": getattr(message, "status", "completed"),
+            "summary": getattr(message, "summary", ""),
+            "usage": dict(usage) if usage else None,
+            "output_file": output_file,
+        }
+        existing = self._task_registry.get(message.task_id, {})
+        existing.update(notification_value)
+        self._task_registry[message.task_id] = existing
+        if output_file:
+            self._task_outputs[message.task_id] = output_file
+        return CustomEvent(type=EventType.CUSTOM, name="task:completed", value=notification_value)
 
     async def _stream_claude_sdk(
         self,
         prompt: str,
         thread_id: str,
         run_id: str,
-        input_data: RunAgentInput,
+        input_data: Optional[RunAgentInput],
         frontend_tool_names: set[str],
         message_stream: Any,
     ) -> AsyncIterator[BaseEvent]:
@@ -670,6 +793,9 @@ class ClaudeAgentAdapter:
             ResultMessage,
             ToolUseBlock,
             ToolResultBlock,
+            TaskStartedMessage,
+            TaskProgressMessage,
+            TaskNotificationMessage,
         )
         from claude_agent_sdk.types import StreamEvent
 
@@ -683,6 +809,13 @@ class ClaudeAgentAdapter:
 
         try:
             async for message in message_stream:
+                # Pass-through: if something pushes an AG-UI event
+                # directly into the message stream (e.g. stop endpoint),
+                # yield it immediately without SDK processing.
+                if isinstance(message, BaseEvent):
+                    yield message
+                    continue
+
                 message_count += 1
 
                 # If we've halted due to frontend tool, break out of loop (interrupt already called)
@@ -770,12 +903,16 @@ class ClaudeAgentAdapter:
                             current_reasoning_id = str(uuid.uuid4())
                             ts = now_ms()
                             yield ReasoningStartEvent(
-                                threadId=thread_id, runId=run_id,
-                                messageId=current_reasoning_id, timestamp=ts,
+                                threadId=thread_id,
+                                runId=run_id,
+                                messageId=current_reasoning_id,
+                                timestamp=ts,
                             )
                             yield ReasoningMessageStartEvent(
-                                threadId=thread_id, runId=run_id,
-                                messageId=current_reasoning_id, timestamp=ts,
+                                threadId=thread_id,
+                                runId=run_id,
+                                messageId=current_reasoning_id,
+                                timestamp=ts,
                             )
                         elif block_type == "tool_use":
                             # Tool call starting - emit TOOL_CALL_START
@@ -807,12 +944,16 @@ class ClaudeAgentAdapter:
                             in_thinking_block = False
                             ts = now_ms()
                             yield ReasoningMessageEndEvent(
-                                threadId=thread_id, runId=run_id,
-                                messageId=current_reasoning_id, timestamp=ts,
+                                threadId=thread_id,
+                                runId=run_id,
+                                messageId=current_reasoning_id,
+                                timestamp=ts,
                             )
                             yield ReasoningEndEvent(
-                                threadId=thread_id, runId=run_id,
-                                messageId=current_reasoning_id, timestamp=ts,
+                                threadId=thread_id,
+                                runId=run_id,
+                                messageId=current_reasoning_id,
+                                timestamp=ts,
                             )
 
                             # Persist thinking content as ReasoningMessage per AG-UI spec.
@@ -1022,6 +1163,9 @@ class ClaudeAgentAdapter:
                             ):
                                 yield event
 
+                elif isinstance(message, (TaskStartedMessage, TaskProgressMessage, TaskNotificationMessage)):
+                    yield self._emit_task_event(message)
+
                 elif isinstance(message, SystemMessage):
                     data = getattr(message, "data", {}) or {}
 
@@ -1096,6 +1240,10 @@ class ClaudeAgentAdapter:
                             )
                         )
 
+                # Drain hook event queue (non-blocking) after each SDK message
+                for hook_event in self.drain_hook_events():
+                    yield hook_event
+
         except Exception as e:
             # Capture for re-raise after cleanup
             stream_error = e
@@ -1124,12 +1272,19 @@ class ClaudeAgentAdapter:
                 logger.debug("Cleanup: closing hanging thinking block")
                 ts = now_ms()
                 yield ReasoningMessageEndEvent(
-                    threadId=thread_id, runId=run_id, timestamp=ts
+                    threadId=thread_id,
+                    runId=run_id,
+                    messageId=current_reasoning_id,
+                    timestamp=ts,
                 )
                 yield ReasoningEndEvent(
-                    threadId=thread_id, runId=run_id, timestamp=ts
+                    threadId=thread_id,
+                    runId=run_id,
+                    messageId=current_reasoning_id,
+                    timestamp=ts,
                 )
                 in_thinking_block = False
+                current_reasoning_id = None
 
             if has_streamed_text and current_message_id:
                 logger.debug(
@@ -1182,7 +1337,7 @@ class ClaudeAgentAdapter:
                 else None
             )
             stamped_inputs: List[Any] = []
-            for msg in input_data.messages or []:
+            for msg in (input_data.messages if input_data else None) or []:
                 if hasattr(msg, "model_dump"):
                     d = msg.model_dump(exclude_none=True)
                 elif isinstance(msg, dict):
@@ -1209,3 +1364,4 @@ class ClaudeAgentAdapter:
         # Re-raise to let run() emit RunErrorEvent
         if stream_error is not None:
             raise stream_error
+

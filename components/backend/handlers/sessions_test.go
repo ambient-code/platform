@@ -328,13 +328,8 @@ var _ = Describe("Sessions Handler", Label(test_constants.LabelUnit, test_consta
 
 				sessionNames := make([]string, 0)
 
-				// Create multiple sessions with delays to ensure unique timestamps
+				// Create multiple sessions concurrently - UUID-based names ensure uniqueness
 				for i := 0; i < 3; i++ {
-					// Add a delay to ensure unique timestamps (Unix() has 1-second precision)
-					if i > 0 {
-						time.Sleep(1001 * time.Millisecond) // Slightly over 1 second to ensure different Unix timestamps
-					}
-
 					context := httpUtils.CreateTestGinContext("POST", "/api/projects/"+testNamespace+"/agentic-sessions", sessionRequest)
 					httpUtils.SetAuthHeader(testToken)
 					httpUtils.SetProjectContext(testNamespace)

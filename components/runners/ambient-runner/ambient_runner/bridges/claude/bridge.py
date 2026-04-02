@@ -14,8 +14,9 @@ import os
 import time
 from typing import Any, AsyncIterator, Optional
 
-from ag_ui.core import BaseEvent, RunAgentInput
+from ag_ui.core import BaseEvent, EventType, RunAgentInput, RunStartedEvent, RunFinishedEvent
 from ag_ui_claude_sdk import ClaudeAgentAdapter
+from ag_ui_claude_sdk.adapter import now_ms
 
 from ambient_runner.bridge import (
     FrameworkCapabilities,
@@ -86,22 +87,69 @@ class ClaudeBridge(PlatformBridge):
             session_persistence=True,
         )
 
-    async def run(self, input_data: RunAgentInput) -> AsyncIterator[BaseEvent]:
-        """Full run lifecycle: lazy setup → adapter → session worker → tracing."""
-        # 1. Lazy platform setup
-        await self._ensure_ready()
-        await self._refresh_credentials_if_stale()
+    async def _initialize_run(
+        self,
+        thread_id: str,
+        current_user_id: str,
+        current_user_name: str,
+        caller_token: str,
+    ) -> None:
+        """Prepare the runtime for a new run.
 
-        # 2. Ensure adapter exists
+        Sets user context, refreshes credentials, and restarts the Claude
+        client if the user changed (so MCP servers pick up new creds).
+        """
+        from ambient_runner.platform.auth import (
+            clear_runtime_credentials,
+            populate_mcp_server_credentials,
+            populate_runtime_credentials,
+        )
+
+        prev_user = self._context.current_user_id if self._context else ""
+        if self._context:
+            self._context.set_current_user(current_user_id, current_user_name, caller_token)
+
+        await self._ensure_ready()
+
+        # Fresh credentials for this user on every run
+        clear_runtime_credentials()
+        await populate_runtime_credentials(self._context)
+        await populate_mcp_server_credentials(self._context)
+        self._last_creds_refresh = time.monotonic()
+
+        # If the caller changed, destroy the worker and rebuild MCP servers +
+        # adapter so the new ClaudeSDKClient gets fresh mcp_servers config.
+        # The session ID is preserved — --resume works because each SDK client
+        # is a new CLI subprocess that spawns fresh MCP servers from os.environ.
+        user_changed = current_user_id != prev_user
+        if user_changed and self._session_manager.get_existing(thread_id):
+            logger.info(
+                f"User changed for thread={thread_id}, "
+                "rebuilding MCP servers and adapter with new credentials"
+            )
+            await self._session_manager.destroy(thread_id)
+            self._rebuild_mcp_servers()
+            # Force adapter rebuild so ClaudeAgentOptions uses new mcp_servers
+            self._adapter = None
+
         self._ensure_adapter()
 
-        # 3. Extract user message for worker and observability
+    async def run(
+        self,
+        input_data: RunAgentInput,
+        current_user_id: str = "",
+        current_user_name: str = "",
+        caller_token: str = "",
+    ) -> AsyncIterator[BaseEvent]:
+        """Full run lifecycle: initialize → session worker → tracing."""
+        thread_id = input_data.thread_id or (self._context.session_id if self._context else "")
+
+        await self._initialize_run(thread_id, current_user_id, current_user_name, caller_token)
+
         from ag_ui_claude_sdk.utils import process_messages
 
         user_msg, _ = process_messages(input_data)
 
-        # 4. Get or create session worker for this thread
-        thread_id = input_data.thread_id or self._context.session_id
         api_key = os.getenv("ANTHROPIC_API_KEY", "")
         saved_session_id = self._saved_session_ids.pop(
             thread_id, None
@@ -116,40 +164,68 @@ class ClaudeBridge(PlatformBridge):
         # 5. Run adapter with message stream, wrapped in tracing
         session_label = self._session_manager.get_session_id(thread_id) or thread_id
         async with self._session_manager.get_lock(thread_id):
-            message_stream = worker.query(user_msg, session_id=session_label)
+            try:
+                message_stream = worker.query(user_msg, session_id=session_label)
 
-            from ambient_runner.middleware import tracing_middleware
-
-            wrapped_stream = tracing_middleware(
-                self._adapter.run(input_data, message_stream=message_stream),
-                obs=self._obs,
-                model=self._configured_model,
-                prompt=user_msg,
-            )
-
-            async for event in wrapped_stream:
-                yield event
-
-            # Persist session ID after turn completes (for --resume on pod restart)
-            if worker.session_id:
-                self._session_manager._session_ids[thread_id] = worker.session_id
-                self._session_manager._persist_session_ids()
-
-            # Capture halt state for this thread to avoid race conditions
-            # with concurrent runs modifying the shared adapter's halted flag
-            self._halted_by_thread[thread_id] = self._adapter.halted
-
-            # If the adapter halted (frontend tool or built-in HITL tool like
-            # AskUserQuestion), interrupt the worker to prevent the SDK from
-            # auto-approving the tool call with a placeholder result.
-            if self._halted_by_thread.get(thread_id, False):
-                logger.info(
-                    f"Adapter halted for thread={thread_id}, "
-                    "interrupting worker to await user input"
+                from ambient_runner.middleware import (
+                    secret_redaction_middleware,
+                    tracing_middleware,
                 )
-                await worker.interrupt()
-                # Clear the halt flag for this thread
-                self._halted_by_thread.pop(thread_id, None)
+
+                wrapped_stream = tracing_middleware(
+                    secret_redaction_middleware(
+                        self._adapter.run(input_data, message_stream=message_stream),
+                    ),
+                    obs=self._obs,
+                    model=self._configured_model,
+                    prompt=user_msg,
+                )
+
+                async for event in wrapped_stream:
+                    yield event
+
+                # Detect resume failure (session ID already persisted
+                # eagerly by the _on_session_id callback at init time).
+                if (
+                    saved_session_id
+                    and worker.session_id
+                    and worker.session_id != saved_session_id
+                ):
+                    logger.warning(
+                        "Session resume failed: requested --resume %s "
+                        "but CLI created new session %s. "
+                        "Previous conversation history was lost "
+                        "(likely caused by ungraceful runner shutdown).",
+                        saved_session_id,
+                        worker.session_id,
+                    )
+
+                # Capture halt state for this thread to avoid race conditions
+                # with concurrent runs modifying the shared adapter's halted flag
+                self._halted_by_thread[thread_id] = self._adapter.halted
+
+                # If the adapter halted (frontend tool or built-in HITL tool like
+                # AskUserQuestion), interrupt the worker to prevent the SDK from
+                # auto-approving the tool call with a placeholder result.
+                if self._halted_by_thread.get(thread_id, False):
+                    logger.info(
+                        f"Adapter halted for thread={thread_id}, "
+                        "interrupting worker to await user input"
+                    )
+                    await worker.interrupt()
+                    # Clear the halt flag for this thread
+                    self._halted_by_thread.pop(thread_id, None)
+            finally:
+                # Clear caller token immediately — never persist between turns.
+                if self._context:
+                    self._context.caller_token = ""
+
+                # Clear credentials after turn completes (shared session security).
+                # In finally to ensure cleanup even on errors/cancellation.
+                if (self._context.get_env("KEEP_CREDENTIALS_PERSISTENT") or "").lower() != "true":
+                    from ambient_runner.platform.auth import clear_runtime_credentials
+
+                    clear_runtime_credentials()
 
         self._first_run = False
 
@@ -172,6 +248,123 @@ class ClaudeBridge(PlatformBridge):
         # Record interrupt in observability metrics
         if self._obs:
             self._obs.record_interrupt()
+
+    async def stop_task(self, task_id: str, thread_id: Optional[str] = None) -> None:
+        """Stop a background task (subagent) by ID."""
+        if not self._session_manager:
+            raise RuntimeError("No active session manager")
+
+        tid = thread_id or (self._context.session_id if self._context else None)
+        if not tid:
+            raise RuntimeError("No thread_id available")
+
+        worker = self._session_manager.get_existing(tid)
+        if not worker:
+            raise RuntimeError(f"No active session for thread {tid}")
+
+        await worker.stop_task(task_id)
+
+    async def stream_between_run_events(
+        self, thread_id: str
+    ) -> AsyncIterator[BaseEvent]:
+        """Yield AG-UI events for SDK messages arriving between user runs."""
+        import asyncio
+
+        # Wait for session manager and adapter to be ready
+        for _ in range(120):  # up to 60 seconds
+            if self._session_manager and self._adapter:
+                break
+            await asyncio.sleep(0.5)
+        else:
+            return
+
+        # Wait for worker to be created (it's created during the first run)
+        worker = None
+        for _ in range(120):
+            worker = self._session_manager.get_existing(thread_id)
+            if worker:
+                break
+            await asyncio.sleep(0.5)
+
+        if not worker:
+            return
+
+        import uuid as _uuid
+        from claude_agent_sdk import (
+            TaskStartedMessage,
+            TaskProgressMessage,
+            TaskNotificationMessage,
+            ResultMessage,
+        )
+
+        # Between-run messages form complete SDK turns (init → stream →
+        # assistant → result).  We pipe non-task messages through the
+        # normal _stream_claude_sdk adapter so StreamEvents are processed
+        # with full text streaming, wrapped in a synthetic AG-UI run.
+
+        while True:
+            msg = await worker.between_run_queue_get()
+            if msg is None:
+                return
+
+            # Task lifecycle → CUSTOM events, no run envelope needed
+            if isinstance(msg, (TaskStartedMessage, TaskProgressMessage, TaskNotificationMessage)):
+                yield self._adapter._emit_task_event(msg)
+                for hook_evt in self._adapter.drain_hook_events():
+                    yield hook_evt
+                continue
+
+            # First non-task message — open a synthetic run and pipe
+            # this + subsequent messages through _stream_claude_sdk.
+            synthetic_run_id = str(_uuid.uuid4())
+
+            yield RunStartedEvent(
+                type=EventType.RUN_STARTED,
+                thread_id=thread_id,
+                run_id=synthetic_run_id,
+                timestamp=now_ms(),
+                parent_run_id=self._adapter._last_run_id,
+            )
+
+            async def _between_run_stream(first_msg):
+                yield first_msg
+                async for m in worker.between_run_events():
+                    yield m
+                    if isinstance(m, ResultMessage):
+                        return
+
+            try:
+                async for event in self._adapter._stream_claude_sdk(
+                    prompt="",
+                    thread_id=thread_id,
+                    run_id=synthetic_run_id,
+                    input_data=None,
+                    frontend_tool_names=set(),
+                    message_stream=_between_run_stream(msg),
+                ):
+                    yield event
+            finally:
+                self._adapter._last_run_id = synthetic_run_id
+                yield RunFinishedEvent(
+                    type=EventType.RUN_FINISHED,
+                    thread_id=thread_id,
+                    run_id=synthetic_run_id,
+                    timestamp=now_ms(),
+                )
+
+    @property
+    def task_registry(self) -> dict:
+        """Background task metadata tracked by the adapter."""
+        if self._adapter:
+            return getattr(self._adapter, "_task_registry", {})
+        return {}
+
+    @property
+    def task_outputs(self) -> dict:
+        """Background task output file paths tracked by the adapter."""
+        if self._adapter:
+            return getattr(self._adapter, "_task_outputs", {})
+        return {}
 
     # ------------------------------------------------------------------
     # Lifecycle methods
@@ -371,6 +564,23 @@ class ClaudeBridge(PlatformBridge):
         self._mcp_servers = mcp_servers
         self._allowed_tools = allowed_tools
         self._system_prompt = system_prompt
+
+    def _rebuild_mcp_servers(self) -> None:
+        """Rebuild MCP server config with current env vars.
+
+        Called when the user changes so .mcp.json env blocks (e.g.,
+        ${JIRA_API_TOKEN}) are re-expanded with the new user's credentials.
+        """
+        from ambient_runner.bridges.claude.mcp import (
+            build_allowed_tools,
+            build_mcp_servers,
+        )
+
+        self._mcp_servers = build_mcp_servers(
+            self._context, self._cwd_path, self._obs
+        )
+        self._allowed_tools = build_allowed_tools(self._mcp_servers)
+        logger.info("Rebuilt MCP servers with updated credentials")
 
     # ------------------------------------------------------------------
     # Private: adapter lifecycle
