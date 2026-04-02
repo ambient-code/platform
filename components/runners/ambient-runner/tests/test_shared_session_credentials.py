@@ -403,7 +403,6 @@ class TestCredentialLifecycle:
         # We need to handle multiple requests (github, google, jira, gitlab)
         call_count = [0]
         responses = {
-<<<<<<< HEAD
             "cred-gh": {"token": "gh-tok"},
             "cred-google": {},
             "cred-jira": {
@@ -412,16 +411,6 @@ class TestCredentialLifecycle:
                 "email": "j@example.com",
             },
             "cred-gl": {"token": "gl-tok"},
-=======
-            "/github": {"token": "gh-tok"},
-            "/google": {},
-            "/jira": {
-                "apiToken": "jira-tok",
-                "url": "https://jira.example.com",
-                "email": "j@example.com",
-            },
-            "/gitlab": {"token": "gl-tok"},
->>>>>>> upstream/main
         }
 
         class MultiHandler(BaseHTTPRequestHandler):
