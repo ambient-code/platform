@@ -4,28 +4,14 @@ kind: Kustomization
 metadata:
   name: ambient-mpp-openshift
 
-namespace: ambient-code--runtime-int
-
 resources:
 - ambient-api-server-db.yaml
 - ambient-api-server.yaml
 - ambient-control-plane.yaml
 - ambient-api-server-route.yaml
 - ambient-control-plane-sa.yaml
-- ambient-control-plane-rbac.yaml
+- tenant-rbac/
 - ambient-tenant-ingress-netpol.yaml
-
-replacements:
-- source:
-    kind: ServiceAccount
-    name: ambient-control-plane
-    fieldPath: metadata.namespace
-  targets:
-  - select:
-      kind: RoleBinding
-      name: ambient-control-plane-tenant-namespaces
-    fieldPaths:
-    - subjects.0.namespace
 
 patches:
 - path: ambient-api-server-args-patch.yaml

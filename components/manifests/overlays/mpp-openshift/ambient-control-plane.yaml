@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ambient-control-plane
+  namespace: ambient-code--runtime-int
   labels:
     app: ambient-control-plane
 spec:

@@ -2,6 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: ambient-api-server-db
+  namespace: ambient-code--runtime-int
   labels:
     app: ambient-api-server
     component: database
@@ -20,6 +21,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ambient-api-server-db
+  namespace: ambient-code--runtime-int
   labels:
     app: ambient-api-server
     component: database
