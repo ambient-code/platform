@@ -208,6 +208,23 @@ class TestWorkerEnvironment:
             call_kwargs = mock_exec.call_args[1]
             assert call_kwargs["cwd"] == "/my/workspace"
 
+    @pytest.mark.asyncio
+    async def test_buffer_limit_set_for_large_responses(self):
+        """The subprocess should use a 10 MB buffer limit for large MCP tool responses."""
+        worker = GeminiSessionWorker(model="m")
+        proc = _make_mock_process(
+            stdout_lines=[b'{"done":true}\n'],
+            stderr_lines=[],
+        )
+
+        with patch("asyncio.create_subprocess_exec", return_value=proc) as mock_exec:
+            async for _ in worker.query("test"):
+                pass
+
+            call_kwargs = mock_exec.call_args[1]
+            # Verify 10 MB limit is set to prevent LimitOverrunError on large NDJSON lines
+            assert call_kwargs["limit"] == 10 * 1024 * 1024
+
 
 # ------------------------------------------------------------------
 # GeminiSessionWorker -- stderr streaming
