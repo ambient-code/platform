@@ -322,10 +322,7 @@ class TestFetchCredentialHeaders:
                 _CredentialHandler.captured_headers.get("X-Runner-Current-User")
                 == "userB@example.com"
             )
-<<<<<<< HEAD
-=======
             # Should use caller token, not BOT_TOKEN
->>>>>>> upstream/main
             assert (
                 "Bearer userB-oauth-token"
                 in _CredentialHandler.captured_headers.get("Authorization", "")

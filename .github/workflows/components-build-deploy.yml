@@ -47,50 +47,7 @@ jobs:
     outputs:
       build-matrix: ${{ steps.matrix.outputs.build-matrix }}
       merge-matrix: ${{ steps.matrix.outputs.merge-matrix }}
-<<<<<<< HEAD
-      has-builds: ${{ steps.matrix.outputs.has-builds }}
-      frontend: ${{ steps.filter.outputs.frontend }}
-      backend: ${{ steps.filter.outputs.backend }}
-      operator: ${{ steps.filter.outputs.operator }}
-      claude-runner: ${{ steps.filter.outputs.claude-runner }}
-      state-sync: ${{ steps.filter.outputs.state-sync }}
-      ambient-api-server: ${{ steps.filter.outputs.ambient-api-server }}
-      ambient-control-plane: ${{ steps.filter.outputs.ambient-control-plane }}
-      ambient-mcp: ${{ steps.filter.outputs.ambient-mcp }}
-      public-api: ${{ steps.filter.outputs.public-api }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Check for component changes
-        uses: dorny/paths-filter@v4
-        id: filter
-        with:
-          filters: |
-            frontend:
-              - 'components/frontend/**'
-            backend:
-              - 'components/backend/**'
-            operator:
-              - 'components/operator/**'
-            claude-runner:
-              - 'components/runners/ambient-runner/**'
-            state-sync:
-              - 'components/runners/state-sync/**'
-            public-api:
-              - 'components/public-api/**'
-            ambient-api-server:
-              - 'components/ambient-api-server/**'
-            ambient-control-plane:
-              - 'components/ambient-control-plane/**'
-            ambient-mcp:
-              - 'components/ambient-mcp/**'
-
-=======
-    steps:
->>>>>>> upstream/main
       - name: Build component matrices
         id: matrix
         run: |
@@ -110,21 +67,8 @@ jobs:
 
           if [ -n "$SELECTED" ]; then
             FILTERED=$(echo "$ALL_COMPONENTS" | jq -c --arg sel "$SELECTED" '[.[] | select(.name as $n | $sel | split(",") | map(gsub("^\\s+|\\s+$";"")) | index($n))]')
-<<<<<<< HEAD
-          elif [ "$EVENT" == "pull_request" ]; then
-            # PR — always build all components so every PR image is in quay for deployment
-=======
           else
->>>>>>> upstream/main
             FILTERED="$ALL_COMPONENTS"
-          else
-            # Push to main — only changed components
-            FILTERED="[]"
-            for comp in $(echo "$ALL_COMPONENTS" | jq -r '.[].name'); do
-              if [ "${FILTER_MAP[$comp]}" == "true" ]; then
-                FILTERED=$(echo "$FILTERED" | jq -c --arg name "$comp" --argjson all "$ALL_COMPONENTS" '. + [$all[] | select(.name == $name)]')
-              fi
-            done
           fi
 
           echo "build-matrix=$(echo "$FILTERED" | jq -c '.')" >> $GITHUB_OUTPUT
@@ -284,13 +228,8 @@ jobs:
 
   deploy-to-openshift:
     runs-on: ubuntu-latest
-<<<<<<< HEAD
-    needs: [detect-changes, merge-manifests, update-rbac-and-crd]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.operator == 'true' || needs.detect-changes.outputs.claude-runner == 'true' || needs.detect-changes.outputs.state-sync == 'true' || needs.detect-changes.outputs.ambient-api-server == 'true' || needs.detect-changes.outputs.ambient-control-plane == 'true' || needs.detect-changes.outputs.ambient-mcp == 'true' || needs.detect-changes.outputs.public-api == 'true')
-=======
     needs: [merge-manifests, update-rbac-and-crd]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
->>>>>>> upstream/main
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -310,77 +249,6 @@ jobs:
         run: |
           oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
 
-<<<<<<< HEAD
-      - name: Determine image tags
-        id: image-tags
-        run: |
-          if [ "${{ needs.detect-changes.outputs.frontend }}" == "true" ]; then
-            echo "frontend_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
-          else
-            echo "frontend_tag=stage" >> $GITHUB_OUTPUT
-          fi
-
-          if [ "${{ needs.detect-changes.outputs.backend }}" == "true" ]; then
-            echo "backend_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
-          else
-            echo "backend_tag=stage" >> $GITHUB_OUTPUT
-          fi
-
-          if [ "${{ needs.detect-changes.outputs.operator }}" == "true" ]; then
-            echo "operator_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
-          else
-            echo "operator_tag=stage" >> $GITHUB_OUTPUT
-          fi
-
-          if [ "${{ needs.detect-changes.outputs.claude-runner }}" == "true" ]; then
-            echo "runner_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
-          else
-            echo "runner_tag=latest" >> $GITHUB_OUTPUT
-          fi
-
-          if [ "${{ needs.detect-changes.outputs.state-sync }}" == "true" ]; then
-            echo "state_sync_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
-          else
-            echo "state_sync_tag=latest" >> $GITHUB_OUTPUT
-          fi
-
-          if [ "${{ needs.detect-changes.outputs.ambient-api-server }}" == "true" ]; then
-            echo "api_server_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
-          else
-            echo "api_server_tag=stage" >> $GITHUB_OUTPUT
-          fi
-
-          if [ "${{ needs.detect-changes.outputs.ambient-control-plane }}" == "true" ]; then
-            echo "control_plane_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
-          else
-            echo "control_plane_tag=stage" >> $GITHUB_OUTPUT
-          fi
-
-          if [ "${{ needs.detect-changes.outputs.ambient-mcp }}" == "true" ]; then
-            echo "mcp_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
-          else
-            echo "mcp_tag=stage" >> $GITHUB_OUTPUT
-          fi
-
-          if [ "${{ needs.detect-changes.outputs.public-api }}" == "true" ]; then
-            echo "public_api_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
-          else
-            echo "public_api_tag=stage" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Update kustomization with image tags
-        working-directory: components/manifests/overlays/production
-        run: |
-          kustomize edit set image quay.io/ambient_code/vteam_frontend:latest=quay.io/ambient_code/vteam_frontend:${{ steps.image-tags.outputs.frontend_tag }}
-          kustomize edit set image quay.io/ambient_code/vteam_backend:latest=quay.io/ambient_code/vteam_backend:${{ steps.image-tags.outputs.backend_tag }}
-          kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:${{ steps.image-tags.outputs.operator_tag }}
-          kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:${{ steps.image-tags.outputs.runner_tag }}
-          kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:${{ steps.image-tags.outputs.state_sync_tag }}
-          kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:${{ steps.image-tags.outputs.api_server_tag }}
-          kustomize edit set image quay.io/ambient_code/vteam_control_plane:latest=quay.io/ambient_code/vteam_control_plane:${{ steps.image-tags.outputs.control_plane_tag }}
-          kustomize edit set image quay.io/ambient_code/vteam_mcp:latest=quay.io/ambient_code/vteam_mcp:${{ steps.image-tags.outputs.mcp_tag }}
-          kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:${{ steps.image-tags.outputs.public_api_tag }}
-=======
       - name: Update kustomization with SHA image tags
         working-directory: components/manifests/overlays/production
         run: |
@@ -390,8 +258,9 @@ jobs:
           kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/vteam_control_plane:latest=quay.io/ambient_code/vteam_control_plane:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/vteam_mcp:latest=quay.io/ambient_code/vteam_mcp:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:${{ github.sha }}
->>>>>>> upstream/main
 
       - name: Validate kustomization
         working-directory: components/manifests/overlays/production
@@ -460,24 +329,15 @@ jobs:
       - name: Update kustomization with SHA image tags
         working-directory: components/manifests/overlays/production
         run: |
-<<<<<<< HEAD
-          kustomize edit set image quay.io/ambient_code/vteam_frontend:latest=quay.io/ambient_code/vteam_frontend:stage
-          kustomize edit set image quay.io/ambient_code/vteam_backend:latest=quay.io/ambient_code/vteam_backend:stage
-          kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:stage
-          kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:stage
-          kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:stage
-          kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:stage
-          kustomize edit set image quay.io/ambient_code/vteam_control_plane:latest=quay.io/ambient_code/vteam_control_plane:stage
-          kustomize edit set image quay.io/ambient_code/vteam_mcp:latest=quay.io/ambient_code/vteam_mcp:stage
-=======
           kustomize edit set image quay.io/ambient_code/vteam_frontend:latest=quay.io/ambient_code/vteam_frontend:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_backend:latest=quay.io/ambient_code/vteam_backend:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/vteam_control_plane:latest=quay.io/ambient_code/vteam_control_plane:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/vteam_mcp:latest=quay.io/ambient_code/vteam_mcp:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:${{ github.sha }}
->>>>>>> upstream/main
 
       - name: Validate kustomization
         working-directory: components/manifests/overlays/production
