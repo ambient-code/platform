@@ -462,7 +462,7 @@ jobs:
           RELEASE_TAG="${{ needs.release.outputs.new_tag }}"
           BUILT="${{ steps.built.outputs.names }}"
           if echo ",$BUILT," | grep -q ",operator,"; then
-            oc set env deployment/agentic-backend -n ambient-code -c agentic-backend \
+            oc set env deployment/backend-api -n ambient-code -c backend-api \
               OPERATOR_IMAGE="quay.io/ambient_code/vteam_operator:${RELEASE_TAG}"
           fi
 
