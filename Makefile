@@ -4,6 +4,7 @@
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
 .PHONY: local-test local-test-dev local-test-quick test-all local-troubleshoot local-port-forward local-stop-port-forward
 .PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-backend kind-reload-frontend kind-reload-operator kind-status kind-login
+.PHONY: crc-up crc-down crc-clean crc-status crc-test crc-rebuild crc-logs crc-logs-backend crc-logs-frontend crc-logs-operator
 .PHONY: preflight-cluster preflight dev-env dev
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: unleash-port-forward unleash-status
@@ -97,6 +98,12 @@ KIND_FWD_API_SERVER_PORT := $(KIND_FWD_API_SERVER_PORT)
 # Remote kind host — set to Tailscale IP/hostname of the Linux build machine.
 # When set, kubeconfig is rewritten so kubectl/port-forward work from Mac.
 KIND_HOST ?=
+
+# CRC (OpenShift Local) Configuration
+CRC_CPUS ?= 4
+CRC_MEMORY ?= 11264
+CRC_DISK ?= 50
+CRC_PROJECT_NAME ?= vteam-dev
 
 # Vertex AI Configuration (for LOCAL_VERTEX=true)
 # These inherit from environment if set, or can be overridden on command line
@@ -1023,6 +1030,86 @@ e2e-clean: kind-down ## Alias for kind-down (backward compatibility)
 deploy-langfuse-openshift: ## Deploy Langfuse to OpenShift/ROSA cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying Langfuse to OpenShift cluster..."
 	@cd e2e && ./scripts/deploy-langfuse.sh --openshift
+
+##@ CRC Local Development (OpenShift Local)
+
+crc-up: ## Start CRC cluster and deploy the platform (CRC_CPUS=4 CRC_MEMORY=11264 CRC_DISK=50)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Starting CRC-based local development environment..."
+	@CRC_CPUS=$(CRC_CPUS) CRC_MEMORY=$(CRC_MEMORY) CRC_DISK=$(CRC_DISK) PROJECT_NAME=$(CRC_PROJECT_NAME) \
+		bash components/scripts/local-dev/crc-start.sh
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) CRC environment ready!"
+	@echo ""
+	@echo "Run tests:"
+	@echo "  make crc-test"
+
+crc-down: ## Stop CRC deployments (keep cluster running)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Stopping CRC deployments..."
+	@PROJECT_NAME=$(CRC_PROJECT_NAME) bash components/scripts/local-dev/crc-stop.sh
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) CRC deployments stopped"
+
+crc-clean: ## Full cleanup including CRC cluster
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Cleaning up CRC environment..."
+	@PROJECT_NAME=$(CRC_PROJECT_NAME) bash components/scripts/local-dev/crc-stop.sh --delete-project --stop-cluster
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) CRC environment cleaned up"
+
+crc-status: ## Show CRC cluster and deployment status
+	@echo "$(COLOR_BOLD)CRC Cluster Status$(COLOR_RESET)"
+	@echo ""
+	@if command -v crc >/dev/null 2>&1; then \
+		crc status || echo "$(COLOR_YELLOW)CRC not running$(COLOR_RESET)"; \
+	else \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) CRC not installed"; \
+		echo "  Install: brew install crc (macOS) or https://crc.dev/crc/"; \
+	fi
+	@echo ""
+	@echo "$(COLOR_BOLD)Project Deployments$(COLOR_RESET)"
+	@if command -v oc >/dev/null 2>&1 && oc whoami >/dev/null 2>&1; then \
+		oc get deployment,pod,route -n $(CRC_PROJECT_NAME) 2>/dev/null || \
+		echo "$(COLOR_YELLOW)Project '$(CRC_PROJECT_NAME)' not found$(COLOR_RESET)"; \
+	else \
+		echo "$(COLOR_YELLOW)Not logged into OpenShift$(COLOR_RESET)"; \
+	fi
+
+crc-test: ## Run CRC environment tests
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running CRC tests..."
+	@PROJECT_NAME=$(CRC_PROJECT_NAME) TIMEOUT=30 bash components/scripts/local-dev/crc-test.sh
+
+crc-rebuild: ## Rebuild and redeploy all components in CRC
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding all components..."
+	@if ! oc whoami >/dev/null 2>&1; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) Not logged into OpenShift. Run 'make crc-up' first."; \
+		exit 1; \
+	fi
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding backend..."
+	@oc start-build vteam-backend --from-dir=components/backend --wait -n $(CRC_PROJECT_NAME) || \
+		echo "$(COLOR_YELLOW)Backend build failed (may need to create BuildConfig first)$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding frontend..."
+	@oc start-build vteam-frontend --from-dir=components/frontend --wait -n $(CRC_PROJECT_NAME) || \
+		echo "$(COLOR_YELLOW)Frontend build failed (may need to create BuildConfig first)$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding operator..."
+	@oc start-build vteam-operator --from-dir=components/operator --wait -n $(CRC_PROJECT_NAME) || \
+		echo "$(COLOR_YELLOW)Operator build failed (may need to create BuildConfig first)$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting deployments..."
+	@oc rollout restart deployment/vteam-backend -n $(CRC_PROJECT_NAME) 2>/dev/null || true
+	@oc rollout restart deployment/vteam-frontend -n $(CRC_PROJECT_NAME) 2>/dev/null || true
+	@oc rollout restart deployment/vteam-operator -n $(CRC_PROJECT_NAME) 2>/dev/null || true
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) All components rebuilt and restarted"
+
+crc-logs: ## Show logs from all CRC components (follow mode)
+	@echo "$(COLOR_BOLD)Tailing all component logs (Ctrl+C to stop)$(COLOR_RESET)"
+	@oc logs -f -l 'app in (vteam-backend,vteam-frontend,vteam-operator)' -n $(CRC_PROJECT_NAME) --prefix --all-containers=true
+
+crc-logs-backend: ## Show backend logs only
+	@echo "$(COLOR_BOLD)Backend logs (Ctrl+C to stop)$(COLOR_RESET)"
+	@oc logs -f deployment/vteam-backend -n $(CRC_PROJECT_NAME)
+
+crc-logs-frontend: ## Show frontend logs only
+	@echo "$(COLOR_BOLD)Frontend logs (Ctrl+C to stop)$(COLOR_RESET)"
+	@oc logs -f deployment/vteam-frontend -n $(CRC_PROJECT_NAME)
+
+crc-logs-operator: ## Show operator logs only
+	@echo "$(COLOR_BOLD)Operator logs (Ctrl+C to stop)$(COLOR_RESET)"
+	@oc logs -f deployment/vteam-operator -n $(CRC_PROJECT_NAME)
 
 ##@ Unleash Feature Flags
 # Note: Unleash is deployed automatically via 'make deploy' as part of the platform manifests.
