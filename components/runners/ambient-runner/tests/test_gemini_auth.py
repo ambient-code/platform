@@ -1,6 +1,6 @@
 """Tests for Gemini CLI authentication setup."""
 
-import tempfile
+
 import warnings
 
 import pytest
@@ -217,11 +217,9 @@ class TestSetupGeminiCliAuth:
         monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "my-project")
         monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "us-central1")
 
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-            cred_path = f.name
         ctx = _make_context(
             USE_VERTEX="1",
-            GOOGLE_APPLICATION_CREDENTIALS=cred_path,
+            GOOGLE_APPLICATION_CREDENTIALS=str(creds_file),
             GOOGLE_CLOUD_PROJECT="my-project",
             GOOGLE_CLOUD_LOCATION="us-central1",
         )

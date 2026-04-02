@@ -88,6 +88,10 @@ class LangGraphBridge(PlatformBridge):
         """Interrupt the current LangGraph execution."""
         if self._adapter is None:
             raise RuntimeError("LangGraphBridge: no adapter to interrupt")
+        if thread_id is not None:
+            raise NotImplementedError(
+                "LangGraphBridge.interrupt() does not support thread_id"
+            )
 
         if hasattr(self._adapter, "interrupt"):
             await self._adapter.interrupt()

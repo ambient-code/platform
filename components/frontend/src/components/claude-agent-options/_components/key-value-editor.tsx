@@ -47,6 +47,8 @@ export function KeyValueEditor({
     onChange(next);
   };
   const updateEntry = (index: number, newKey: string, newVal: string | null) => {
+    const oldKey = entries[index][0];
+    if (newKey !== oldKey && newKey in value) return;
     const next: Record<string, string | null> = {};
     for (let i = 0; i < entries.length; i++) {
       if (i === index) {

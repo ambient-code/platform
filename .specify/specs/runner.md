@@ -15,7 +15,7 @@ The ambient-runner is a Python application that executes AI agent sessions insid
 
 ### Managed Paths
 
-```
+```text
 components/runners/ambient-runner/
 ├── Dockerfile                    # Runner container image
 ├── main.py                      # FastAPI entry point
@@ -42,7 +42,7 @@ components/runners/ambient-runner/
 
 ### Supporting Frontend Paths
 
-```
+```text
 components/frontend/src/components/claude-agent-options/
 ├── schema.ts                     # Zod schema (mirrors SDK types)
 ├── options-form.tsx              # Main form component
@@ -57,6 +57,7 @@ components/frontend/src/components/claude-agent-options/
 - Python 3.12 (system default), Node.js (AppStream), Go (go-toolset)
 
 ### Pinned Tools
+
 | Tool | Dockerfile ARG | Purpose |
 |------|---------------|---------|
 | gh | `GH_VERSION` | GitHub CLI for repo operations |
@@ -66,6 +67,7 @@ components/frontend/src/components/claude-agent-options/
 | gemini-cli | `GEMINI_CLI_VERSION` | Google Gemini CLI |
 
 ### Key Dependencies
+
 | Package | Constraint | Role |
 |---------|-----------|------|
 | claude-agent-sdk | `>=0.1.50` | Claude Code agent SDK |

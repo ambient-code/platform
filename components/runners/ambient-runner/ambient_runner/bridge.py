@@ -234,7 +234,7 @@ class PlatformBridge(ABC):
     @property
     def context(self) -> RunnerContext | None:
         """The current ``RunnerContext``, or ``None`` before ``set_context()``."""
-        return None
+        return self._context
 
     @property
     def configured_model(self) -> str:

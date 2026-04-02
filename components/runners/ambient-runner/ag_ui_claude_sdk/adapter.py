@@ -428,7 +428,6 @@ class ClaudeAgentAdapter:
     def build_options(
         self,
         input_data: RunAgentInput | None = None,
-        thread_id: str | None = None,
         resume_from: str | None = None,
     ) -> "ClaudeAgentOptions":
         """
@@ -438,7 +437,6 @@ class ClaudeAgentAdapter:
 
         Args:
             input_data: Optional RunAgentInput for extracting dynamic tools
-            thread_id: Optional thread_id for session resumption lookup
             resume_from: Optional CLI session ID to resume (preserves chat history
                 across adapter rebuilds, e.g. after a repo is added mid-session)
 
@@ -1157,9 +1155,8 @@ class ClaudeAgentAdapter:
                                 upsert_message(
                                     build_agui_tool_message(tool_use_id, block_content)
                                 )
-                            parent_id = getattr(message, "parent_tool_use_id", None)
                             async for event in handle_tool_result_block(
-                                block, thread_id, run_id, parent_id
+                                block, thread_id, run_id
                             ):
                                 yield event
 

@@ -12,7 +12,8 @@ Owns the entire Claude session lifecycle:
 import logging
 import os
 import time
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 from ag_ui.core import (
     BaseEvent,
@@ -167,7 +168,7 @@ class ClaudeBridge(PlatformBridge):
             thread_id, None
         ) or self._session_manager.get_session_id(thread_id)
         sdk_options = self._adapter.build_options(
-            input_data, thread_id=thread_id, resume_from=saved_session_id
+            input_data, resume_from=saved_session_id
         )
         worker = await self._session_manager.get_or_create(
             thread_id, sdk_options, api_key

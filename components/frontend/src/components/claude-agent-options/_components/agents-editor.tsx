@@ -47,6 +47,8 @@ export function AgentsEditor({ value, onChange }: { value: Record<string, AgentD
     onChange(next);
   };
   const updateAgentName = (index: number, newName: string) => {
+    const oldName = entries[index][0];
+    if (newName !== oldName && newName in value) return;
     const next: Record<string, AgentDef> = {};
     for (let i = 0; i < entries.length; i++) {
       next[i === index ? newName : entries[i][0]] = entries[i][1];

@@ -58,6 +58,8 @@ export function McpServersEditor({ value, onChange }: { value: Record<string, Mc
     onChange(next);
   };
   const updateServerName = (index: number, newName: string) => {
+    const oldName = entries[index][0];
+    if (newName !== oldName && newName in value) return;
     const next: Record<string, McpFormServer> = {};
     for (let i = 0; i < entries.length; i++) {
       next[i === index ? newName : entries[i][0]] = entries[i][1];
@@ -96,7 +98,13 @@ export function McpServersEditor({ value, onChange }: { value: Record<string, Mc
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground">Environment</Label>
-                <KeyValueEditor value={server.env ?? {}} onChange={(e) => updateServer(name, { ...server, env: e as Record<string, string> })} />
+                <KeyValueEditor value={server.env ?? {}} onChange={(e) => {
+                  const sanitized: Record<string, string> = {};
+                  for (const [ek, ev] of Object.entries(e)) {
+                    if (ev != null) sanitized[ek] = ev;
+                  }
+                  updateServer(name, { ...server, env: sanitized });
+                }} />
               </div>
             </>
           ) : (
@@ -104,7 +112,13 @@ export function McpServersEditor({ value, onChange }: { value: Record<string, Mc
               <Input className="font-mono text-xs" placeholder={server.type === "sse" ? "https://server.example.com/sse" : "https://server.example.com/mcp"} value={server.url ?? ""} onChange={(e) => updateServer(name, { ...server, url: e.target.value })} />
               <div>
                 <Label className="text-xs text-muted-foreground">Headers</Label>
-                <KeyValueEditor value={server.headers ?? {}} onChange={(h) => updateServer(name, { ...server, headers: h as Record<string, string> })} keyPlaceholder="Header-Name" valuePlaceholder="Header value" />
+                <KeyValueEditor value={server.headers ?? {}} onChange={(h) => {
+                  const sanitized: Record<string, string> = {};
+                  for (const [hk, hv] of Object.entries(h)) {
+                    if (hv != null) sanitized[hk] = hv;
+                  }
+                  updateServer(name, { ...server, headers: sanitized });
+                }} keyPlaceholder="Header-Name" valuePlaceholder="Header value" />
               </div>
             </>
           )}
