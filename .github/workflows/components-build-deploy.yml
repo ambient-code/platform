@@ -40,12 +40,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  detect-changes:
+  build-matrix:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    permissions: {}
     outputs:
       build-matrix: ${{ steps.matrix.outputs.build-matrix }}
       merge-matrix: ${{ steps.matrix.outputs.merge-matrix }}
+<<<<<<< HEAD
       has-builds: ${{ steps.matrix.outputs.has-builds }}
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
@@ -86,10 +88,12 @@ jobs:
             ambient-mcp:
               - 'components/ambient-mcp/**'
 
+=======
+    steps:
+>>>>>>> upstream/main
       - name: Build component matrices
         id: matrix
         run: |
-          # All components definition
           ALL_COMPONENTS='[
             {"name":"frontend","context":"./components/frontend","image":"quay.io/ambient_code/vteam_frontend","dockerfile":"./components/frontend/Dockerfile"},
             {"name":"backend","context":"./components/backend","image":"quay.io/ambient_code/vteam_backend","dockerfile":"./components/backend/Dockerfile"},
@@ -105,10 +109,13 @@ jobs:
           SELECTED="${{ github.event.inputs.components }}"
 
           if [ -n "$SELECTED" ]; then
-            # Dispatch with specific components
             FILTERED=$(echo "$ALL_COMPONENTS" | jq -c --arg sel "$SELECTED" '[.[] | select(.name as $n | $sel | split(",") | map(gsub("^\\s+|\\s+$";"")) | index($n))]')
+<<<<<<< HEAD
           elif [ "$EVENT" == "pull_request" ]; then
             # PR — always build all components so every PR image is in quay for deployment
+=======
+          else
+>>>>>>> upstream/main
             FILTERED="$ALL_COMPONENTS"
           else
             # Push to main — only changed components
@@ -120,21 +127,14 @@ jobs:
             done
           fi
 
-          # Build matrix includes context/dockerfile; merge matrix only needs name/image
-          BUILD_MATRIX=$(echo "$FILTERED" | jq -c '.')
-          MERGE_MATRIX=$(echo "$FILTERED" | jq -c '[.[] | {name, image}]')
-          HAS_BUILDS=$(echo "$FILTERED" | jq -c 'length > 0')
-
-          echo "build-matrix=$BUILD_MATRIX" >> $GITHUB_OUTPUT
-          echo "merge-matrix=$MERGE_MATRIX" >> $GITHUB_OUTPUT
-          echo "has-builds=$HAS_BUILDS" >> $GITHUB_OUTPUT
+          echo "build-matrix=$(echo "$FILTERED" | jq -c '.')" >> $GITHUB_OUTPUT
+          echo "merge-matrix=$(echo "$FILTERED" | jq -c '[.[] | {name, image}]')" >> $GITHUB_OUTPUT
 
           echo "Components to build:"
           echo "$FILTERED" | jq -r '.[].name'
 
   build:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.has-builds == 'true'
+    needs: build-matrix
     permissions:
       contents: read
       pull-requests: read
@@ -152,7 +152,7 @@ jobs:
           - runner: ubuntu-24.04-arm
             platform: linux/arm64
             suffix: arm64
-        component: ${{ fromJSON(needs.detect-changes.outputs.build-matrix) }}
+        component: ${{ fromJSON(needs.build-matrix.outputs.build-matrix) }}
     runs-on: ${{ matrix.arch.runner }}
     steps:
       - name: Checkout code
@@ -206,8 +206,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
 
   merge-manifests:
-    needs: [detect-changes, build]
-    if: needs.detect-changes.outputs.has-builds == 'true'
+    needs: [build-matrix, build]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -215,7 +214,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        component: ${{ fromJSON(needs.detect-changes.outputs.merge-matrix) }}
+        component: ${{ fromJSON(needs.build-matrix.outputs.merge-matrix) }}
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -236,7 +235,6 @@ jobs:
           docker buildx imagetools create \
             -t ${{ matrix.component.image }}:latest \
             -t ${{ matrix.component.image }}:${{ github.sha }} \
-            -t ${{ matrix.component.image }}:stage \
             ${{ matrix.component.image }}:${{ github.sha }}-amd64 \
             ${{ matrix.component.image }}:${{ github.sha }}-arm64
 
@@ -259,7 +257,7 @@ jobs:
 
   update-rbac-and-crd:
     runs-on: ubuntu-latest
-    needs: [detect-changes, merge-manifests]
+    needs: [build-matrix, merge-manifests]
     if: always() && !cancelled() && (github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
     steps:
       - name: Checkout code
@@ -286,8 +284,13 @@ jobs:
 
   deploy-to-openshift:
     runs-on: ubuntu-latest
+<<<<<<< HEAD
     needs: [detect-changes, merge-manifests, update-rbac-and-crd]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.operator == 'true' || needs.detect-changes.outputs.claude-runner == 'true' || needs.detect-changes.outputs.state-sync == 'true' || needs.detect-changes.outputs.ambient-api-server == 'true' || needs.detect-changes.outputs.ambient-control-plane == 'true' || needs.detect-changes.outputs.ambient-mcp == 'true' || needs.detect-changes.outputs.public-api == 'true')
+=======
+    needs: [merge-manifests, update-rbac-and-crd]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+>>>>>>> upstream/main
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -307,6 +310,7 @@ jobs:
         run: |
           oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
 
+<<<<<<< HEAD
       - name: Determine image tags
         id: image-tags
         run: |
@@ -376,6 +380,18 @@ jobs:
           kustomize edit set image quay.io/ambient_code/vteam_control_plane:latest=quay.io/ambient_code/vteam_control_plane:${{ steps.image-tags.outputs.control_plane_tag }}
           kustomize edit set image quay.io/ambient_code/vteam_mcp:latest=quay.io/ambient_code/vteam_mcp:${{ steps.image-tags.outputs.mcp_tag }}
           kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:${{ steps.image-tags.outputs.public_api_tag }}
+=======
+      - name: Update kustomization with SHA image tags
+        working-directory: components/manifests/overlays/production
+        run: |
+          kustomize edit set image quay.io/ambient_code/vteam_frontend:latest=quay.io/ambient_code/vteam_frontend:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/vteam_backend:latest=quay.io/ambient_code/vteam_backend:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:${{ github.sha }}
+>>>>>>> upstream/main
 
       - name: Validate kustomization
         working-directory: components/manifests/overlays/production
@@ -389,43 +405,38 @@ jobs:
           oc apply -k . -n ambient-code
 
       - name: Update frontend environment variables
-        if: needs.detect-changes.outputs.frontend == 'true'
         run: |
           oc set env deployment/frontend -n ambient-code -c frontend \
             GITHUB_APP_SLUG="ambient-code-stage" \
             FEEDBACK_URL="https://forms.gle/7XiWrvo6No922DUz6"
 
       - name: Update operator environment variables
-        if: needs.detect-changes.outputs.operator == 'true' || needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.claude-runner == 'true' || needs.detect-changes.outputs.state-sync == 'true'
         run: |
           oc set env deployment/agentic-operator -n ambient-code -c agentic-operator \
-            AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ steps.image-tags.outputs.runner_tag }}" \
-            STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ steps.image-tags.outputs.state_sync_tag }}"
+            AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}" \
+            STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ github.sha }}"
+
+      - name: Pin OPERATOR_IMAGE on backend for scheduled session triggers
+        run: |
+          oc set env deployment/agentic-backend -n ambient-code -c agentic-backend \
+            OPERATOR_IMAGE="quay.io/ambient_code/vteam_operator:${{ github.sha }}"
 
       - name: Update agent registry ConfigMap with pinned image tags
-        if: needs.detect-changes.outputs.claude-runner == 'true' || needs.detect-changes.outputs.state-sync == 'true'
         run: |
-          # Fetch live JSON from cluster so unchanged images keep their current tag
           REGISTRY=$(oc get configmap ambient-agent-registry -n ambient-code \
             -o jsonpath='{.data.agent-registry\.json}')
 
-          # Only replace images that were actually rebuilt this run.
-          # Pattern [@:][^"]* matches both :tag and @sha256:digest refs.
-          if [ "${{ needs.detect-changes.outputs.claude-runner }}" == "true" ]; then
-            REGISTRY=$(echo "$REGISTRY" | sed \
-              "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}|g")
-          fi
-          if [ "${{ needs.detect-changes.outputs.state-sync }}" == "true" ]; then
-            REGISTRY=$(echo "$REGISTRY" | sed \
-              "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:${{ github.sha }}|g")
-          fi
+          REGISTRY=$(echo "$REGISTRY" | sed \
+            "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}|g")
+          REGISTRY=$(echo "$REGISTRY" | sed \
+            "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:${{ github.sha }}|g")
 
           oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
             -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"
 
   deploy-with-disptach:
     runs-on: ubuntu-latest
-    needs: [detect-changes, merge-manifests, update-rbac-and-crd]
+    needs: [merge-manifests, update-rbac-and-crd]
     if: github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout code
@@ -446,9 +457,10 @@ jobs:
         run: |
           oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
 
-      - name: Update kustomization with stage image tags
+      - name: Update kustomization with SHA image tags
         working-directory: components/manifests/overlays/production
         run: |
+<<<<<<< HEAD
           kustomize edit set image quay.io/ambient_code/vteam_frontend:latest=quay.io/ambient_code/vteam_frontend:stage
           kustomize edit set image quay.io/ambient_code/vteam_backend:latest=quay.io/ambient_code/vteam_backend:stage
           kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:stage
@@ -457,6 +469,15 @@ jobs:
           kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:stage
           kustomize edit set image quay.io/ambient_code/vteam_control_plane:latest=quay.io/ambient_code/vteam_control_plane:stage
           kustomize edit set image quay.io/ambient_code/vteam_mcp:latest=quay.io/ambient_code/vteam_mcp:stage
+=======
+          kustomize edit set image quay.io/ambient_code/vteam_frontend:latest=quay.io/ambient_code/vteam_frontend:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/vteam_backend:latest=quay.io/ambient_code/vteam_backend:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:${{ github.sha }}
+>>>>>>> upstream/main
 
       - name: Validate kustomization
         working-directory: components/manifests/overlays/production
@@ -475,37 +496,26 @@ jobs:
             GITHUB_APP_SLUG="ambient-code-stage" \
             FEEDBACK_URL="https://forms.gle/7XiWrvo6No922DUz6"
 
-      - name: Determine which components were built
-        id: built
-        run: |
-          MATRIX='${{ needs.detect-changes.outputs.build-matrix }}'
-          echo "has-runner=$(echo "$MATRIX" | jq -r '[.[].name] | if index("ambient-runner") then "true" else "false" end')" >> $GITHUB_OUTPUT
-          echo "has-state-sync=$(echo "$MATRIX" | jq -r '[.[].name] | if index("state-sync") then "true" else "false" end')" >> $GITHUB_OUTPUT
-
       - name: Update operator environment variables
-        if: steps.built.outputs.has-runner == 'true' || steps.built.outputs.has-state-sync == 'true'
         run: |
-          ARGS=""
-          if [ "${{ steps.built.outputs.has-runner }}" == "true" ]; then
-            ARGS="$ARGS AMBIENT_CODE_RUNNER_IMAGE=quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}"
-          fi
-          if [ "${{ steps.built.outputs.has-state-sync }}" == "true" ]; then
-            ARGS="$ARGS STATE_SYNC_IMAGE=quay.io/ambient_code/vteam_state_sync:${{ github.sha }}"
-          fi
-          oc set env deployment/agentic-operator -n ambient-code -c agentic-operator $ARGS
+          oc set env deployment/agentic-operator -n ambient-code -c agentic-operator \
+            AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}" \
+            STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ github.sha }}"
+
+      - name: Pin OPERATOR_IMAGE on backend for scheduled session triggers
+        run: |
+          oc set env deployment/agentic-backend -n ambient-code -c agentic-backend \
+            OPERATOR_IMAGE="quay.io/ambient_code/vteam_operator:${{ github.sha }}"
 
       - name: Update agent registry ConfigMap with pinned image tags
-        if: steps.built.outputs.has-runner == 'true' || steps.built.outputs.has-state-sync == 'true'
         run: |
           REGISTRY=$(oc get configmap ambient-agent-registry -n ambient-code \
             -o jsonpath='{.data.agent-registry\.json}')
-          if [ "${{ steps.built.outputs.has-runner }}" == "true" ]; then
-            REGISTRY=$(echo "$REGISTRY" | sed \
-              "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}|g")
-          fi
-          if [ "${{ steps.built.outputs.has-state-sync }}" == "true" ]; then
-            REGISTRY=$(echo "$REGISTRY" | sed \
-              "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:${{ github.sha }}|g")
-          fi
+
+          REGISTRY=$(echo "$REGISTRY" | sed \
+            "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}|g")
+          REGISTRY=$(echo "$REGISTRY" | sed \
+            "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:${{ github.sha }}|g")
+
           oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
             -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"

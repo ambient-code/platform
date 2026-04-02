@@ -1,0 +1,123 @@
+name: Component Benchmarks
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      components:
+        description: Components to benchmark (comma-separated or all)
+        required: false
+        default: all
+        type: string
+      mode:
+        description: cold, warm, or both
+        required: false
+        default: both
+        type: string
+      baseline_ref:
+        description: Optional baseline git ref
+        required: false
+        default: ""
+        type: string
+  pull_request:
+    types: [labeled]
+
+jobs:
+  benchmark:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'benchmark'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: components/backend/go.mod
+          cache: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Run benchmark harness self-tests
+        run: |
+          bash tests/bench-test.sh
+
+      - name: Run component benchmarks
+        env:
+          COMPONENTS: ${{ inputs.components }}
+          MODE: ${{ inputs.mode }}
+          BASELINE_REF_INPUT: ${{ inputs.baseline_ref }}
+        run: |
+          set -euo pipefail
+
+          ARGS=()
+          if [[ -n "${COMPONENTS:-}" && "${COMPONENTS}" != "all" ]]; then
+            ARGS+=(--components "${COMPONENTS}")
+          fi
+          if [[ -n "${MODE:-}" ]]; then
+            ARGS+=(--mode "${MODE}")
+          fi
+          if [[ -n "${BASELINE_REF_INPUT:-}" ]]; then
+            ARGS+=(--baseline-ref "${BASELINE_REF_INPUT}")
+          fi
+
+          bash scripts/benchmarks/component-bench.sh --ci "${ARGS[@]}" >/dev/null
+
+      - name: Publish benchmark summary
+        if: always()
+        run: |
+          {
+            echo "### Component Benchmarks"
+            echo
+
+            if [[ -f reports/benchmarks/results.tsv ]]; then
+              OVER_BUDGET=$(awk -F'\t' 'NR > 1 && $2 == "cold" && $8 == "false" { print $1 " (" $4 "s)" }' reports/benchmarks/results.tsv)
+              REGRESSIONS=$(awk -F'\t' 'NR > 1 && ($6 + 0) > 10.0 { print $1 " " $2 " (" $6 "%)" }' reports/benchmarks/results.tsv)
+
+              if [[ -n "${OVER_BUDGET}" ]]; then
+                echo "**Over 60s budget:**"
+                while IFS= read -r line; do
+                  [[ -n "$line" ]] && echo "- $line"
+                done <<<"${OVER_BUDGET}"
+                echo
+              fi
+
+              if [[ -n "${REGRESSIONS}" ]]; then
+                echo "**Regressions over 10%:**"
+                while IFS= read -r line; do
+                  [[ -n "$line" ]] && echo "- $line"
+                done <<<"${REGRESSIONS}"
+                echo
+              fi
+            fi
+
+            echo '```text'
+            if [[ -f reports/benchmarks/results.human.txt ]]; then
+              cat reports/benchmarks/results.human.txt
+            else
+              echo "No human-readable benchmark report was generated."
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload benchmark artifacts
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: component-benchmarks-${{ github.run_id }}
+          path: reports/benchmarks/
+          retention-days: 7

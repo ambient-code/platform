@@ -26,10 +26,14 @@ import (
 var K8sClientScheduled kubernetes.Interface
 
 const (
-	labelScheduledSession     = "ambient-code.io/scheduled-session"
-	labelScheduledSessionName = "ambient-code.io/scheduled-session-name"
-	labelCreatedBy            = "ambient-code.io/created-by"
-	annotationDisplayName     = "ambient-code.io/display-name"
+	labelScheduledSession      = "ambient-code.io/scheduled-session"
+	labelScheduledSessionName  = "ambient-code.io/scheduled-session-name"
+	labelCreatedBy             = "ambient-code.io/created-by"
+	annotationDisplayName      = "ambient-code.io/display-name"
+	annotationReuseLastSession = "ambient-code.io/reuse-last-session"
+
+	// flagReuseLastSession is the Unleash feature flag for the reuse last session option.
+	flagReuseLastSession = "scheduled-session.reuse.enabled"
 )
 
 // checkScheduledSessionAccess verifies the user token and checks RBAC permission
@@ -116,6 +120,11 @@ func CreateScheduledSession(c *gin.Context) {
 		return
 	}
 
+	// Gate reuseLastSession behind feature flag
+	if req.ReuseLastSession && !isReuseEnabled(c) {
+		req.ReuseLastSession = false
+	}
+
 	userID := c.GetString("userID")
 
 	// Inject userContext into the session template so triggered sessions can
@@ -169,7 +178,8 @@ func CreateScheduledSession(c *gin.Context) {
 				labelCreatedBy:        sanitizeLabelValue(userID),
 			},
 			Annotations: map[string]string{
-				annotationDisplayName: req.DisplayName,
+				annotationDisplayName:      req.DisplayName,
+				annotationReuseLastSession: fmt.Sprintf("%t", req.ReuseLastSession),
 			},
 		},
 		Spec: batchv1.CronJobSpec{
@@ -195,6 +205,7 @@ func CreateScheduledSession(c *gin.Context) {
 										{Name: "SESSION_TEMPLATE", Value: string(templateJSON)},
 										{Name: "PROJECT_NAMESPACE", Value: project},
 										{Name: "SCHEDULED_SESSION_NAME", Value: name},
+										{Name: "REUSE_LAST_SESSION", Value: fmt.Sprintf("%t", req.ReuseLastSession)},
 									},
 									SecurityContext: &corev1.SecurityContext{
 										AllowPrivilegeEscalation: types.BoolPtr(false),
@@ -260,6 +271,11 @@ func UpdateScheduledSession(c *gin.Context) {
 		return
 	}
 
+	// Gate reuseLastSession behind feature flag
+	if req.ReuseLastSession != nil && *req.ReuseLastSession && !isReuseEnabled(c) {
+		req.ReuseLastSession = nil
+	}
+
 	cj, err := K8sClientScheduled.BatchV1().CronJobs(project).Get(c.Request.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -286,6 +302,13 @@ func UpdateScheduledSession(c *gin.Context) {
 			cj.Annotations = map[string]string{}
 		}
 		cj.Annotations[annotationDisplayName] = *req.DisplayName
+	}
+	if req.ReuseLastSession != nil {
+		if cj.Annotations == nil {
+			cj.Annotations = map[string]string{}
+		}
+		cj.Annotations[annotationReuseLastSession] = fmt.Sprintf("%t", *req.ReuseLastSession)
+		upsertTriggerEnvVar(cj, "REUSE_LAST_SESSION", fmt.Sprintf("%t", *req.ReuseLastSession))
 	}
 	if req.SessionTemplate != nil {
 		// Inject userContext so updated templates retain credential resolution
@@ -314,25 +337,7 @@ func UpdateScheduledSession(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to encode session template"})
 			return
 		}
-		for i := range cj.Spec.JobTemplate.Spec.Template.Spec.Containers {
-			container := &cj.Spec.JobTemplate.Spec.Template.Spec.Containers[i]
-			if container.Name == "trigger" {
-				found := false
-				for j := range container.Env {
-					if container.Env[j].Name == "SESSION_TEMPLATE" {
-						container.Env[j].Value = string(templateJSON)
-						found = true
-						break
-					}
-				}
-				if !found {
-					container.Env = append(container.Env, corev1.EnvVar{
-						Name:  "SESSION_TEMPLATE",
-						Value: string(templateJSON),
-					})
-				}
-			}
-		}
+		upsertTriggerEnvVar(cj, "SESSION_TEMPLATE", string(templateJSON))
 	}
 
 	updated, err := K8sClientScheduled.BatchV1().CronJobs(project).Update(c.Request.Context(), cj, metav1.UpdateOptions{})
@@ -521,6 +526,9 @@ func cronJobToScheduledSession(cj *batchv1.CronJob) types.ScheduledSession {
 		if dn, ok := cj.Annotations[annotationDisplayName]; ok {
 			ss.DisplayName = dn
 		}
+		if reuse, ok := cj.Annotations[annotationReuseLastSession]; ok {
+			ss.ReuseLastSession = reuse == "true"
+		}
 	}
 
 	// Extract session template from the trigger container's SESSION_TEMPLATE env var
@@ -538,6 +546,40 @@ func cronJobToScheduledSession(cj *batchv1.CronJob) types.ScheduledSession {
 	}
 
 	return ss
+}
+
+// isReuseEnabled checks if the reuse last session feature flag is enabled,
+// respecting workspace-scoped overrides.
+func isReuseEnabled(c *gin.Context) bool {
+	project := c.GetString("project")
+	reqK8s, _ := GetK8sClientsForRequest(c)
+	if reqK8s != nil {
+		overrides, err := getWorkspaceOverrides(c.Request.Context(), reqK8s, project)
+		if err == nil && overrides != nil {
+			if val, exists := overrides[flagReuseLastSession]; exists {
+				return val == "true"
+			}
+		}
+	}
+	return FeatureEnabled(flagReuseLastSession)
+}
+
+// upsertTriggerEnvVar updates or appends an environment variable in the trigger container.
+func upsertTriggerEnvVar(cj *batchv1.CronJob, name, value string) {
+	for i := range cj.Spec.JobTemplate.Spec.Template.Spec.Containers {
+		container := &cj.Spec.JobTemplate.Spec.Template.Spec.Containers[i]
+		if container.Name == "trigger" {
+			for j := range container.Env {
+				if container.Env[j].Name == name {
+					container.Env[j].Value = value
+					return
+				}
+			}
+			container.Env = append(container.Env, corev1.EnvVar{Name: name, Value: value})
+			return
+		}
+	}
+	log.Printf("Warning: trigger container not found in CronJob %s/%s while setting %s", cj.Namespace, cj.Name, name)
 }
 
 // sanitizeLabelValue ensures a string is safe for use as a Kubernetes label value.
