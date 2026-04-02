@@ -52,10 +52,10 @@ jobs:
           python scripts/sdk-version-bump.py --check-only --package "$PACKAGE_ARG"
           EXIT_CODE=$?
 
-          if [ $EXIT_CODE -eq 2 ]; then
-            echo "updates_available=true" >> $GITHUB_OUTPUT
-          elif [ $EXIT_CODE -eq 0 ]; then
-            echo "updates_available=false" >> $GITHUB_OUTPUT
+          if [ "$EXIT_CODE" -eq 2 ]; then
+            echo "updates_available=true" >> "$GITHUB_OUTPUT"
+          elif [ "$EXIT_CODE" -eq 0 ]; then
+            echo "updates_available=false" >> "$GITHUB_OUTPUT"
           else
             echo "Script failed with exit code $EXIT_CODE"
             exit 1
@@ -73,16 +73,16 @@ jobs:
             --jq 'length')
 
           if [ "$EXISTING" -gt "0" ]; then
-            echo "pr_exists=true" >> $GITHUB_OUTPUT
+            echo "pr_exists=true" >> "$GITHUB_OUTPUT"
             PR_NUM=$(gh pr list \
               --head "automated/sdk-version-bump" \
               --state open \
               --json number \
               --jq '.[0].number')
-            echo "pr_number=$PR_NUM" >> $GITHUB_OUTPUT
+            echo "pr_number=$PR_NUM" >> "$GITHUB_OUTPUT"
             echo "Existing PR #$PR_NUM found - will update it"
           else
-            echo "pr_exists=false" >> $GITHUB_OUTPUT
+            echo "pr_exists=false" >> "$GITHUB_OUTPUT"
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -96,7 +96,7 @@ jobs:
 
           # Read outputs
           PR_TITLE=$(cat .sdk-bump-output/pr-title.txt)
-          echo "pr_title=$PR_TITLE" >> $GITHUB_OUTPUT
+          echo "pr_title=$PR_TITLE" >> "$GITHUB_OUTPUT"
 
       - name: Create or update PR
         if: steps.check.outputs.updates_available == 'true'
@@ -148,13 +148,17 @@ jobs:
         if: always()
         run: |
           if [ "${{ steps.check.outputs.updates_available }}" == "true" ]; then
-            echo "## SDK Version Bump" >> $GITHUB_STEP_SUMMARY
-            echo "Updates applied and PR created/updated." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            cat .sdk-bump-output/pr-body.md >> $GITHUB_STEP_SUMMARY 2>/dev/null || true
+            {
+              echo "## SDK Version Bump"
+              echo "Updates applied and PR created/updated."
+              echo ""
+              cat .sdk-bump-output/pr-body.md 2>/dev/null || true
+            } >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "## SDK Version Bump" >> $GITHUB_STEP_SUMMARY
-            echo "All tracked SDKs are up to date. No action needed." >> $GITHUB_STEP_SUMMARY
+            {
+              echo "## SDK Version Bump"
+              echo "All tracked SDKs are up to date. No action needed."
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Clean up output directory
