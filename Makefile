@@ -1049,7 +1049,7 @@ crc-down: ## Stop CRC deployments (keep cluster running)
 
 crc-clean: ## Full cleanup including CRC cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Cleaning up CRC environment..."
-	@PROJECT_NAME=$(CRC_PROJECT_NAME) bash components/scripts/local-dev/crc-stop.sh --delete-project --stop-cluster
+	@PROJECT_NAME=$(CRC_PROJECT_NAME) STOP_CLUSTER=true DELETE_PROJECT=true bash components/scripts/local-dev/crc-stop.sh
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) CRC environment cleaned up"
 
 crc-status: ## Show CRC cluster and deployment status
