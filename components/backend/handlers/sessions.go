@@ -118,8 +118,6 @@ var allowedSdkOptionKeys = map[string]bool{
 	"max_budget_usd":            true,
 	"fallback_model":            true,
 	"model":                     true,
-	"timeout":                   true,
-	"inactivity_timeout":        true,
 	"permission_mode":           true,
 	"output_format":             true,
 	"include_partial_messages":  true,

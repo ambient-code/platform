@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { AdvancedSdkOptions } from '../advanced-sdk-options';
 import type { SdkOptions } from '@/types/api/sessions';
@@ -12,6 +12,10 @@ describe('AdvancedSdkOptions', () => {
       { id: 'claude-opus-4-5', name: 'Claude Opus 4.5' },
     ],
   };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('renders the collapsible trigger button', () => {
     render(<AdvancedSdkOptions {...defaultProps} />);

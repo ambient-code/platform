@@ -125,12 +125,10 @@ export type SdkOptions = {
   model?: string;
   temperature?: number;
   max_tokens?: number;
-  timeout?: number;
   fallback_model?: string;
   max_thinking_tokens?: number;
   max_turns?: number;
   max_budget_usd?: number;
-  inactivity_timeout?: number;
   permission_mode?: "default" | "acceptEdits" | "bypassPermissions";
   output_format?: string;
   include_partial_messages?: boolean;

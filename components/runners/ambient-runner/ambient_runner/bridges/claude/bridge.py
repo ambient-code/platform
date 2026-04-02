@@ -636,6 +636,9 @@ class ClaudeBridge(PlatformBridge):
         if sdk_options_json:
             try:
                 sdk_opts = json.loads(sdk_options_json)
+                if not isinstance(sdk_opts, dict):
+                    logger.warning("SDK_OPTIONS must be a JSON object, ignoring")
+                    sdk_opts = {}
                 applied = 0
                 for key, value in sdk_opts.items():
                     if key in _SDK_OPTIONS_DENYLIST:

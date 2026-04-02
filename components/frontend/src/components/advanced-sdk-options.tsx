@@ -254,48 +254,6 @@ export function AdvancedSdkOptions({
             Execution &amp; Control
           </legend>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label htmlFor="sdk-timeout" className="text-xs">
-                Timeout (seconds)
-              </Label>
-              <Input
-                id="sdk-timeout"
-                type="number"
-                min={60}
-                max={86400}
-                placeholder="300"
-                value={value.timeout ?? ""}
-                onChange={(e) =>
-                  update({
-                    timeout:
-                      e.target.value === ""
-                        ? undefined
-                        : parseInt(e.target.value),
-                  })
-                }
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="sdk-inactivity-timeout" className="text-xs">
-                Inactivity Timeout (seconds)
-              </Label>
-              <Input
-                id="sdk-inactivity-timeout"
-                type="number"
-                min={0}
-                max={86400}
-                placeholder="(none)"
-                value={value.inactivity_timeout ?? ""}
-                onChange={(e) =>
-                  update({
-                    inactivity_timeout:
-                      e.target.value === ""
-                        ? undefined
-                        : parseInt(e.target.value),
-                  })
-                }
-              />
-            </div>
             <div className="space-y-1 col-span-2">
               <Label htmlFor="sdk-permission-mode" className="text-xs">
                 Permission Mode
