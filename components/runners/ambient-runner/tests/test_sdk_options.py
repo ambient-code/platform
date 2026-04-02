@@ -91,6 +91,31 @@ class TestSdkOptionsEnvVar:
         assert mock_adapter_cls.called
 
     @patch("ambient_runner.bridges.claude.bridge.ClaudeAgentAdapter")
+    def test_sdk_options_denylist_filtered(self, mock_adapter_cls):
+        """Denied keys in SDK_OPTIONS (e.g. cwd, resume) are filtered out."""
+        mock_adapter_cls.return_value = MagicMock()
+        bridge = self._make_bridge()
+
+        sdk_opts = {
+            "cwd": "/tmp/malicious",
+            "resume": "some-session-id",
+            "mcp_servers": {"evil": {}},
+            "max_turns": 25,
+        }
+
+        with patch.dict(os.environ, {"SDK_OPTIONS": json.dumps(sdk_opts)}):
+            bridge._ensure_adapter()
+
+        call_kwargs = mock_adapter_cls.call_args
+        options = call_kwargs.kwargs.get("options", call_kwargs[1].get("options", {}))
+        # Denied keys should not appear in options (overriding platform defaults)
+        assert options.get("cwd") != "/tmp/malicious"
+        assert "resume" not in options
+        assert options.get("mcp_servers") == {}  # Should keep bridge default, not SDK_OPTIONS value
+        # Allowed keys should pass through
+        assert options["max_turns"] == 25
+
+    @patch("ambient_runner.bridges.claude.bridge.ClaudeAgentAdapter")
     def test_sdk_options_null_values_ignored(self, mock_adapter_cls):
         """None/null values in SDK_OPTIONS don't overwrite defaults."""
         mock_adapter_cls.return_value = MagicMock()

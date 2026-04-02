@@ -74,11 +74,12 @@ type CloneSessionRequest struct {
 }
 
 type UpdateAgenticSessionRequest struct {
-	InitialPrompt *string                `json:"initialPrompt,omitempty"`
-	DisplayName   *string                `json:"displayName,omitempty"`
-	Timeout       *int                   `json:"timeout,omitempty"`
-	LLMSettings   *LLMSettings           `json:"llmSettings,omitempty"`
-	SdkOptions    map[string]interface{} `json:"sdkOptions,omitempty"`
+	InitialPrompt  *string                `json:"initialPrompt,omitempty"`
+	DisplayName    *string                `json:"displayName,omitempty"`
+	Timeout        *int                   `json:"timeout,omitempty"`
+	LLMSettings    *LLMSettings           `json:"llmSettings,omitempty"`
+	SdkOptions     map[string]interface{} `json:"sdkOptions,omitempty"`
+	ClearSdkOptions bool                  `json:"clearSdkOptions,omitempty"`
 }
 
 type CloneAgenticSessionRequest struct {

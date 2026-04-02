@@ -90,6 +90,14 @@
     "temperature": {
       "type": "float",
       "required": false
+    },
+    "timeout": {
+      "type": "int",
+      "required": false
+    },
+    "inactivity_timeout": {
+      "type": "int",
+      "required": false
     }
   }
 }

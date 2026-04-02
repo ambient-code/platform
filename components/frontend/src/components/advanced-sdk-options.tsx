@@ -22,6 +22,8 @@ import {
 import { ChevronsUpDown, Settings, Code, X } from "lucide-react";
 import type { SdkOptions } from "@/types/api/sessions";
 
+// Keep in sync with the runner's default allowed_tools in
+// components/runners/ambient-runner/ambient_runner/bridges/claude/bridge.py
 const DEFAULT_TOOLS = [
   "Read",
   "Write",
@@ -36,7 +38,7 @@ const DEFAULT_TOOLS = [
   "TodoRead",
   "TodoWrite",
   "Agent",
-];
+] as const;
 
 type ModelOption = {
   id: string;
@@ -58,13 +60,17 @@ export function AdvancedSdkOptions({
   const [showJsonPreview, setShowJsonPreview] = useState(false);
   const [betaInput, setBetaInput] = useState("");
   const [customToolInput, setCustomToolInput] = useState("");
+  const [outputFormatError, setOutputFormatError] = useState<string | null>(null);
 
   const update = (partial: Partial<SdkOptions>) => {
     onChange({ ...value, ...partial });
   };
 
   const toggleTool = (tool: string) => {
-    const current = value.allowed_tools ?? [];
+    // If allowed_tools is undefined, the runner uses its own defaults.
+    // When the user first toggles a tool, we start from the full DEFAULT_TOOLS list
+    // so toggling off one tool removes it from an explicit allowlist.
+    const current = value.allowed_tools ?? [...DEFAULT_TOOLS];
     const next = current.includes(tool)
       ? current.filter((t) => t !== tool)
       : [...current, tool];
@@ -259,22 +265,23 @@ export function AdvancedSdkOptions({
                 Permission Mode
               </Label>
               <Select
-                value={value.permission_mode ?? "__default__"}
-                onValueChange={(v) =>
-                  update({
-                    permission_mode:
-                      v === "__default__"
-                        ? undefined
-                        : (v as SdkOptions["permission_mode"]),
-                  })
-                }
+                value={value.permission_mode === "default" ? "prompt_user" : (value.permission_mode ?? "__unset__")}
+                onValueChange={(v) => {
+                  if (v === "__unset__") {
+                    update({ permission_mode: undefined });
+                  } else if (v === "prompt_user") {
+                    update({ permission_mode: "default" as SdkOptions["permission_mode"] });
+                  } else {
+                    update({ permission_mode: v as SdkOptions["permission_mode"] });
+                  }
+                }}
               >
                 <SelectTrigger id="sdk-permission-mode">
                   <SelectValue placeholder="Default (acceptEdits)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__default__">Default (acceptEdits)</SelectItem>
-                  <SelectItem value="default">Prompt</SelectItem>
+                  <SelectItem value="__unset__">Default (acceptEdits)</SelectItem>
+                  <SelectItem value="prompt_user">Prompt</SelectItem>
                   <SelectItem value="acceptEdits">Accept Edits</SelectItem>
                   <SelectItem value="bypassPermissions">
                     Bypass Permissions
@@ -328,15 +335,28 @@ export function AdvancedSdkOptions({
             <Textarea
               id="sdk-output-format"
               placeholder='{"type": "object", "properties": {...}}'
-              className="font-mono text-xs min-h-[60px]"
+              className={`font-mono text-xs min-h-[60px] ${outputFormatError ? "border-destructive" : ""}`}
               value={value.output_format ?? ""}
-              onChange={(e) =>
-                update({
-                  output_format:
-                    e.target.value === "" ? undefined : e.target.value,
-                })
-              }
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === "") {
+                  setOutputFormatError(null);
+                  update({ output_format: undefined });
+                } else {
+                  try {
+                    JSON.parse(val);
+                    setOutputFormatError(null);
+                    update({ output_format: val });
+                  } catch {
+                    setOutputFormatError("Invalid JSON");
+                    update({ output_format: val });
+                  }
+                }
+              }}
             />
+            {outputFormatError && (
+              <p className="text-xs text-destructive">{outputFormatError}</p>
+            )}
           </div>
         </fieldset>
 
@@ -362,7 +382,7 @@ export function AdvancedSdkOptions({
           </div>
           {/* Custom tools not in default list */}
           {(value.allowed_tools ?? [])
-            .filter((t) => !DEFAULT_TOOLS.includes(t))
+            .filter((t) => !(DEFAULT_TOOLS as readonly string[]).includes(t))
             .map((tool) => (
               <Badge key={tool} variant="secondary" className="gap-1 mr-1">
                 {tool}

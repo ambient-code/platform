@@ -128,15 +128,60 @@ var allowedSdkOptionKeys = map[string]bool{
 	"system_prompt":             true,
 }
 
-// filterSdkOptions returns only the allowed keys from the input map.
-func filterSdkOptions(opts map[string]interface{}) map[string]interface{} {
+// filterSdkOptions returns only the allowed keys from the input map, validating value types.
+// Returns the filtered map and an error if any value has an invalid type.
+func filterSdkOptions(opts map[string]interface{}) (map[string]interface{}, error) {
 	filtered := make(map[string]interface{}, len(opts))
 	for k, v := range opts {
-		if allowedSdkOptionKeys[k] {
-			filtered[k] = v
+		if !allowedSdkOptionKeys[k] {
+			continue
+		}
+		if err := validateSdkOptionValue(k, v); err != nil {
+			return nil, fmt.Errorf("invalid value for %q: %w", k, err)
+		}
+		filtered[k] = v
+	}
+	return filtered, nil
+}
+
+// validateSdkOptionValue checks that the value type is appropriate for the given SDK option key.
+func validateSdkOptionValue(key string, value interface{}) error {
+	if value == nil {
+		return nil
+	}
+	switch key {
+	case "model", "permission_mode", "fallback_model", "system_prompt", "output_format":
+		if _, ok := value.(string); !ok {
+			return fmt.Errorf("expected string, got %T", value)
+		}
+	case "temperature", "max_budget_usd":
+		switch value.(type) {
+		case float64, float32, int, int64:
+		default:
+			return fmt.Errorf("expected number, got %T", value)
+		}
+	case "max_tokens", "max_thinking_tokens", "max_turns":
+		switch value.(type) {
+		case float64, int, int64:
+		default:
+			return fmt.Errorf("expected integer, got %T", value)
+		}
+	case "include_partial_messages", "enable_file_checkpointing", "strict_mcp_config":
+		if _, ok := value.(bool); !ok {
+			return fmt.Errorf("expected boolean, got %T", value)
+		}
+	case "betas", "allowed_tools":
+		arr, ok := value.([]interface{})
+		if !ok {
+			return fmt.Errorf("expected array, got %T", value)
+		}
+		for i, item := range arr {
+			if _, ok := item.(string); !ok {
+				return fmt.Errorf("expected string at index %d, got %T", i, item)
+			}
 		}
 	}
-	return filtered
+	return nil
 }
 
 func parseSpec(spec map[string]interface{}) types.AgenticSessionSpec {
@@ -806,7 +851,11 @@ func CreateSession(c *gin.Context) {
 
 	// Serialize sdkOptions as JSON into SDK_OPTIONS env var (filtered to allowed keys only)
 	if len(req.SdkOptions) > 0 {
-		filtered := filterSdkOptions(req.SdkOptions)
+		filtered, filterErr := filterSdkOptions(req.SdkOptions)
+		if filterErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid sdkOptions: %v", filterErr)})
+			return
+		}
 		if len(filtered) > 0 {
 			sdkOptsJSON, err := json.Marshal(filtered)
 			if err != nil {
@@ -1311,8 +1360,18 @@ func UpdateSession(c *gin.Context) {
 	}
 
 	// Update SDK options in environmentVariables (filtered to allowed keys only)
-	if len(req.SdkOptions) > 0 {
-		filtered := filterSdkOptions(req.SdkOptions)
+	if req.ClearSdkOptions {
+		envVars, _ := spec["environmentVariables"].(map[string]interface{})
+		if envVars != nil {
+			delete(envVars, "SDK_OPTIONS")
+			spec["environmentVariables"] = envVars
+		}
+	} else if len(req.SdkOptions) > 0 {
+		filtered, filterErr := filterSdkOptions(req.SdkOptions)
+		if filterErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid sdkOptions: %v", filterErr)})
+			return
+		}
 		if len(filtered) > 0 {
 			sdkOptsJSON, err := json.Marshal(filtered)
 			if err != nil {
