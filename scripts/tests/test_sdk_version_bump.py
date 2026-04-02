@@ -5,7 +5,6 @@ import textwrap
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 # Import the module under test
 import sys
@@ -32,33 +31,49 @@ class TestVersionTuple:
         assert sdk_version_bump._version_tuple("") == (0,)
 
     def test_comparison(self):
-        assert sdk_version_bump._version_tuple("0.1.50") > sdk_version_bump._version_tuple("0.1.23")
-        assert sdk_version_bump._version_tuple("1.0.0") > sdk_version_bump._version_tuple("0.99.99")
-        assert sdk_version_bump._version_tuple("0.1.23") == sdk_version_bump._version_tuple("0.1.23")
+        assert sdk_version_bump._version_tuple(
+            "0.1.50"
+        ) > sdk_version_bump._version_tuple("0.1.23")
+        assert sdk_version_bump._version_tuple(
+            "1.0.0"
+        ) > sdk_version_bump._version_tuple("0.99.99")
+        assert sdk_version_bump._version_tuple(
+            "0.1.23"
+        ) == sdk_version_bump._version_tuple("0.1.23")
 
 
 class TestParseCurrentVersion:
     def test_parses_simple_dependency(self, tmp_path):
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text(textwrap.dedent("""\
+        pyproject.write_text(
+            textwrap.dedent("""\
             [project.optional-dependencies]
             claude = [
               "anthropic[vertex]>=0.68.0",
               "claude-agent-sdk>=0.1.23",
             ]
-        """))
-        assert sdk_version_bump.parse_current_version(pyproject, "claude-agent-sdk") == "0.1.23"
+        """)
+        )
+        assert (
+            sdk_version_bump.parse_current_version(pyproject, "claude-agent-sdk")
+            == "0.1.23"
+        )
 
     def test_parses_extras_dependency(self, tmp_path):
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text(textwrap.dedent("""\
+        pyproject.write_text(
+            textwrap.dedent("""\
             [project.optional-dependencies]
             claude = [
               "anthropic[vertex]>=0.68.0",
               "claude-agent-sdk>=0.1.23",
             ]
-        """))
-        assert sdk_version_bump.parse_current_version(pyproject, "anthropic[vertex]") == "0.68.0"
+        """)
+        )
+        assert (
+            sdk_version_bump.parse_current_version(pyproject, "anthropic[vertex]")
+            == "0.68.0"
+        )
 
     def test_returns_none_for_missing(self, tmp_path):
         pyproject = tmp_path / "pyproject.toml"
@@ -69,13 +84,15 @@ class TestParseCurrentVersion:
 class TestUpdatePyprojectVersion:
     def test_updates_version(self, tmp_path):
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text(textwrap.dedent("""\
+        pyproject.write_text(
+            textwrap.dedent("""\
             [project.optional-dependencies]
             claude = [
               "anthropic[vertex]>=0.68.0",
               "claude-agent-sdk>=0.1.23",
             ]
-        """))
+        """)
+        )
         result = sdk_version_bump.update_pyproject_version(
             pyproject, "claude-agent-sdk", "0.1.23", "0.1.50"
         )
@@ -87,13 +104,15 @@ class TestUpdatePyprojectVersion:
 
     def test_updates_extras_version(self, tmp_path):
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text(textwrap.dedent("""\
+        pyproject.write_text(
+            textwrap.dedent("""\
             [project.optional-dependencies]
             claude = [
               "anthropic[vertex]>=0.68.0",
               "claude-agent-sdk>=0.1.23",
             ]
-        """))
+        """)
+        )
         result = sdk_version_bump.update_pyproject_version(
             pyproject, "anthropic[vertex]", "0.68.0", "0.86.0"
         )
@@ -115,7 +134,9 @@ class TestFetchPypiLatest:
     def test_successful_fetch(self):
         mock_response = json.dumps({"info": {"version": "0.1.50"}}).encode()
         mock_ctx = MagicMock()
-        mock_ctx.__enter__ = MagicMock(return_value=MagicMock(read=MagicMock(return_value=mock_response)))
+        mock_ctx.__enter__ = MagicMock(
+            return_value=MagicMock(read=MagicMock(return_value=mock_response))
+        )
         mock_ctx.__exit__ = MagicMock(return_value=False)
 
         with patch("urllib.request.urlopen", return_value=mock_ctx):
@@ -130,21 +151,24 @@ class TestFetchPypiLatest:
 
 class TestFetchGithubChangelog:
     def _make_releases(self, versions_and_bodies):
-        return json.dumps([
-            {"tag_name": f"v{v}", "body": b}
-            for v, b in versions_and_bodies
-        ]).encode()
+        return json.dumps(
+            [{"tag_name": f"v{v}", "body": b} for v, b in versions_and_bodies]
+        ).encode()
 
     def test_filters_versions_in_range(self):
-        releases = self._make_releases([
-            ("0.1.26", "Release 0.1.26 notes"),
-            ("0.1.25", "Release 0.1.25 notes"),
-            ("0.1.24", "Release 0.1.24 notes"),
-            ("0.1.23", "Should be excluded (current)"),
-            ("0.1.22", "Should be excluded (older)"),
-        ])
+        releases = self._make_releases(
+            [
+                ("0.1.26", "Release 0.1.26 notes"),
+                ("0.1.25", "Release 0.1.25 notes"),
+                ("0.1.24", "Release 0.1.24 notes"),
+                ("0.1.23", "Should be excluded (current)"),
+                ("0.1.22", "Should be excluded (older)"),
+            ]
+        )
         mock_ctx = MagicMock()
-        mock_ctx.__enter__ = MagicMock(return_value=MagicMock(read=MagicMock(return_value=releases)))
+        mock_ctx.__enter__ = MagicMock(
+            return_value=MagicMock(read=MagicMock(return_value=releases))
+        )
         mock_ctx.__exit__ = MagicMock(return_value=False)
 
         with patch("urllib.request.urlopen", return_value=mock_ctx):
@@ -162,7 +186,9 @@ class TestFetchGithubChangelog:
     def test_empty_on_no_releases(self):
         releases = json.dumps([]).encode()
         mock_ctx = MagicMock()
-        mock_ctx.__enter__ = MagicMock(return_value=MagicMock(read=MagicMock(return_value=releases)))
+        mock_ctx.__enter__ = MagicMock(
+            return_value=MagicMock(read=MagicMock(return_value=releases))
+        )
         mock_ctx.__exit__ = MagicMock(return_value=False)
 
         with patch("urllib.request.urlopen", return_value=mock_ctx):
@@ -181,15 +207,19 @@ class TestFetchGithubChangelog:
 
 class TestCheckVersions:
     def test_detects_update_needed(self, tmp_path):
-        pyproject = tmp_path / "components" / "runners" / "ambient-runner" / "pyproject.toml"
+        pyproject = (
+            tmp_path / "components" / "runners" / "ambient-runner" / "pyproject.toml"
+        )
         pyproject.parent.mkdir(parents=True)
-        pyproject.write_text(textwrap.dedent("""\
+        pyproject.write_text(
+            textwrap.dedent("""\
             [project.optional-dependencies]
             claude = [
               "anthropic[vertex]>=0.68.0",
               "claude-agent-sdk>=0.1.23",
             ]
-        """))
+        """)
+        )
 
         with patch.object(sdk_version_bump, "fetch_pypi_latest") as mock_pypi:
             mock_pypi.side_effect = lambda name: {
@@ -209,15 +239,19 @@ class TestCheckVersions:
         assert anthropic_result.needs_update is True
 
     def test_no_update_needed(self, tmp_path):
-        pyproject = tmp_path / "components" / "runners" / "ambient-runner" / "pyproject.toml"
+        pyproject = (
+            tmp_path / "components" / "runners" / "ambient-runner" / "pyproject.toml"
+        )
         pyproject.parent.mkdir(parents=True)
-        pyproject.write_text(textwrap.dedent("""\
+        pyproject.write_text(
+            textwrap.dedent("""\
             [project.optional-dependencies]
             claude = [
               "anthropic[vertex]>=0.86.0",
               "claude-agent-sdk>=0.1.50",
             ]
-        """))
+        """)
+        )
 
         with patch.object(sdk_version_bump, "fetch_pypi_latest") as mock_pypi:
             mock_pypi.side_effect = lambda name: {

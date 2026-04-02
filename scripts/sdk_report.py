@@ -59,17 +59,36 @@ class FeatureReport:
 
 # Keywords that indicate specific runner relevance
 CLAUDE_KEYWORDS = [
-    "claude", "anthropic", "mcp", "tool_use", "thinking", "agent_definition",
-    "agentdefinition", "session", "hook", "subagent", "allowed_tools",
-    "claude_code", "claude cli", "bundled claude",
+    "claude",
+    "anthropic",
+    "mcp",
+    "tool_use",
+    "thinking",
+    "agent_definition",
+    "agentdefinition",
+    "session",
+    "hook",
+    "subagent",
+    "allowed_tools",
+    "claude_code",
+    "claude cli",
+    "bundled claude",
 ]
 GEMINI_KEYWORDS = ["gemini", "google", "vertex"]
 
 # Behavior change indicators
 BEHAVIOR_CHANGE_KEYWORDS = [
-    "changed", "breaking", "deprecated", "removed", "now.*instead",
-    "no longer", "replaced", "migrat", "default.*changed",
-    "takes precedence", "now-deprecated",
+    "changed",
+    "breaking",
+    "deprecated",
+    "removed",
+    "now.*instead",
+    "no longer",
+    "replaced",
+    "migrat",
+    "default.*changed",
+    "takes precedence",
+    "now-deprecated",
 ]
 
 # Items that are purely internal and should not appear in behavior changes
@@ -166,9 +185,8 @@ def parse_release_body(version: str, body: str) -> list[Feature]:
 
         # Top-level bullet (supports both "- " and "* " formats)
         is_top_bullet = (
-            (stripped.startswith("- ") or stripped.startswith("* "))
-            and not line.startswith("  ")
-        )
+            stripped.startswith("- ") or stripped.startswith("* ")
+        ) and not line.startswith("  ")
         if is_top_bullet:
             # Flush previous bullet
             if current_bullet_lines:
@@ -218,7 +236,10 @@ def _parse_feature_line(version: str, line: str, section: str) -> Feature | None
         name = name_match.group(1).strip().rstrip(":")
         description = name_match.group(2).strip()
         # If name is a generic scope (e.g. "api", "internal"), use description as name
-        if name.lower() in ("api", "internal", "tests", "docs", "chore") and description:
+        if (
+            name.lower() in ("api", "internal", "tests", "docs", "chore")
+            and description
+        ):
             name = _extract_name(description)
         if not description:
             description = name
@@ -321,9 +342,7 @@ def _detect_default(text: str, section: str) -> str:
     text_lower = text.lower()
 
     # Look for explicit default mentions
-    default_match = re.search(
-        r"default[s]?\s*(?:is|to|:)\s*[`\"']?(\w+)", text_lower
-    )
+    default_match = re.search(r"default[s]?\s*(?:is|to|:)\s*[`\"']?(\w+)", text_lower)
     if default_match:
         return default_match.group(1).capitalize()
 
@@ -426,9 +445,8 @@ def render_report_markdown(reports: list[FeatureReport]) -> str:
             elif f.action == ActionRequired.OPT_IN and f.category == "feature":
                 opt_in_items.append(pair)
 
-            if (
-                f.category == "behavior_change"
-                or (f.category == "feature" and _is_behavior_change(f.description))
+            if f.category == "behavior_change" or (
+                f.category == "feature" and _is_behavior_change(f.description)
             ):
                 behavior_items.append(pair)
             elif f.category == "feature":
@@ -446,17 +464,11 @@ def render_report_markdown(reports: list[FeatureReport]) -> str:
         )
     if opt_in_items:
         lines.append(
-            f"- **{len(opt_in_items)} opt-in feature(s)** "
-            "available for adoption"
+            f"- **{len(opt_in_items)} opt-in feature(s)** available for adoption"
         )
     if behavior_items:
-        lines.append(
-            f"- {len(behavior_items)} behavior change(s) to review"
-        )
-    lines.append(
-        f"- {len(new_features)} new feature(s), "
-        f"{len(bugfixes)} bug fix(es)"
-    )
+        lines.append(f"- {len(behavior_items)} behavior change(s) to review")
+    lines.append(f"- {len(new_features)} new feature(s), {len(bugfixes)} bug fix(es)")
     lines.append("")
 
     # Action Items (always visible — the stuff that needs human attention)
@@ -468,8 +480,7 @@ def render_report_markdown(reports: list[FeatureReport]) -> str:
             for f, pkg in migrate_items:
                 desc = _truncate(f.description, 120)
                 lines.append(
-                    f"- **MIGRATE** — **{f.name}** "
-                    f"(`{pkg}` v{f.version}): {desc}"
+                    f"- **MIGRATE** — **{f.name}** (`{pkg}` v{f.version}): {desc}"
                 )
             lines.append("")
 
@@ -478,10 +489,7 @@ def render_report_markdown(reports: list[FeatureReport]) -> str:
             lines.append("")
             for f, pkg in opt_in_items:
                 desc = _truncate(f.description, 100)
-                lines.append(
-                    f"- [ ] **{f.name}** "
-                    f"(`{pkg}` v{f.version}): {desc}"
-                )
+                lines.append(f"- [ ] **{f.name}** (`{pkg}` v{f.version}): {desc}")
             lines.append("")
 
     # Behavior Changes (always visible if present, but compact)
@@ -491,10 +499,7 @@ def render_report_markdown(reports: list[FeatureReport]) -> str:
         lines.append("| Change | Package | Version | Action |")
         lines.append("|--------|---------|---------|--------|")
         for f, pkg in behavior_items:
-            lines.append(
-                f"| **{f.name}** | `{pkg}` | {f.version} "
-                f"| {f.action.value} |"
-            )
+            lines.append(f"| **{f.name}** | `{pkg}` | {f.version} | {f.action.value} |")
         lines.append("")
 
     # New Features table — collapsible
@@ -512,12 +517,10 @@ def render_report_markdown(reports: list[FeatureReport]) -> str:
         )
         for f, pkg in new_features:
             claude_col = _check_mark(
-                f.runner_relevance
-                in (RunnerRelevance.CLAUDE, RunnerRelevance.BOTH)
+                f.runner_relevance in (RunnerRelevance.CLAUDE, RunnerRelevance.BOTH)
             )
             gemini_col = _check_mark(
-                f.runner_relevance
-                in (RunnerRelevance.GEMINI, RunnerRelevance.BOTH)
+                f.runner_relevance in (RunnerRelevance.GEMINI, RunnerRelevance.BOTH)
             )
             lines.append(
                 f"| **{f.name}** | `{pkg}` | {f.version} "
@@ -531,8 +534,7 @@ def render_report_markdown(reports: list[FeatureReport]) -> str:
     # Bug Fixes — collapsible
     if bugfixes:
         lines.append(
-            f"<details><summary><strong>Bug Fixes</strong> "
-            f"({len(bugfixes)})</summary>"
+            f"<details><summary><strong>Bug Fixes</strong> ({len(bugfixes)})</summary>"
         )
         lines.append("")
         for f, pkg in bugfixes:
@@ -568,9 +570,7 @@ def render_report_markdown(reports: list[FeatureReport]) -> str:
 
     # Internal changes — collapsible one-liner summary
     for r in reports:
-        internal = [
-            f for f in r.features if f.status == FeatureStatus.INTERNAL
-        ]
+        internal = [f for f in r.features if f.status == FeatureStatus.INTERNAL]
         if internal:
             lines.append(
                 f"<details><summary>Internal changes: "
