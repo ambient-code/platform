@@ -20,7 +20,7 @@
         "JIRA_USERNAME": "${JIRA_EMAIL}",
         "JIRA_API_TOKEN": "${JIRA_API_TOKEN}",
         "JIRA_SSL_VERIFY": "true",
-        "READ_ONLY_MODE": "true"
+        "READ_ONLY_MODE": "${JIRA_READ_ONLY_MODE:-true}"
       }
     },
     "google-workspace": {

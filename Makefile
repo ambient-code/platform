@@ -288,15 +288,17 @@ deploy-observability: ## Deploy observability (OTel + OpenShift Prometheus)
 
 add-grafana: ## Add Grafana on top of observability stack
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Adding Grafana..."
+	@kubectl apply -f components/manifests/observability/overlays/with-grafana/grafana-pvc.yaml
 	@kubectl apply -k components/manifests/observability/overlays/with-grafana/
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Grafana deployed"
 	@echo "  Create route: oc create route edge grafana --service=grafana -n $(NAMESPACE)"
 
-clean-observability: ## Remove observability components
+clean-observability: ## Remove observability components (preserves Grafana PVC)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Removing observability..."
 	@kubectl delete -k components/manifests/observability/overlays/with-grafana/ 2>/dev/null || true
 	@kubectl delete -k components/manifests/observability/ 2>/dev/null || true
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Observability removed"
+	@echo "  To also delete Grafana data: kubectl delete pvc grafana-storage -n $(NAMESPACE)"
 
 grafana-dashboard: ## Open Grafana (create route first)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Opening Grafana..."

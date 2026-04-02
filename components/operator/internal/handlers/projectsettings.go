@@ -331,7 +331,7 @@ func ensureSessionTriggerRBAC(namespace string, owner *unstructured.Unstructured
 			{
 				APIGroups: []string{"vteam.ambient-code"},
 				Resources: []string{"agenticsessions"},
-				Verbs:     []string{"create", "get", "list"},
+				Verbs:     []string{"create", "get", "list", "update"},
 			},
 		},
 	}
@@ -339,6 +339,11 @@ func ensureSessionTriggerRBAC(namespace string, owner *unstructured.Unstructured
 		if !errors.IsAlreadyExists(err) {
 			return fmt.Errorf("failed to create Role %s: %v", roleName, err)
 		}
+		// Update existing Role to ensure it has the latest permissions
+		if _, err := config.K8sClient.RbacV1().Roles(namespace).Update(context.TODO(), role, v1.UpdateOptions{}); err != nil {
+			return fmt.Errorf("failed to update Role %s: %v", roleName, err)
+		}
+		log.Printf("Updated Role %s in namespace %s", roleName, namespace)
 	} else {
 		log.Printf("Created Role %s in namespace %s", roleName, namespace)
 	}
