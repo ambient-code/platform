@@ -113,7 +113,11 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		log.Info().Str("token_file", cfg.ProjectKubeTokenFile).Msg("using separate project kube client")
 	}
 
-	provisioner := buildNamespaceProvisioner(cfg, kube)
+	provisionerKube := kube
+	if projectKube != nil {
+		provisionerKube = projectKube
+	}
+	provisioner := buildNamespaceProvisioner(cfg, provisionerKube)
 	tokenProvider := buildTokenProvider(cfg, log.Logger)
 
 	factory := reconciler.NewSDKClientFactory(cfg.APIServerURL, tokenProvider, log.Logger)
