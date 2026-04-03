@@ -57,6 +57,11 @@ var activityUpdateSem = make(chan struct{}, 50)
 // for each session to avoid excessive API calls. Key: "namespace/sessionName"
 var lastActivityUpdateTimes sync.Map
 
+// stopOnRunFinishedCache tracks which sessions have stopOnRunFinished set.
+// Populated lazily on first RUN_FINISHED event, avoids repeated k8s API calls.
+// Key: sessionName, Value: bool
+var stopOnRunFinishedCache sync.Map
+
 // sessionProjectMap maps sessionName → projectName so that persistStreamedEvent
 // (which only receives sessionID) can look up the project for activity tracking.
 // Populated by HandleAGUIRunProxy on each run request.
@@ -534,8 +539,8 @@ func persistStreamedEvent(sessionID, runID, threadID, jsonData string) {
 	// sessionID-to-project mapping populated by HandleAGUIRunProxy.
 	eventType, _ := event["type"].(string)
 
-	// Update lastActivityTime on CR for activity events (debounced).
-	if isActivityEvent(eventType) {
+	// Update lastActivityTime on CR for any event (debounced).
+	if eventType != "" {
 		if projectName, ok := sessionProjectMap.Load(sessionID); ok {
 			updateLastActivityTime(projectName.(string), sessionID, eventType == types.EventTypeRunStarted)
 		}
@@ -992,18 +997,19 @@ func triggerDisplayNameGenerationIfNeeded(projectName, sessionName string, messa
 	handlers.GenerateDisplayNameAsync(projectName, sessionName, userMessage, sessionCtx)
 }
 
-// isActivityEvent returns true for any AG-UI event type that indicates
-// the session is alive. Every event from the runner resets the inactivity
-// timer — if events stop flowing, the session is truly inactive.
-func isActivityEvent(eventType string) bool {
-	return eventType != ""
-}
-
-// checkAndStopOnRunFinished reads the session CR to check if stopOnRunFinished is set,
-// and if so, sets the desired-phase annotation to Stopped.
+// checkAndStopOnRunFinished checks if stopOnRunFinished is set for a session
+// and triggers a stop. Uses an in-memory cache to avoid k8s API calls for
+// sessions that don't have the flag set.
 func checkAndStopOnRunFinished(projectName, sessionName string) {
 	if handlers.DynamicClient == nil {
 		return
+	}
+
+	// Check cache first — skip k8s API call for sessions we've already checked
+	if cached, ok := stopOnRunFinishedCache.Load(sessionName); ok {
+		if !cached.(bool) {
+			return
+		}
 	}
 
 	gvr := types.GetAgenticSessionResource()
@@ -1017,11 +1023,11 @@ func checkAndStopOnRunFinished(projectName, sessionName string) {
 	}
 
 	stopOnFinish, _, _ := unstructured.NestedBool(obj.Object, "spec", "stopOnRunFinished")
+	stopOnRunFinishedCache.Store(sessionName, stopOnFinish)
 	if !stopOnFinish {
 		return
 	}
 
-	// Set desired-phase to Stopped
 	annotations := obj.GetAnnotations()
 	if annotations == nil {
 		annotations = make(map[string]string)

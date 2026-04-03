@@ -279,9 +279,9 @@ jobs:
       - name: Session summary
         if: always() && steps.context.outputs.is_fork != 'true'
         run: |
-          # Get session name from whichever step ran
-          SESSION_NAME="${{ steps.fix-session.outputs.session-name }}${{ steps.fix-issue-session.outputs.session-name }}${{ steps.custom-session.outputs.session-name }}"
-          SESSION_PHASE="${{ steps.fix-session.outputs.session-phase }}${{ steps.fix-issue-session.outputs.session-phase }}${{ steps.custom-session.outputs.session-phase }}"
+          # Get session name from whichever step ran (only one will have output)
+          SESSION_NAME="${{ steps.fix-session.outputs.session-name || steps.fix-issue-session.outputs.session-name || steps.custom-session.outputs.session-name }}"
+          SESSION_PHASE="${{ steps.fix-session.outputs.session-phase || steps.fix-issue-session.outputs.session-phase || steps.custom-session.outputs.session-phase }}"
 
           echo "### Amber — ${{ steps.context.outputs.type }} #${{ steps.context.outputs.number }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -316,6 +316,8 @@ jobs:
           import os
           import re
           import subprocess
+          import time
+          import uuid
           import requests
           from datetime import datetime, timezone
 
@@ -371,7 +373,6 @@ jobs:
 
           def create_session_api(prompt, session_name="", model="claude-opus-4-6"):
               """Create a new session or send message to existing one."""
-              import time, uuid
 
               if session_name:
                   # Ensure session is running
