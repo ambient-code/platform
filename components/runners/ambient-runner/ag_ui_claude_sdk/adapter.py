@@ -317,7 +317,6 @@ class ClaudeAgentAdapter:
         # Build a human-readable description of what Claude wants to do.
         file_path = input_data.get("file_path", "")
         command = input_data.get("command", "")
-        description = ""
         if file_path:
             description = f"{tool_name} on {file_path}"
         elif command:
@@ -964,20 +963,18 @@ class ClaudeAgentAdapter:
                 if isinstance(message, BaseEvent):
                     # Rewrite placeholder thread/run IDs injected by
                     # can_use_tool (which doesn't know the real IDs).
-                    if hasattr(message, "thread_id") and message.thread_id == _PERM_PLACEHOLDER_ID:
+                    if getattr(message, "thread_id", None) == _PERM_PLACEHOLDER_ID:
                         message.thread_id = thread_id
-                    if hasattr(message, "run_id") and message.run_id == _PERM_PLACEHOLDER_ID:
+                    if getattr(message, "run_id", None) == _PERM_PLACEHOLDER_ID:
                         message.run_id = run_id
 
                     yield message
 
-                    # Detect PermissionRequest halt: the ToolCallEndEvent
-                    # for a PermissionRequest tool signals that we should
-                    # halt just like a frontend tool.
+                    # PermissionRequest halt: ToolCallEndEvent with a
+                    # perm- prefixed ID triggers the same halt as a
+                    # frontend tool.
                     if (
                         isinstance(message, ToolCallEndEvent)
-                        and hasattr(message, "tool_call_id")
-                        and isinstance(message.tool_call_id, str)
                         and message.tool_call_id.startswith(_PERM_TOOL_ID_PREFIX)
                     ):
                         logger.debug(

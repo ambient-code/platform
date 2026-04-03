@@ -233,6 +233,9 @@ class ClaudeBridge(PlatformBridge):
                     # Clear the halt flag for this thread
                     self._halted_by_thread.pop(thread_id, None)
             finally:
+                # Release worker reference so destroyed workers can be GC'd.
+                self._adapter.set_permission_worker(None)
+
                 # Clear caller token immediately — never persist between turns.
                 if self._context:
                     self._context.caller_token = ""

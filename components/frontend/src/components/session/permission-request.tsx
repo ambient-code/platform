@@ -92,9 +92,7 @@ export const PermissionRequestMessage: React.FC<
     }
   };
 
-  const config = STATUS_CONFIG[disabled && status !== "pending" ? status : "pending"];
-  const resolvedConfig = STATUS_CONFIG[status];
-  const activeConfig = disabled ? resolvedConfig : config;
+  const activeConfig = STATUS_CONFIG[disabled && status !== "pending" ? status : "pending"];
   const Icon = activeConfig.icon;
 
   return (

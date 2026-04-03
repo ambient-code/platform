@@ -42,8 +42,6 @@ function parseQuestions(input: Record<string, unknown>): AskUserQuestionItem[] {
   return [];
 }
 
-const hasResult = hasToolResult;
-
 export const AskUserQuestionMessage: React.FC<AskUserQuestionMessageProps> = ({
   toolUseBlock,
   resultBlock,
@@ -52,7 +50,7 @@ export const AskUserQuestionMessage: React.FC<AskUserQuestionMessageProps> = ({
   isNewest = false,
 }) => {
   const questions = parseQuestions(toolUseBlock.input);
-  const alreadyAnswered = hasResult(resultBlock);
+  const alreadyAnswered = hasToolResult(resultBlock);
   const formattedTime = formatTimestamp(timestamp);
   const isMultiQuestion = questions.length > 1;
 
