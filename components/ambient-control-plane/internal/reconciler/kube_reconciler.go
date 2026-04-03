@@ -19,6 +19,12 @@ import (
 const (
 	mcpSidecarPort = int64(8090)
 	mcpSidecarURL  = "http://localhost:8090"
+
+	runnerTokenMountPath    = "/var/run/secrets/ambient"
+	runnerTokenFileName     = "bot-token"
+	runnerTokenVolumeKey    = "api-token"
+	runnerTokenVolumeName   = "runner-token"
+	runnerTokenRefreshEvery = 10 * time.Minute
 )
 
 type KubeReconcilerConfig struct {
@@ -398,7 +404,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 					"protocol":      "TCP",
 				},
 			},
-			"volumeMounts": r.buildVolumeMounts(),
+			"volumeMounts": r.buildVolumeMounts(secretName),
 			"env":          r.buildEnv(ctx, session, sdk, secretName, useMCPSidecar, credentialIDs),
 			"resources": map[string]interface{}{
 				"requests": map[string]interface{}{
@@ -442,7 +448,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 				"automountServiceAccountToken":  false,
 				"restartPolicy":                 "Never",
 				"terminationGracePeriodSeconds": int64(60),
-				"volumes":                       r.buildVolumes(),
+				"volumes":                       r.buildVolumes(secretName),
 				"containers":                    containers,
 			},
 		},
@@ -456,7 +462,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 	return nil
 }
 
-func (r *SimpleKubeReconciler) buildVolumes() []interface{} {
+func (r *SimpleKubeReconciler) buildVolumes(credSecretName string) []interface{} {
 	vols := []interface{}{
 		map[string]interface{}{
 			"name":     "workspace",
@@ -467,6 +473,18 @@ func (r *SimpleKubeReconciler) buildVolumes() []interface{} {
 			"configMap": map[string]interface{}{
 				"name":     "openshift-service-ca.crt",
 				"optional": true,
+			},
+		},
+		map[string]interface{}{
+			"name": runnerTokenVolumeName,
+			"secret": map[string]interface{}{
+				"secretName": credSecretName,
+				"items": []interface{}{
+					map[string]interface{}{
+						"key":  runnerTokenVolumeKey,
+						"path": runnerTokenFileName,
+					},
+				},
 			},
 		},
 	}
@@ -481,7 +499,7 @@ func (r *SimpleKubeReconciler) buildVolumes() []interface{} {
 	return vols
 }
 
-func (r *SimpleKubeReconciler) buildVolumeMounts() []interface{} {
+func (r *SimpleKubeReconciler) buildVolumeMounts(_ string) []interface{} {
 	mounts := []interface{}{
 		map[string]interface{}{
 			"name":      "workspace",
@@ -491,6 +509,11 @@ func (r *SimpleKubeReconciler) buildVolumeMounts() []interface{} {
 			"name":      "service-ca",
 			"mountPath": "/etc/pki/ca-trust/extracted/pem/service-ca.crt",
 			"subPath":   "service-ca.crt",
+			"readOnly":  true,
+		},
+		map[string]interface{}{
+			"name":      runnerTokenVolumeName,
+			"mountPath": runnerTokenMountPath,
 			"readOnly":  true,
 		},
 	}
@@ -852,4 +875,66 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func (r *SimpleKubeReconciler) refreshRunnerToken(ctx context.Context, namespace, sessionID string) error {
+	name := secretName(sessionID)
+	existing, err := r.nsKube().GetSecret(ctx, namespace, name)
+	if err != nil {
+		return fmt.Errorf("getting secret %s: %w", name, err)
+	}
+
+	token, err := r.factory.Token(ctx)
+	if err != nil {
+		return fmt.Errorf("resolving fresh API token: %w", err)
+	}
+
+	updated := existing.DeepCopy()
+	if err := unstructured.SetNestedField(updated.Object, map[string]interface{}{"api-token": token}, "stringData"); err != nil {
+		return fmt.Errorf("setting stringData on secret %s: %w", name, err)
+	}
+
+	if _, err := r.nsKube().UpdateSecret(ctx, updated); err != nil {
+		return fmt.Errorf("updating secret %s: %w", name, err)
+	}
+
+	r.logger.Info().Str("secret", name).Str("namespace", namespace).Msg("runner token refreshed")
+	return nil
+}
+
+func (r *SimpleKubeReconciler) StartTokenRefreshLoop(ctx context.Context) {
+	go func() {
+		ticker := time.NewTicker(runnerTokenRefreshEvery)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				r.refreshAllRunningTokens(ctx)
+			}
+		}
+	}()
+}
+
+func (r *SimpleKubeReconciler) refreshAllRunningTokens(ctx context.Context) {
+	sdk, err := r.factory.ForProject(ctx, "")
+	if err != nil {
+		r.logger.Warn().Err(err).Msg("token refresh loop: failed to get SDK client")
+		return
+	}
+
+	list, err := sdk.Sessions().List(ctx, &types.ListOptions{Page: 1, Size: 500, Search: "phase = 'Running'"})
+	if err != nil {
+		r.logger.Warn().Err(err).Msg("token refresh loop: failed to list running sessions")
+		return
+	}
+
+	for i := range list.Items {
+		session := list.Items[i]
+		namespace := r.namespaceForSession(session)
+		if err := r.refreshRunnerToken(ctx, namespace, session.ID); err != nil {
+			r.logger.Warn().Err(err).Str("session_id", session.ID).Str("namespace", namespace).Msg("token refresh loop: failed to refresh token")
+		}
+	}
 }
