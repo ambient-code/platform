@@ -57,7 +57,7 @@ func Load() (*ControlPlaneConfig, error) {
 		Reconcilers:           parseReconcilers(envOrDefault("RECONCILERS", "tally,kube")),
 		RunnerImage:           envOrDefault("RUNNER_IMAGE", "quay.io/ambient_code/vteam_claude_runner:latest"),
 		RunnerGRPCUseTLS:      os.Getenv("AMBIENT_GRPC_USE_TLS") == "true",
-		BackendURL:            envOrDefault("BACKEND_API_URL", "http://backend-service.ambient-code.svc:8080/api"),
+		BackendURL:            envOrDefault("BACKEND_API_URL", envOrDefault("AMBIENT_API_SERVER_URL", "http://localhost:8000")),
 		Namespace:             envOrDefault("NAMESPACE", "ambient-code"),
 		AnthropicAPIKey:       os.Getenv("ANTHROPIC_API_KEY"),
 		VertexEnabled:         os.Getenv("USE_VERTEX") == "1" || os.Getenv("USE_VERTEX") == "true",
