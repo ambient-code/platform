@@ -36,8 +36,9 @@ import (
 
 const (
 	// activityDebounceInterval is the minimum interval between CR status updates for lastActivityTime.
-	// Inactivity timeout is measured in hours, so minute-level granularity is sufficient.
-	activityDebounceInterval = 60 * time.Second
+	// Must be significantly shorter than the smallest inactivity timeout to prevent
+	// false inactivity detection while the session is actively processing.
+	activityDebounceInterval = 10 * time.Second
 
 	// activityUpdateTimeout bounds how long a single activity status update can take.
 	activityUpdateTimeout = 10 * time.Second
@@ -540,6 +541,13 @@ func persistStreamedEvent(sessionID, runID, threadID, jsonData string) {
 		}
 	}
 
+	// Stop session on RUN_FINISHED if stopOnRunFinished is set.
+	if eventType == types.EventTypeRunFinished {
+		if projectName, ok := sessionProjectMap.Load(sessionID); ok {
+			go checkAndStopOnRunFinished(projectName.(string), sessionID)
+		}
+	}
+
 	// agentStatus is derived at query time from the event log (DeriveAgentStatus).
 	// No CR updates needed here — the persisted events ARE the source of truth.
 }
@@ -984,17 +992,51 @@ func triggerDisplayNameGenerationIfNeeded(projectName, sessionName string, messa
 	handlers.GenerateDisplayNameAsync(projectName, sessionName, userMessage, sessionCtx)
 }
 
-// isActivityEvent returns true for AG-UI event types that indicate session activity.
+// isActivityEvent returns true for any AG-UI event type that indicates
+// the session is alive. Every event from the runner resets the inactivity
+// timer — if events stop flowing, the session is truly inactive.
 func isActivityEvent(eventType string) bool {
-	switch eventType {
-	case types.EventTypeRunStarted,
-		types.EventTypeTextMessageStart,
-		types.EventTypeTextMessageContent,
-		types.EventTypeToolCallStart:
-		return true
-	default:
-		return false
+	return eventType != ""
+}
+
+// checkAndStopOnRunFinished reads the session CR to check if stopOnRunFinished is set,
+// and if so, sets the desired-phase annotation to Stopped.
+func checkAndStopOnRunFinished(projectName, sessionName string) {
+	if handlers.DynamicClient == nil {
+		return
 	}
+
+	gvr := types.GetAgenticSessionResource()
+	ctx, cancel := context.WithTimeout(context.Background(), activityUpdateTimeout)
+	defer cancel()
+
+	obj, err := handlers.DynamicClient.Resource(gvr).Namespace(projectName).Get(ctx, sessionName, metav1.GetOptions{})
+	if err != nil {
+		log.Printf("stopOnRunFinished: failed to get session %s/%s: %v", projectName, sessionName, err)
+		return
+	}
+
+	stopOnFinish, _, _ := unstructured.NestedBool(obj.Object, "spec", "stopOnRunFinished")
+	if !stopOnFinish {
+		return
+	}
+
+	// Set desired-phase to Stopped
+	annotations := obj.GetAnnotations()
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+	annotations["ambient-code.io/desired-phase"] = "Stopped"
+	annotations["ambient-code.io/stop-reason"] = "run-finished"
+	obj.SetAnnotations(annotations)
+
+	_, err = handlers.DynamicClient.Resource(gvr).Namespace(projectName).Update(ctx, obj, metav1.UpdateOptions{})
+	if err != nil {
+		log.Printf("stopOnRunFinished: failed to update session %s/%s: %v", projectName, sessionName, err)
+		return
+	}
+
+	log.Printf("stopOnRunFinished: session %s/%s set to Stopped after RUN_FINISHED", projectName, sessionName)
 }
 
 // updateLastActivityTime updates the lastActivityTime field on the AgenticSession CR status.
