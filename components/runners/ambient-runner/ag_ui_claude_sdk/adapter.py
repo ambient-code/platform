@@ -975,6 +975,7 @@ class ClaudeAgentAdapter:
                     # frontend tool.
                     if (
                         isinstance(message, ToolCallEndEvent)
+                        and message.tool_call_id
                         and message.tool_call_id.startswith(_PERM_TOOL_ID_PREFIX)
                     ):
                         logger.debug(
