@@ -212,14 +212,28 @@ jobs:
         run: |
           oc apply -f components/manifests/components/openshift-ai/namespace.yaml
           oc apply -f components/manifests/components/openshift-ai/operatorgroup.yaml
+          # Remove any existing subscription/CSV to ensure clean install on the target channel
+          OLD_CSV=$(oc get subscription rhods-operator -n redhat-ods-operator \
+            -o jsonpath='{.status.installedCSV}' 2>/dev/null || true)
+          if [ -n "$OLD_CSV" ]; then
+            DESIRED_CHANNEL=$(grep 'channel:' components/manifests/components/openshift-ai/subscription.yaml | awk '{print $2}')
+            CURRENT_CHANNEL=$(oc get subscription rhods-operator -n redhat-ods-operator \
+              -o jsonpath='{.spec.channel}' 2>/dev/null || true)
+            if [ "$CURRENT_CHANNEL" != "$DESIRED_CHANNEL" ]; then
+              echo "Channel mismatch ($CURRENT_CHANNEL → $DESIRED_CHANNEL), removing old operator..."
+              oc delete subscription rhods-operator -n redhat-ods-operator --ignore-not-found
+              oc delete csv "$OLD_CSV" -n redhat-ods-operator --ignore-not-found
+            fi
+          fi
           oc apply -f components/manifests/components/openshift-ai/subscription.yaml
 
       - name: Wait for RHOAI operator to be ready
         run: |
-          echo "Waiting for RHOAI operator CSV to appear..."
+          DESIRED_CHANNEL=$(grep 'channel:' components/manifests/components/openshift-ai/subscription.yaml | awk '{print $2}')
+          echo "Waiting for RHOAI operator CSV on channel $DESIRED_CHANNEL..."
           for i in $(seq 1 60); do
             CSV=$(oc get subscription rhods-operator -n redhat-ods-operator \
-              -o jsonpath='{.status.installedCSV}' 2>/dev/null)
+              -o jsonpath='{.status.currentCSV}' 2>/dev/null)
             if [ -n "$CSV" ]; then
               echo "Found CSV: $CSV"
               break
