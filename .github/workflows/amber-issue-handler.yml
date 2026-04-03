@@ -36,7 +36,7 @@ jobs:
       github.event_name == 'issues'
       && github.event.label.name == 'amber:auto-fix'
     concurrency:
-      group: amber-issue-${{ github.event.issue.number }}
+      group: amber-${{ github.event.issue.number }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -142,13 +142,13 @@ jobs:
         id: context
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
           NUMBER="${{ github.event.issue.number }}"
           echo "number=$NUMBER" >> $GITHUB_OUTPUT
 
           # Determine if @amber is alone (fix prompt) or has instruction text (custom prompt)
-          COMMENT='${{ github.event.comment.body }}'
-          STRIPPED=$(echo "$COMMENT" | sed 's/@amber//g' | tr -d '[:space:]')
+          STRIPPED=$(echo "$COMMENT_BODY" | sed 's/@amber//g' | tr -d '[:space:]')
           if [ -z "$STRIPPED" ]; then
             echo "prompt_type=fix" >> $GITHUB_OUTPUT
           else
@@ -306,7 +306,7 @@ jobs:
           AMBIENT_API_TOKEN: ${{ secrets.AMBIENT_BOT_TOKEN }}
           AMBIENT_PROJECT: ${{ secrets.AMBIENT_PROJECT }}
         run: |
-          pip install --quiet requests>=2.31.0
+          pip install --quiet 'requests>=2.31.0'
 
           python3 - << 'PYEOF'
           import json
@@ -478,6 +478,17 @@ jobs:
           6. If fundamentally broken beyond repair, add a comment explaining and stop."""
 
               create_session_api(prompt, session_name=session_id)
+
+              # Increment retry_count in frontmatter so circuit breaker advances
+              if fm:
+                  new_count = fm["retry_count"] + 1
+                  now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                  old_fm = f'acp:session_id={fm["session_id"]} source={fm["source"]} last_action={fm["last_action"]} retry_count={fm["retry_count"]}'
+                  new_fm = f'acp:session_id={fm["session_id"]} source={fm["source"]} last_action={now} retry_count={new_count}'
+                  new_body = body.replace(old_fm, new_fm)
+                  if new_body != body:
+                      gh("pr", "edit", str(number), "--repo", REPO, "--body", new_body)
+                      print(f"  Updated frontmatter: retry_count={new_count}, last_action={now}")
 
               processed += 1
 
