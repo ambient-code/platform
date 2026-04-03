@@ -220,6 +220,10 @@ func (kc *KubeClient) CreateSecret(ctx context.Context, obj *unstructured.Unstru
 	return kc.dynamic.Resource(SecretGVR).Namespace(obj.GetNamespace()).Create(ctx, obj, metav1.CreateOptions{})
 }
 
+func (kc *KubeClient) UpdateSecret(ctx context.Context, obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	return kc.dynamic.Resource(SecretGVR).Namespace(obj.GetNamespace()).Update(ctx, obj, metav1.UpdateOptions{})
+}
+
 func (kc *KubeClient) DeleteSecretsByLabel(ctx context.Context, namespace, labelSelector string) error {
 	return kc.dynamic.Resource(SecretGVR).Namespace(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: labelSelector})
 }

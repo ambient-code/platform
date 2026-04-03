@@ -176,6 +176,9 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	sessionReconcilers := createSessionReconcilers(cfg.Reconcilers, factory, kube, projectKube, provisioner, kubeReconcilerCfg, log.Logger)
 	for _, sessionRec := range sessionReconcilers {
 		inf.RegisterHandler("sessions", sessionRec.Reconcile)
+		if kr, ok := sessionRec.(*reconciler.SimpleKubeReconciler); ok {
+			kr.StartTokenRefreshLoop(ctx)
+		}
 	}
 
 	return inf.Run(ctx)

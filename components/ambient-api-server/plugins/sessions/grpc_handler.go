@@ -21,18 +21,20 @@ import (
 
 type sessionGRPCHandler struct {
 	pb.UnimplementedSessionServiceServer
-	service    SessionService
-	generic    services.GenericService
-	brokerFunc func() *server.EventBroker
-	msgService MessageService
+	service            SessionService
+	generic            services.GenericService
+	brokerFunc         func() *server.EventBroker
+	msgService         MessageService
+	grpcServiceAccount string
 }
 
-func NewSessionGRPCHandler(service SessionService, generic services.GenericService, brokerFunc func() *server.EventBroker, msgService MessageService) pb.SessionServiceServer {
+func NewSessionGRPCHandler(service SessionService, generic services.GenericService, brokerFunc func() *server.EventBroker, msgService MessageService, grpcServiceAccount string) pb.SessionServiceServer {
 	return &sessionGRPCHandler{
-		service:    service,
-		generic:    generic,
-		brokerFunc: brokerFunc,
-		msgService: msgService,
+		service:            service,
+		generic:            generic,
+		brokerFunc:         brokerFunc,
+		msgService:         msgService,
+		grpcServiceAccount: grpcServiceAccount,
 	}
 }
 
@@ -286,7 +288,7 @@ func (h *sessionGRPCHandler) WatchSessionMessages(req *pb.WatchSessionMessagesRe
 
 	if !middleware.IsServiceCaller(ctx) {
 		username := auth.GetUsernameFromContext(ctx)
-		if username != "" {
+		if username != "" && (h.grpcServiceAccount == "" || username != h.grpcServiceAccount) {
 			session, svcErr := h.service.Get(ctx, req.GetSessionId())
 			if svcErr != nil {
 				return grpcutil.ServiceErrorToGRPC(svcErr)
