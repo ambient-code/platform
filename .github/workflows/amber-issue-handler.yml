@@ -105,7 +105,6 @@ jobs:
           SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
         run: |
           if [ -n "$SESSION_NAME" ]; then
-            gh issue edit ${{ steps.issue.outputs.number }} --repo "${{ github.repository }}" --add-label "ambient-code:triaged" || true
             gh issue comment ${{ steps.issue.outputs.number }} --repo "${{ github.repository }}" --body "Session \`$SESSION_NAME\` created (phase: $SESSION_PHASE). PR will have the \`ambient-code:managed\` label."
           fi
 
