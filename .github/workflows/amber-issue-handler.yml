@@ -205,13 +205,15 @@ jobs:
                - Are there merge conflicts? Resolve them.
                - Is CI failing? Read the logs and fix the failures.
                - Are there review comments (human or bot like CodeRabbit)? Address each comment.
-            2. Push fixes.
-            3. Ensure the PR body contains this frontmatter as the first line
+            2. For each issue you fix, call `log_correction` to record what went wrong and how you fixed it.
+               This helps the feedback loop improve future sessions.
+            3. Push fixes.
+            4. Ensure the PR body contains this frontmatter as the first line
                (read your session ID from the AGENTIC_SESSION_NAME environment variable):
                <!-- acp:session_id=$AGENTIC_SESSION_NAME source=#${{ steps.context.outputs.number }} last_action=<ISO8601_NOW> retry_count=0 -->
-            4. Add the `ambient-code:managed` label.
-            5. Do not merge. Do not close. Do not force-push.
-            6. If fundamentally broken beyond repair, add a comment explaining and stop.
+            5. Add the `ambient-code:managed` label.
+            6. Do not merge. Do not close. Do not force-push.
+            7. If fundamentally broken beyond repair, add a comment explaining and stop.
 
       # Fix prompt on an issue: @ambient-code alone — investigate and create PR (same as fresh prompt)
       - name: Run fix prompt (issue)
@@ -468,12 +470,13 @@ jobs:
              - Are there merge conflicts? Resolve them.
              - Is CI failing? Read the logs and fix the failures.
              - Are there review comments (human or bot like CodeRabbit)? Address each comment.
-          2. Push fixes.
-          3. Ensure the PR body contains this frontmatter as the first line
+          2. For each issue you fix, call `log_correction` to record what went wrong and how you fixed it.
+          3. Push fixes.
+          4. Ensure the PR body contains this frontmatter as the first line
              (read your session ID from the AGENTIC_SESSION_NAME environment variable):
              <!-- acp:session_id=$AGENTIC_SESSION_NAME source={source} last_action=<ISO8601_NOW> retry_count=0 -->
-          4. Add the `ambient-code:managed` label.
-          5. Do not merge. Do not close. Do not force-push.
+          5. Add the `ambient-code:managed` label.
+          6. Do not merge. Do not close. Do not force-push.
           6. If fundamentally broken beyond repair, add a comment explaining and stop."""
 
               create_session_api(prompt, session_name=session_id)
