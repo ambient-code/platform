@@ -51,6 +51,11 @@ patches:
     kind: Service
     name: ambient-api-server
     version: v1
+- path: minio-pvc-patch.yaml
+  target:
+    kind: PersistentVolumeClaim
+    name: minio-data
+    version: v1
 
 # Production images
 images:
