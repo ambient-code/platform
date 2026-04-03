@@ -82,4 +82,5 @@ func init() {
 	presenters.RegisterKind(&Credential{}, "Credential")
 
 	db.RegisterMigration(migration())
+	db.RegisterMigration(rolesMigration())
 }
