@@ -68,7 +68,7 @@ jobs:
       - name: Create session
         if: steps.existing.outputs.skip != 'true'
         id: session
-        uses: ambient-code/ambient-action@v0.0.4
+        uses: ambient-code/ambient-action@v0.0.5
         with:
           api-url: ${{ secrets.AMBIENT_API_URL }}
           api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
@@ -105,7 +105,6 @@ jobs:
           SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
         run: |
           if [ -n "$SESSION_NAME" ]; then
-            gh issue edit ${{ steps.issue.outputs.number }} --repo "${{ github.repository }}" --add-label "ambient-code:triaged" || true
             gh issue comment ${{ steps.issue.outputs.number }} --repo "${{ github.repository }}" --body "Session \`$SESSION_NAME\` created (phase: $SESSION_PHASE). PR will have the \`ambient-code:managed\` label."
           fi
 
@@ -189,7 +188,7 @@ jobs:
           && steps.context.outputs.prompt_type == 'fix'
           && steps.context.outputs.type == 'pr'
         id: fix-session
-        uses: ambient-code/ambient-action@v0.0.4
+        uses: ambient-code/ambient-action@v0.0.5
         with:
           api-url: ${{ secrets.AMBIENT_API_URL }}
           api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
@@ -221,7 +220,7 @@ jobs:
           && steps.context.outputs.prompt_type == 'fix'
           && steps.context.outputs.type == 'issue'
         id: fix-issue-session
-        uses: ambient-code/ambient-action@v0.0.4
+        uses: ambient-code/ambient-action@v0.0.5
         with:
           api-url: ${{ secrets.AMBIENT_API_URL }}
           api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
@@ -257,7 +256,7 @@ jobs:
           steps.context.outputs.is_fork != 'true'
           && steps.context.outputs.prompt_type == 'custom'
         id: custom-session
-        uses: ambient-code/ambient-action@v0.0.4
+        uses: ambient-code/ambient-action@v0.0.5
         with:
           api-url: ${{ secrets.AMBIENT_API_URL }}
           api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
