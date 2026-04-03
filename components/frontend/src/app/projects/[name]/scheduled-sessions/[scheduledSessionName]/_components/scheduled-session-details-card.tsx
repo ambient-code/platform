@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { Info } from "lucide-react";
 
@@ -33,6 +34,11 @@ export function ScheduledSessionDetailsCard({
   const runnerLabel = selectedRunner?.displayName ?? runnerTypeId;
   const modelDisplay = modelLabel ?? modelId;
 
+  const nextRun = useMemo(() => {
+    const runs = getNextRuns(scheduledSession.schedule, 1);
+    return runs.length > 0 ? runs[0] : null;
+  }, [scheduledSession.schedule]);
+
   return (
     <Card>
       <CardHeader>
@@ -56,18 +62,16 @@ export function ScheduledSessionDetailsCard({
           <div>
             <dt className="text-muted-foreground">Next Run</dt>
             <dd>
-              {(() => {
-                const nextRuns = getNextRuns(scheduledSession.schedule, 1);
-                if (nextRuns.length === 0) return <span className="text-muted-foreground">—</span>;
-                return (
-                  <div>
-                    <span>{formatScheduleDateTime(nextRuns[0])}</span>
-                    <span className="text-muted-foreground ml-2">
-                      ({formatDistanceToNow(nextRuns[0], { addSuffix: true })})
-                    </span>
-                  </div>
-                );
-              })()}
+              {nextRun ? (
+                <div>
+                  <span>{formatScheduleDateTime(nextRun)}</span>
+                  <span className="text-muted-foreground ml-2">
+                    ({formatDistanceToNow(nextRun, { addSuffix: true })})
+                  </span>
+                </div>
+              ) : (
+                <span className="text-muted-foreground">&mdash;</span>
+              )}
             </dd>
           </div>
           <div>
