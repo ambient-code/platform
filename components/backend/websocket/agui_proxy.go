@@ -113,6 +113,7 @@ func cleanupStaleSessions() {
 					betweenRunListeners.Delete(proj.(string) + "/" + sessionName)
 				}
 				sessionProjectMap.Delete(sessionName)
+				stopOnRunFinishedCache.Delete(sessionName)
 				// lastActivityUpdateTimes is keyed by "project/session";
 				// remove any entry whose suffix matches this session.
 				lastActivityUpdateTimes.Range(func(k, _ interface{}) bool {
