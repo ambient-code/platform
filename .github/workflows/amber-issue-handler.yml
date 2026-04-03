@@ -311,6 +311,7 @@ jobs:
           python3 - << 'PYEOF'
           import json
           import os
+          import re
           import subprocess
           import requests
           from datetime import datetime, timezone
@@ -326,25 +327,20 @@ jobs:
 
           def parse_frontmatter(body):
               """Extract session_id, source, last_action, retry_count from PR body frontmatter."""
-              import re
               match = re.search(r'acp:session_id=(\S+)\s+source=(\S+)\s+last_action=(\S+)\s+retry_count=(\d+)', body or "")
               if not match:
                   return None
+              # Validate last_action is ISO8601-ish to prevent injection
+              la = match.group(3)
+              if not re.match(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}', la):
+                  print(f"  Warning: invalid last_action format: {la}")
+                  la = "1970-01-01T00:00:00Z"
               return {
                   "session_id": match.group(1),
                   "source": match.group(2),
-                  "last_action": match.group(3),
+                  "last_action": la,
                   "retry_count": int(match.group(4)),
               }
-
-          def has_changes_since(pr_number, last_action, repo):
-              """Check if PR has new activity since last_action (ignoring bot commits)."""
-              timeline = gh("api", f"repos/{repo}/issues/{pr_number}/timeline",
-                           "--jq", f'[.[] | select(.created_at > "{last_action}" and .actor.login != "github-actions[bot]" and .actor.login != "ambient-bot")] | length')
-              try:
-                  return int(timeline) > 0
-              except (ValueError, TypeError):
-                  return True  # If we can't tell, assume changed
 
           def get_session_phase(session_name):
               """Get the current phase of a session."""
@@ -419,10 +415,10 @@ jobs:
                   print(f"  Failed to create session: {e}")
                   return None
 
-          # Get all open amber:managed PRs
+          # Get all open amber:managed PRs (include updatedAt to avoid per-PR API calls)
           prs_json = gh("pr", "list", "--repo", REPO, "--state", "open",
                         "--label", "amber:managed", "--limit", "200",
-                        "--json", "number,body,title")
+                        "--json", "number,body,title,updatedAt")
           prs = json.loads(prs_json) if prs_json else []
           print(f"Found {len(prs)} amber:managed PRs")
 
@@ -450,9 +446,10 @@ jobs:
                       gh("pr", "comment", str(number), "--repo", REPO, "--body", "AI was unable to resolve issues after 3 attempts. Needs human attention.")
                       continue
 
-                  # Check for changes
-                  if not has_changes_since(number, fm["last_action"], REPO):
-                      print(f"PR #{number}: no changes since {fm['last_action']}, skipping")
+                  # Check for changes using updatedAt from gh pr list (no extra API call)
+                  updated_at = pr.get("updatedAt", "")
+                  if updated_at and updated_at <= fm["last_action"]:
+                      print(f"PR #{number}: no changes since {fm['last_action']} (updatedAt={updated_at}), skipping")
                       skipped += 1
                       continue
 
