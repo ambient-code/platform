@@ -10,7 +10,7 @@
 #
 # BEHAVIOR:
 # - On an issue (label or @amber): creates ACP session to investigate and fix, creates PR with amber:managed + frontmatter
-# - On a PR (@amber): creates ACP session to follow instruction or fix CI/conflicts/reviews
+# - On a PR (@amber): sends message to existing session (reuse) or creates new one
 # - Batch cron: orchestrator manages all amber:managed PRs (session reuse, change detection, circuit breaker)
 
 name: Amber Handler
@@ -57,7 +57,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           NUMBER="${{ steps.issue.outputs.number }}"
-          EXISTING=$(gh pr list --repo "${{ github.repository }}" --state open --label "amber:managed" --json number,body --jq ".[] | select(.body | test(\"source=.*#${NUMBER}\")) | .number" | head -1 || echo "")
+          EXISTING=$(gh pr list --repo "${{ github.repository }}" --state open --label "amber:managed" --limit 200 --json number,body --jq ".[] | select((.body // \"\") | test(\"source=#${NUMBER}(\\\\s|$)\")) | .number" | head -1 || echo "")
           if [ -n "$EXISTING" ]; then
             echo "Found existing amber:managed PR #$EXISTING for issue #$NUMBER — skipping"
             echo "skip=true" >> $GITHUB_OUTPUT
@@ -68,7 +68,7 @@ jobs:
       - name: Create session
         if: steps.existing.outputs.skip != 'true'
         id: session
-        uses: ambient-code/ambient-action@v0.0.3
+        uses: ambient-code/ambient-action@v0.0.4
         with:
           api-url: ${{ secrets.AMBIENT_API_URL }}
           api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
@@ -104,8 +104,8 @@ jobs:
           SESSION_NAME: ${{ steps.session.outputs.session-name }}
           SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
         run: |
-          gh issue edit ${{ steps.issue.outputs.number }} --repo "${{ github.repository }}" --add-label "amber:triaged" || true
           if [ -n "$SESSION_NAME" ]; then
+            gh issue edit ${{ steps.issue.outputs.number }} --repo "${{ github.repository }}" --add-label "amber:triaged" || true
             gh issue comment ${{ steps.issue.outputs.number }} --repo "${{ github.repository }}" --body "Session \`$SESSION_NAME\` created (phase: $SESSION_PHASE). PR will have the \`amber:managed\` label."
           fi
 
@@ -113,7 +113,6 @@ jobs:
         if: always() && steps.existing.outputs.skip != 'true'
         env:
           SESSION_NAME: ${{ steps.session.outputs.session-name }}
-          SESSION_UID: ${{ steps.session.outputs.session-uid }}
           SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
         run: |
           echo "### Amber — Issue #${{ steps.issue.outputs.number }}" >> $GITHUB_STEP_SUMMARY
@@ -153,20 +152,27 @@ jobs:
 
             IS_FORK=$(gh pr view "$NUMBER" --repo "${{ github.repository }}" --json isCrossRepository --jq '.isCrossRepository')
             echo "is_fork=$IS_FORK" >> $GITHUB_OUTPUT
+
+            # Check for existing session in PR frontmatter
+            BODY=$(gh pr view "$NUMBER" --repo "${{ github.repository }}" --json body --jq '.body')
+            SESSION_ID=$(echo "$BODY" | grep -oP 'acp:session_id=\K[^ ]+' | head -1 || echo "")
+            echo "session_id=$SESSION_ID" >> $GITHUB_OUTPUT
           else
             echo "type=issue" >> $GITHUB_OUTPUT
             echo "url=https://github.com/${{ github.repository }}/issues/$NUMBER" >> $GITHUB_OUTPUT
             echo "is_fork=false" >> $GITHUB_OUTPUT
+            echo "session_id=" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create session
+      - name: Send message or create session
         if: steps.context.outputs.is_fork != 'true'
         id: session
-        uses: ambient-code/ambient-action@v0.0.3
+        uses: ambient-code/ambient-action@v0.0.4
         with:
           api-url: ${{ secrets.AMBIENT_API_URL }}
           api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
           project: ${{ secrets.AMBIENT_PROJECT }}
+          session-name: ${{ steps.context.outputs.session_id }}
           prompt: |
             Context: ${{ steps.context.outputs.type }} #${{ steps.context.outputs.number }}
             URL: ${{ steps.context.outputs.url }}
@@ -204,7 +210,7 @@ jobs:
     steps:
       - name: Run PR fixer orchestrator
         id: session
-        uses: ambient-code/ambient-action@v0.0.3
+        uses: ambient-code/ambient-action@v0.0.4
         with:
           api-url: ${{ secrets.AMBIENT_API_URL }}
           api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
@@ -277,7 +283,6 @@ jobs:
         if: always()
         env:
           SESSION_NAME: ${{ steps.session.outputs.session-name }}
-          SESSION_UID: ${{ steps.session.outputs.session-uid }}
           SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
         run: |
           echo "### Amber — Batch PR Fixer" >> $GITHUB_STEP_SUMMARY
