@@ -22,13 +22,13 @@ import (
 
 var Cmd = &cobra.Command{
 	Use:   "apply",
-	Short: "Apply declarative Project and Agent manifests",
-	Long: `Apply Projects and Agents from YAML files or a Kustomize directory.
+	Short: "Apply declarative Project, Agent, and Credential manifests",
+	Long: `Apply Projects, Agents, and Credentials from YAML files or a Kustomize directory.
 
 Mirrors kubectl apply semantics: resources are created if they do not exist,
 or patched if they do. Output reports created / configured / unchanged per resource.
 
-Supported kinds: Project, Agent
+Supported kinds: Project, Agent, Credential
 
 File format (one or more documents separated by ---):
 
@@ -64,6 +64,16 @@ Examples:
   acpctl apply -k .ambient/teams/overlays/dev/
   acpctl apply -k .ambient/teams/overlays/prod/ --dry-run
   cat lead.yaml | acpctl apply -f -
+
+Credential example:
+
+  kind: Credential
+  name: my-gitlab-pat
+  provider: gitlab
+  token: $GITLAB_PAT
+  url: https://gitlab.myco.com
+  labels:
+    team: platform
 `,
 	RunE: run,
 }
@@ -93,6 +103,10 @@ type resource struct {
 	Labels      map[string]string `yaml:"labels"`
 	Annotations map[string]string `yaml:"annotations"`
 	Inbox       []inboxSeed       `yaml:"inbox"`
+	Provider    string            `yaml:"provider"`
+	Token       string            `yaml:"token"`
+	URL         string            `yaml:"url"`
+	Email       string            `yaml:"email"`
 }
 
 type inboxSeed struct {
@@ -161,6 +175,8 @@ func run(cmd *cobra.Command, _ []string) error {
 			result, err = applyProject(ctx, client, doc)
 		case "agent":
 			result, err = applyAgent(ctx, client, doc, projectName, factory)
+		case "credential":
+			result, err = applyCredential(ctx, client, doc)
 		default:
 			fmt.Fprintf(cmd.ErrOrStderr(), "warning: unknown kind %q — skipping\n", doc.Kind)
 			continue
@@ -224,6 +240,82 @@ func applyProject(ctx context.Context, client *sdkclient.Client, doc resource) (
 		return applyResult{}, err
 	}
 	return applyResult{Kind: "Project", Name: doc.Name, Status: "configured"}, nil
+}
+
+func applyCredential(ctx context.Context, client *sdkclient.Client, doc resource) (applyResult, error) {
+	existing, err := client.Credentials().Get(ctx, doc.Name)
+	if err != nil {
+		token := os.ExpandEnv(doc.Token)
+		builder := sdktypes.NewCredentialBuilder().
+			Name(doc.Name).
+			Provider(doc.Provider)
+		if token != "" {
+			builder = builder.Token(token)
+		}
+		if doc.Description != "" {
+			builder = builder.Description(doc.Description)
+		}
+		if doc.URL != "" {
+			builder = builder.Url(doc.URL)
+		}
+		if doc.Email != "" {
+			builder = builder.Email(doc.Email)
+		}
+		if len(doc.Labels) > 0 {
+			builder = builder.Labels(marshalStringMap(doc.Labels))
+		}
+		if len(doc.Annotations) > 0 {
+			builder = builder.Annotations(marshalStringMap(doc.Annotations))
+		}
+		cred, buildErr := builder.Build()
+		if buildErr != nil {
+			return applyResult{}, buildErr
+		}
+		if _, createErr := client.Credentials().Create(ctx, cred); createErr != nil {
+			return applyResult{}, createErr
+		}
+		return applyResult{Kind: "Credential", Name: doc.Name, Status: "created"}, nil
+	}
+
+	patch, changed := buildCredentialPatch(existing, doc)
+	if !changed {
+		return applyResult{Kind: "Credential", Name: doc.Name, Status: "unchanged"}, nil
+	}
+	if _, err = client.Credentials().Update(ctx, existing.ID, patch); err != nil {
+		return applyResult{}, err
+	}
+	return applyResult{Kind: "Credential", Name: doc.Name, Status: "configured"}, nil
+}
+
+func buildCredentialPatch(existing *sdktypes.Credential, doc resource) (map[string]any, bool) {
+	changed := false
+	patch := sdktypes.NewCredentialPatchBuilder()
+	if doc.Description != "" && doc.Description != existing.Description {
+		patch = patch.Description(doc.Description)
+		changed = true
+	}
+	if doc.URL != "" {
+		patch = patch.Url(doc.URL)
+		changed = true
+	}
+	if doc.Email != "" {
+		patch = patch.Email(doc.Email)
+		changed = true
+	}
+	token := os.ExpandEnv(doc.Token)
+	if token != "" {
+		patch = patch.Token(token)
+		changed = true
+	}
+	if len(doc.Labels) > 0 {
+		patch = patch.Labels(marshalStringMap(doc.Labels))
+		changed = true
+	}
+	if len(doc.Annotations) > 0 {
+		patch = patch.Annotations(marshalStringMap(doc.Annotations))
+		changed = true
+	}
+	return patch.Build(), changed
 }
 
 func marshalStringMap(m map[string]string) string {
