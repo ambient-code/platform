@@ -79,6 +79,9 @@ spec:
                 type: integer
                 minimum: 0
                 description: "Seconds of inactivity before auto-stopping a session. 0 disables auto-shutdown. If omitted, falls back to project-level inactivityTimeoutSeconds, then 24h default."
+              stopOnRunFinished:
+                type: boolean
+                description: "When true, automatically stop the session when the agent completes its run (RUN_FINISHED event). Useful for one-shot tasks triggered by automation."
               environmentVariables:
                 type: object
                 additionalProperties:

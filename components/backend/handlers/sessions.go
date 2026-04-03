@@ -741,6 +741,9 @@ func CreateSession(c *gin.Context) {
 		}
 		spec["inactivityTimeout"] = *req.InactivityTimeout
 	}
+	if req.StopOnRunFinished != nil && *req.StopOnRunFinished {
+		spec["stopOnRunFinished"] = true
+	}
 
 	session := map[string]interface{}{
 		"apiVersion": "vteam.ambient-code/v1alpha1",
