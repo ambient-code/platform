@@ -143,6 +143,14 @@ CREATED_PROJECT=""
 CREATED_CREDENTIAL_ID=""
 
 cleanup() {
+    if [[ -n "${NO_CLEANUP:-}" ]]; then
+        echo
+        yellow "   NO_CLEANUP set — skipping cleanup"
+        dim    "   session:    ${CREATED_SESSION_ID}"
+        dim    "   credential: ${CREATED_CREDENTIAL_ID}"
+        dim    "   project:    ${CREATED_PROJECT}"
+        return
+    fi
     echo
     announce "Cleanup"
     if [[ -n "${CREATED_SESSION_ID}" ]]; then

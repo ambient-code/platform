@@ -2,7 +2,9 @@ package sessions
 
 import (
 	"net/http"
+	"os"
 	"sync"
+
 
 	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
 	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/plugins/rbac"
@@ -21,6 +23,8 @@ import (
 )
 
 const EventSource = "Sessions"
+
+var grpcServiceAccount = os.Getenv("GRPC_SERVICE_ACCOUNT")
 
 type ServiceLocator func() SessionService
 
@@ -135,7 +139,7 @@ func init() {
 			}
 			return nil
 		}
-		pb.RegisterSessionServiceServer(grpcServer, NewSessionGRPCHandler(sessionService, genericService, brokerFunc, msgService))
+		pb.RegisterSessionServiceServer(grpcServer, NewSessionGRPCHandler(sessionService, genericService, brokerFunc, msgService, grpcServiceAccount))
 	})
 
 	db.RegisterMigration(migration())
