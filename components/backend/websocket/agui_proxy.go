@@ -31,6 +31,7 @@ import (
 	authv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -1012,7 +1013,11 @@ func checkAndStopOnRunFinished(projectName, sessionName string) {
 		}
 	}
 
-	gvr := types.GetAgenticSessionResource()
+	gvr := schema.GroupVersionResource{
+		Group:    "vteam.ambient-code",
+		Version:  "v1alpha1",
+		Resource: "agenticsessions",
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), activityUpdateTimeout)
 	defer cancel()
 
