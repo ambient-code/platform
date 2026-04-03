@@ -136,3 +136,5 @@ hack/
 
 # Personal exports
 *.csv
+credentials-testing.md
+components/ambient-cli/credential.yaml
