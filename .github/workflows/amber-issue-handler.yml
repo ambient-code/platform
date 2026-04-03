@@ -3,10 +3,10 @@
 # Single workflow for all Amber AI automation.
 #
 # TRIGGERS:
-# - Issue labeled with: amber:auto-fix → fresh session prompt
+# - Issue labeled with: ambient-code:auto-fix → fresh session prompt
 # - Comment "@ambient-code" alone on issue/PR → follow-up/fix prompt
 # - Comment "@ambient-code <instruction>" on issue/PR → custom prompt
-# - Cron every 30 min → shell-driven batch for all amber:managed PRs
+# - Cron every 30 min → shell-driven batch for all ambient-code:managed PRs
 # - Manual dispatch → same as cron
 #
 # SESSION REUSE:
@@ -30,11 +30,11 @@ permissions:
   pull-requests: write
 
 jobs:
-  # -- Issue: labeled amber:auto-fix → fresh session prompt --
+  # -- Issue: labeled ambient-code:auto-fix → fresh session prompt --
   handle-issue-label:
     if: >-
       github.event_name == 'issues'
-      && github.event.label.name == 'amber:auto-fix'
+      && github.event.label.name == 'ambient-code:auto-fix'
     concurrency:
       group: amber-${{ github.event.issue.number }}
       cancel-in-progress: false
@@ -57,9 +57,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           NUMBER="${{ steps.issue.outputs.number }}"
-          EXISTING=$(gh pr list --repo "${{ github.repository }}" --state open --label "amber:managed" --limit 200 --json number,body --jq ".[] | select((.body // \"\") | test(\"source=#${NUMBER}(\\\\s|$)\")) | .number" | head -1 || echo "")
+          EXISTING=$(gh pr list --repo "${{ github.repository }}" --state open --label "ambient-code:managed" --limit 200 --json number,body --jq ".[] | select((.body // \"\") | test(\"source=#${NUMBER}(\\\\s|$)\")) | .number" | head -1 || echo "")
           if [ -n "$EXISTING" ]; then
-            echo "Found existing amber:managed PR #$EXISTING for issue #$NUMBER — skipping"
+            echo "Found existing ambient-code:managed PR #$EXISTING for issue #$NUMBER — skipping"
             echo "skip=true" >> $GITHUB_OUTPUT
           else
             echo "skip=false" >> $GITHUB_OUTPUT
@@ -88,7 +88,7 @@ jobs:
                first line of the PR body (read your session ID from the
                AGENTIC_SESSION_NAME environment variable):
                <!-- acp:session_id=$AGENTIC_SESSION_NAME source=#${{ steps.issue.outputs.number }} last_action=<ISO8601_NOW> retry_count=0 -->
-            5. Add the `amber:managed` label to the PR.
+            5. Add the `ambient-code:managed` label to the PR.
             6. Ensure CI passes. If it fails, investigate and fix.
             7. Do not merge. Leave the PR open for human review.
           repos: >-
@@ -105,8 +105,8 @@ jobs:
           SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
         run: |
           if [ -n "$SESSION_NAME" ]; then
-            gh issue edit ${{ steps.issue.outputs.number }} --repo "${{ github.repository }}" --add-label "amber:triaged" || true
-            gh issue comment ${{ steps.issue.outputs.number }} --repo "${{ github.repository }}" --body "Session \`$SESSION_NAME\` created (phase: $SESSION_PHASE). PR will have the \`amber:managed\` label."
+            gh issue edit ${{ steps.issue.outputs.number }} --repo "${{ github.repository }}" --add-label "ambient-code:triaged" || true
+            gh issue comment ${{ steps.issue.outputs.number }} --repo "${{ github.repository }}" --body "Session \`$SESSION_NAME\` created (phase: $SESSION_PHASE). PR will have the \`ambient-code:managed\` label."
           fi
 
       - name: Session summary
@@ -172,8 +172,8 @@ jobs:
             echo "url=https://github.com/${{ github.repository }}/issues/$NUMBER" >> $GITHUB_OUTPUT
             echo "is_fork=false" >> $GITHUB_OUTPUT
 
-            # Check for existing amber:managed PR for this issue and get its session ID
-            EXISTING_PR=$(gh pr list --repo "${{ github.repository }}" --state open --label "amber:managed" --limit 200 --json number,body --jq ".[] | select((.body // \"\") | test(\"source=#${NUMBER}(\\\\s|$)\"))" | head -1 || echo "")
+            # Check for existing ambient-code:managed PR for this issue and get its session ID
+            EXISTING_PR=$(gh pr list --repo "${{ github.repository }}" --state open --label "ambient-code:managed" --limit 200 --json number,body --jq ".[] | select((.body // \"\") | test(\"source=#${NUMBER}(\\\\s|$)\"))" | head -1 || echo "")
             if [ -n "$EXISTING_PR" ]; then
               SESSION_ID=$(echo "$EXISTING_PR" | jq -r '.body' | grep -oP 'acp:session_id=\K[^ ]+' | head -1 || echo "")
               echo "session_id=$SESSION_ID" >> $GITHUB_OUTPUT
@@ -210,7 +210,7 @@ jobs:
             3. Ensure the PR body contains this frontmatter as the first line
                (read your session ID from the AGENTIC_SESSION_NAME environment variable):
                <!-- acp:session_id=$AGENTIC_SESSION_NAME source=#${{ steps.context.outputs.number }} last_action=<ISO8601_NOW> retry_count=0 -->
-            4. Add the `amber:managed` label.
+            4. Add the `ambient-code:managed` label.
             5. Do not merge. Do not close. Do not force-push.
             6. If fundamentally broken beyond repair, add a comment explaining and stop.
 
@@ -242,7 +242,7 @@ jobs:
                first line of the PR body (read your session ID from the
                AGENTIC_SESSION_NAME environment variable):
                <!-- acp:session_id=$AGENTIC_SESSION_NAME source=#${{ steps.context.outputs.number }} last_action=<ISO8601_NOW> retry_count=0 -->
-            5. Add the `amber:managed` label to the PR.
+            5. Add the `ambient-code:managed` label to the PR.
             6. Ensure CI passes. If it fails, investigate and fix.
             7. Do not merge. Leave the PR open for human review.
           repos: >-
@@ -291,7 +291,7 @@ jobs:
             echo "- **Status**: Failed to create session" >> $GITHUB_STEP_SUMMARY
           fi
 
-  # -- Batch: manage all amber:managed PRs (shell-driven) --
+  # -- Batch: manage all ambient-code:managed PRs (shell-driven) --
   batch-pr-fixer:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     concurrency:
@@ -300,7 +300,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Find and process amber:managed PRs
+      - name: Find and process ambient-code:managed PRs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AMBIENT_API_URL: ${{ secrets.AMBIENT_API_URL }}
@@ -417,12 +417,12 @@ jobs:
                   print(f"  Failed to create session: {e}")
                   return None
 
-          # Get all open amber:managed PRs (include updatedAt to avoid per-PR API calls)
+          # Get all open ambient-code:managed PRs (include updatedAt to avoid per-PR API calls)
           prs_json = gh("pr", "list", "--repo", REPO, "--state", "open",
-                        "--label", "amber:managed", "--limit", "200",
+                        "--label", "ambient-code:managed", "--limit", "200",
                         "--json", "number,body,title,updatedAt")
           prs = json.loads(prs_json) if prs_json else []
-          print(f"Found {len(prs)} amber:managed PRs")
+          print(f"Found {len(prs)} ambient-code:managed PRs")
 
           processed = 0
           skipped = 0
@@ -443,8 +443,8 @@ jobs:
 
                   # Circuit breaker
                   if fm["retry_count"] >= 3:
-                      print(f"PR #{number}: circuit breaker (retry_count={fm['retry_count']}), adding amber:needs-human")
-                      gh("pr", "edit", str(number), "--repo", REPO, "--add-label", "amber:needs-human", "--remove-label", "amber:managed")
+                      print(f"PR #{number}: circuit breaker (retry_count={fm['retry_count']}), adding ambient-code:needs-human")
+                      gh("pr", "edit", str(number), "--repo", REPO, "--add-label", "ambient-code:needs-human", "--remove-label", "ambient-code:managed")
                       gh("pr", "comment", str(number), "--repo", REPO, "--body", "AI was unable to resolve issues after 3 attempts. Needs human attention.")
                       continue
 
@@ -472,7 +472,7 @@ jobs:
           3. Ensure the PR body contains this frontmatter as the first line
              (read your session ID from the AGENTIC_SESSION_NAME environment variable):
              <!-- acp:session_id=$AGENTIC_SESSION_NAME source={source} last_action=<ISO8601_NOW> retry_count=0 -->
-          4. Add the `amber:managed` label.
+          4. Add the `ambient-code:managed` label.
           5. Do not merge. Do not close. Do not force-push.
           6. If fundamentally broken beyond repair, add a comment explaining and stop."""
 
