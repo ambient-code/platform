@@ -265,7 +265,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
       llmSettings: { model: values.model, temperature: 0.7, maxTokens: 4000 },
       timeout: 300,
       ...(parsedInactivityTimeout !== undefined ? { inactivityTimeout: parsedInactivityTimeout } : {}),
-      ...(values.stopOnRunFinished ? { stopOnRunFinished: true } : {}),
+      stopOnRunFinished: values.stopOnRunFinished ?? false,
       ...(activeWorkflow ? { activeWorkflow } : {}),
       ...(validRepos.length > 0 ? { repos: validRepos } : {}),
     };
