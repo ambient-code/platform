@@ -28,6 +28,8 @@ import type { WorkflowConfig } from "../lib/types";
 type PendingRepo = {
   url: string;
   name: string;
+  branch?: string;
+  autoPush?: boolean;
 };
 
 type NewSessionViewProps = {
@@ -37,7 +39,7 @@ type NewSessionViewProps = {
     runner: string;
     model: string;
     workflow?: string;
-    repos?: Array<{ url: string }>;
+    repos?: Array<{ url: string; branch?: string; autoPush?: boolean }>;
   }) => void;
   ootbWorkflows: WorkflowConfig[];
   onLoadCustomWorkflow?: () => void;
@@ -109,10 +111,10 @@ export function NewSessionView({
     el.style.height = `${el.scrollHeight}px`;
   }, [prompt]);
 
-  const addPendingRepo = (url: string) => {
+  const addPendingRepo = (url: string, branch?: string, autoPush?: boolean) => {
     if (pendingRepos.some((r) => r.url === url)) return;
     const name = url.replace(/\/+$/, "").split("/").pop()?.replace(/\.git$/, "") || url;
-    setPendingRepos((prev) => [...prev, { url, name }]);
+    setPendingRepos((prev) => [...prev, { url, name, branch: branch || undefined, autoPush }]);
   };
 
   const removePendingRepo = (url: string) => {
@@ -131,7 +133,7 @@ export function NewSessionView({
       runner: selectedRunner,
       model: selectedModel,
       workflow: hasWorkflow ? selectedWorkflow : undefined,
-      repos: pendingRepos.length > 0 ? pendingRepos.map((r) => ({ url: r.url })) : undefined,
+      repos: pendingRepos.length > 0 ? pendingRepos.map((r) => ({ url: r.url, branch: r.branch, autoPush: r.autoPush })) : undefined,
     });
   }, [prompt, selectedRunner, selectedModel, selectedWorkflow, pendingRepos, onCreateSession]);
 
@@ -259,8 +261,8 @@ export function NewSessionView({
       <AddContextModal
         open={contextModalOpen}
         onOpenChange={setContextModalOpen}
-        onAddRepository={async (url) => {
-          addPendingRepo(url);
+        onAddRepository={async (url, branch, autoPush) => {
+          addPendingRepo(url, branch, autoPush);
           setContextModalOpen(false);
         }}
       />

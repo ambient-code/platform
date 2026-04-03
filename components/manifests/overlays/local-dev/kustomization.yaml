@@ -14,6 +14,8 @@ resources:
 - frontend-route.yaml
 - operator-config-crc.yaml
 - unleash-credentials.yaml
+# mlflow-db-credentials is applied separately (lives in redhat-ods-applications,
+# incompatible with namePrefix and namespace directives in this overlay)
 - unleash-route.yaml
 
 # Patches for local dev environment

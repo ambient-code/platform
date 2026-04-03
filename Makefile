@@ -672,6 +672,8 @@ dev-env: check-kubectl check-local-context ## Generate components/frontend/.env.
 		echo "BACKEND_URL=$$BACKEND_URL"; \
 		echo "ENABLE_OC_WHOAMI=0"; \
 		if [ -n "$$TOKEN" ]; then echo "OC_TOKEN=$$TOKEN"; else echo "OC_TOKEN="; fi; \
+		echo "OC_USER=system:serviceaccount:$(NAMESPACE):test-user"; \
+		echo "OC_EMAIL=test-user@vteam.local"; \
 	} > "$$ENV_FILE.tmp"; \
 	if [ -f "$$ENV_FILE" ] && cmp -s "$$ENV_FILE.tmp" "$$ENV_FILE"; then \
 		rm -f "$$ENV_FILE.tmp"; \

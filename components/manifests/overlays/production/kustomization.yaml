@@ -25,6 +25,8 @@ components:
 - ../../components/oauth-proxy
 - ../../components/postgresql-rhel
 - ../../components/ambient-api-server-db
+# openshift-ai is deployed separately via the deploy-rhoai-mlflow workflow job
+# (requires multi-stage apply due to CRD ordering and cross-namespace resources)
 
 # Patches for production environment
 patches:
