@@ -34,6 +34,7 @@ jobs:
           model: claude-opus-4-6
           wait: 'true'
           timeout: '10800'
+          stop-on-run-finished: 'true'
 
       - name: Session summary
         if: always()

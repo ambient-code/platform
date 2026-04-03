@@ -167,6 +167,7 @@ jobs:
           labels: ${{ steps.config.outputs.labels }}
           environment-variables: ${{ steps.config.outputs.environment-variables }}
           model: claude-sonnet-4-5
+          stop-on-run-finished: 'true'
 
       - name: Session summary
         if: always()
