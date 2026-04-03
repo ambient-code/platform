@@ -32,6 +32,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import {
   useCreateScheduledSession,
   useUpdateScheduledSession,
@@ -72,6 +73,7 @@ const formSchema = z.object({
       { message: "Must be a non-negative integer" }
     ),
   reuseLastSession: z.boolean().optional(),
+  stopOnRunFinished: z.boolean().optional(),
 }).refine(
   (data) => {
     if (data.schedulePreset === "custom") {
@@ -157,6 +159,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
         ? String(initialData.sessionTemplate.inactivityTimeout)
         : "",
       reuseLastSession: isEdit ? (initialData?.reuseLastSession ?? false) : false,
+      stopOnRunFinished: isEdit ? (initialData?.sessionTemplate.stopOnRunFinished ?? false) : false,
     },
   });
 
@@ -262,6 +265,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
       llmSettings: { model: values.model, temperature: 0.7, maxTokens: 4000 },
       timeout: 300,
       ...(parsedInactivityTimeout !== undefined ? { inactivityTimeout: parsedInactivityTimeout } : {}),
+      ...(values.stopOnRunFinished ? { stopOnRunFinished: true } : {}),
       ...(activeWorkflow ? { activeWorkflow } : {}),
       ...(validRepos.length > 0 ? { repos: validRepos } : {}),
     };
@@ -624,6 +628,26 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                     </FormControl>
                     <p className="text-xs text-muted-foreground">Default: 24 hours (86400s). Set to 0 to disable auto-stop.</p>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="stopOnRunFinished"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                    <div className="space-y-0.5">
+                      <FormLabel>Stop on Run Finished</FormLabel>
+                      <p className="text-xs text-muted-foreground">Automatically stop the session when the agent completes its run.</p>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={mutation.isPending}
+                      />
+                    </FormControl>
                   </FormItem>
                 )}
               />

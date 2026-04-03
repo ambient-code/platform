@@ -112,6 +112,10 @@ export function ScheduledSessionDetailsCard({
                   : "Default (24 hours)"}
             </dd>
           </div>
+          <div>
+            <dt className="text-muted-foreground">Stop on Run Finished</dt>
+            <dd>{sessionTemplate.stopOnRunFinished ? "Enabled" : "Disabled"}</dd>
+          </div>
           {sessionTemplate.activeWorkflow && (
             <div className="sm:col-span-2">
               <dt className="text-muted-foreground">Workflow</dt>

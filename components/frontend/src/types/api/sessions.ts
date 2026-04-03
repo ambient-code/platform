@@ -127,6 +127,7 @@ export type CreateAgenticSessionRequest = {
   displayName?: string;
   timeout?: number;
   inactivityTimeout?: number;
+  stopOnRunFinished?: boolean;
   project?: string;
   parent_session_id?: string;
   environmentVariables?: Record<string, string>;
