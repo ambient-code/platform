@@ -72,7 +72,11 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, event informer.Resour
 		}
 		return r.ensureCreatorRoleBinding(ctx, project)
 	case informer.EventDeleted:
-		r.logger.Info().Str("project_id", project.ID).Msg("project deleted — namespace retained for safety")
+		name := r.provisioner.NamespaceName(project.ID)
+		if err := r.provisioner.DeprovisionNamespace(ctx, name); err != nil {
+			return fmt.Errorf("deprovisioning namespace %s: %w", name, err)
+		}
+		r.logger.Info().Str("namespace", name).Str("project_id", project.ID).Msg("namespace deprovisioned")
 	}
 	return nil
 }

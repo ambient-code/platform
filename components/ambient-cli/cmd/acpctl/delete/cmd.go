@@ -26,7 +26,8 @@ Valid resource types:
   session           (aliases: sess)
   agent
   role
-  role-binding      (aliases: rolebinding, rb)`,
+  role-binding      (aliases: rolebinding, rb)
+  credential        (aliases: cred)`,
 	Args: cobra.ExactArgs(2),
 	RunE: run,
 }
@@ -107,7 +108,14 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "role-binding/%s deleted\n", name)
 		return nil
 
+	case "credential", "credentials", "cred", "creds":
+		if err := client.Credentials().Delete(ctx, name); err != nil {
+			return fmt.Errorf("delete credential %q: %w", name, err)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "credential/%s deleted\n", name)
+		return nil
+
 	default:
-		return fmt.Errorf("unknown or non-deletable resource type: %s\nDeletable types: project, project-settings, session, agent, role, role-binding", cmdArgs[0])
+		return fmt.Errorf("unknown or non-deletable resource type: %s\nDeletable types: project, project-settings, session, agent, role, role-binding, credential", cmdArgs[0])
 	}
 }

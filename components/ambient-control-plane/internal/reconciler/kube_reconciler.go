@@ -156,12 +156,6 @@ func (r *SimpleKubeReconciler) provisionSession(ctx context.Context, session typ
 		credentialIDs = map[string]string{}
 	}
 
-	if len(credentialIDs) > 0 {
-		if err := r.ensureCredentialRoleBindings(ctx, namespace, serviceAccountName(session.ID), credentialIDs); err != nil {
-			return fmt.Errorf("ensuring credential role bindings: %w", err)
-		}
-	}
-
 	if err := r.ensurePod(ctx, namespace, session, sessionLabel, sdk, credentialIDs); err != nil {
 		return fmt.Errorf("ensuring pod: %w", err)
 	}
@@ -643,44 +637,6 @@ func (r *SimpleKubeReconciler) resolveCredentialIDs(ctx context.Context, sdk *sd
 
 	r.logger.Info().Int("count", len(result)).Msg("resolved credential IDs for session")
 	return result, nil
-}
-
-func (r *SimpleKubeReconciler) ensureCredentialRoleBindings(ctx context.Context, namespace, saName string, credentialIDs map[string]string) error {
-	for provider, credID := range credentialIDs {
-		name := fmt.Sprintf("%s-credential-%s", saName, provider)
-		rb := &unstructured.Unstructured{
-			Object: map[string]interface{}{
-				"apiVersion": "rbac.authorization.k8s.io/v1",
-				"kind":       "RoleBinding",
-				"metadata": map[string]interface{}{
-					"name":      name,
-					"namespace": namespace,
-				},
-				"roleRef": map[string]interface{}{
-					"apiGroup": "rbac.authorization.k8s.io",
-					"kind":     "ClusterRole",
-					"name":     "credential:token-reader",
-				},
-				"subjects": []interface{}{
-					map[string]interface{}{
-						"kind":      "ServiceAccount",
-						"name":      saName,
-						"namespace": namespace,
-					},
-				},
-			},
-		}
-		if _, err := r.nsKube().CreateRoleBinding(ctx, namespace, rb); err != nil && !k8serrors.IsAlreadyExists(err) {
-			return fmt.Errorf("creating credential role binding %s for provider %s (id=%s): %w", name, provider, credID, err)
-		}
-		r.logger.Debug().
-			Str("role_binding", name).
-			Str("namespace", namespace).
-			Str("provider", provider).
-			Str("credential_id", credID).
-			Msg("credential token-reader role binding ensured")
-	}
-	return nil
 }
 
 func (r *SimpleKubeReconciler) assembleInitialPrompt(ctx context.Context, session types.Session, sdk *sdkclient.Client) string {
