@@ -27,9 +27,9 @@
       "command": "uvx",
       "args": [
         "workspace-mcp@1.14.2",
-        "--tools",
-        "drive",
-        "gmail"
+        "--permissions",
+        "gmail:send",
+        "drive:full"
       ],
       "env": {
         "GOOGLE_MCP_CREDENTIALS_DIR": "${GOOGLE_MCP_CREDENTIALS_DIR}",
