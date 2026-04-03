@@ -26,7 +26,7 @@
     "google-workspace": {
       "command": "uvx",
       "args": [
-        "workspace-mcp@1.14.2",
+        "workspace-mcp@1.17.1",
         "--permissions",
         "gmail:send",
         "drive:full"
