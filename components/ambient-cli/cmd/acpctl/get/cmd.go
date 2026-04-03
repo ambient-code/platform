@@ -39,6 +39,7 @@ Valid resource types:
   agents              (aliases: agent)
   roles               (aliases: role)
   role-bindings       (aliases: role-binding, rb)
+  credentials         (aliases: credential, cred)
 `,
 	Args:    cobra.RangeArgs(1, 2),
 	RunE:    run,
@@ -135,8 +136,10 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		return getRoles(ctx, client, printer, name)
 	case "role-bindings":
 		return getRoleBindings(ctx, client, printer, name)
+	case "credentials":
+		return getCredentials(ctx, client, printer, name)
 	default:
-		return fmt.Errorf("unknown resource type: %s\nValid types: sessions, projects, project-agents, project-settings, users, agents, roles, role-bindings", cmdArgs[0])
+		return fmt.Errorf("unknown resource type: %s\nValid types: sessions, projects, project-agents, project-settings, users, agents, roles, role-bindings, credentials", cmdArgs[0])
 	}
 }
 
@@ -158,6 +161,8 @@ func normalizeResource(r string) string {
 		return "roles"
 	case "role-binding", "role-bindings", "rolebinding", "rolebindings", "rb":
 		return "role-bindings"
+	case "credential", "credentials", "cred", "creds":
+		return "credentials"
 	default:
 		return r
 	}
@@ -508,6 +513,48 @@ func getRoleBindings(ctx context.Context, client *sdkclient.Client, printer *out
 		return printer.PrintJSON(list)
 	}
 	return printRoleBindingTable(printer, list.Items)
+}
+
+func getCredentials(ctx context.Context, client *sdkclient.Client, printer *output.Printer, name string) error {
+	if name != "" {
+		cred, err := client.Credentials().Get(ctx, name)
+		if err != nil {
+			return fmt.Errorf("get credential %q: %w", name, err)
+		}
+		if printer.Format() == output.FormatJSON {
+			return printer.PrintJSON(cred)
+		}
+		return printCredentialTable(printer, []sdktypes.Credential{*cred})
+	}
+	opts := sdktypes.NewListOptions().Size(args.limit).Build()
+	list, err := client.Credentials().List(ctx, opts)
+	if err != nil {
+		return fmt.Errorf("list credentials: %w", err)
+	}
+	if printer.Format() == output.FormatJSON {
+		return printer.PrintJSON(list)
+	}
+	return printCredentialTable(printer, list.Items)
+}
+
+func printCredentialTable(printer *output.Printer, credentials []sdktypes.Credential) error {
+	columns := []output.Column{
+		{Name: "ID", Width: 27},
+		{Name: "NAME", Width: 24},
+		{Name: "PROVIDER", Width: 12},
+		{Name: "DESCRIPTION", Width: 32},
+		{Name: "AGE", Width: 10},
+	}
+	table := output.NewTable(printer.Writer(), columns)
+	table.WriteHeaders()
+	for _, c := range credentials {
+		age := ""
+		if c.CreatedAt != nil {
+			age = output.FormatAge(time.Since(*c.CreatedAt))
+		}
+		table.WriteRow(c.ID, c.Name, c.Provider, c.Description, age)
+	}
+	return nil
 }
 
 func printRoleBindingTable(printer *output.Printer, rbs []sdktypes.RoleBinding) error {
