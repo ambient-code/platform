@@ -349,8 +349,9 @@ var deleteCmd = &cobra.Command{
 }
 
 var agentStartArgs struct {
-	projectID string
-	prompt    string
+	projectID    string
+	prompt       string
+	outputFormat string
 }
 
 var agentStartCmd = &cobra.Command{
@@ -389,6 +390,13 @@ var agentStartCmd = &cobra.Command{
 			return fmt.Errorf("start agent: %w", err)
 		}
 
+		if agentStartArgs.outputFormat == "json" {
+			printer := output.NewPrinter(output.FormatJSON, cmd.OutOrStdout())
+			if resp.Session != nil {
+				return printer.PrintJSON(resp.Session)
+			}
+			return printer.PrintJSON(resp)
+		}
 		if resp.Session != nil {
 			fmt.Fprintf(cmd.OutOrStdout(), "session/%s started (phase: %s)\n", resp.Session.ID, resp.Session.Phase)
 		} else {
@@ -533,6 +541,7 @@ func init() {
 
 	agentStartCmd.Flags().StringVar(&agentStartArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
 	agentStartCmd.Flags().StringVar(&agentStartArgs.prompt, "prompt", "", "Task prompt for this run")
+	agentStartCmd.Flags().StringVarP(&agentStartArgs.outputFormat, "output", "o", "", "Output format: json")
 
 	ignitionCmd.Flags().StringVar(&ignitionArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
 
