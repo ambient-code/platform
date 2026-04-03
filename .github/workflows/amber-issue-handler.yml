@@ -3,15 +3,15 @@
 # Single workflow for all Amber AI automation.
 #
 # TRIGGERS:
-# - Issue labeled with: amber:auto-fix
-# - Comment containing @amber on an issue or PR (members/owners/collaborators only)
-# - Cron: every 30 min weekdays (batch PR management)
-# - Manual dispatch (batch PR management)
+# - Issue labeled with: amber:auto-fix → fresh session prompt
+# - Comment "@amber" alone on issue/PR → follow-up/fix prompt
+# - Comment "@amber <instruction>" on issue/PR → custom prompt
+# - Cron every 30 min → shell-driven batch for all amber:managed PRs
+# - Manual dispatch → same as cron
 #
-# BEHAVIOR:
-# - On an issue (label or @amber): creates ACP session to investigate and fix, creates PR with amber:managed + frontmatter
-# - On a PR (@amber): sends message to existing session (reuse) or creates new one
-# - Batch cron: orchestrator manages all amber:managed PRs (session reuse, change detection, circuit breaker)
+# SESSION REUSE:
+# All paths check PR frontmatter for existing session ID.
+# If found, sends message to that session. If not, creates new.
 
 name: Amber Handler
 
@@ -30,7 +30,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  # -- Issue: labeled amber:auto-fix --
+  # -- Issue: labeled amber:auto-fix → fresh session prompt --
   handle-issue-label:
     if: >-
       github.event_name == 'issues'
@@ -146,6 +146,15 @@ jobs:
           NUMBER="${{ github.event.issue.number }}"
           echo "number=$NUMBER" >> $GITHUB_OUTPUT
 
+          # Determine if @amber is alone (fix prompt) or has instruction text (custom prompt)
+          COMMENT='${{ github.event.comment.body }}'
+          STRIPPED=$(echo "$COMMENT" | sed 's/@amber//g' | tr -d '[:space:]')
+          if [ -z "$STRIPPED" ]; then
+            echo "prompt_type=fix" >> $GITHUB_OUTPUT
+          else
+            echo "prompt_type=custom" >> $GITHUB_OUTPUT
+          fi
+
           if [ -n "${{ github.event.issue.pull_request }}" ]; then
             echo "type=pr" >> $GITHUB_OUTPUT
             echo "url=https://github.com/${{ github.repository }}/pull/$NUMBER" >> $GITHUB_OUTPUT
@@ -164,9 +173,48 @@ jobs:
             echo "session_id=" >> $GITHUB_OUTPUT
           fi
 
-      - name: Send message or create session
-        if: steps.context.outputs.is_fork != 'true'
-        id: session
+      # Fix prompt: @amber alone — assess and fix CI/conflicts/reviews
+      - name: Run fix prompt
+        if: >-
+          steps.context.outputs.is_fork != 'true'
+          && steps.context.outputs.prompt_type == 'fix'
+        id: fix-session
+        uses: ambient-code/ambient-action@v0.0.4
+        with:
+          api-url: ${{ secrets.AMBIENT_API_URL }}
+          api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
+          project: ${{ secrets.AMBIENT_PROJECT }}
+          session-name: ${{ steps.context.outputs.session_id }}
+          prompt: |
+            You are maintaining a ${{ steps.context.outputs.type }}.
+
+            URL: ${{ steps.context.outputs.url }}
+
+            ## Instructions
+
+            1. Assess the current state:
+               - Are there merge conflicts? Resolve them.
+               - Is CI failing? Read the logs and fix the failures.
+               - Are there review comments (human or bot like CodeRabbit)? Address each comment.
+            2. Push fixes.
+            3. If this is a PR, ensure the PR body contains this frontmatter as the first line
+               (read your session ID from the AGENTIC_SESSION_NAME environment variable):
+               <!-- acp:session_id=$AGENTIC_SESSION_NAME source=#${{ steps.context.outputs.number }} last_action=<ISO8601_NOW> retry_count=0 -->
+            4. Add the `amber:managed` label.
+            5. Do not merge. Do not close. Do not force-push.
+            6. If fundamentally broken beyond repair, add a comment explaining and stop.
+          repos: >-
+            [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
+          model: claude-opus-4-6
+          wait: 'true'
+          timeout: '60'
+
+      # Custom prompt: @amber <instruction> — pass user's text
+      - name: Run custom prompt
+        if: >-
+          steps.context.outputs.is_fork != 'true'
+          && steps.context.outputs.prompt_type == 'custom'
+        id: custom-session
         uses: ambient-code/ambient-action@v0.0.4
         with:
           api-url: ${{ secrets.AMBIENT_API_URL }}
@@ -186,20 +234,22 @@ jobs:
 
       - name: Session summary
         if: always() && steps.context.outputs.is_fork != 'true'
-        env:
-          SESSION_NAME: ${{ steps.session.outputs.session-name }}
-          SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
         run: |
+          # Get session name from whichever step ran
+          SESSION_NAME="${{ steps.fix-session.outputs.session-name }}${{ steps.custom-session.outputs.session-name }}"
+          SESSION_PHASE="${{ steps.fix-session.outputs.session-phase }}${{ steps.custom-session.outputs.session-phase }}"
+
           echo "### Amber — ${{ steps.context.outputs.type }} #${{ steps.context.outputs.number }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ -n "$SESSION_NAME" ]; then
             echo "- **Session**: \`$SESSION_NAME\`" >> $GITHUB_STEP_SUMMARY
             echo "- **Phase**: \`$SESSION_PHASE\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Prompt**: ${{ steps.context.outputs.prompt_type }}" >> $GITHUB_STEP_SUMMARY
           else
             echo "- **Status**: Failed to create session" >> $GITHUB_STEP_SUMMARY
           fi
 
-  # -- Batch: manage all amber:managed PRs --
+  # -- Batch: manage all amber:managed PRs (shell-driven) --
   batch-pr-fixer:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     concurrency:
@@ -208,88 +258,137 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Run PR fixer orchestrator
-        id: session
-        uses: ambient-code/ambient-action@v0.0.4
-        with:
-          api-url: ${{ secrets.AMBIENT_API_URL }}
-          api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
-          project: ${{ secrets.AMBIENT_PROJECT }}
-          prompt: |
-            You are a PR fixer orchestrator. Manage all open amber:managed PRs.
-
-            ## Find PRs
-
-            Run: gh pr list --repo ${{ github.repository }} --state open --label "amber:managed" --search "draft:false" --limit 200
-
-            For each PR:
-
-            ## 1. Read frontmatter
-            Parse <!-- acp:session_id=<ID> source=<KEY> last_action=<TIMESTAMP> retry_count=<N> --> from the PR body.
-            If no frontmatter: create a new Fix PR session, update the PR body with frontmatter. Continue.
-
-            ## 2. Circuit breaker
-            If retry_count >= 3: comment "AI was unable to resolve after 3 attempts. Needs human attention.",
-            add amber:needs-human label, remove amber:managed label. Skip.
-
-            ## 3. Check for changes since last_action
-            Ignore commits authored by the bot. Only look for:
-            - New commits by someone other than the bot
-            - New or updated review comments
-            - New CI failures
-            - Merge conflicts from base branch changes
-
-            If nothing changed → skip entirely.
-
-            ## 4. Something changed — act
-            - CI failing → send message to existing session with CI logs
-            - New review comments → send message with the comments
-            - Merge conflicts → send message to rebase
-            - New external commits → send message to review and ensure CI passes
-
-            ## 5. Session management
-            Before sending a message, check session status:
-            - Running → send the message
-            - Stopped → restart (reuse), then send
-            - Not found → create new session with this prompt:
-              "You are maintaining an open pull request.
-              PR: <URL>  Source issue: <KEY> (if known)
-              1. Check out the PR branch.
-              2. Resolve merge conflicts, fix CI failures, address review comments.
-              3. Push fixes. Do not merge/close/force-push.
-              4. Write frontmatter: <!-- acp:session_id=$AGENTIC_SESSION_NAME source=<KEY> last_action=<NOW> retry_count=0 -->
-              5. If broken beyond repair, comment and stop."
-
-            After sending:
-            - If the PR is still broken (CI failing, conflicts unresolved, reviews unaddressed), increment retry_count.
-            - If the PR is healthy (CI passing, no open review threads, no conflicts), reset retry_count to 0.
-            - Update last_action in frontmatter.
-
-            ## Rules
-            - No-op if nothing changed. Do not interact with the session.
-            - Use real ACP session IDs from AGENTIC_SESSION_NAME env var.
-            - Send messages to existing sessions, don't recreate.
-            - Ignore bot's own commits.
-            - Do not merge PRs.
-
-            All child sessions use model claude-opus-4-6.
-          repos: >-
-            [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
-          model: claude-opus-4-6
-          wait: 'true'
-          timeout: '60'
-
-      - name: Session summary
-        if: always()
+      - name: Find and process amber:managed PRs
         env:
-          SESSION_NAME: ${{ steps.session.outputs.session-name }}
-          SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AMBIENT_API_URL: ${{ secrets.AMBIENT_API_URL }}
+          AMBIENT_API_TOKEN: ${{ secrets.AMBIENT_BOT_TOKEN }}
+          AMBIENT_PROJECT: ${{ secrets.AMBIENT_PROJECT }}
+        run: |
+          pip install --quiet requests>=2.31.0
+
+          python3 - << 'PYEOF'
+          import json
+          import os
+          import subprocess
+          import sys
+          from datetime import datetime, timezone
+
+          REPO = os.environ.get("GITHUB_REPOSITORY", "")
+          API_URL = os.environ["AMBIENT_API_URL"]
+          API_TOKEN = os.environ["AMBIENT_API_TOKEN"]
+          PROJECT = os.environ["AMBIENT_PROJECT"]
+
+          def gh(*args):
+              result = subprocess.run(["gh"] + list(args), capture_output=True, text=True)
+              return result.stdout.strip()
+
+          def parse_frontmatter(body):
+              """Extract session_id, source, last_action, retry_count from PR body frontmatter."""
+              import re
+              match = re.search(r'acp:session_id=(\S+)\s+source=(\S+)\s+last_action=(\S+)\s+retry_count=(\d+)', body or "")
+              if not match:
+                  return None
+              return {
+                  "session_id": match.group(1),
+                  "source": match.group(2),
+                  "last_action": match.group(3),
+                  "retry_count": int(match.group(4)),
+              }
+
+          def has_changes_since(pr_number, last_action, repo):
+              """Check if PR has new activity since last_action (ignoring bot commits)."""
+              # Get PR timeline events since last_action
+              timeline = gh("api", f"repos/{repo}/issues/{pr_number}/timeline",
+                           "--jq", f'[.[] | select(.created_at > "{last_action}" and .actor.login != "github-actions[bot]" and .actor.login != "ambient-bot")] | length')
+              try:
+                  return int(timeline) > 0
+              except (ValueError, TypeError):
+                  return True  # If we can't tell, assume changed
+
+          # Get all open amber:managed PRs
+          prs_json = gh("pr", "list", "--repo", REPO, "--state", "open",
+                        "--label", "amber:managed", "--limit", "200",
+                        "--json", "number,body,title")
+          prs = json.loads(prs_json) if prs_json else []
+          print(f"Found {len(prs)} amber:managed PRs")
+
+          processed = 0
+          skipped = 0
+
+          for pr in prs:
+              number = pr["number"]
+              body = pr.get("body", "")
+              fm = parse_frontmatter(body)
+
+              if not fm:
+                  print(f"PR #{number}: no frontmatter, skipping (needs @amber to initialize)")
+                  skipped += 1
+                  continue
+
+              # Circuit breaker
+              if fm["retry_count"] >= 3:
+                  print(f"PR #{number}: circuit breaker (retry_count={fm['retry_count']}), adding amber:needs-human")
+                  gh("pr", "edit", str(number), "--repo", REPO, "--add-label", "amber:needs-human", "--remove-label", "amber:managed")
+                  gh("pr", "comment", str(number), "--repo", REPO, "--body", "AI was unable to resolve issues after 3 attempts. Needs human attention.")
+                  continue
+
+              # Check for changes
+              if not has_changes_since(number, fm["last_action"], REPO):
+                  print(f"PR #{number}: no changes since {fm['last_action']}, skipping")
+                  skipped += 1
+                  continue
+
+              # Something changed — trigger fix via ambient-action
+              print(f"PR #{number}: changes detected, triggering fix session (session_id={fm['session_id']})")
+
+              # Write prompt to temp file
+              prompt = f"""You are maintaining a pull request.
+
+          URL: https://github.com/{REPO}/pull/{number}
+
+          ## Instructions
+
+          1. Assess the current state:
+             - Are there merge conflicts? Resolve them.
+             - Is CI failing? Read the logs and fix the failures.
+             - Are there review comments (human or bot like CodeRabbit)? Address each comment.
+          2. Push fixes.
+          3. Ensure the PR body contains this frontmatter as the first line
+             (read your session ID from the AGENTIC_SESSION_NAME environment variable):
+             <!-- acp:session_id=$AGENTIC_SESSION_NAME source={fm['source']} last_action=<ISO8601_NOW> retry_count=0 -->
+          4. Add the `amber:managed` label.
+          5. Do not merge. Do not close. Do not force-push.
+          6. If fundamentally broken beyond repair, add a comment explaining and stop."""
+
+              import tempfile
+              with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+                  f.write(prompt)
+                  prompt_file = f.name
+
+              # Call create_session.py directly
+              cmd = [
+                  sys.executable, os.path.join(os.environ.get("GITHUB_ACTION_PATH", "."), "create_session.py"),
+                  "--api-url", API_URL,
+                  "--api-token", API_TOKEN,
+                  "--project", PROJECT,
+                  "--prompt-file", prompt_file,
+                  "--session-name", fm["session_id"],
+                  "--timeout", "60",
+              ]
+              result = subprocess.run(cmd, capture_output=True, text=True)
+              print(f"  Session result: {result.stdout.strip()}")
+              if result.returncode != 0:
+                  print(f"  Error: {result.stderr.strip()}")
+
+              processed += 1
+
+          print(f"\nBatch complete: {processed} processed, {skipped} skipped")
+          PYEOF
+
+      - name: Batch summary
+        if: always()
         run: |
           echo "### Amber — Batch PR Fixer" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ -n "$SESSION_NAME" ]; then
-            echo "- **Session**: \`$SESSION_NAME\`" >> $GITHUB_STEP_SUMMARY
-            echo "- **Phase**: \`$SESSION_PHASE\`" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "- **Status**: Failed to create session" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "See step logs for per-PR details" >> $GITHUB_STEP_SUMMARY
