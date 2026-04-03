@@ -143,6 +143,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COMMENT_BODY: ${{ github.event.comment.body }}
+          IS_PR: ${{ github.event.issue.pull_request && 'true' || 'false' }}
         run: |
           NUMBER="${{ github.event.issue.number }}"
           echo "number=$NUMBER" >> $GITHUB_OUTPUT
@@ -155,7 +156,7 @@ jobs:
             echo "prompt_type=custom" >> $GITHUB_OUTPUT
           fi
 
-          if [ -n "${{ github.event.issue.pull_request }}" ]; then
+          if [ "$IS_PR" = "true" ]; then
             echo "type=pr" >> $GITHUB_OUTPUT
             echo "url=https://github.com/${{ github.repository }}/pull/$NUMBER" >> $GITHUB_OUTPUT
 
