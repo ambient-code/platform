@@ -5,6 +5,7 @@ import { MessageObject, ToolUseMessages, HierarchicalToolMessage } from "@/types
 import { LoadingDots, Message } from "@/components/ui/message";
 import { ToolMessage } from "@/components/ui/tool-message";
 import { AskUserQuestionMessage } from "@/components/session/ask-user-question";
+import { PermissionRequestMessage } from "@/components/session/permission-request";
 import { ThinkingMessage } from "@/components/ui/thinking-message";
 import { SystemMessage } from "@/components/ui/system-message";
 import { Button } from "@/components/ui/button";
@@ -20,9 +21,16 @@ export type StreamMessageProps = {
   currentUserId?: string;
 };
 
+function normalizeToolName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z]/g, "");
+}
+
 function isAskUserQuestionTool(name: string): boolean {
-  const normalized = name.toLowerCase().replace(/[^a-z]/g, "");
-  return normalized === "askuserquestion";
+  return normalizeToolName(name) === "askuserquestion";
+}
+
+function isPermissionRequestTool(name: string): boolean {
+  return normalizeToolName(name) === "permissionrequest";
 }
 
 const getRandomAgentMessage = () => {
@@ -50,6 +58,19 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
     if (isAskUserQuestionTool(message.toolUseBlock.name)) {
       return (
         <AskUserQuestionMessage
+          toolUseBlock={message.toolUseBlock}
+          resultBlock={message.resultBlock}
+          timestamp={message.timestamp}
+          onSubmitAnswer={onSubmitAnswer}
+          isNewest={isNewest}
+        />
+      );
+    }
+
+    // Render PermissionRequest with Allow/Deny buttons
+    if (isPermissionRequestTool(message.toolUseBlock.name)) {
+      return (
+        <PermissionRequestMessage
           toolUseBlock={message.toolUseBlock}
           resultBlock={message.resultBlock}
           timestamp={message.timestamp}

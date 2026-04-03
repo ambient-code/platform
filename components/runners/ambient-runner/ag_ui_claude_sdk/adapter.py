@@ -77,7 +77,11 @@ from .handlers import (
 # These are HITL (human-in-the-loop) tools that require user input before
 # the agent can continue.  The adapter treats them identically to frontend
 # tools registered via ``input_data.tools``.
-BUILTIN_FRONTEND_TOOLS: set[str] = {"AskUserQuestion"}
+BUILTIN_FRONTEND_TOOLS: set[str] = {"AskUserQuestion", "PermissionRequest"}
+
+# Sentinel values for synthetic PermissionRequest events.
+_PERM_PLACEHOLDER_ID = "__perm__"
+_PERM_TOOL_ID_PREFIX = "perm-"
 
 logger = logging.getLogger(__name__)
 
@@ -245,6 +249,14 @@ class ClaudeAgentAdapter:
         # stream drains them between SDK messages.
         self._hook_event_queue: asyncio.Queue = asyncio.Queue()
 
+        # Permission approval tracking: set of "tool_name:key" strings that
+        # the user has approved via the PermissionRequest UI.
+        self._approved_operations: set[str] = set()
+
+        # Reference to the SessionWorker, set by the bridge before each run
+        # so can_use_tool can inject synthetic events into the output queue.
+        self._permission_worker: Any | None = None
+
         # Background task registry (task_id -> info dict).
         # Populated from TaskStarted/TaskProgress/TaskNotification messages.
         self._task_registry: dict[str, dict[str, Any]] = {}
@@ -264,6 +276,137 @@ class ClaudeAgentAdapter:
         placeholder result.
         """
         return self._halted
+
+    def set_permission_worker(self, worker: Any) -> None:
+        """Set the session worker for permission request event injection."""
+        self._permission_worker = worker
+
+    def _permission_key(self, tool_name: str, input_data: dict) -> str:
+        """Build a stable key for an approved operation."""
+        file_path = input_data.get("file_path", "")
+        if file_path:
+            return f"{tool_name}:{file_path}"
+        command = input_data.get("command", "")
+        if command:
+            return f"{tool_name}:{command}"
+        return f"{tool_name}:*"
+
+    async def _can_use_tool(
+        self,
+        tool_name: str,
+        input_data: dict,
+        *args: Any,
+        **kwargs: Any,
+    ) -> dict:
+        """Callback for Claude SDK ``can_use_tool``.
+
+        If the operation was previously approved by the user, returns allow.
+        Otherwise emits a synthetic PermissionRequest tool call into the
+        worker's output queue (triggering the same halt-interrupt-resume
+        pattern used by AskUserQuestion) and returns deny so the SDK
+        reports the denial to Claude.  When the user approves via the UI
+        and Claude retries, the approved set will contain the key and the
+        next invocation will return allow.
+        """
+        key = self._permission_key(tool_name, input_data)
+
+        if key in self._approved_operations:
+            logger.info(f"[PermissionRequest] Auto-approved (previously granted): {key}")
+            return {"behavior": "allow", "updatedInput": input_data}
+
+        # Build a human-readable description of what Claude wants to do.
+        file_path = input_data.get("file_path", "")
+        command = input_data.get("command", "")
+        description = ""
+        if file_path:
+            description = f"{tool_name} on {file_path}"
+        elif command:
+            description = f"{tool_name}: {command}"
+        else:
+            description = f"Use tool: {tool_name}"
+
+        logger.info(f"[PermissionRequest] Requesting user approval: {description}")
+
+        # Emit synthetic PermissionRequest tool call into the worker's
+        # output queue so the adapter's event loop picks it up and halts.
+        queue = (
+            self._permission_worker.active_output_queue
+            if self._permission_worker is not None
+            else None
+        )
+        if queue is not None:
+            perm_tool_call_id = f"{_PERM_TOOL_ID_PREFIX}{uuid.uuid4()}"
+            perm_input = {
+                "tool_name": tool_name,
+                "file_path": file_path,
+                "command": command,
+                "description": description,
+                "key": key,
+            }
+            # We use the same thread/run IDs as the current run — the adapter
+            # will fill these in from the BaseEvent pass-through path, but we
+            # need placeholder values since AG-UI events require them.
+            thread_id = _PERM_PLACEHOLDER_ID
+            run_id = _PERM_PLACEHOLDER_ID
+            ts = now_ms()
+
+            events: list[BaseEvent] = [
+                ToolCallStartEvent(
+                    type=EventType.TOOL_CALL_START,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    tool_call_id=perm_tool_call_id,
+                    tool_call_name="PermissionRequest",
+                    timestamp=ts,
+                ),
+                ToolCallArgsEvent(
+                    type=EventType.TOOL_CALL_ARGS,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    tool_call_id=perm_tool_call_id,
+                    delta=json.dumps(perm_input),
+                ),
+                ToolCallEndEvent(
+                    type=EventType.TOOL_CALL_END,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    tool_call_id=perm_tool_call_id,
+                    timestamp=ts,
+                ),
+            ]
+            for ev in events:
+                await queue.put(ev)
+        else:
+            logger.warning(
+                "[PermissionRequest] No active output queue — "
+                "permission request events dropped for: %s",
+                description,
+            )
+
+        return {
+            "behavior": "deny",
+            "message": (
+                f"User approval required. {description}. "
+                "The user has been prompted — please wait for their response, "
+                "then retry the same operation."
+            ),
+        }
+
+    def _handle_permission_response(self, user_message: str) -> None:
+        """Parse a PermissionRequest response and update approved operations."""
+        try:
+            data = json.loads(user_message)
+        except (json.JSONDecodeError, TypeError):
+            logger.debug(f"[PermissionRequest] Non-JSON response: {user_message!r}")
+            return
+
+        approved = data.get("approved", False)
+        key = data.get("key", "")
+        if approved and key:
+            self._approved_operations.add(key)
+            logger.info(f"[PermissionRequest] User approved: {key}")
+        else:
+            logger.info(f"[PermissionRequest] User denied: {key}")
 
     async def run(
         self,
@@ -333,6 +476,10 @@ class ClaudeAgentAdapter:
             # If the previous run halted for a frontend tool (e.g. AskUserQuestion),
             # emit a TOOL_CALL_RESULT so the frontend can mark the question as answered.
             if previous_halted_tool_call_id and user_message:
+                # If this was a PermissionRequest response, track the approval.
+                if previous_halted_tool_call_id.startswith(_PERM_TOOL_ID_PREFIX):
+                    self._handle_permission_response(user_message)
+
                 yield ToolCallResultEvent(
                     type=EventType.TOOL_CALL_RESULT,
                     thread_id=thread_id,
@@ -592,6 +739,10 @@ class ClaudeAgentAdapter:
                 merged[event_name] = [*merged.get(event_name, []), *matchers]
             merged_kwargs["hooks"] = merged
 
+        # Register can_use_tool callback so sensitive operations prompt
+        # the user for approval via the PermissionRequest UI.
+        merged_kwargs["can_use_tool"] = self._can_use_tool
+
         # Create the options object
         logger.debug(f"Creating ClaudeAgentOptions with merged kwargs: {merged_kwargs}")
         return ClaudeAgentOptions(**merged_kwargs)
@@ -811,7 +962,36 @@ class ClaudeAgentAdapter:
                 # directly into the message stream (e.g. stop endpoint),
                 # yield it immediately without SDK processing.
                 if isinstance(message, BaseEvent):
+                    # Rewrite placeholder thread/run IDs injected by
+                    # can_use_tool (which doesn't know the real IDs).
+                    if hasattr(message, "thread_id") and message.thread_id == _PERM_PLACEHOLDER_ID:
+                        message.thread_id = thread_id
+                    if hasattr(message, "run_id") and message.run_id == _PERM_PLACEHOLDER_ID:
+                        message.run_id = run_id
+
                     yield message
+
+                    # Detect PermissionRequest halt: the ToolCallEndEvent
+                    # for a PermissionRequest tool signals that we should
+                    # halt just like a frontend tool.
+                    if (
+                        isinstance(message, ToolCallEndEvent)
+                        and hasattr(message, "tool_call_id")
+                        and isinstance(message.tool_call_id, str)
+                        and message.tool_call_id.startswith(_PERM_TOOL_ID_PREFIX)
+                    ):
+                        logger.debug(
+                            f"PermissionRequest halt: {message.tool_call_id}"
+                        )
+
+                        # Add to pending_msg snapshot (so MESSAGES_SNAPSHOT
+                        # includes the PermissionRequest tool call).
+                        flush_pending_msg()
+
+                        self._halted = True
+                        self._halted_tool_call_id = message.tool_call_id
+                        halt_event_stream = True
+
                     continue
 
                 message_count += 1

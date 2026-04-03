@@ -177,6 +177,10 @@ class ClaudeBridge(PlatformBridge):
         # 5. Run adapter with message stream, wrapped in tracing
         session_label = self._session_manager.get_session_id(thread_id) or thread_id
         async with self._session_manager.get_lock(thread_id):
+            # Expose the worker to the adapter so the can_use_tool callback
+            # can inject synthetic events into the active output queue.
+            self._adapter.set_permission_worker(worker)
+
             try:
                 message_stream = worker.query(user_msg, session_id=session_label)
 

@@ -31,6 +31,15 @@ export type AskUserQuestionInput = {
 	questions: AskUserQuestionItem[];
 };
 
+// PermissionRequest tool types (synthetic tool emitted by can_use_tool callback)
+export type PermissionRequestInput = {
+	tool_name: string;
+	file_path?: string;
+	command?: string;
+	description: string;
+	key: string;
+};
+
 export type LLMSettings = {
 	model: string;
 	temperature: number;
@@ -131,6 +140,15 @@ export type ToolResultBlock = {
 };
 
 export type ContentBlock = TextBlock | ReasoningBlock | ToolUseBlock | ToolResultBlock;
+
+/** Check whether a ToolResultBlock contains a non-empty result. */
+export function hasToolResult(resultBlock?: ToolResultBlock): boolean {
+	if (!resultBlock) return false;
+	const content = resultBlock.content;
+	if (!content) return false;
+	if (typeof content === "string" && content.trim() === "") return false;
+	return true;
+}
 
 export type ToolUseMessages = {
 	type: "tool_use_messages";

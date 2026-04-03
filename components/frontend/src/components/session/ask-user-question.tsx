@@ -8,11 +8,12 @@ import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { HelpCircle, CheckCircle2, Send, ChevronRight } from "lucide-react";
 import { formatTimestamp } from "@/lib/format-timestamp";
-import type {
-  ToolUseBlock,
-  ToolResultBlock,
-  AskUserQuestionItem,
-  AskUserQuestionInput,
+import {
+  hasToolResult,
+  type ToolUseBlock,
+  type ToolResultBlock,
+  type AskUserQuestionItem,
+  type AskUserQuestionInput,
 } from "@/types/agentic-session";
 
 export type AskUserQuestionMessageProps = {
@@ -41,13 +42,7 @@ function parseQuestions(input: Record<string, unknown>): AskUserQuestionItem[] {
   return [];
 }
 
-function hasResult(resultBlock?: ToolResultBlock): boolean {
-  if (!resultBlock) return false;
-  const content = resultBlock.content;
-  if (!content) return false;
-  if (typeof content === "string" && content.trim() === "") return false;
-  return true;
-}
+const hasResult = hasToolResult;
 
 export const AskUserQuestionMessage: React.FC<AskUserQuestionMessageProps> = ({
   toolUseBlock,

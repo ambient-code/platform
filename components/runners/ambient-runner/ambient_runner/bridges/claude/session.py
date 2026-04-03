@@ -96,6 +96,11 @@ class SessionWorker:
     # ── lifecycle ──
 
     @property
+    def active_output_queue(self) -> "asyncio.Queue | None":
+        """The output queue for the currently-active run (if any)."""
+        return self._active_output_queue
+
+    @property
     def is_alive(self) -> bool:
         """True if the background task is still running."""
         return self._task is not None and not self._task.done()
