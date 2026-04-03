@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Create review queue session
         id: session
-        uses: ambient-code/ambient-action@v0.0.2
+        uses: ambient-code/ambient-action@v0.0.5
         with:
           api-url: ${{ secrets.AMBIENT_API_URL }}
           api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
@@ -31,9 +31,9 @@ jobs:
             [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
           workflow: >-
             {"gitUrl": "https://github.com/ambient-code/workflows", "branch": "main", "path": "internal-workflows/pr-overview"}
-          model: claude-sonnet-4-5
+          model: claude-opus-4-6
           wait: 'true'
-          timeout: '10'
+          timeout: '10800'
 
       - name: Session summary
         if: always()
