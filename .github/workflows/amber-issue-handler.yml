@@ -321,26 +321,30 @@ jobs:
               body = pr.get("body", "")
               fm = parse_frontmatter(body)
 
+              session_id = ""
+              source = f"#{number}"
+
               if not fm:
-                  print(f"PR #{number}: no frontmatter, skipping (needs @amber to initialize)")
-                  skipped += 1
-                  continue
+                  print(f"PR #{number}: no frontmatter, will create new session")
+              else:
+                  session_id = fm["session_id"]
+                  source = fm["source"]
 
-              # Circuit breaker
-              if fm["retry_count"] >= 3:
-                  print(f"PR #{number}: circuit breaker (retry_count={fm['retry_count']}), adding amber:needs-human")
-                  gh("pr", "edit", str(number), "--repo", REPO, "--add-label", "amber:needs-human", "--remove-label", "amber:managed")
-                  gh("pr", "comment", str(number), "--repo", REPO, "--body", "AI was unable to resolve issues after 3 attempts. Needs human attention.")
-                  continue
+                  # Circuit breaker
+                  if fm["retry_count"] >= 3:
+                      print(f"PR #{number}: circuit breaker (retry_count={fm['retry_count']}), adding amber:needs-human")
+                      gh("pr", "edit", str(number), "--repo", REPO, "--add-label", "amber:needs-human", "--remove-label", "amber:managed")
+                      gh("pr", "comment", str(number), "--repo", REPO, "--body", "AI was unable to resolve issues after 3 attempts. Needs human attention.")
+                      continue
 
-              # Check for changes
-              if not has_changes_since(number, fm["last_action"], REPO):
-                  print(f"PR #{number}: no changes since {fm['last_action']}, skipping")
-                  skipped += 1
-                  continue
+                  # Check for changes
+                  if not has_changes_since(number, fm["last_action"], REPO):
+                      print(f"PR #{number}: no changes since {fm['last_action']}, skipping")
+                      skipped += 1
+                      continue
 
-              # Something changed — trigger fix via ambient-action
-              print(f"PR #{number}: changes detected, triggering fix session (session_id={fm['session_id']})")
+              # Trigger fix — reuse session if exists, create new if not
+              print(f"PR #{number}: triggering fix (session_id={session_id or 'new'})")
 
               # Write prompt to temp file
               prompt = f"""You are maintaining a pull request.
@@ -356,7 +360,7 @@ jobs:
           2. Push fixes.
           3. Ensure the PR body contains this frontmatter as the first line
              (read your session ID from the AGENTIC_SESSION_NAME environment variable):
-             <!-- acp:session_id=$AGENTIC_SESSION_NAME source={fm['source']} last_action=<ISO8601_NOW> retry_count=0 -->
+             <!-- acp:session_id=$AGENTIC_SESSION_NAME source={source} last_action=<ISO8601_NOW> retry_count=0 -->
           4. Add the `amber:managed` label.
           5. Do not merge. Do not close. Do not force-push.
           6. If fundamentally broken beyond repair, add a comment explaining and stop."""
@@ -373,9 +377,12 @@ jobs:
                   "--api-token", API_TOKEN,
                   "--project", PROJECT,
                   "--prompt-file", prompt_file,
-                  "--session-name", fm["session_id"],
                   "--timeout", "60",
+                  "--model", "claude-opus-4-6",
+                  "--repos", json.dumps([{"url": f"https://github.com/{REPO}", "branch": "main"}]),
               ]
+              if session_id:
+                  cmd.extend(["--session-name", session_id])
               result = subprocess.run(cmd, capture_output=True, text=True)
               print(f"  Session result: {result.stdout.strip()}")
               if result.returncode != 0:
