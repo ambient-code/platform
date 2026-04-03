@@ -4,8 +4,8 @@
 #
 # TRIGGERS:
 # - Issue labeled with: amber:auto-fix → fresh session prompt
-# - Comment "@amber" alone on issue/PR → follow-up/fix prompt
-# - Comment "@amber <instruction>" on issue/PR → custom prompt
+# - Comment "@ambient-code" alone on issue/PR → follow-up/fix prompt
+# - Comment "@ambient-code <instruction>" on issue/PR → custom prompt
 # - Cron every 30 min → shell-driven batch for all amber:managed PRs
 # - Manual dispatch → same as cron
 #
@@ -124,11 +124,11 @@ jobs:
             echo "- **Status**: Failed to create session" >> $GITHUB_STEP_SUMMARY
           fi
 
-  # -- @amber comment on an issue or PR --
+  # -- @ambient-code comment on an issue or PR --
   handle-comment:
     if: >-
       github.event_name == 'issue_comment'
-      && contains(github.event.comment.body, '@amber')
+      && contains(github.event.comment.body, '@ambient-code')
       && (github.event.comment.author_association == 'MEMBER'
           || github.event.comment.author_association == 'OWNER'
           || github.event.comment.author_association == 'COLLABORATOR')
@@ -147,8 +147,8 @@ jobs:
           NUMBER="${{ github.event.issue.number }}"
           echo "number=$NUMBER" >> $GITHUB_OUTPUT
 
-          # Determine if @amber is alone (fix prompt) or has instruction text (custom prompt)
-          STRIPPED=$(echo "$COMMENT_BODY" | sed 's/@amber//g' | tr -d '[:space:]')
+          # Determine if @ambient-code is alone (fix prompt) or has instruction text (custom prompt)
+          STRIPPED=$(echo "$COMMENT_BODY" | sed 's/@ambient-code//g' | tr -d '[:space:]')
           if [ -z "$STRIPPED" ]; then
             echo "prompt_type=fix" >> $GITHUB_OUTPUT
           else
@@ -181,7 +181,7 @@ jobs:
             fi
           fi
 
-      # Fix prompt on a PR: @amber alone — assess and fix CI/conflicts/reviews
+      # Fix prompt on a PR: @ambient-code alone — assess and fix CI/conflicts/reviews
       - name: Run fix prompt (PR)
         if: >-
           steps.context.outputs.is_fork != 'true'
@@ -213,7 +213,7 @@ jobs:
             5. Do not merge. Do not close. Do not force-push.
             6. If fundamentally broken beyond repair, add a comment explaining and stop.
 
-      # Fix prompt on an issue: @amber alone — investigate and create PR (same as fresh prompt)
+      # Fix prompt on an issue: @ambient-code alone — investigate and create PR (same as fresh prompt)
       - name: Run fix prompt (issue)
         if: >-
           steps.context.outputs.is_fork != 'true'
@@ -250,7 +250,7 @@ jobs:
           wait: 'true'
           timeout: '0'
 
-      # Custom prompt: @amber <instruction> — pass user's text
+      # Custom prompt: @ambient-code <instruction> — pass user's text
       - name: Run custom prompt
         if: >-
           steps.context.outputs.is_fork != 'true'
