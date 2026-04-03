@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/watcher"
@@ -78,6 +79,18 @@ type ResourceEvent struct {
 
 type EventHandler func(ctx context.Context, event ResourceEvent) error
 
+const (
+	retryMaxAttempts = 5
+	retryBaseDelay   = 2 * time.Second
+	retryMaxDelay    = 30 * time.Second
+)
+
+type retryEvent struct {
+	event    ResourceEvent
+	attempt  int
+	fireAt   time.Time
+}
+
 type Informer struct {
 	sdk          *sdkclient.Client
 	watchManager *watcher.WatchManager
@@ -85,6 +98,7 @@ type Informer struct {
 	mu           sync.RWMutex
 	logger       zerolog.Logger
 	eventCh      chan ResourceEvent
+	retryCh      chan retryEvent
 
 	sessionCache         map[string]types.Session
 	projectCache         map[string]types.Project
@@ -98,6 +112,7 @@ func New(sdk *sdkclient.Client, watchManager *watcher.WatchManager, logger zerol
 		handlers:             make(map[string][]EventHandler),
 		logger:               logger.With().Str("component", "informer").Logger(),
 		eventCh:              make(chan ResourceEvent, 256),
+		retryCh:              make(chan retryEvent, 256),
 		sessionCache:         make(map[string]types.Session),
 		projectCache:         make(map[string]types.Project),
 		projectSettingsCache: make(map[string]types.ProjectSettings),
@@ -118,6 +133,7 @@ func (inf *Informer) Run(ctx context.Context) error {
 	}
 
 	go inf.dispatchLoop(ctx)
+	go inf.retryLoop(ctx)
 
 	inf.wireWatchHandlers()
 
@@ -133,18 +149,61 @@ func (inf *Informer) dispatchLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case event := <-inf.eventCh:
-			inf.mu.RLock()
-			handlers := inf.handlers[event.Resource]
-			inf.mu.RUnlock()
+			inf.dispatchEvent(ctx, event, 0)
+		}
+	}
+}
 
-			for _, handler := range handlers {
-				if err := handler(ctx, event); err != nil {
-					inf.logger.Error().
-						Err(err).
-						Str("resource", event.Resource).
-						Str("event_type", string(event.Type)).
-						Msg("handler failed")
+func (inf *Informer) retryLoop(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case re := <-inf.retryCh:
+			wait := time.Until(re.fireAt)
+			if wait > 0 {
+				select {
+				case <-time.After(wait):
+				case <-ctx.Done():
+					return
 				}
+			}
+			inf.dispatchEvent(ctx, re.event, re.attempt)
+		}
+	}
+}
+
+func (inf *Informer) dispatchEvent(ctx context.Context, event ResourceEvent, attempt int) {
+	inf.mu.RLock()
+	handlers := inf.handlers[event.Resource]
+	inf.mu.RUnlock()
+
+	for _, handler := range handlers {
+		if err := handler(ctx, event); err != nil {
+			if attempt < retryMaxAttempts {
+				delay := retryBaseDelay * (1 << attempt)
+				if delay > retryMaxDelay {
+					delay = retryMaxDelay
+				}
+				inf.logger.Warn().
+					Err(err).
+					Str("resource", event.Resource).
+					Str("event_type", string(event.Type)).
+					Int("attempt", attempt+1).
+					Int("max_attempts", retryMaxAttempts).
+					Dur("retry_in", delay).
+					Msg("handler failed, will retry")
+				select {
+				case inf.retryCh <- retryEvent{event: event, attempt: attempt + 1, fireAt: time.Now().Add(delay)}:
+				case <-ctx.Done():
+				}
+			} else {
+				inf.logger.Error().
+					Err(err).
+					Str("resource", event.Resource).
+					Str("event_type", string(event.Type)).
+					Int("attempts", attempt+1).
+					Msg("handler failed after max retries")
 			}
 		}
 	}
