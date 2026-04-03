@@ -288,7 +288,10 @@ func (h *sessionGRPCHandler) WatchSessionMessages(req *pb.WatchSessionMessagesRe
 
 	if !middleware.IsServiceCaller(ctx) {
 		username := auth.GetUsernameFromContext(ctx)
-		if username != "" && (h.grpcServiceAccount == "" || username != h.grpcServiceAccount) {
+		if username == "" {
+			return status.Error(codes.PermissionDenied, "not authorized to watch this session")
+		}
+		if h.grpcServiceAccount == "" || username != h.grpcServiceAccount {
 			session, svcErr := h.service.Get(ctx, req.GetSessionId())
 			if svcErr != nil {
 				return grpcutil.ServiceErrorToGRPC(svcErr)
