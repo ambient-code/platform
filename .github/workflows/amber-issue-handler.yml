@@ -95,7 +95,7 @@ jobs:
             [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
           model: claude-opus-4-6
           wait: 'true'
-          timeout: '0'
+          timeout: '10800'
 
       - name: Post-session labels and comment
         if: steps.existing.outputs.skip != 'true'
@@ -248,7 +248,7 @@ jobs:
             [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
           model: claude-opus-4-6
           wait: 'true'
-          timeout: '0'
+          timeout: '10800'
 
       # Custom prompt: @ambient-code <instruction> — pass user's text
       - name: Run custom prompt
@@ -271,7 +271,7 @@ jobs:
             [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
           model: claude-opus-4-6
           wait: 'true'
-          timeout: '0'
+          timeout: '10800'
 
       - name: Session summary
         if: always() && steps.context.outputs.is_fork != 'true'
@@ -403,6 +403,7 @@ jobs:
               # Create new session
               url = f"{API_URL.rstrip('/')}/projects/{PROJECT}/agentic-sessions"
               body = {"initialPrompt": prompt,
+                      "inactivityTimeout": 10800,
                       "llmSettings": {"model": model},
                       "repos": [{"url": f"https://github.com/{REPO}", "branch": "main"}]}
               try:
