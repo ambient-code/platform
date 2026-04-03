@@ -18,6 +18,7 @@ type AgenticSessionSpec struct {
 	LLMSettings          LLMSettings        `json:"llmSettings"`
 	Timeout              int                `json:"timeout"`
 	InactivityTimeout    *int               `json:"inactivityTimeout,omitempty"`
+	StopOnRunFinished    bool               `json:"stopOnRunFinished,omitempty"`
 	UserContext          *UserContext       `json:"userContext,omitempty"`
 	BotAccount           *BotAccountRef     `json:"botAccount,omitempty"`
 	ResourceOverrides    *ResourceOverrides `json:"resourceOverrides,omitempty"`
@@ -58,6 +59,7 @@ type CreateAgenticSessionRequest struct {
 	LLMSettings          *LLMSettings       `json:"llmSettings,omitempty"`
 	Timeout              *int               `json:"timeout,omitempty"`
 	InactivityTimeout    *int               `json:"inactivityTimeout,omitempty"`
+	StopOnRunFinished    *bool              `json:"stopOnRunFinished,omitempty"`
 	ParentSessionID      string             `json:"parent_session_id,omitempty"`
 	Repos                []SimpleRepo       `json:"repos,omitempty"`
 	ActiveWorkflow       *WorkflowSelection `json:"activeWorkflow,omitempty"`
