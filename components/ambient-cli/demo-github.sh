@@ -278,13 +278,32 @@ echo
 announce "4 · Create GitHub credential"
 
 sep; bold "▶  Create credential: ${CRED_NAME}"; sleep "$PAUSE"
+_CRED_MANIFEST=$(mktemp --suffix=.yaml)
+cat > "${_CRED_MANIFEST}" <<'CRED_EOF'
+kind: Credential
+name: CRED_NAME_PLACEHOLDER
+provider: github
+token: $DEMO_GITHUB_PAT
+description: CRED_DESC_PLACEHOLDER
+CRED_EOF
+sed -i \
+    -e "s/CRED_NAME_PLACEHOLDER/${CRED_NAME}/" \
+    -e "s/CRED_DESC_PLACEHOLDER/GitHub PAT for demo ${RUN_ID}/" \
+    "${_CRED_MANIFEST}"
+DEMO_GITHUB_PAT="${GITHUB_TOKEN_VALUE}" \
+    "$ACPCTL" apply -f "${_CRED_MANIFEST}" 2>/dev/null
+rm -f "${_CRED_MANIFEST}"
 CRED_JSON=$(
-    "$ACPCTL" credential create \
-        --name "${CRED_NAME}" \
-        --provider github \
-        --token "${GITHUB_TOKEN_VALUE}" \
-        --description "GitHub PAT for demo ${RUN_ID}" \
-        -o json 2>/dev/null
+    "$ACPCTL" get credentials -o json 2>/dev/null \
+    | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+items = data.get('items', []) if isinstance(data, dict) else data
+for c in items:
+    if c.get('name') == '${CRED_NAME}':
+        print(json.dumps(c))
+        break
+" 2>/dev/null
 )
 CREDENTIAL_ID=$(json_field "$CRED_JSON" "id")
 [[ -z "${CREDENTIAL_ID}" ]] && die "Failed to parse credential ID"
@@ -299,7 +318,7 @@ step "Verify credential visible" \
 
 announce "5 · Bind credential to agent"
 
-sep; bold "▶  Look up credential:reader role ID"; sleep "$PAUSE"
+sep; bold "▶  Look up credential:token-reader role ID"; sleep "$PAUSE"
 ROLES_JSON=$("$ACPCTL" get roles -o json 2>/dev/null)
 READER_ROLE_ID=$(
     echo "$ROLES_JSON" | python3 -c "
@@ -307,7 +326,7 @@ import sys, json
 data = json.load(sys.stdin)
 items = data.get('items', []) if isinstance(data, dict) else data
 for r in items:
-    if r.get('name') == 'credential:reader':
+    if r.get('name') == 'credential:token-reader':
         print(r['id'])
         break
 " 2>/dev/null
@@ -319,13 +338,13 @@ MY_USER_ID=$(
 )
 
 if [[ -z "${READER_ROLE_ID}" ]]; then
-    yellow "   credential:reader role not in this deployment — skipping role binding"
+    yellow "   credential:token-reader role not in this deployment — skipping role binding"
     dim   "   (credential roles are seeded by the api-server migration; redeploy may be needed)"
 else
-    dim "   credential:reader role ID: ${READER_ROLE_ID}"
+    dim "   credential:token-reader role ID: ${READER_ROLE_ID}"
     dim "   my user ID: ${MY_USER_ID}"
 
-    sep; bold "▶  Create role-binding: credential:reader scope=agent"; sleep "$PAUSE"
+    sep; bold "▶  Create role-binding: credential:token-reader scope=agent"; sleep "$PAUSE"
     "$ACPCTL" create role-binding \
         --user-id "${MY_USER_ID}" \
         --role-id "${READER_ROLE_ID}" \

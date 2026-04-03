@@ -86,9 +86,10 @@ const (
 )
 
 type retryEvent struct {
-	event    ResourceEvent
-	attempt  int
-	fireAt   time.Time
+	event        ResourceEvent
+	handlerIndex int
+	attempt      int
+	fireAt       time.Time
 }
 
 type Informer struct {
@@ -162,13 +163,15 @@ func (inf *Informer) retryLoop(ctx context.Context) {
 		case re := <-inf.retryCh:
 			wait := time.Until(re.fireAt)
 			if wait > 0 {
+				timer := time.NewTimer(wait)
 				select {
-				case <-time.After(wait):
+				case <-timer.C:
 				case <-ctx.Done():
+					timer.Stop()
 					return
 				}
 			}
-			inf.dispatchEvent(ctx, re.event, re.attempt)
+			inf.dispatchHandler(ctx, re.event, re.handlerIndex, re.attempt)
 		}
 	}
 }
@@ -178,34 +181,53 @@ func (inf *Informer) dispatchEvent(ctx context.Context, event ResourceEvent, att
 	handlers := inf.handlers[event.Resource]
 	inf.mu.RUnlock()
 
-	for _, handler := range handlers {
+	for i, handler := range handlers {
 		if err := handler(ctx, event); err != nil {
-			if attempt < retryMaxAttempts {
-				delay := retryBaseDelay * (1 << attempt)
-				if delay > retryMaxDelay {
-					delay = retryMaxDelay
-				}
-				inf.logger.Warn().
-					Err(err).
-					Str("resource", event.Resource).
-					Str("event_type", string(event.Type)).
-					Int("attempt", attempt+1).
-					Int("max_attempts", retryMaxAttempts).
-					Dur("retry_in", delay).
-					Msg("handler failed, will retry")
-				select {
-				case inf.retryCh <- retryEvent{event: event, attempt: attempt + 1, fireAt: time.Now().Add(delay)}:
-				case <-ctx.Done():
-				}
-			} else {
-				inf.logger.Error().
-					Err(err).
-					Str("resource", event.Resource).
-					Str("event_type", string(event.Type)).
-					Int("attempts", attempt+1).
-					Msg("handler failed after max retries")
-			}
+			inf.scheduleRetry(ctx, event, i, attempt, err)
 		}
+	}
+}
+
+func (inf *Informer) dispatchHandler(ctx context.Context, event ResourceEvent, handlerIndex, attempt int) {
+	inf.mu.RLock()
+	handlers := inf.handlers[event.Resource]
+	inf.mu.RUnlock()
+
+	if handlerIndex >= len(handlers) {
+		return
+	}
+	if err := handlers[handlerIndex](ctx, event); err != nil {
+		inf.scheduleRetry(ctx, event, handlerIndex, attempt, err)
+	}
+}
+
+func (inf *Informer) scheduleRetry(ctx context.Context, event ResourceEvent, handlerIndex, attempt int, err error) {
+	if attempt < retryMaxAttempts {
+		delay := retryBaseDelay * (1 << attempt)
+		if delay > retryMaxDelay {
+			delay = retryMaxDelay
+		}
+		inf.logger.Warn().
+			Err(err).
+			Str("resource", event.Resource).
+			Str("event_type", string(event.Type)).
+			Int("handler", handlerIndex).
+			Int("attempt", attempt+1).
+			Int("max_attempts", retryMaxAttempts).
+			Dur("retry_in", delay).
+			Msg("handler failed, will retry")
+		select {
+		case inf.retryCh <- retryEvent{event: event, handlerIndex: handlerIndex, attempt: attempt + 1, fireAt: time.Now().Add(delay)}:
+		case <-ctx.Done():
+		}
+	} else {
+		inf.logger.Error().
+			Err(err).
+			Str("resource", event.Resource).
+			Str("event_type", string(event.Type)).
+			Int("handler", handlerIndex).
+			Int("attempts", attempt+1).
+			Msg("handler failed after max retries")
 	}
 }
 

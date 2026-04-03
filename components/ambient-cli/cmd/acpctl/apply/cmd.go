@@ -294,24 +294,24 @@ func buildCredentialPatch(existing *sdktypes.Credential, doc resource) (map[stri
 		patch = patch.Description(doc.Description)
 		changed = true
 	}
-	if doc.URL != "" {
+	if doc.URL != "" && doc.URL != existing.Url {
 		patch = patch.Url(doc.URL)
 		changed = true
 	}
-	if doc.Email != "" {
+	if doc.Email != "" && doc.Email != existing.Email {
 		patch = patch.Email(doc.Email)
 		changed = true
 	}
 	token := os.ExpandEnv(doc.Token)
-	if token != "" {
+	if token != "" && token != existing.Token {
 		patch = patch.Token(token)
 		changed = true
 	}
-	if len(doc.Labels) > 0 {
+	if len(doc.Labels) > 0 && marshalStringMap(doc.Labels) != existing.Labels {
 		patch = patch.Labels(marshalStringMap(doc.Labels))
 		changed = true
 	}
-	if len(doc.Annotations) > 0 {
+	if len(doc.Annotations) > 0 && marshalStringMap(doc.Annotations) != existing.Annotations {
 		patch = patch.Annotations(marshalStringMap(doc.Annotations))
 		changed = true
 	}
@@ -648,6 +648,18 @@ func strategicMerge(base, patch resource) resource {
 	}
 	if patch.Prompt != "" {
 		base.Prompt = patch.Prompt
+	}
+	if patch.Provider != "" {
+		base.Provider = patch.Provider
+	}
+	if patch.Token != "" {
+		base.Token = patch.Token
+	}
+	if patch.URL != "" {
+		base.URL = patch.URL
+	}
+	if patch.Email != "" {
+		base.Email = patch.Email
 	}
 	for k, v := range patch.Labels {
 		if base.Labels == nil {

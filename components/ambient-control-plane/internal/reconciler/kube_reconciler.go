@@ -924,17 +924,23 @@ func (r *SimpleKubeReconciler) refreshAllRunningTokens(ctx context.Context) {
 		return
 	}
 
-	list, err := sdk.Sessions().List(ctx, &types.ListOptions{Page: 1, Size: 500, Search: "phase = 'Running'"})
-	if err != nil {
-		r.logger.Warn().Err(err).Msg("token refresh loop: failed to list running sessions")
-		return
-	}
-
-	for i := range list.Items {
-		session := list.Items[i]
-		namespace := r.namespaceForSession(session)
-		if err := r.refreshRunnerToken(ctx, namespace, session.ID); err != nil {
-			r.logger.Warn().Err(err).Str("session_id", session.ID).Str("namespace", namespace).Msg("token refresh loop: failed to refresh token")
+	opts := &types.ListOptions{Page: 1, Size: 100, Search: "phase = 'Running'"}
+	for {
+		list, err := sdk.Sessions().List(ctx, opts)
+		if err != nil {
+			r.logger.Warn().Err(err).Int("page", opts.Page).Msg("token refresh loop: failed to list running sessions")
+			return
 		}
+		for i := range list.Items {
+			session := list.Items[i]
+			namespace := r.namespaceForSession(session)
+			if err := r.refreshRunnerToken(ctx, namespace, session.ID); err != nil {
+				r.logger.Warn().Err(err).Str("session_id", session.ID).Str("namespace", namespace).Msg("token refresh loop: failed to refresh token")
+			}
+		}
+		if len(list.Items) == 0 || list.Total <= opts.Page*opts.Size {
+			break
+		}
+		opts.Page++
 	}
 }
