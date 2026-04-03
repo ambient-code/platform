@@ -170,7 +170,15 @@ jobs:
             echo "type=issue" >> $GITHUB_OUTPUT
             echo "url=https://github.com/${{ github.repository }}/issues/$NUMBER" >> $GITHUB_OUTPUT
             echo "is_fork=false" >> $GITHUB_OUTPUT
-            echo "session_id=" >> $GITHUB_OUTPUT
+
+            # Check for existing amber:managed PR for this issue and get its session ID
+            EXISTING_PR=$(gh pr list --repo "${{ github.repository }}" --state open --label "amber:managed" --limit 200 --json number,body --jq ".[] | select((.body // \"\") | test(\"source=#${NUMBER}(\\\\s|$)\"))" | head -1 || echo "")
+            if [ -n "$EXISTING_PR" ]; then
+              SESSION_ID=$(echo "$EXISTING_PR" | jq -r '.body' | grep -oP 'acp:session_id=\K[^ ]+' | head -1 || echo "")
+              echo "session_id=$SESSION_ID" >> $GITHUB_OUTPUT
+            else
+              echo "session_id=" >> $GITHUB_OUTPUT
+            fi
           fi
 
       # Fix prompt: @amber alone — assess and fix CI/conflicts/reviews
@@ -271,7 +279,7 @@ jobs:
           import json
           import os
           import subprocess
-          import sys
+          import requests
           from datetime import datetime, timezone
 
           REPO = os.environ.get("GITHUB_REPOSITORY", "")
@@ -298,13 +306,85 @@ jobs:
 
           def has_changes_since(pr_number, last_action, repo):
               """Check if PR has new activity since last_action (ignoring bot commits)."""
-              # Get PR timeline events since last_action
               timeline = gh("api", f"repos/{repo}/issues/{pr_number}/timeline",
                            "--jq", f'[.[] | select(.created_at > "{last_action}" and .actor.login != "github-actions[bot]" and .actor.login != "ambient-bot")] | length')
               try:
                   return int(timeline) > 0
               except (ValueError, TypeError):
                   return True  # If we can't tell, assume changed
+
+          def get_session_phase(session_name):
+              """Get the current phase of a session."""
+              url = f"{API_URL.rstrip('/')}/projects/{PROJECT}/agentic-sessions/{session_name}"
+              try:
+                  resp = requests.get(url, headers={"Authorization": f"Bearer {API_TOKEN}"}, timeout=15)
+                  if resp.status_code == 404:
+                      return None
+                  resp.raise_for_status()
+                  return resp.json().get("status", {}).get("phase", "Unknown")
+              except Exception as e:
+                  print(f"  Failed to get session phase: {e}")
+                  return None
+
+          def start_session_api(session_name):
+              """Start/restart a stopped session."""
+              url = f"{API_URL.rstrip('/')}/projects/{PROJECT}/agentic-sessions/{session_name}/start"
+              try:
+                  resp = requests.post(url, headers={"Authorization": f"Bearer {API_TOKEN}"}, timeout=30)
+                  resp.raise_for_status()
+                  return True
+              except Exception as e:
+                  print(f"  Failed to start session: {e}")
+                  return False
+
+          def create_session_api(prompt, session_name="", model="claude-opus-4-6"):
+              """Create a new session or send message to existing one."""
+              import time, uuid
+
+              if session_name:
+                  # Ensure session is running
+                  phase = get_session_phase(session_name)
+                  if phase is None:
+                      print(f"  Session {session_name} not found, creating new")
+                      session_name = ""  # Fall through to create
+                  elif phase != "Running":
+                      print(f"  Session {session_name} is {phase}, starting...")
+                      start_session_api(session_name)
+                      for _ in range(20):
+                          time.sleep(3)
+                          if get_session_phase(session_name) == "Running":
+                              break
+
+                  if session_name:
+                      # Send message
+                      url = f"{API_URL.rstrip('/')}/projects/{PROJECT}/agentic-sessions/{session_name}/agui/run"
+                      body = {"threadId": session_name, "runId": str(uuid.uuid4()),
+                              "messages": [{"id": str(uuid.uuid4()), "role": "user", "content": prompt}]}
+                      try:
+                          resp = requests.post(url, headers={"Authorization": f"Bearer {API_TOKEN}", "Content-Type": "application/json"},
+                                               json=body, timeout=30)
+                          resp.raise_for_status()
+                          print(f"  Message sent to session {session_name}")
+                          return session_name
+                      except Exception as e:
+                          print(f"  Failed to send message: {e}")
+                          return None
+
+              # Create new session
+              url = f"{API_URL.rstrip('/')}/projects/{PROJECT}/agentic-sessions"
+              body = {"initialPrompt": prompt, "inactivityTimeout": 60,
+                      "llmSettings": {"model": model},
+                      "repos": [{"url": f"https://github.com/{REPO}", "branch": "main"}]}
+              try:
+                  resp = requests.post(url, headers={"Authorization": f"Bearer {API_TOKEN}", "Content-Type": "application/json"},
+                                       json=body, timeout=30)
+                  resp.raise_for_status()
+                  name = resp.json().get("name", "")
+                  print(f"  Created session {name}")
+                  return name
+              except Exception as e:
+                  print(f"  Failed to create session: {e}")
+                  return None
 
           # Get all open amber:managed PRs
           prs_json = gh("pr", "list", "--repo", REPO, "--state", "open",
@@ -346,7 +426,6 @@ jobs:
               # Trigger fix — reuse session if exists, create new if not
               print(f"PR #{number}: triggering fix (session_id={session_id or 'new'})")
 
-              # Write prompt to temp file
               prompt = f"""You are maintaining a pull request.
 
           URL: https://github.com/{REPO}/pull/{number}
@@ -365,28 +444,7 @@ jobs:
           5. Do not merge. Do not close. Do not force-push.
           6. If fundamentally broken beyond repair, add a comment explaining and stop."""
 
-              import tempfile
-              with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-                  f.write(prompt)
-                  prompt_file = f.name
-
-              # Call create_session.py directly
-              cmd = [
-                  sys.executable, os.path.join(os.environ.get("GITHUB_ACTION_PATH", "."), "create_session.py"),
-                  "--api-url", API_URL,
-                  "--api-token", API_TOKEN,
-                  "--project", PROJECT,
-                  "--prompt-file", prompt_file,
-                  "--timeout", "60",
-                  "--model", "claude-opus-4-6",
-                  "--repos", json.dumps([{"url": f"https://github.com/{REPO}", "branch": "main"}]),
-              ]
-              if session_id:
-                  cmd.extend(["--session-name", session_id])
-              result = subprocess.run(cmd, capture_output=True, text=True)
-              print(f"  Session result: {result.stdout.strip()}")
-              if result.returncode != 0:
-                  print(f"  Error: {result.stderr.strip()}")
+              create_session_api(prompt, session_name=session_id)
 
               processed += 1
 
