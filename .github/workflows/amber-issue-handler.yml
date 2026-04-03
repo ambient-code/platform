@@ -28,6 +28,7 @@ permissions:
   contents: read
   issues: write
   pull-requests: write
+  checks: write
 
 jobs:
   # -- Issue: labeled ambient-code:auto-fix → fresh session prompt --
@@ -274,10 +275,45 @@ jobs:
           wait: 'true'
           timeout: '0'
 
+      - name: Post check run on PR
+        if: >-
+          always()
+          && steps.context.outputs.is_fork != 'true'
+          && steps.context.outputs.type == 'pr'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SESSION_NAME="${{ steps.fix-session.outputs.session-name || steps.fix-issue-session.outputs.session-name || steps.custom-session.outputs.session-name }}"
+          SESSION_URL="${{ steps.fix-session.outputs.session-url || steps.fix-issue-session.outputs.session-url || steps.custom-session.outputs.session-url }}"
+          SESSION_PHASE="${{ steps.fix-session.outputs.session-phase || steps.fix-issue-session.outputs.session-phase || steps.custom-session.outputs.session-phase }}"
+
+          if [ -z "$SESSION_NAME" ]; then
+            exit 0
+          fi
+
+          # Get PR head SHA
+          HEAD_SHA=$(gh pr view ${{ steps.context.outputs.number }} --repo "${{ github.repository }}" --json headRefOid --jq '.headRefOid')
+
+          # Map session phase to check conclusion
+          case "$SESSION_PHASE" in
+            Completed|Running) CONCLUSION="success" ;;
+            Error|Failed) CONCLUSION="failure" ;;
+            *) CONCLUSION="neutral" ;;
+          esac
+
+          gh api "repos/${{ github.repository }}/check-runs" \
+            -X POST \
+            -f "name=Amber Session" \
+            -f "head_sha=$HEAD_SHA" \
+            -f "status=completed" \
+            -f "conclusion=$CONCLUSION" \
+            -f "details_url=$SESSION_URL" \
+            -f "output[title]=Amber — ${{ steps.context.outputs.prompt_type }} prompt" \
+            -f "output[summary]=Session \`$SESSION_NAME\` (phase: $SESSION_PHASE)" || true
+
       - name: Session summary
         if: always() && steps.context.outputs.is_fork != 'true'
         run: |
-          # Get session name from whichever step ran (only one will have output)
           SESSION_NAME="${{ steps.fix-session.outputs.session-name || steps.fix-issue-session.outputs.session-name || steps.custom-session.outputs.session-name }}"
           SESSION_PHASE="${{ steps.fix-session.outputs.session-phase || steps.fix-issue-session.outputs.session-phase || steps.custom-session.outputs.session-phase }}"
 
@@ -368,6 +404,24 @@ jobs:
               except Exception as e:
                   print(f"  Failed to start session: {e}")
                   return False
+
+          def post_check_run(pr_number, session_name, status="in_progress"):
+              """Post a check run on the PR linking to the Amber session."""
+              head_sha = gh("pr", "view", str(pr_number), "--repo", REPO, "--json", "headRefOid", "--jq", ".headRefOid")
+              if not head_sha:
+                  return
+              api_url_base = API_URL.rstrip("/").replace("/api", "")
+              session_url = f"{api_url_base}/projects/{PROJECT}/sessions/{session_name}"
+              conclusion = "success" if status == "completed" else "neutral"
+              gh("api", f"repos/{REPO}/check-runs",
+                 "-X", "POST",
+                 "-f", "name=Amber Session",
+                 "-f", f"head_sha={head_sha}",
+                 "-f", "status=completed",
+                 "-f", f"conclusion={conclusion}",
+                 "-f", f"details_url={session_url}",
+                 "-f", "output[title]=Amber — batch fix",
+                 "-f", f"output[summary]=Session `{session_name}` triggered for PR #{pr_number}")
 
           def create_session_api(prompt, session_name="", model="claude-opus-4-6"):
               """Create a new session or send message to existing one."""
@@ -476,7 +530,9 @@ jobs:
           5. Do not merge. Do not close. Do not force-push.
           6. If fundamentally broken beyond repair, add a comment explaining and stop."""
 
-              create_session_api(prompt, session_name=session_id)
+              result_name = create_session_api(prompt, session_name=session_id)
+              if result_name:
+                  post_check_run(number, result_name)
 
               # Increment retry_count in frontmatter so circuit breaker advances
               if fm:
