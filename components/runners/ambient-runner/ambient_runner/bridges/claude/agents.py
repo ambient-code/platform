@@ -116,11 +116,7 @@ def load_agents_from_directory(agents_dir: str) -> dict[str, AgentDefinition]:
             logger.info("Loaded custom agent '%s' from %s", name, md_file.name)
 
         except Exception:
-            logger.warning(
-                "Failed to load agent from %s", md_file.name, exc_info=True
-            )
+            logger.warning("Failed to load agent from %s", md_file.name, exc_info=True)
 
-    logger.info(
-        "Loaded %d custom agent(s) from %s", len(agents), agents_dir
-    )
+    logger.info("Loaded %d custom agent(s) from %s", len(agents), agents_dir)
     return agents

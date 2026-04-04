@@ -4,8 +4,6 @@ import textwrap
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from ambient_runner.bridges.claude.agents import (
     _parse_agent_file,
     _parse_string_list,
@@ -81,7 +79,9 @@ class TestParseAgentFile:
 
     def test_quoted_values_stripped(self, tmp_path: Path):
         md = tmp_path / "quoted.md"
-        md.write_text('---\nname: "my-agent"\ndescription: \'does things\'\n---\nBody.\n')
+        md.write_text(
+            "---\nname: \"my-agent\"\ndescription: 'does things'\n---\nBody.\n"
+        )
 
         metadata, body = _parse_agent_file(md)
 
@@ -213,7 +213,10 @@ class TestLoadAgentsFromDirectory:
         result = load_agents_from_directory(str(agents_dir))
 
         assert "my-agent" in result
-        assert mock_agent_def.call_args.kwargs["description"] == "An agent without a name field"
+        assert (
+            mock_agent_def.call_args.kwargs["description"]
+            == "An agent without a name field"
+        )
 
     @patch("ambient_runner.bridges.claude.agents.AgentDefinition")
     def test_fallback_description(self, mock_agent_def, tmp_path: Path):
@@ -230,7 +233,7 @@ class TestLoadAgentsFromDirectory:
             """,
         )
 
-        result = load_agents_from_directory(str(agents_dir))
+        load_agents_from_directory(str(agents_dir))
 
         assert mock_agent_def.call_args.kwargs["description"] == "Agent: bare-agent"
 
@@ -268,7 +271,10 @@ class TestLoadAgentsFromDirectory:
         assert len(result) == 1
         assert "real" in result
 
-    @patch("ambient_runner.bridges.claude.agents.AgentDefinition", side_effect=Exception("boom"))
+    @patch(
+        "ambient_runner.bridges.claude.agents.AgentDefinition",
+        side_effect=Exception("boom"),
+    )
     def test_bad_file_logged_and_skipped(self, mock_agent_def, tmp_path: Path):
         agents_dir = tmp_path / "agents"
         self._write_agent(
