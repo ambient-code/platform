@@ -27,7 +27,10 @@ def _parse_agent_file(file_path: Path) -> tuple[dict[str, str], str]:
     try:
         content = file_path.read_text(encoding="utf-8")
     except OSError:
-        return {}, ""
+        logger.warning("Cannot read agent file %s", file_path.name, exc_info=True)
+        raise
+
+    content = content.replace("\r\n", "\n")
 
     if not content.startswith("---\n"):
         return {}, content
