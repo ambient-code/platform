@@ -538,6 +538,12 @@ class ClaudeBridge(PlatformBridge):
         if add_dirs:
             os.environ["CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"] = "1"
 
+        # Custom agents from .claude/agents/*.md
+        from ambient_runner.bridges.claude.agents import load_agents_from_directory
+
+        agents_dir = os.path.join(cwd_path, ".claude", "agents")
+        custom_agents = load_agents_from_directory(agents_dir)
+
         # Observability (shared helper, before MCP so rubric tool can access it)
         self._obs = await setup_bridge_observability(self._context, configured_model)
 
@@ -561,6 +567,7 @@ class ClaudeBridge(PlatformBridge):
         self._configured_model = configured_model
         self._cwd_path = cwd_path
         self._add_dirs = add_dirs
+        self._custom_agents = custom_agents
         self._mcp_servers = mcp_servers
         self._allowed_tools = allowed_tools
         self._system_prompt = system_prompt
@@ -615,6 +622,8 @@ class ClaudeBridge(PlatformBridge):
             options["add_dirs"] = self._add_dirs
         if self._configured_model:
             options["model"] = self._configured_model
+        if self._custom_agents:
+            options["agents"] = self._custom_agents
 
         adapter = ClaudeAgentAdapter(
             name="claude_code_runner",
