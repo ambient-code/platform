@@ -109,6 +109,24 @@ class BackendAPIClient:
             logger.error(f"URL error from {url}: {e.reason}")
             raise
 
+    def _resolve_session_id(self, session_name: str) -> str:
+        """Return the session ID for a given session name.
+
+        Looks up the session by name within the current project and returns
+        its ID (KSUID), which is required by action routes like /stop and /start.
+
+        Raises:
+            ValueError: If no session with that name is found in the project.
+        """
+        search_expr = f"name = '{session_name}' and project_id = '{self.project_name}'"
+        params = urlencode({"search": search_expr, "size": 10})
+        path = f"/api/ambient/v1/sessions?{params}"
+        response = self._make_request("GET", path)
+        items = response.get("items", [])
+        if not items:
+            raise ValueError(f"Session '{session_name}' not found in project '{self.project_name}'")
+        return items[0]["id"]
+
     def list_sessions(
         self,
         include_completed: bool = False,
@@ -121,43 +139,42 @@ class BackendAPIClient:
 
         Args:
             include_completed: Whether to include stopped/completed sessions
-            search: Search term to filter by name or displayName
-            limit: Max number of sessions to return (default 20, max 100)
+            search: Additional TSL search expression to AND with the project filter
+            limit: Max number of sessions to return (default 100)
             offset: Offset for pagination
             phase: Filter by phase (Running, Pending, Stopped, Failed, Completed)
 
         Returns:
             Dict with 'items', 'totalCount', 'hasMore', 'nextOffset' keys
         """
-        path = f"/projects/{self.project_name}/agentic-sessions"
-
-        query_params: Dict[str, Any] = {}
+        base_search = f"project_id = '{self.project_name}'"
         if search:
-            query_params["search"] = search
-        if limit is not None:
-            query_params["limit"] = limit
+            base_search = f"{base_search} and {search}"
+
+        query_params: Dict[str, Any] = {
+            "search": base_search,
+            "size": limit if limit is not None else 100,
+        }
         if offset is not None:
-            query_params["offset"] = offset
-        if query_params:
-            path = f"{path}?{urlencode(query_params)}"
+            query_params["page"] = (offset // query_params["size"]) + 1
+        path = f"/api/ambient/v1/sessions?{urlencode(query_params)}"
 
         response = self._make_request("GET", path)
 
         items = response.get("items", [])
 
-        # Client-side phase filtering (backend doesn't support phase query param)
         if phase:
             phase_lower = phase.lower()
             items = [
                 s
                 for s in items
-                if s.get("status", {}).get("phase", "").lower() == phase_lower
+                if s.get("phase", "").lower() == phase_lower
             ]
         elif not include_completed:
             items = [
                 s
                 for s in items
-                if s.get("status", {}).get("phase", "").lower()
+                if s.get("phase", "").lower()
                 not in ("stopped", "completed", "failed")
             ]
 
@@ -169,7 +186,7 @@ class BackendAPIClient:
         }
 
     def get_session(self, session_name: str) -> Dict[str, Any]:
-        """Get details of a specific session.
+        """Get details of a specific session by name.
 
         Args:
             session_name: Name of the session to retrieve
@@ -177,7 +194,8 @@ class BackendAPIClient:
         Returns:
             Session object with full details
         """
-        path = f"/projects/{self.project_name}/agentic-sessions/{session_name}"
+        session_id = self._resolve_session_id(session_name)
+        path = f"/api/ambient/v1/sessions/{session_id}"
         return self._make_request("GET", path)
 
     def create_session(
@@ -205,27 +223,27 @@ class BackendAPIClient:
         Returns:
             Created session object
         """
-        path = f"/projects/{self.project_name}/agentic-sessions"
+        path = "/api/ambient/v1/sessions"
 
         payload: Dict[str, Any] = {
-            "sessionName": session_name,
+            "name": session_name,
+            "project_id": self.project_name,
         }
 
-        # Set parent session ID so the child inherits the parent's userContext
         parent_session = os.getenv("AGENTIC_SESSION_NAME", "").strip()
         if parent_session:
-            payload["parentSessionId"] = parent_session
+            payload["parent_session_id"] = parent_session
 
         if initial_prompt:
-            payload["initialPrompt"] = initial_prompt
+            payload["prompt"] = initial_prompt
         if display_name:
-            payload["displayName"] = display_name
+            payload["display_name"] = display_name
         if repos:
-            payload["repos"] = repos
+            payload["repos"] = json.dumps(repos) if not isinstance(repos, str) else repos
         if model:
-            payload["llmSettings"] = {"model": model}
+            payload["llm_model"] = model
         if workflow:
-            payload["activeWorkflow"] = workflow
+            payload["workflow_id"] = workflow.get("id") or workflow.get("gitUrl", "")
 
         return self._make_request("POST", path, data=payload)
 
@@ -238,7 +256,8 @@ class BackendAPIClient:
         Returns:
             Response from the backend
         """
-        path = f"/projects/{self.project_name}/agentic-sessions/{session_name}/stop"
+        session_id = self._resolve_session_id(session_name)
+        path = f"/api/ambient/v1/sessions/{session_id}/stop"
         return self._make_request("POST", path)
 
     def send_message(
@@ -247,24 +266,23 @@ class BackendAPIClient:
         message: str,
         thread_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Send a message to a session (AG-UI run endpoint).
+        """Send a message to a session.
 
         Args:
             session_name: Name of the session
             message: Message content to send
-            thread_id: Optional thread ID for multi-threaded sessions
+            thread_id: Unused (retained for API compatibility)
 
         Returns:
-            Run metadata (runId, threadId)
+            Pushed message object
         """
-        path = f"/projects/{self.project_name}/agentic-sessions/{session_name}/agui/run"
+        session_id = self._resolve_session_id(session_name)
+        path = f"/api/ambient/v1/sessions/{session_id}/messages"
 
-        msg_id = str(uuid.uuid4())
         payload: Dict[str, Any] = {
-            "messages": [{"id": msg_id, "role": "user", "content": message}],
+            "event_type": "user",
+            "payload": message,
         }
-        if thread_id:
-            payload["threadId"] = thread_id
 
         return self._make_request("POST", path, data=payload)
 
@@ -277,7 +295,8 @@ class BackendAPIClient:
         Returns:
             Response from the backend
         """
-        path = f"/projects/{self.project_name}/agentic-sessions/{session_name}/start"
+        session_id = self._resolve_session_id(session_name)
+        path = f"/api/ambient/v1/sessions/{session_id}/start"
         return self._make_request("POST", path)
 
     def list_workflows(self) -> List[Dict[str, Any]]:
@@ -317,16 +336,10 @@ class BackendAPIClient:
         """
         cap = max_events if max_events and max_events > 0 else self._MAX_EXPORT_EVENTS
 
-        path = f"/projects/{self.project_name}/agentic-sessions/{session_name}/export"
+        session_id = self._resolve_session_id(session_name)
+        path = f"/api/ambient/v1/sessions/{session_id}/messages"
         response = self._make_request("GET", path)
-        # Export returns {"aguiEvents": [...], "sessionId": ..., ...}
-        events = response.get("aguiEvents", [])
-        if isinstance(events, str):
-            # aguiEvents may be a JSON-encoded string (RawMessage from Go)
-            try:
-                events = json.loads(events)
-            except json.JSONDecodeError:
-                return []
-        if isinstance(events, list):
-            return events[-cap:]
+        items = response.get("items", [])
+        if isinstance(items, list):
+            return items[-cap:]
         return []
