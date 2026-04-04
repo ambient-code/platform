@@ -918,29 +918,47 @@ func (r *SimpleKubeReconciler) StartTokenRefreshLoop(ctx context.Context) {
 }
 
 func (r *SimpleKubeReconciler) refreshAllRunningTokens(ctx context.Context) {
-	sdk, err := r.factory.ForProject(ctx, "")
-	if err != nil {
-		r.logger.Warn().Err(err).Msg("token refresh loop: failed to get SDK client")
-		return
-	}
-
-	opts := &types.ListOptions{Page: 1, Size: 100, Search: "phase = 'Running'"}
+	projectOpts := &types.ListOptions{Page: 1, Size: 100}
 	for {
-		list, err := sdk.Sessions().List(ctx, opts)
+		projectSDK, err := r.factory.ForProject(ctx, "_")
 		if err != nil {
-			r.logger.Warn().Err(err).Int("page", opts.Page).Msg("token refresh loop: failed to list running sessions")
+			r.logger.Warn().Err(err).Msg("token refresh loop: failed to get SDK client")
 			return
 		}
-		for i := range list.Items {
-			session := list.Items[i]
-			namespace := r.namespaceForSession(session)
-			if err := r.refreshRunnerToken(ctx, namespace, session.ID); err != nil {
-				r.logger.Warn().Err(err).Str("session_id", session.ID).Str("namespace", namespace).Msg("token refresh loop: failed to refresh token")
+		projectList, err := projectSDK.Projects().List(ctx, projectOpts)
+		if err != nil {
+			r.logger.Warn().Err(err).Int("page", projectOpts.Page).Msg("token refresh loop: failed to list projects")
+			return
+		}
+		for _, project := range projectList.Items {
+			sdk, err := r.factory.ForProject(ctx, project.ID)
+			if err != nil {
+				r.logger.Warn().Err(err).Str("project_id", project.ID).Msg("token refresh loop: failed to get SDK client for project")
+				continue
+			}
+			sessionOpts := &types.ListOptions{Page: 1, Size: 100, Search: "phase = 'Running'"}
+			for {
+				list, err := sdk.Sessions().List(ctx, sessionOpts)
+				if err != nil {
+					r.logger.Warn().Err(err).Str("project_id", project.ID).Int("page", sessionOpts.Page).Msg("token refresh loop: failed to list running sessions")
+					break
+				}
+				for i := range list.Items {
+					session := list.Items[i]
+					namespace := r.namespaceForSession(session)
+					if err := r.refreshRunnerToken(ctx, namespace, session.ID); err != nil {
+						r.logger.Warn().Err(err).Str("session_id", session.ID).Str("namespace", namespace).Msg("token refresh loop: failed to refresh token")
+					}
+				}
+				if len(list.Items) == 0 || list.Total <= sessionOpts.Page*sessionOpts.Size {
+					break
+				}
+				sessionOpts.Page++
 			}
 		}
-		if len(list.Items) == 0 || list.Total <= opts.Page*opts.Size {
+		if len(projectList.Items) == 0 || projectList.Total <= projectOpts.Page*projectOpts.Size {
 			break
 		}
-		opts.Page++
+		projectOpts.Page++
 	}
 }
