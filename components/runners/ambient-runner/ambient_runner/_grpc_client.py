@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
+import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Optional
@@ -21,25 +24,74 @@ _SERVICE_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
 _SA_TOKEN_FILE = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
 
 
+_CP_TOKEN_FETCH_ATTEMPTS = 3
+_CP_TOKEN_FETCH_TIMEOUT = 10
+
+
+def _validate_cp_token_url(url: str) -> None:
+    """Reject non-http(s) or credential-bearing URLs to prevent SA token exfiltration."""
+    parsed = urllib.parse.urlparse(url)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise RuntimeError(
+            f"invalid CP token URL (must be http/https with no credentials): {url!r}"
+        )
+
+
 def _fetch_token_from_cp(cp_token_url: str) -> str:
-    """Fetch a fresh API token from the CP /token endpoint using the pod SA token."""
+    """Fetch a fresh API token from the CP /token endpoint using the pod SA token.
+
+    Retries up to _CP_TOKEN_FETCH_ATTEMPTS times with exponential backoff
+    to handle transient CP unavailability.
+    """
+    _validate_cp_token_url(cp_token_url)
+
     try:
         sa_token = _SA_TOKEN_FILE.read_text().strip()
     except OSError as e:
         raise RuntimeError(f"cannot read SA token from {_SA_TOKEN_FILE}: {e}") from e
 
-    req = urllib.request.Request(
-        cp_token_url,
-        headers={"Authorization": f"Bearer {sa_token}"},
-    )
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        body = json.loads(resp.read())
+    last_err: Exception = RuntimeError("no attempts made")
+    for attempt in range(_CP_TOKEN_FETCH_ATTEMPTS):
+        if attempt > 0:
+            backoff = 2 ** (attempt - 1)
+            logger.warning(
+                "[GRPC CLIENT] CP token fetch attempt %d/%d failed, retrying in %ds: %s",
+                attempt,
+                _CP_TOKEN_FETCH_ATTEMPTS,
+                backoff,
+                last_err,
+            )
+            time.sleep(backoff)
+        try:
+            req = urllib.request.Request(
+                cp_token_url,
+                headers={"Authorization": f"Bearer {sa_token}"},
+            )
+            with urllib.request.urlopen(req, timeout=_CP_TOKEN_FETCH_TIMEOUT) as resp:
+                body = json.loads(resp.read())
+            token = body.get("token", "")
+            if not token:
+                raise RuntimeError("CP /token response missing 'token' field")
+            logger.info("[GRPC CLIENT] Fetched fresh API token from CP token endpoint")
+            return token
+        except urllib.error.HTTPError as e:
+            resp_body = ""
+            try:
+                resp_body = e.read().decode(errors="replace")
+            except Exception:
+                pass
+            last_err = RuntimeError(f"CP /token HTTP {e.code}: {resp_body}")
+        except Exception as e:
+            last_err = e
 
-    token = body.get("token", "")
-    if not token:
-        raise RuntimeError("CP /token response missing 'token' field")
-    logger.info("[GRPC CLIENT] Fetched fresh API token from CP token endpoint")
-    return token
+    raise RuntimeError(
+        f"CP token endpoint unreachable after {_CP_TOKEN_FETCH_ATTEMPTS} attempts: {last_err}"
+    ) from last_err
 
 
 def _load_ca_cert(ca_cert_file: Optional[str]) -> Optional[bytes]:

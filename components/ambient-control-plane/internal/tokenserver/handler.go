@@ -23,8 +23,7 @@ const (
 )
 
 type tokenResponse struct {
-	Token     string `json:"token"`
-	ExpiresAt string `json:"expires_at,omitempty"`
+	Token string `json:"token"`
 }
 
 type handler struct {

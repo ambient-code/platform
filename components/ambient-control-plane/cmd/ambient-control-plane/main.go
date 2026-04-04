@@ -182,20 +182,25 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		inf.RegisterHandler("sessions", sessionRec.Reconcile)
 	}
 
-	errCh := make(chan error, 1)
+	tsErrCh := make(chan error, 1)
 	go func() {
-		if err := startTokenServer(ctx, cfg, tokenProvider); err != nil {
-			errCh <- err
-		}
+		tsErrCh <- startTokenServer(ctx, cfg, tokenProvider)
 	}()
 
-	infErr := inf.Run(ctx)
+	infErrCh := make(chan error, 1)
+	go func() {
+		infErrCh <- inf.Run(ctx)
+	}()
+
 	select {
-	case tsErr := <-errCh:
-		return fmt.Errorf("token server: %w", tsErr)
-	default:
+	case tsErr := <-tsErrCh:
+		if tsErr != nil {
+			return fmt.Errorf("token server: %w", tsErr)
+		}
+		return <-infErrCh
+	case infErr := <-infErrCh:
+		return infErr
 	}
-	return infErr
 }
 
 func startTokenServer(ctx context.Context, cfg *config.ControlPlaneConfig, tokenProvider auth.TokenProvider) error {
