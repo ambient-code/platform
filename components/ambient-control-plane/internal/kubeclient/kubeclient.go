@@ -57,6 +57,12 @@ var RoleGVR = schema.GroupVersionResource{
 	Resource: "roles",
 }
 
+var NetworkPolicyGVR = schema.GroupVersionResource{
+	Group:    "networking.k8s.io",
+	Version:  "v1",
+	Resource: "networkpolicies",
+}
+
 type KubeClient struct {
 	dynamic dynamic.Interface
 	logger  zerolog.Logger
@@ -256,6 +262,14 @@ func (kc *KubeClient) DeleteRolesByLabel(ctx context.Context, namespace, labelSe
 
 func (kc *KubeClient) DeleteRoleBindingsByLabel(ctx context.Context, namespace, labelSelector string) error {
 	return kc.dynamic.Resource(RoleBindingGVR).Namespace(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: labelSelector})
+}
+
+func (kc *KubeClient) GetNetworkPolicy(ctx context.Context, namespace, name string) (*unstructured.Unstructured, error) {
+	return kc.dynamic.Resource(NetworkPolicyGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+}
+
+func (kc *KubeClient) CreateNetworkPolicy(ctx context.Context, obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	return kc.dynamic.Resource(NetworkPolicyGVR).Namespace(obj.GetNamespace()).Create(ctx, obj, metav1.CreateOptions{})
 }
 
 func (kc *KubeClient) GetResource(ctx context.Context, gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {

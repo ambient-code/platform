@@ -266,6 +266,65 @@ func (r *SimpleKubeReconciler) ensureNamespaceExists(ctx context.Context, namesp
 		}
 	}
 
+	if r.cfg.CPRuntimeNamespace != "" {
+		if err := r.ensureAPIServerNetworkPolicy(ctx, namespace); err != nil {
+			r.logger.Warn().Err(err).Str("namespace", namespace).Msg("failed to ensure api-server network policy")
+		}
+	}
+
+	return nil
+}
+
+func (r *SimpleKubeReconciler) ensureAPIServerNetworkPolicy(ctx context.Context, namespace string) error {
+	name := "allow-ambient-api-server"
+
+	if _, err := r.nsKube().GetNetworkPolicy(ctx, namespace, name); err == nil {
+		return nil
+	}
+
+	np := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "networking.k8s.io/v1",
+			"kind":       "NetworkPolicy",
+			"metadata": map[string]interface{}{
+				"name":      name,
+				"namespace": namespace,
+				"labels": map[string]interface{}{
+					LabelManaged:   "true",
+					LabelManagedBy: "ambient-control-plane",
+				},
+			},
+			"spec": map[string]interface{}{
+				"podSelector": map[string]interface{}{},
+				"ingress": []interface{}{
+					map[string]interface{}{
+						"from": []interface{}{
+							map[string]interface{}{
+								"namespaceSelector": map[string]interface{}{
+									"matchLabels": map[string]interface{}{
+										"kubernetes.io/metadata.name": r.cfg.CPRuntimeNamespace,
+									},
+								},
+							},
+						},
+						"ports": []interface{}{
+							map[string]interface{}{
+								"protocol": "TCP",
+								"port":     int64(8001),
+							},
+						},
+					},
+				},
+				"policyTypes": []interface{}{"Ingress"},
+			},
+		},
+	}
+
+	if _, err := r.nsKube().CreateNetworkPolicy(ctx, np); err != nil && !k8serrors.IsAlreadyExists(err) {
+		return fmt.Errorf("creating network policy %s in %s: %w", name, namespace, err)
+	}
+
+	r.logger.Debug().Str("namespace", namespace).Str("policy", name).Msg("api-server network policy created")
 	return nil
 }
 
