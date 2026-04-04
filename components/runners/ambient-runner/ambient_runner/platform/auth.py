@@ -122,6 +122,7 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
     parsed = urlparse(base)
     if parsed.hostname and not (
         parsed.hostname.endswith(".svc.cluster.local")
+        or parsed.hostname.endswith(".svc")
         or parsed.hostname == "localhost"
         or parsed.hostname == "127.0.0.1"
     ):
