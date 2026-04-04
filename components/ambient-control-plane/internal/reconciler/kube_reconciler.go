@@ -904,6 +904,7 @@ func (r *SimpleKubeReconciler) refreshRunnerToken(ctx context.Context, namespace
 
 func (r *SimpleKubeReconciler) StartTokenRefreshLoop(ctx context.Context) {
 	go func() {
+		r.refreshAllRunningTokens(ctx)
 		ticker := time.NewTicker(runnerTokenRefreshEvery)
 		defer ticker.Stop()
 		for {
