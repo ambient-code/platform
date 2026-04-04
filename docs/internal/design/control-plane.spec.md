@@ -109,9 +109,10 @@ Each section is joined with `\n\n`. Empty sections are omitted. If all four are 
 | `WORKSPACE_PATH` | `/workspace` | Claude Code working directory |
 | `AGUI_PORT` | `8001` | Runner HTTP listener port |
 | `BACKEND_API_URL` | CP config | api-server base URL |
-| `BOT_TOKEN` | from K8s secret | api-server bearer token |
+| `BOT_TOKEN` | from K8s secret | api-server bearer token (bootstrap only — see Token Endpoint) |
 | `AMBIENT_GRPC_URL` | CP config | api-server gRPC address |
 | `AMBIENT_GRPC_USE_TLS` | CP config | TLS flag for gRPC |
+| `AMBIENT_CP_TOKEN_URL` | CP config | CP token endpoint URL (e.g. `http://ambient-control-plane.{ns}.svc:8080/token`) |
 | `INITIAL_PROMPT` | assembled prompt | Auto-execute on startup |
 | `USE_VERTEX` / `ANTHROPIC_VERTEX_PROJECT_ID` / `CLOUD_ML_REGION` | CP config | Vertex AI config (when enabled) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | `/app/vertex/ambient-code-key.json` | Vertex service account path |
@@ -357,6 +358,96 @@ Status: 🔲 planned
 
 ---
 
+## CP Token Endpoint
+
+### Problem
+
+Runner pods authenticate to the api-server gRPC interface using a `BOT_TOKEN` injected at pod start and refreshed by the CP every 4 minutes via a K8s Secret update. In OIDC environments (e.g. S0), `BOT_TOKEN` is an OIDC client-credentials JWT with a 15-minute TTL.
+
+This creates a three-way async race:
+
+1. CP ticker writes a fresh token to the Secret every 4 minutes
+2. Kubelet propagates the Secret update to the pod's file mount (30–60s delay in busy clusters)
+3. Runner reads the file mount on gRPC reconnect
+
+When the CP writes a token that is already close to expiry — because its in-memory `OIDCTokenProvider` cache had a short buffer — the runner reconnects with an already-expired token and enters an `UNAUTHENTICATED` loop.
+
+The fundamental issue is that the Secret-write model is an **async push** with no synchronization guarantee between when the token is written and when the runner reads it.
+
+### Solution
+
+The CP exposes a lightweight HTTP endpoint that runners call **synchronously on demand** to obtain a guaranteed-fresh token. This eliminates the async race entirely.
+
+```
+GET /token
+```
+
+- Served by a new `net/http` listener on the CP (port 8080, separate from any existing listener)
+- Runner authenticates using its K8s service account token (mounted at `/var/run/secrets/kubernetes.io/serviceaccount/token`) — validated by the CP via the K8s `TokenReview` API
+- CP calls `tokenProvider.Token(ctx)` at request time and returns the result — always fresh, always valid TTL
+- Response: `{"token": "<value>", "expires_at": "<RFC3339>"}`
+
+### Authentication
+
+The runner's K8s SA token is a signed JWT issued by the K8s API server. The CP validates it using the K8s `authentication/v1` `TokenReview` resource:
+
+```
+POST /apis/authentication.k8s.io/v1/tokenreviews
+{
+  "spec": { "token": "<runner SA token>" }
+}
+```
+
+A successful `TokenReview` returns `status.authenticated=true` and `status.user.username` (e.g. `system:serviceaccount:ambient-code--myproject:session-abc123-sa`). The CP verifies the username prefix matches a known runner SA pattern before returning a token.
+
+This approach uses credentials already present in every pod — no new secrets required.
+
+### Token Bootstrap vs. Renewal
+
+| Phase | Mechanism |
+|---|---|
+| Initial startup | `BOT_TOKEN` env var / Secret file mount (injected by CP at pod creation) |
+| gRPC reconnect | `GET /token` from CP endpoint — synchronous, guaranteed fresh |
+
+The Secret write loop is retained for initial bootstrap. For renewal, runners call the CP endpoint.
+
+### CP HTTP Server
+
+The CP adds a minimal `net/http` server alongside its existing K8s controller loop:
+
+```go
+mux := http.NewServeMux()
+mux.HandleFunc("/token", tokenHandler)
+mux.HandleFunc("/healthz", healthHandler)
+http.ListenAndServe(":8080", mux)
+```
+
+The server runs in a goroutine alongside `runKubeMode`. It shares the existing `tokenProvider` and `k8sClient` from the main CP config.
+
+### Runner Changes
+
+`_grpc_client.py` `reconnect()` is updated to call the CP token endpoint instead of re-reading the Secret file:
+
+```python
+def reconnect(self) -> None:
+    fresh_token = _fetch_token_from_cp()   # GET AMBIENT_CP_TOKEN_URL/token with SA token
+    self.close()
+    self._token = fresh_token
+```
+
+`AMBIENT_CP_TOKEN_URL` is injected by the CP as an env var when creating the runner pod. If not set (local dev / non-OIDC environments), the runner falls back to reading from the Secret file mount.
+
+### New CP Internal Packages
+
+| Package | Purpose |
+|---|---|
+| `internal/tokenserver/server.go` | HTTP server setup and graceful shutdown |
+| `internal/tokenserver/handler.go` | `GET /token` handler — TokenReview validation + tokenProvider call |
+
+Status: 🔲 planned — RHOAIENG-56711
+
+---
+
 ## Runner Credential Fetch
 
 The runner fetches provider credentials at session start before invoking Claude. Credentials are resolved by the CP and injected into the runner pod as `CREDENTIAL_IDS` — a JSON-encoded map of `provider → credential_id`:
@@ -427,3 +518,6 @@ The `ambient-control-plane` ServiceAccount does not have `delete` on `namespaces
 | assistant payload → plain string | Symmetric with user payload; reasoning is observability data not conversation record |
 | GET /events is runner-local | Runner has the event queue; api-server proxies it; no second fan-out layer needed |
 | Namespace per project, not per session | Sessions within a project share a namespace; secrets and RBAC are project-scoped |
+| CP token endpoint over Secret-write renewal | Secret writes are async push with no synchronization guarantee vs. token TTL; synchronous pull from CP eliminates the race entirely |
+| Runner SA token for CP auth | K8s SA tokens are already mounted in every pod, long-lived, and K8s-managed — no new secrets or out-of-band key distribution required |
+| BOT_TOKEN Secret retained for bootstrap | Avoids a chicken-and-egg: runner needs a token to make the first gRPC call before the CP endpoint can be contacted; Secret provides the initial credential |
