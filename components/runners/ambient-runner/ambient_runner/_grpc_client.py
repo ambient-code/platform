@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
+import urllib.request
 from pathlib import Path
 from typing import Optional
 
@@ -11,23 +13,33 @@ logger = logging.getLogger(__name__)
 
 _ENV_GRPC_URL = "AMBIENT_GRPC_URL"
 _ENV_TOKEN = "BOT_TOKEN"
+_ENV_CP_TOKEN_URL = "AMBIENT_CP_TOKEN_URL"
 _ENV_USE_TLS = "AMBIENT_GRPC_USE_TLS"
 _ENV_CA_CERT = "AMBIENT_GRPC_CA_CERT_FILE"
 _DEFAULT_GRPC_URL = "ambient-api-server:9000"
 _SERVICE_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
-_BOT_TOKEN_FILE = Path("/var/run/secrets/ambient/bot-token")
+_SA_TOKEN_FILE = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
 
 
-def _read_current_token() -> str:
-    """Read the bot token, preferring the kubelet-rotated file mount over env var."""
+def _fetch_token_from_cp(cp_token_url: str) -> str:
+    """Fetch a fresh API token from the CP /token endpoint using the pod SA token."""
     try:
-        if _BOT_TOKEN_FILE.exists():
-            token = _BOT_TOKEN_FILE.read_text().strip()
-            if token:
-                return token
-    except OSError:
-        pass
-    return os.environ.get(_ENV_TOKEN, "")
+        sa_token = _SA_TOKEN_FILE.read_text().strip()
+    except OSError as e:
+        raise RuntimeError(f"cannot read SA token from {_SA_TOKEN_FILE}: {e}") from e
+
+    req = urllib.request.Request(
+        cp_token_url,
+        headers={"Authorization": f"Bearer {sa_token}"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        body = json.loads(resp.read())
+
+    token = body.get("token", "")
+    if not token:
+        raise RuntimeError("CP /token response missing 'token' field")
+    logger.info("[GRPC CLIENT] Fetched fresh API token from CP token endpoint")
+    return token
 
 
 def _load_ca_cert(ca_cert_file: Optional[str]) -> Optional[bytes]:
@@ -82,11 +94,13 @@ class AmbientGRPCClient:
         token: str,
         use_tls: bool = False,
         ca_cert_file: Optional[str] = None,
+        cp_token_url: str = "",
     ) -> None:
         self._grpc_url = grpc_url
         self._token = token
         self._use_tls = use_tls
         self._ca_cert_file = ca_cert_file
+        self._cp_token_url = cp_token_url
         self._channel: Optional[grpc.Channel] = None
         self._session_messages: Optional["SessionMessagesAPI"] = None  # noqa: F821
 
@@ -94,9 +108,17 @@ class AmbientGRPCClient:
     def from_env(cls) -> AmbientGRPCClient:
         """Create client from environment variables."""
         grpc_url = os.environ.get(_ENV_GRPC_URL, _DEFAULT_GRPC_URL)
-        token = _read_current_token()
+        cp_token_url = os.environ.get(_ENV_CP_TOKEN_URL, "")
         use_tls = os.environ.get(_ENV_USE_TLS, "").lower() in ("true", "1", "yes")
         ca_cert_file = os.environ.get(_ENV_CA_CERT)
+        if cp_token_url:
+            logger.info(
+                "[GRPC CLIENT] Fetching token from CP endpoint: url=%s", cp_token_url
+            )
+            token = _fetch_token_from_cp(cp_token_url)
+        else:
+            token = os.environ.get(_ENV_TOKEN, "")
+            logger.info("[GRPC CLIENT] Using BOT_TOKEN env var (local dev mode)")
         logger.info(
             "[GRPC CLIENT] Initializing from env: url=%s tls=%s token_len=%d",
             grpc_url,
@@ -104,12 +126,19 @@ class AmbientGRPCClient:
             len(token),
         )
         return cls(
-            grpc_url=grpc_url, token=token, use_tls=use_tls, ca_cert_file=ca_cert_file
+            grpc_url=grpc_url,
+            token=token,
+            use_tls=use_tls,
+            ca_cert_file=ca_cert_file,
+            cp_token_url=cp_token_url,
         )
 
     def reconnect(self) -> None:
-        """Close the existing channel and rebuild with a fresh token from the file mount."""
-        fresh_token = _read_current_token()
+        """Close the existing channel and rebuild with a fresh token from the CP endpoint."""
+        if self._cp_token_url:
+            fresh_token = _fetch_token_from_cp(self._cp_token_url)
+        else:
+            fresh_token = os.environ.get(_ENV_TOKEN, "")
         logger.info(
             "[GRPC CLIENT] Reconnecting with fresh token (len=%d)", len(fresh_token)
         )

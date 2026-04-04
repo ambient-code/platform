@@ -37,6 +37,8 @@ type ControlPlaneConfig struct {
 	MCPAPIServerURL       string
 	RunnerLogLevel        string
 	ProjectKubeTokenFile string
+	CPTokenListenAddr    string
+	CPTokenURL           string
 }
 
 func Load() (*ControlPlaneConfig, error) {
@@ -71,6 +73,8 @@ func Load() (*ControlPlaneConfig, error) {
 		MCPAPIServerURL:       envOrDefault("MCP_API_SERVER_URL", "http://ambient-api-server.ambient-code.svc:8000"),
 		RunnerLogLevel:        envOrDefault("RUNNER_LOG_LEVEL", "info"),
 		ProjectKubeTokenFile: os.Getenv("PROJECT_KUBE_TOKEN_FILE"),
+		CPTokenListenAddr:    envOrDefault("CP_TOKEN_LISTEN_ADDR", ":8080"),
+		CPTokenURL:           os.Getenv("CP_TOKEN_URL"),
 	}
 
 	if cfg.APIToken == "" && (cfg.OIDCClientID == "" || cfg.OIDCClientSecret == "") {
