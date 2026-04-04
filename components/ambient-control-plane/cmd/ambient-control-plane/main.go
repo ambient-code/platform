@@ -17,6 +17,7 @@ import (
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/informer"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/reconciler"
+	"github.com/ambient-code/platform/components/ambient-control-plane/internal/tokenserver"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/watcher"
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
 	"github.com/rs/zerolog"
@@ -24,6 +25,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 var (
@@ -138,6 +141,7 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		MCPAPIServerURL:       cfg.MCPAPIServerURL,
 		RunnerLogLevel:        cfg.RunnerLogLevel,
 		CPRuntimeNamespace:    cfg.CPRuntimeNamespace,
+		CPTokenURL:            cfg.CPTokenURL,
 	}
 
 	conn, err := grpc.NewClient(cfg.GRPCServerAddr, grpc.WithTransportCredentials(grpcCredentials(cfg.GRPCUseTLS)))
@@ -176,12 +180,46 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	sessionReconcilers := createSessionReconcilers(cfg.Reconcilers, factory, kube, projectKube, provisioner, kubeReconcilerCfg, log.Logger)
 	for _, sessionRec := range sessionReconcilers {
 		inf.RegisterHandler("sessions", sessionRec.Reconcile)
-		if kr, ok := sessionRec.(*reconciler.SimpleKubeReconciler); ok {
-			kr.StartTokenRefreshLoop(ctx)
-		}
 	}
 
-	return inf.Run(ctx)
+	tsErrCh := make(chan error, 1)
+	go func() {
+		tsErrCh <- startTokenServer(ctx, cfg, tokenProvider)
+	}()
+
+	infErrCh := make(chan error, 1)
+	go func() {
+		infErrCh <- inf.Run(ctx)
+	}()
+
+	select {
+	case tsErr := <-tsErrCh:
+		if tsErr != nil {
+			return fmt.Errorf("token server: %w", tsErr)
+		}
+		return <-infErrCh
+	case infErr := <-infErrCh:
+		return infErr
+	}
+}
+
+func startTokenServer(ctx context.Context, cfg *config.ControlPlaneConfig, tokenProvider auth.TokenProvider) error {
+	k8sConfig, err := buildK8sRestConfig(cfg.Kubeconfig)
+	if err != nil {
+		return fmt.Errorf("building k8s rest config for token server: %w", err)
+	}
+	ts, err := tokenserver.New(cfg.CPTokenListenAddr, tokenProvider, k8sConfig, log.Logger)
+	if err != nil {
+		return fmt.Errorf("creating token server: %w", err)
+	}
+	return ts.Start(ctx)
+}
+
+func buildK8sRestConfig(kubeconfig string) (*rest.Config, error) {
+	if kubeconfig != "" {
+		return clientcmd.BuildConfigFromFlags("", kubeconfig)
+	}
+	return rest.InClusterConfig()
 }
 
 func createSessionReconcilers(reconcilerTypes []string, factory *reconciler.SDKClientFactory, kube *kubeclient.KubeClient, projectKube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, cfg reconciler.KubeReconcilerConfig, logger zerolog.Logger) []reconciler.Reconciler {

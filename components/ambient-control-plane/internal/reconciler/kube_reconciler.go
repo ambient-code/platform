@@ -19,12 +19,6 @@ import (
 const (
 	mcpSidecarPort = int64(8090)
 	mcpSidecarURL  = "http://localhost:8090"
-
-	runnerTokenMountPath    = "/var/run/secrets/ambient"
-	runnerTokenFileName     = "bot-token"
-	runnerTokenVolumeKey    = "api-token"
-	runnerTokenVolumeName   = "runner-token"
-	runnerTokenRefreshEvery = 4 * time.Minute
 )
 
 type KubeReconcilerConfig struct {
@@ -44,6 +38,7 @@ type KubeReconcilerConfig struct {
 	MCPAPIServerURL       string
 	RunnerLogLevel        string
 	CPRuntimeNamespace    string
+	CPTokenURL            string
 }
 
 type SimpleKubeReconciler struct {
@@ -141,10 +136,6 @@ func (r *SimpleKubeReconciler) provisionSession(ctx context.Context, session typ
 	}
 
 	sessionLabel := sessionLabelSelector(session.ID)
-
-	if err := r.ensureSecret(ctx, namespace, session, sessionLabel); err != nil {
-		return fmt.Errorf("ensuring secret: %w", err)
-	}
 
 	if r.cfg.VertexEnabled {
 		if err := r.ensureVertexSecret(ctx, namespace); err != nil {
@@ -275,6 +266,65 @@ func (r *SimpleKubeReconciler) ensureNamespaceExists(ctx context.Context, namesp
 		}
 	}
 
+	if r.cfg.CPRuntimeNamespace != "" {
+		if err := r.ensureAPIServerNetworkPolicy(ctx, namespace); err != nil {
+			r.logger.Warn().Err(err).Str("namespace", namespace).Msg("failed to ensure api-server network policy")
+		}
+	}
+
+	return nil
+}
+
+func (r *SimpleKubeReconciler) ensureAPIServerNetworkPolicy(ctx context.Context, namespace string) error {
+	name := "allow-ambient-api-server"
+
+	if _, err := r.nsKube().GetNetworkPolicy(ctx, namespace, name); err == nil {
+		return nil
+	}
+
+	np := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "networking.k8s.io/v1",
+			"kind":       "NetworkPolicy",
+			"metadata": map[string]interface{}{
+				"name":      name,
+				"namespace": namespace,
+				"labels": map[string]interface{}{
+					LabelManaged:   "true",
+					LabelManagedBy: "ambient-control-plane",
+				},
+			},
+			"spec": map[string]interface{}{
+				"podSelector": map[string]interface{}{},
+				"ingress": []interface{}{
+					map[string]interface{}{
+						"from": []interface{}{
+							map[string]interface{}{
+								"namespaceSelector": map[string]interface{}{
+									"matchLabels": map[string]interface{}{
+										"kubernetes.io/metadata.name": r.cfg.CPRuntimeNamespace,
+									},
+								},
+							},
+						},
+						"ports": []interface{}{
+							map[string]interface{}{
+								"protocol": "TCP",
+								"port":     int64(8001),
+							},
+						},
+					},
+				},
+				"policyTypes": []interface{}{"Ingress"},
+			},
+		},
+	}
+
+	if _, err := r.nsKube().CreateNetworkPolicy(ctx, np); err != nil && !k8serrors.IsAlreadyExists(err) {
+		return fmt.Errorf("creating network policy %s in %s: %w", name, namespace, err)
+	}
+
+	r.logger.Debug().Str("namespace", namespace).Str("policy", name).Msg("api-server network policy created")
 	return nil
 }
 
@@ -309,41 +359,6 @@ func (r *SimpleKubeReconciler) ensureImagePullAccess(ctx context.Context, namesp
 	return nil
 }
 
-func (r *SimpleKubeReconciler) ensureSecret(ctx context.Context, namespace string, session types.Session, labelSelector string) error {
-	name := secretName(session.ID)
-
-	if _, err := r.nsKube().GetSecret(ctx, namespace, name); err == nil {
-		return nil
-	}
-
-	token, err := r.factory.Token(ctx)
-	if err != nil {
-		return fmt.Errorf("resolving API token: %w", err)
-	}
-
-	secret := &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": "v1",
-			"kind":       "Secret",
-			"metadata": map[string]interface{}{
-				"name":      name,
-				"namespace": namespace,
-				"labels":    sessionLabels(session.ID, session.ProjectID),
-			},
-			"stringData": map[string]interface{}{
-				"api-token": token,
-			},
-		},
-	}
-
-	if _, err := r.nsKube().CreateSecret(ctx, secret); err != nil && !k8serrors.IsAlreadyExists(err) {
-		return fmt.Errorf("creating secret %s: %w", name, err)
-	}
-
-	r.logger.Debug().Str("secret", name).Str("namespace", namespace).Msg("secret created")
-	return nil
-}
-
 func (r *SimpleKubeReconciler) ensureServiceAccount(ctx context.Context, namespace string, session types.Session, labelSelector string) error {
 	name := serviceAccountName(session.ID)
 
@@ -360,7 +375,7 @@ func (r *SimpleKubeReconciler) ensureServiceAccount(ctx context.Context, namespa
 				"namespace": namespace,
 				"labels":    sessionLabels(session.ID, session.ProjectID),
 			},
-			"automountServiceAccountToken": false,
+			"automountServiceAccountToken": true,
 		},
 	}
 
@@ -381,7 +396,6 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 	}
 
 	saName := serviceAccountName(session.ID)
-	secretName := secretName(session.ID)
 
 	runnerImage := r.cfg.RunnerImage
 	imagePullPolicy := "Always"
@@ -404,8 +418,8 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 					"protocol":      "TCP",
 				},
 			},
-			"volumeMounts": r.buildVolumeMounts(secretName),
-			"env":          r.buildEnv(ctx, session, sdk, secretName, useMCPSidecar, credentialIDs),
+			"volumeMounts": r.buildVolumeMounts(),
+			"env":          r.buildEnv(ctx, session, sdk, useMCPSidecar, credentialIDs),
 			"resources": map[string]interface{}{
 				"requests": map[string]interface{}{
 					"cpu":    "500m",
@@ -426,7 +440,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 	}
 
 	if useMCPSidecar {
-		containers = append(containers, r.buildMCPSidecar(secretName))
+		containers = append(containers, r.buildMCPSidecar())
 		r.logger.Info().Str("session_id", session.ID).Msg("MCP sidecar enabled for session")
 	}
 
@@ -445,10 +459,10 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 			},
 			"spec": map[string]interface{}{
 				"serviceAccountName":            saName,
-				"automountServiceAccountToken":  false,
+				"automountServiceAccountToken":  true,
 				"restartPolicy":                 "Never",
 				"terminationGracePeriodSeconds": int64(60),
-				"volumes":                       r.buildVolumes(secretName),
+				"volumes":                       r.buildVolumes(),
 				"containers":                    containers,
 			},
 		},
@@ -462,7 +476,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 	return nil
 }
 
-func (r *SimpleKubeReconciler) buildVolumes(credSecretName string) []interface{} {
+func (r *SimpleKubeReconciler) buildVolumes() []interface{} {
 	vols := []interface{}{
 		map[string]interface{}{
 			"name":     "workspace",
@@ -473,18 +487,6 @@ func (r *SimpleKubeReconciler) buildVolumes(credSecretName string) []interface{}
 			"configMap": map[string]interface{}{
 				"name":     "openshift-service-ca.crt",
 				"optional": true,
-			},
-		},
-		map[string]interface{}{
-			"name": runnerTokenVolumeName,
-			"secret": map[string]interface{}{
-				"secretName": credSecretName,
-				"items": []interface{}{
-					map[string]interface{}{
-						"key":  runnerTokenVolumeKey,
-						"path": runnerTokenFileName,
-					},
-				},
 			},
 		},
 	}
@@ -499,7 +501,7 @@ func (r *SimpleKubeReconciler) buildVolumes(credSecretName string) []interface{}
 	return vols
 }
 
-func (r *SimpleKubeReconciler) buildVolumeMounts(_ string) []interface{} {
+func (r *SimpleKubeReconciler) buildVolumeMounts() []interface{} {
 	mounts := []interface{}{
 		map[string]interface{}{
 			"name":      "workspace",
@@ -509,11 +511,6 @@ func (r *SimpleKubeReconciler) buildVolumeMounts(_ string) []interface{} {
 			"name":      "service-ca",
 			"mountPath": "/etc/pki/ca-trust/extracted/pem/service-ca.crt",
 			"subPath":   "service-ca.crt",
-			"readOnly":  true,
-		},
-		map[string]interface{}{
-			"name":      runnerTokenVolumeName,
-			"mountPath": runnerTokenMountPath,
 			"readOnly":  true,
 		},
 	}
@@ -564,7 +561,7 @@ func (r *SimpleKubeReconciler) ensureVertexSecret(ctx context.Context, namespace
 	return nil
 }
 
-func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Session, sdk *sdkclient.Client, credSecretName string, useMCPSidecar bool, credentialIDs map[string]string) []interface{} {
+func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Session, sdk *sdkclient.Client, useMCPSidecar bool, credentialIDs map[string]string) []interface{} {
 	useVertex := "0"
 	if r.cfg.VertexEnabled {
 		useVertex = "1"
@@ -584,7 +581,7 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 		envVar("BACKEND_API_URL", r.cfg.BackendURL),
 		envVar("USE_VERTEX", useVertex),
 		envVar("CLAUDE_CODE_USE_VERTEX", useVertex),
-		envVarFromSecret("BOT_TOKEN", credSecretName, "api-token"),
+		envVar("AMBIENT_CP_TOKEN_URL", r.cfg.CPTokenURL),
 		envVar("AMBIENT_GRPC_URL", r.cfg.RunnerGRPCURL),
 		envVar("AMBIENT_GRPC_ENABLED", boolToStr(r.cfg.RunnerGRPCURL != "")),
 		envVar("AMBIENT_GRPC_USE_TLS", boolToStr(r.cfg.RunnerGRPCUseTLS)),
@@ -797,10 +794,6 @@ func podName(sessionID string) string {
 	return fmt.Sprintf("session-%s-runner", safeResourceName(sessionID))
 }
 
-func secretName(sessionID string) string {
-	return fmt.Sprintf("session-%s-creds", safeResourceName(sessionID))
-}
-
 func serviceAccountName(sessionID string) string {
 	return fmt.Sprintf("session-%s-sa", safeResourceName(sessionID))
 }
@@ -816,7 +809,7 @@ func boolToStr(b bool) string {
 	return "false"
 }
 
-func (r *SimpleKubeReconciler) buildMCPSidecar(credSecretName string) interface{} {
+func (r *SimpleKubeReconciler) buildMCPSidecar() interface{} {
 	mcpImage := r.cfg.MCPImage
 	imagePullPolicy := "Always"
 	if strings.HasPrefix(mcpImage, "localhost/") {
@@ -837,7 +830,7 @@ func (r *SimpleKubeReconciler) buildMCPSidecar(credSecretName string) interface{
 			envVar("MCP_TRANSPORT", "sse"),
 			envVar("MCP_BIND_ADDR", fmt.Sprintf(":%d", mcpSidecarPort)),
 			envVar("AMBIENT_API_URL", r.cfg.MCPAPIServerURL),
-			envVarFromSecret("AMBIENT_TOKEN", credSecretName, "api-token"),
+			envVar("AMBIENT_CP_TOKEN_URL", r.cfg.CPTokenURL),
 		},
 		"resources": map[string]interface{}{
 			"requests": map[string]interface{}{
@@ -858,18 +851,6 @@ func (r *SimpleKubeReconciler) buildMCPSidecar(credSecretName string) interface{
 	}
 }
 
-func envVarFromSecret(name, secretName, key string) interface{} {
-	return map[string]interface{}{
-		"name": name,
-		"valueFrom": map[string]interface{}{
-			"secretKeyRef": map[string]interface{}{
-				"name": secretName,
-				"key":  key,
-			},
-		},
-	}
-}
-
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -877,89 +858,3 @@ func min(a, b int) int {
 	return b
 }
 
-func (r *SimpleKubeReconciler) refreshRunnerToken(ctx context.Context, namespace, sessionID string) error {
-	name := secretName(sessionID)
-	existing, err := r.nsKube().GetSecret(ctx, namespace, name)
-	if err != nil {
-		return fmt.Errorf("getting secret %s: %w", name, err)
-	}
-
-	token, err := r.factory.Token(ctx)
-	if err != nil {
-		return fmt.Errorf("resolving fresh API token: %w", err)
-	}
-
-	updated := existing.DeepCopy()
-	if err := unstructured.SetNestedField(updated.Object, map[string]interface{}{"api-token": token}, "stringData"); err != nil {
-		return fmt.Errorf("setting stringData on secret %s: %w", name, err)
-	}
-
-	if _, err := r.nsKube().UpdateSecret(ctx, updated); err != nil {
-		return fmt.Errorf("updating secret %s: %w", name, err)
-	}
-
-	r.logger.Info().Str("secret", name).Str("namespace", namespace).Msg("runner token refreshed")
-	return nil
-}
-
-func (r *SimpleKubeReconciler) StartTokenRefreshLoop(ctx context.Context) {
-	go func() {
-		r.refreshAllRunningTokens(ctx)
-		ticker := time.NewTicker(runnerTokenRefreshEvery)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				r.refreshAllRunningTokens(ctx)
-			}
-		}
-	}()
-}
-
-func (r *SimpleKubeReconciler) refreshAllRunningTokens(ctx context.Context) {
-	projectOpts := &types.ListOptions{Page: 1, Size: 100}
-	for {
-		projectSDK, err := r.factory.ForProject(ctx, "_")
-		if err != nil {
-			r.logger.Warn().Err(err).Msg("token refresh loop: failed to get SDK client")
-			return
-		}
-		projectList, err := projectSDK.Projects().List(ctx, projectOpts)
-		if err != nil {
-			r.logger.Warn().Err(err).Int("page", projectOpts.Page).Msg("token refresh loop: failed to list projects")
-			return
-		}
-		for _, project := range projectList.Items {
-			sdk, err := r.factory.ForProject(ctx, project.ID)
-			if err != nil {
-				r.logger.Warn().Err(err).Str("project_id", project.ID).Msg("token refresh loop: failed to get SDK client for project")
-				continue
-			}
-			sessionOpts := &types.ListOptions{Page: 1, Size: 100, Search: "phase = 'Running'"}
-			for {
-				list, err := sdk.Sessions().List(ctx, sessionOpts)
-				if err != nil {
-					r.logger.Warn().Err(err).Str("project_id", project.ID).Int("page", sessionOpts.Page).Msg("token refresh loop: failed to list running sessions")
-					break
-				}
-				for i := range list.Items {
-					session := list.Items[i]
-					namespace := r.namespaceForSession(session)
-					if err := r.refreshRunnerToken(ctx, namespace, session.ID); err != nil {
-						r.logger.Warn().Err(err).Str("session_id", session.ID).Str("namespace", namespace).Msg("token refresh loop: failed to refresh token")
-					}
-				}
-				if len(list.Items) == 0 || list.Total <= sessionOpts.Page*sessionOpts.Size {
-					break
-				}
-				sessionOpts.Page++
-			}
-		}
-		if len(projectList.Items) == 0 || projectList.Total <= projectOpts.Page*projectOpts.Size {
-			break
-		}
-		projectOpts.Page++
-	}
-}
