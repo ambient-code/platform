@@ -83,7 +83,7 @@ The CP creates a Pod (not a Job) for each session. Key pod attributes:
 | `restartPolicy` | `Never` | Sessions are single-run; no automatic restart |
 | `imagePullPolicy` | `IfNotPresent` for `localhost/` images, `Always` otherwise | kind uses local containerd — `Always` breaks `localhost/` image pulls |
 | `serviceAccountName` | `session-{id}-sa` | Session-scoped; no cross-session access |
-| `automountServiceAccountToken` | `false` | Runner uses BOT_TOKEN, not SA token |
+| `automountServiceAccountToken` | `true` | Runner uses the SA token to authenticate to the CP token endpoint |
 | CPU request/limit | 500m / 2000m | Generous for Claude Code |
 | Memory request/limit | 512Mi / 4Gi | Claude Code is memory-intensive |
 
@@ -109,7 +109,6 @@ Each section is joined with `\n\n`. Empty sections are omitted. If all four are 
 | `WORKSPACE_PATH` | `/workspace` | Claude Code working directory |
 | `AGUI_PORT` | `8001` | Runner HTTP listener port |
 | `BACKEND_API_URL` | CP config | api-server base URL |
-| `BOT_TOKEN` | from K8s secret | api-server bearer token (bootstrap only — see Token Endpoint) |
 | `AMBIENT_GRPC_URL` | CP config | api-server gRPC address |
 | `AMBIENT_GRPC_USE_TLS` | CP config | TLS flag for gRPC |
 | `AMBIENT_CP_TOKEN_URL` | CP config | CP token endpoint URL (e.g. `http://ambient-control-plane.{ns}.svc:8080/token`) |
@@ -402,14 +401,16 @@ A successful `TokenReview` returns `status.authenticated=true` and `status.user.
 
 This approach uses credentials already present in every pod — no new secrets required.
 
-### Token Bootstrap vs. Renewal
+### Token Lifecycle
+
+The CP token endpoint is the **sole source** of the api-server bearer token for all runner pods. There is no Secret write loop and no `BOT_TOKEN` env var or file mount.
 
 | Phase | Mechanism |
 |---|---|
-| Initial startup | `BOT_TOKEN` env var / Secret file mount (injected by CP at pod creation) |
+| Initial startup | `GET /token` from CP endpoint — called in lifespan before gRPC channel opens |
 | gRPC reconnect | `GET /token` from CP endpoint — synchronous, guaranteed fresh |
 
-The Secret write loop is retained for initial bootstrap. For renewal, runners call the CP endpoint.
+The CP is critical infrastructure. It creates the runner pod, so it is running before the runner makes its first token request. If the CP is unreachable, the runner cannot function regardless (the CP is also responsible for all K8s provisioning). No fallback is needed or provided.
 
 ### CP HTTP Server
 
@@ -435,7 +436,7 @@ def reconnect(self) -> None:
     self._token = fresh_token
 ```
 
-`AMBIENT_CP_TOKEN_URL` is injected by the CP as an env var when creating the runner pod. If not set (local dev / non-OIDC environments), the runner falls back to reading from the Secret file mount.
+`AMBIENT_CP_TOKEN_URL` is injected by the CP as an env var when creating the runner pod. In local dev environments where the CP is not present, `BOT_TOKEN` env var may be set directly and the runner skips the CP endpoint call.
 
 ### New CP Internal Packages
 
@@ -520,4 +521,4 @@ The `ambient-control-plane` ServiceAccount does not have `delete` on `namespaces
 | Namespace per project, not per session | Sessions within a project share a namespace; secrets and RBAC are project-scoped |
 | CP token endpoint over Secret-write renewal | Secret writes are async push with no synchronization guarantee vs. token TTL; synchronous pull from CP eliminates the race entirely |
 | Runner SA token for CP auth | K8s SA tokens are already mounted in every pod, long-lived, and K8s-managed — no new secrets or out-of-band key distribution required |
-| BOT_TOKEN Secret retained for bootstrap | Avoids a chicken-and-egg: runner needs a token to make the first gRPC call before the CP endpoint can be contacted; Secret provides the initial credential |
+| CP is sole token source — no BOT_TOKEN Secret | CP creates the runner pod, so it is always reachable before the runner's first token request; retaining a Secret adds complexity and a second failure mode with the same blast radius |
