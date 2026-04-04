@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -299,7 +300,7 @@ func (h sessionHandler) StreamRunnerEvents(w http.ResponseWriter, r *http.Reques
 
 	runnerURL := fmt.Sprintf(
 		"http://session-%s.%s.svc.cluster.local:8001/events/%s",
-		*session.KubeCrName, *session.KubeNamespace, *session.KubeCrName,
+		strings.ToLower(*session.KubeCrName), *session.KubeNamespace, *session.KubeCrName,
 	)
 
 	req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, runnerURL, nil)

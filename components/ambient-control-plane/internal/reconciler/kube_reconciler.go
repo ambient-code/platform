@@ -24,7 +24,7 @@ const (
 	runnerTokenFileName     = "bot-token"
 	runnerTokenVolumeKey    = "api-token"
 	runnerTokenVolumeName   = "runner-token"
-	runnerTokenRefreshEvery = 10 * time.Minute
+	runnerTokenRefreshEvery = 4 * time.Minute
 )
 
 type KubeReconcilerConfig struct {
