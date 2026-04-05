@@ -8,6 +8,7 @@ resources:
 - ambient-api-server-db.yaml
 - ambient-api-server.yaml
 - ambient-control-plane.yaml
+- ambient-control-plane-svc.yaml
 - ambient-api-server-route.yaml
 - ambient-control-plane-sa.yaml
 - tenant-rbac/
