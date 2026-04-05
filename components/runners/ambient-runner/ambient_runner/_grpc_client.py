@@ -11,10 +11,11 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
+import grpc
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
-import grpc
+from ambient_runner.platform.utils import set_bot_token
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,7 @@ def _fetch_token_from_cp(cp_token_url: str, public_key_pem: str, session_id: str
             if not token:
                 raise RuntimeError("CP /token response missing 'token' field")
             logger.info("[GRPC CLIENT] Fetched fresh API token from CP token endpoint")
+            set_bot_token(token)
             return token
         except urllib.error.HTTPError as e:
             resp_body = ""
