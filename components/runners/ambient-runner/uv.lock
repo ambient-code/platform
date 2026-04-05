@@ -145,6 +145,7 @@ source = { editable = "." }
 dependencies = [
     { name = "ag-ui-protocol" },
     { name = "aiohttp" },
+    { name = "cryptography" },
     { name = "fastapi" },
     { name = "grpcio" },
     { name = "protobuf" },
@@ -189,6 +190,7 @@ requires-dist = [
     { name = "ambient-runner", extras = ["claude", "observability", "mcp-atlassian"], marker = "extra == 'all'" },
     { name = "anthropic", extras = ["vertex"], marker = "extra == 'claude'", specifier = ">=0.86.0" },
     { name = "claude-agent-sdk", marker = "extra == 'claude'", specifier = ">=0.1.50" },
+    { name = "cryptography", specifier = ">=42.0.0" },
     { name = "fastapi", specifier = ">=0.100.0" },
     { name = "grpcio", specifier = ">=1.60.0" },
     { name = "langfuse", marker = "extra == 'observability'", specifier = ">=3.0.0" },

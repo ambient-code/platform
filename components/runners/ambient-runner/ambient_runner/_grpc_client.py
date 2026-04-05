@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
@@ -10,6 +11,9 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+
 import grpc
 
 logger = logging.getLogger(__name__)
@@ -17,6 +21,8 @@ logger = logging.getLogger(__name__)
 _ENV_GRPC_URL = "AMBIENT_GRPC_URL"
 _ENV_TOKEN = "BOT_TOKEN"
 _ENV_CP_TOKEN_URL = "AMBIENT_CP_TOKEN_URL"
+_ENV_CP_TOKEN_PUBLIC_KEY = "AMBIENT_CP_TOKEN_PUBLIC_KEY"
+_ENV_SESSION_ID = "SESSION_ID"
 _ENV_USE_TLS = "AMBIENT_GRPC_USE_TLS"
 _ENV_CA_CERT = "AMBIENT_GRPC_CA_CERT_FILE"
 _DEFAULT_GRPC_URL = "ambient-api-server:9000"
@@ -28,8 +34,22 @@ _CP_TOKEN_FETCH_ATTEMPTS = 3
 _CP_TOKEN_FETCH_TIMEOUT = 10
 
 
+def _encrypt_session_id(public_key_pem: str, session_id: str) -> str:
+    """RSA-OAEP encrypt session_id with the CP public key, return base64-encoded ciphertext."""
+    public_key = serialization.load_pem_public_key(public_key_pem.encode())
+    ciphertext = public_key.encrypt(
+        session_id.encode(),
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None,
+        ),
+    )
+    return base64.b64encode(ciphertext).decode()
+
+
 def _validate_cp_token_url(url: str) -> None:
-    """Reject non-http(s) or credential-bearing URLs to prevent SA token exfiltration."""
+    """Reject non-http(s) or credential-bearing URLs to prevent exfiltration."""
     parsed = urllib.parse.urlparse(url)
     if (
         parsed.scheme not in {"http", "https"}
@@ -42,18 +62,15 @@ def _validate_cp_token_url(url: str) -> None:
         )
 
 
-def _fetch_token_from_cp(cp_token_url: str) -> str:
-    """Fetch a fresh API token from the CP /token endpoint using the pod SA token.
+def _fetch_token_from_cp(cp_token_url: str, public_key_pem: str, session_id: str) -> str:
+    """Fetch a fresh API token from the CP /token endpoint.
 
-    Retries up to _CP_TOKEN_FETCH_ATTEMPTS times with exponential backoff
-    to handle transient CP unavailability.
+    Encrypts the session ID with the CP public key and sends it as a Bearer token.
+    Retries up to _CP_TOKEN_FETCH_ATTEMPTS times with exponential backoff.
     """
     _validate_cp_token_url(cp_token_url)
 
-    try:
-        sa_token = _SA_TOKEN_FILE.read_text().strip()
-    except OSError as e:
-        raise RuntimeError(f"cannot read SA token from {_SA_TOKEN_FILE}: {e}") from e
+    bearer = _encrypt_session_id(public_key_pem, session_id)
 
     last_err: Exception = RuntimeError("no attempts made")
     for attempt in range(_CP_TOKEN_FETCH_ATTEMPTS):
@@ -70,7 +87,7 @@ def _fetch_token_from_cp(cp_token_url: str) -> str:
         try:
             req = urllib.request.Request(
                 cp_token_url,
-                headers={"Authorization": f"Bearer {sa_token}"},
+                headers={"Authorization": f"Bearer {bearer}"},
             )
             with urllib.request.urlopen(req, timeout=_CP_TOKEN_FETCH_TIMEOUT) as resp:
                 body = json.loads(resp.read())
@@ -164,10 +181,16 @@ class AmbientGRPCClient:
         use_tls = os.environ.get(_ENV_USE_TLS, "").lower() in ("true", "1", "yes")
         ca_cert_file = os.environ.get(_ENV_CA_CERT)
         if cp_token_url:
+            public_key_pem = os.environ.get(_ENV_CP_TOKEN_PUBLIC_KEY, "")
+            session_id = os.environ.get(_ENV_SESSION_ID, "")
+            if not public_key_pem:
+                raise RuntimeError("AMBIENT_CP_TOKEN_PUBLIC_KEY env var is required when AMBIENT_CP_TOKEN_URL is set")
+            if not session_id:
+                raise RuntimeError("SESSION_ID env var is required when AMBIENT_CP_TOKEN_URL is set")
             logger.info(
                 "[GRPC CLIENT] Fetching token from CP endpoint: url=%s", cp_token_url
             )
-            token = _fetch_token_from_cp(cp_token_url)
+            token = _fetch_token_from_cp(cp_token_url, public_key_pem, session_id)
         else:
             token = os.environ.get(_ENV_TOKEN, "")
             logger.info("[GRPC CLIENT] Using BOT_TOKEN env var (local dev mode)")
@@ -188,7 +211,9 @@ class AmbientGRPCClient:
     def reconnect(self) -> None:
         """Close the existing channel and rebuild with a fresh token from the CP endpoint."""
         if self._cp_token_url:
-            fresh_token = _fetch_token_from_cp(self._cp_token_url)
+            public_key_pem = os.environ.get(_ENV_CP_TOKEN_PUBLIC_KEY, "")
+            session_id = os.environ.get(_ENV_SESSION_ID, "")
+            fresh_token = _fetch_token_from_cp(self._cp_token_url, public_key_pem, session_id)
         else:
             fresh_token = os.environ.get(_ENV_TOKEN, "")
         logger.info(

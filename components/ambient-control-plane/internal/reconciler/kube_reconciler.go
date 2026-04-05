@@ -39,6 +39,7 @@ type KubeReconcilerConfig struct {
 	RunnerLogLevel        string
 	CPRuntimeNamespace    string
 	CPTokenURL            string
+	CPTokenPublicKey      string
 }
 
 type SimpleKubeReconciler struct {
@@ -582,6 +583,7 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 		envVar("USE_VERTEX", useVertex),
 		envVar("CLAUDE_CODE_USE_VERTEX", useVertex),
 		envVar("AMBIENT_CP_TOKEN_URL", r.cfg.CPTokenURL),
+		envVar("AMBIENT_CP_TOKEN_PUBLIC_KEY", r.cfg.CPTokenPublicKey),
 		envVar("AMBIENT_GRPC_URL", r.cfg.RunnerGRPCURL),
 		envVar("AMBIENT_GRPC_ENABLED", boolToStr(r.cfg.RunnerGRPCURL != "")),
 		envVar("AMBIENT_GRPC_USE_TLS", boolToStr(r.cfg.RunnerGRPCUseTLS)),
@@ -831,6 +833,7 @@ func (r *SimpleKubeReconciler) buildMCPSidecar() interface{} {
 			envVar("MCP_BIND_ADDR", fmt.Sprintf(":%d", mcpSidecarPort)),
 			envVar("AMBIENT_API_URL", r.cfg.MCPAPIServerURL),
 			envVar("AMBIENT_CP_TOKEN_URL", r.cfg.CPTokenURL),
+			envVar("AMBIENT_CP_TOKEN_PUBLIC_KEY", r.cfg.CPTokenPublicKey),
 		},
 		"resources": map[string]interface{}{
 			"requests": map[string]interface{}{
