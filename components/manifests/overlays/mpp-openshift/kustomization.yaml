@@ -9,6 +9,7 @@ resources:
 - ambient-api-server.yaml
 - ambient-control-plane.yaml
 - ambient-control-plane-svc.yaml
+- ambient-cp-token-netpol.yaml
 - ambient-api-server-route.yaml
 - ambient-control-plane-sa.yaml
 - tenant-rbac/
