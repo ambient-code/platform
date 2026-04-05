@@ -23,14 +23,27 @@ _TRUTHY_VALUES = frozenset({"1", "true", "yes"})
 # Kubelet automatically refreshes this file when the Secret is updated.
 _BOT_TOKEN_FILE = Path("/var/run/secrets/ambient/bot-token")
 
+# In-process cache for the token fetched from the CP token endpoint.
+# Set once at startup by _grpc_client.py after a successful CP token fetch.
+_cp_fetched_token: str = ""
+
+
+def set_bot_token(token: str) -> None:
+    """Store a token fetched from the CP token endpoint for use by get_bot_token()."""
+    global _cp_fetched_token
+    _cp_fetched_token = token.strip()
+
 
 def get_bot_token() -> str:
-    """Return the current BOT_TOKEN, preferring the file mount over env var.
+    """Return the current BOT_TOKEN.
 
-    The operator mounts the runner-token Secret as a file so kubelet refreshes
-    it automatically when the token is rotated. Falls back to the BOT_TOKEN
-    env var for backward-compatibility with local / non-Kubernetes runs.
+    Priority:
+    1. Token fetched from CP token endpoint (set via set_bot_token()).
+    2. File mount at _BOT_TOKEN_FILE (kubelet-refreshed Secret).
+    3. BOT_TOKEN env var (local / non-Kubernetes fallback).
     """
+    if _cp_fetched_token:
+        return _cp_fetched_token
     try:
         if _BOT_TOKEN_FILE.exists():
             return _BOT_TOKEN_FILE.read_text().strip()

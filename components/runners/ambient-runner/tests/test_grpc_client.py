@@ -200,6 +200,51 @@ class TestFetchTokenFromCP:
                     )
 
 
+class TestSetBotTokenIntegration:
+    def test_get_bot_token_returns_cp_fetched_token_after_successful_fetch(self):
+        import ambient_runner.platform.utils as utils
+        utils._cp_fetched_token = ""
+
+        _, _, public_pem = generate_keypair()
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"token": "oidc-token-for-api-calls"}).encode()
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        assert utils.get_bot_token() == "", "get_bot_token() must be empty before any CP fetch"
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            _fetch_token_from_cp("http://cp.svc:8080/token", public_pem, "session-12345678")
+
+        assert utils.get_bot_token() == "oidc-token-for-api-calls", (
+            "get_bot_token() must return the CP-fetched token so backend API credential "
+            "calls are authenticated — regression for HTTP 401 on credential refresh"
+        )
+        utils._cp_fetched_token = ""
+
+    def test_fetch_from_cp_calls_set_bot_token(self):
+        from cryptography.hazmat.primitives.asymmetric import rsa as _rsa
+        private_key = _rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        public_pem = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        ).decode()
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"token": "oidc-api-token-abc"}).encode()
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        import ambient_runner.platform.utils as utils
+        utils._cp_fetched_token = ""
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            _fetch_token_from_cp("http://cp.svc:8080/token", public_pem, "session-12345678")
+
+        assert utils.get_bot_token() == "oidc-api-token-abc"
+        utils._cp_fetched_token = ""
+
+
 class TestFromEnvIntegration:
     def test_uses_encrypted_session_id_when_cp_token_url_set(self):
         _, _, public_pem = generate_keypair()
