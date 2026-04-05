@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ambient-control-plane
+  namespace: ambient-code--runtime-int
+  labels:
+    app: ambient-control-plane
+spec:
+  selector:
+    app: ambient-control-plane
+  ports:
+    - name: token
+      port: 8080
+      targetPort: 8080
+      protocol: TCP

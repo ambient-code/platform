@@ -76,6 +76,12 @@ spec:
               value: "ambient-vertex"
             - name: VERTEX_SECRET_NAMESPACE
               value: "ambient-code--runtime-int"
+            - name: CP_RUNTIME_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: CP_TOKEN_URL
+              value: "http://ambient-control-plane.ambient-code--ambient-s0.svc:8080/token"
           volumeMounts:
             - name: project-kube-token
               mountPath: /var/run/secrets/project-kube
