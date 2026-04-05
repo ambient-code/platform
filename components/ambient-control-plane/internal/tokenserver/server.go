@@ -2,14 +2,13 @@ package tokenserver
 
 import (
 	"context"
+	"crypto/rsa"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/auth"
 	"github.com/rs/zerolog"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 )
 
 const (
@@ -28,17 +27,12 @@ type Server struct {
 func New(
 	listenAddr string,
 	tokenProvider auth.TokenProvider,
-	k8sConfig *rest.Config,
+	privateKey *rsa.PrivateKey,
 	logger zerolog.Logger,
 ) (*Server, error) {
-	k8sClient, err := kubernetes.NewForConfig(k8sConfig)
-	if err != nil {
-		return nil, fmt.Errorf("creating k8s client for token server: %w", err)
-	}
-
 	h := &handler{
 		tokenProvider: tokenProvider,
-		k8sClient:     k8sClient,
+		privateKey:    privateKey,
 		logger:        logger.With().Str("component", "tokenserver").Logger(),
 	}
 
@@ -78,9 +72,4 @@ func (s *Server) Start(ctx context.Context) error {
 	case err := <-errCh:
 		return fmt.Errorf("token server: %w", err)
 	}
-}
-
-func handleHealthz(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("ok"))
 }

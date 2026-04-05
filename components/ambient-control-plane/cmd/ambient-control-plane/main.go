@@ -15,6 +15,7 @@ import (
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/auth"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/config"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/informer"
+	"github.com/ambient-code/platform/components/ambient-control-plane/internal/keypair"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/reconciler"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/tokenserver"
@@ -25,8 +26,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 var (
@@ -123,6 +122,12 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	provisioner := buildNamespaceProvisioner(cfg, provisionerKube)
 	tokenProvider := buildTokenProvider(cfg, log.Logger)
 
+	kp, err := keypair.EnsureKeypairSecret(ctx, provisionerKube, cfg.CPRuntimeNamespace, log.Logger)
+	if err != nil {
+		return fmt.Errorf("bootstrapping CP token keypair: %w", err)
+	}
+	log.Info().Str("namespace", cfg.CPRuntimeNamespace).Msg("CP token keypair ready")
+
 	factory := reconciler.NewSDKClientFactory(cfg.APIServerURL, tokenProvider, log.Logger)
 	kubeReconcilerCfg := reconciler.KubeReconcilerConfig{
 		RunnerImage:           cfg.RunnerImage,
@@ -142,6 +147,7 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		RunnerLogLevel:        cfg.RunnerLogLevel,
 		CPRuntimeNamespace:    cfg.CPRuntimeNamespace,
 		CPTokenURL:            cfg.CPTokenURL,
+		CPTokenPublicKey:      string(kp.PublicKeyPEM),
 	}
 
 	conn, err := grpc.NewClient(cfg.GRPCServerAddr, grpc.WithTransportCredentials(grpcCredentials(cfg.GRPCUseTLS)))
@@ -184,7 +190,7 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 
 	tsErrCh := make(chan error, 1)
 	go func() {
-		tsErrCh <- startTokenServer(ctx, cfg, tokenProvider)
+		tsErrCh <- startTokenServer(ctx, cfg, tokenProvider, kp)
 	}()
 
 	infErrCh := make(chan error, 1)
@@ -203,24 +209,18 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	}
 }
 
-func startTokenServer(ctx context.Context, cfg *config.ControlPlaneConfig, tokenProvider auth.TokenProvider) error {
-	k8sConfig, err := buildK8sRestConfig(cfg.Kubeconfig)
+func startTokenServer(ctx context.Context, cfg *config.ControlPlaneConfig, tokenProvider auth.TokenProvider, kp *keypair.KeyPair) error {
+	privKey, err := keypair.ParsePrivateKey(kp.PrivateKeyPEM)
 	if err != nil {
-		return fmt.Errorf("building k8s rest config for token server: %w", err)
+		return fmt.Errorf("parsing CP token private key: %w", err)
 	}
-	ts, err := tokenserver.New(cfg.CPTokenListenAddr, tokenProvider, k8sConfig, log.Logger)
+	ts, err := tokenserver.New(cfg.CPTokenListenAddr, tokenProvider, privKey, log.Logger)
 	if err != nil {
 		return fmt.Errorf("creating token server: %w", err)
 	}
 	return ts.Start(ctx)
 }
 
-func buildK8sRestConfig(kubeconfig string) (*rest.Config, error) {
-	if kubeconfig != "" {
-		return clientcmd.BuildConfigFromFlags("", kubeconfig)
-	}
-	return rest.InClusterConfig()
-}
 
 func createSessionReconcilers(reconcilerTypes []string, factory *reconciler.SDKClientFactory, kube *kubeclient.KubeClient, projectKube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, cfg reconciler.KubeReconcilerConfig, logger zerolog.Logger) []reconciler.Reconciler {
 	var reconcilers []reconciler.Reconciler
