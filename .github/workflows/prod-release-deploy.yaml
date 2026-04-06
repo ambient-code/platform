@@ -351,28 +351,14 @@ jobs:
         run: |
           oc apply -f components/manifests/components/openshift-ai/namespace.yaml
           oc apply -f components/manifests/components/openshift-ai/operatorgroup.yaml
-          # Remove any existing subscription/CSV to ensure clean install on the target channel
-          OLD_CSV=$(oc get subscription rhods-operator -n redhat-ods-operator \
-            -o jsonpath='{.status.installedCSV}' 2>/dev/null || true)
-          if [ -n "$OLD_CSV" ]; then
-            DESIRED_CHANNEL=$(grep 'channel:' components/manifests/components/openshift-ai/subscription.yaml | awk '{print $2}')
-            CURRENT_CHANNEL=$(oc get subscription rhods-operator -n redhat-ods-operator \
-              -o jsonpath='{.spec.channel}' 2>/dev/null || true)
-            if [ "$CURRENT_CHANNEL" != "$DESIRED_CHANNEL" ]; then
-              echo "Channel mismatch ($CURRENT_CHANNEL → $DESIRED_CHANNEL), removing old operator..."
-              oc delete subscription rhods-operator -n redhat-ods-operator --ignore-not-found
-              oc delete csv "$OLD_CSV" -n redhat-ods-operator --ignore-not-found
-            fi
-          fi
           oc apply -f components/manifests/components/openshift-ai/subscription.yaml
 
       - name: Wait for RHOAI operator to be ready
         run: |
-          DESIRED_CHANNEL=$(grep 'channel:' components/manifests/components/openshift-ai/subscription.yaml | awk '{print $2}')
-          echo "Waiting for RHOAI operator CSV on channel $DESIRED_CHANNEL..."
+          echo "Waiting for RHOAI operator CSV to appear..."
           for i in $(seq 1 60); do
             CSV=$(oc get subscription rhods-operator -n redhat-ods-operator \
-              -o jsonpath='{.status.currentCSV}' 2>/dev/null)
+              -o jsonpath='{.status.installedCSV}' 2>/dev/null)
             if [ -n "$CSV" ]; then
               echo "Found CSV: $CSV"
               break
@@ -433,13 +419,20 @@ jobs:
           || oc exec -n ambient-code deploy/postgresql -- \
             psql -U postgres -c "CREATE DATABASE mlflow"
 
-      - name: Verify mlflow-db-credentials secret exists
+      - name: Ensure mlflow-db-credentials secret exists
         run: |
-          if ! oc get secret mlflow-db-credentials -n redhat-ods-applications &>/dev/null; then
-            echo "::error::Secret mlflow-db-credentials not found in redhat-ods-applications."
-            echo "::error::Create it before applying the MLflow resource."
-            echo "::error::See components/manifests/base/mlflow-db-credentials-secret.yaml.example"
-            exit 1
+          if oc get secret mlflow-db-credentials -n redhat-ods-applications &>/dev/null; then
+            echo "Secret already exists"
+          else
+            echo "Creating mlflow-db-credentials from postgresql-credentials..."
+            DB_USER=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.user}' | base64 -d)
+            DB_PASS=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.password}' | base64 -d)
+            DB_HOST=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.host}' | base64 -d)
+            DB_PORT=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.port}' | base64 -d)
+            oc create namespace redhat-ods-applications --dry-run=client -o yaml | oc apply -f -
+            oc create secret generic mlflow-db-credentials \
+              -n redhat-ods-applications \
+              --from-literal=uri="postgresql://${DB_USER}:${DB_PASS}@${DB_HOST}.ambient-code.svc.cluster.local:${DB_PORT}/mlflow?sslmode=disable"
           fi
 
       - name: Deploy MLflow instance
