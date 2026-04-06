@@ -90,8 +90,15 @@ jobs:
                AGENTIC_SESSION_NAME environment variable):
                <!-- acp:session_id=$AGENTIC_SESSION_NAME source=#${{ steps.issue.outputs.number }} last_action=<ISO8601_NOW> retry_count=0 -->
             5. Add the `ambient-code:managed` label to the PR.
-            6. Ensure CI passes. If it fails, investigate and fix.
-            7. Do not merge. Leave the PR open for human review.
+            6. After creating the PR, send a Slack notification:
+               ```bash
+               curl -X POST -H 'Content-type: application/json' \
+                 --data '{"text":"PR created for #${{ steps.issue.outputs.number }}\n*PR*: <PR_URL>\n*Session*: '"$PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME"'"}' \
+                 "$SLACK_WEBHOOK_URL"
+               ```
+               Only send if SLACK_WEBHOOK_URL is set.
+            7. Ensure CI passes. If it fails, investigate and fix.
+            8. Do not merge. Leave the PR open for human review.
           repos: >-
             [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
           model: claude-opus-4-6
@@ -265,8 +272,15 @@ jobs:
                AGENTIC_SESSION_NAME environment variable):
                <!-- acp:session_id=$AGENTIC_SESSION_NAME source=#${{ steps.context.outputs.number }} last_action=<ISO8601_NOW> retry_count=0 -->
             5. Add the `ambient-code:managed` label to the PR.
-            6. Ensure CI passes. If it fails, investigate and fix.
-            7. Do not merge. Leave the PR open for human review.
+            6. After creating the PR, send a Slack notification:
+               ```bash
+               curl -X POST -H 'Content-type: application/json' \
+                 --data '{"text":"PR created for #${{ steps.context.outputs.number }}\n*PR*: <PR_URL>\n*Session*: '"$PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME"'"}' \
+                 "$SLACK_WEBHOOK_URL"
+               ```
+               Only send if SLACK_WEBHOOK_URL is set.
+            7. Ensure CI passes. If it fails, investigate and fix.
+            8. Do not merge. Leave the PR open for human review.
           repos: >-
             [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
           model: claude-opus-4-6
