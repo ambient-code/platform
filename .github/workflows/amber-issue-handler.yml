@@ -320,22 +320,30 @@ jobs:
           # Get PR head SHA
           HEAD_SHA=$(gh pr view ${{ steps.context.outputs.number }} --repo "${{ github.repository }}" --json headRefOid --jq '.headRefOid')
 
-          # Map session phase to check conclusion
+          # Map session phase to check status/conclusion
+          CHECK_ARGS=(
+            -X POST
+            -f "name=Amber Session"
+            -f "head_sha=$HEAD_SHA"
+            -f "details_url=$SESSION_URL"
+            -f "output[title]=Amber — ${{ steps.context.outputs.prompt_type }} prompt"
+            -f "output[summary]=Session \`$SESSION_NAME\` (phase: $SESSION_PHASE)"
+          )
+
           case "$SESSION_PHASE" in
-            Completed|Running) CONCLUSION="success" ;;
-            Error|Failed) CONCLUSION="failure" ;;
-            *) CONCLUSION="neutral" ;;
+            Running)
+              CHECK_ARGS+=(-f "status=in_progress") ;;
+            Completed)
+              CHECK_ARGS+=(-f "status=completed" -f "conclusion=success") ;;
+            Error|Failed)
+              CHECK_ARGS+=(-f "status=completed" -f "conclusion=failure") ;;
+            *)
+              CHECK_ARGS+=(-f "status=completed" -f "conclusion=neutral") ;;
           esac
 
-          gh api "repos/${{ github.repository }}/check-runs" \
-            -X POST \
-            -f "name=Amber Session" \
-            -f "head_sha=$HEAD_SHA" \
-            -f "status=completed" \
-            -f "conclusion=$CONCLUSION" \
-            -f "details_url=$SESSION_URL" \
-            -f "output[title]=Amber — ${{ steps.context.outputs.prompt_type }} prompt" \
-            -f "output[summary]=Session \`$SESSION_NAME\` (phase: $SESSION_PHASE)" || true
+          if ! CHECK_OUTPUT=$(gh api "repos/${{ github.repository }}/check-runs" "${CHECK_ARGS[@]}" 2>&1); then
+            echo "::warning::Failed to create check run: $CHECK_OUTPUT"
+          fi
 
       - name: Session summary
         if: always() && steps.context.outputs.is_fork != 'true'
@@ -433,23 +441,25 @@ jobs:
                   print(f"  Failed to start session: {e}")
                   return False
 
-          def post_check_run(pr_number, session_name, status="in_progress"):
-              """Post a check run on the PR linking to the Amber session."""
+          def post_check_run(pr_number, session_name):
+              """Post an in_progress check run on the PR linking to the Amber session."""
               head_sha = gh("pr", "view", str(pr_number), "--repo", REPO, "--json", "headRefOid", "--jq", ".headRefOid")
               if not head_sha:
                   return
-              api_url_base = API_URL.rstrip("/").replace("/api", "")
-              session_url = f"{api_url_base}/projects/{PROJECT}/sessions/{session_name}"
-              conclusion = "success" if status == "completed" else "neutral"
-              gh("api", f"repos/{REPO}/check-runs",
+              host = os.environ.get("PLATFORM_HOST", "").rstrip("/")
+              session_url = f"{host}/projects/{PROJECT}/sessions/{session_name}" if host else ""
+              args = ["api", f"repos/{REPO}/check-runs",
                  "-X", "POST",
                  "-f", "name=Amber Session",
                  "-f", f"head_sha={head_sha}",
-                 "-f", "status=completed",
-                 "-f", f"conclusion={conclusion}",
-                 "-f", f"details_url={session_url}",
+                 "-f", "status=in_progress",
                  "-f", "output[title]=Amber — batch fix",
-                 "-f", f"output[summary]=Session `{session_name}` triggered for PR #{pr_number}")
+                 "-f", f"output[summary]=Session `{session_name}` triggered for PR #{pr_number}"]
+              if session_url:
+                  args.extend(["-f", f"details_url={session_url}"])
+              result = gh(*args)
+              if not result and "error" in result.lower() if result else False:
+                  print(f"  Warning: failed to create check run for PR #{pr_number}")
 
           def create_session_api(prompt, session_name="", model="claude-opus-4-6"):
               """Create a new session or send message to existing one."""
