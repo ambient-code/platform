@@ -728,3 +728,91 @@ class TestRefreshCredentialsTool:
 
         assert result.get("isError") is None or result.get("isError") is False
         assert "successfully" in result["content"][0]["text"].lower()
+
+
+# ---------------------------------------------------------------------------
+# _fetch_credential — CP OIDC token used when no caller token (regression)
+# ---------------------------------------------------------------------------
+
+
+class TestFetchCredentialBotToken:
+    @pytest.mark.asyncio
+    async def test_uses_bot_token_when_no_caller_token(self):
+        """_fetch_credential sends the CP OIDC token when caller_token is absent.
+
+        The api-server validates the CP OIDC token via RHSSO JWT signature verification.
+        The CP's OIDC client identity must have a role_binding granting credential:read.
+
+        Regression for: runner gets HTTP 401 on credential fetch in gRPC-initiated runs.
+        """
+        server = HTTPServer(("127.0.0.1", 0), _CredentialHandler)
+        port = server.server_address[1]
+        thread = Thread(target=server.handle_request, daemon=True)
+        thread.start()
+
+        _CredentialHandler.response_body = {"token": "gh-tok-via-oidc"}
+        _CredentialHandler.captured_headers = {}
+
+        cp_oidc_token = "cp-oidc-jwt-token"
+
+        try:
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "BACKEND_API_URL": f"http://127.0.0.1:{port}/api",
+                        "CREDENTIAL_IDS": json.dumps({"github": "cred-gh-bot-test"}),
+                    },
+                ),
+                patch("ambient_runner.platform.auth.get_bot_token", return_value=cp_oidc_token),
+            ):
+                ctx = _make_context()  # no caller_token
+                result = await _fetch_credential(ctx, "github")
+
+            assert result.get("token") == "gh-tok-via-oidc", (
+                "credential fetch must succeed using CP OIDC token — "
+                "regression for HTTP 401 on gRPC-initiated runs"
+            )
+            assert _CredentialHandler.captured_headers.get("Authorization") == (
+                f"Bearer {cp_oidc_token}"
+            ), "request must use the CP OIDC token"
+        finally:
+            server.server_close()
+            thread.join(timeout=2)
+
+    @pytest.mark.asyncio
+    async def test_bot_token_used_when_no_caller_token(self):
+        """CP OIDC token (get_bot_token) is used when caller_token is absent.
+
+        The credential endpoint on the api-server validates via RHSSO JWT,
+        the same issuer that signs the CP OIDC token — one token for both
+        gRPC and HTTP credential fetches.
+        """
+        called_with = {}
+
+        def fake_urlopen(req, timeout=None):
+            called_with["auth"] = req.get_header("Authorization")
+            mock_resp = MagicMock()
+            mock_resp.read.return_value = json.dumps({"token": "ok"}).encode()
+            mock_resp.__enter__ = lambda s: s
+            mock_resp.__exit__ = MagicMock(return_value=False)
+            return mock_resp
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "BACKEND_API_URL": "http://backend.svc.cluster.local/api",
+                    "CREDENTIAL_IDS": json.dumps({"github": "cred-gh-pref"}),
+                },
+            ),
+            patch("urllib.request.urlopen", side_effect=fake_urlopen),
+            patch("ambient_runner.platform.auth.get_bot_token", return_value="cp-oidc-token"),
+        ):
+            ctx = _make_context()  # no caller_token
+            await _fetch_credential(ctx, "github")
+
+        assert called_with.get("auth") == "Bearer cp-oidc-token", (
+            "CP OIDC token must be used for credential fetch — "
+            "same token used for gRPC and HTTP credential endpoint"
+        )
