@@ -3,8 +3,10 @@ package ldap
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -52,45 +54,121 @@ type cacheEntry struct {
 
 // Client provides LDAP search functionality with in-memory caching.
 type Client struct {
-	url           string
-	baseDN        string
-	groupBaseDN   string
-	skipTLSVerify bool
-	cache         sync.Map
-	cacheTTL      time.Duration
+	url          string // explicit LDAP URL (fallback if srvDomain is empty)
+	srvDomain    string // domain for DNS SRV lookup (e.g. "ipa.redhat.com")
+	baseDN       string
+	groupBaseDN  string
+	bindDN       string
+	bindPassword string
+	tlsConfig    *tls.Config
+	cache        sync.Map
+	cacheTTL     time.Duration
 }
 
 // NewClient creates a new LDAP client.
-// baseDN is the base DN for user searches (e.g. "ou=users,dc=redhat,dc=com").
+// url is the LDAP server URL, used as a fallback when srvDomain is empty.
+// srvDomain enables DNS SRV discovery (e.g. "ipa.redhat.com" queries _ldap._tcp.ipa.redhat.com).
+// baseDN is the base DN for user searches (e.g. "cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com").
 // groupBaseDN is the base DN for group searches. If empty, it is derived from
-// baseDN by replacing the first OU with "ou=managedGroups".
-func NewClient(url, baseDN, groupBaseDN string, skipTLSVerify bool) *Client {
+// baseDN by replacing the first component with "cn=groups".
+// bindDN and bindPassword are used for authenticated binds (required for IPA).
+// caCertPath is an optional path to a PEM CA certificate file to trust.
+func NewClient(url, srvDomain, baseDN, groupBaseDN, bindDN, bindPassword, caCertPath string) (*Client, error) {
 	if groupBaseDN == "" {
-		groupBaseDN = "ou=managedGroups,dc=redhat,dc=com"
 		if parts := strings.SplitN(baseDN, ",", 2); len(parts) == 2 {
-			groupBaseDN = "ou=managedGroups," + parts[1]
+			groupBaseDN = "cn=groups," + parts[1]
 		}
 	}
 
-	return &Client{
-		url:           url,
-		baseDN:        baseDN,
-		groupBaseDN:   groupBaseDN,
-		skipTLSVerify: skipTLSVerify,
-		cacheTTL:      defaultCacheTTL,
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
 	}
+	if caCertPath != "" {
+		rootCAs, err := x509.SystemCertPool()
+		if err != nil {
+			rootCAs = x509.NewCertPool()
+		}
+		caCert, err := os.ReadFile(caCertPath)
+		if err != nil {
+			return nil, fmt.Errorf("ldap read CA cert %s: %w", caCertPath, err)
+		}
+		if !rootCAs.AppendCertsFromPEM(caCert) {
+			return nil, fmt.Errorf("ldap CA cert %s: no valid PEM certificates found", caCertPath)
+		}
+		tlsConfig.RootCAs = rootCAs
+	}
+
+	return &Client{
+		url:          url,
+		srvDomain:    srvDomain,
+		baseDN:       baseDN,
+		groupBaseDN:  groupBaseDN,
+		bindDN:       bindDN,
+		bindPassword: bindPassword,
+		tlsConfig:    tlsConfig,
+		cacheTTL:     defaultCacheTTL,
+	}, nil
 }
 
-// connect dials the LDAP server and returns a connection.
+// connect dials an LDAP server (discovered via SRV or explicit URL) and performs an authenticated bind.
 func (c *Client) connect() (*goldap.Conn, error) {
-	conn, err := goldap.DialURL(c.url, goldap.DialWithTLSConfig(&tls.Config{
-		MinVersion:         tls.VersionTLS12,
-		InsecureSkipVerify: c.skipTLSVerify, //nolint:gosec // controlled by LDAP_SKIP_TLS_VERIFY env var for dev
-	}), goldap.DialWithDialer(&net.Dialer{Timeout: defaultConnTimeout}))
+	conn, err := c.dial()
 	if err != nil {
-		return nil, fmt.Errorf("ldap dial %s: %w", c.url, err)
+		return nil, err
 	}
+
+	if c.bindDN != "" {
+		if err := conn.Bind(c.bindDN, c.bindPassword); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("ldap bind: %w", err)
+		}
+	}
+
 	return conn, nil
+}
+
+// dial connects to an LDAP server. If srvDomain is configured, it discovers
+// servers via DNS SRV records (_ldap._tcp.<domain>) and tries each in
+// priority/weight order using LDAPS (port 636). Falls back to the explicit URL.
+func (c *Client) dial() (*goldap.Conn, error) {
+	dialOpts := []goldap.DialOpt{
+		goldap.DialWithTLSConfig(c.tlsConfig),
+		goldap.DialWithDialer(&net.Dialer{Timeout: defaultConnTimeout}),
+	}
+
+	if c.srvDomain == "" {
+		conn, err := goldap.DialURL(c.url, dialOpts...)
+		if err != nil {
+			return nil, fmt.Errorf("ldap dial %s: %w", c.url, err)
+		}
+		return conn, nil
+	}
+
+	_, addrs, err := net.LookupSRV("ldap", "tcp", c.srvDomain)
+	if err != nil || len(addrs) == 0 {
+		if c.url != "" {
+			conn, dialErr := goldap.DialURL(c.url, dialOpts...)
+			if dialErr != nil {
+				return nil, fmt.Errorf("ldap SRV lookup failed (%v) and fallback dial %s failed: %w", err, c.url, dialErr)
+			}
+			return conn, nil
+		}
+		return nil, fmt.Errorf("ldap SRV lookup _ldap._tcp.%s: %w", c.srvDomain, err)
+	}
+
+	// SRV records return port 389 (plain LDAP); connect on 636 for LDAPS.
+	var lastErr error
+	for _, addr := range addrs {
+		host := strings.TrimSuffix(addr.Target, ".")
+		url := fmt.Sprintf("ldaps://%s:636", host)
+		conn, dialErr := goldap.DialURL(url, dialOpts...)
+		if dialErr != nil {
+			lastErr = fmt.Errorf("ldap dial %s: %w", url, dialErr)
+			continue
+		}
+		return conn, nil
+	}
+	return nil, fmt.Errorf("ldap all SRV targets for %s failed, last error: %w", c.srvDomain, lastErr)
 }
 
 // cacheGet returns a cached value if it exists and hasn't expired.
@@ -133,9 +211,13 @@ func entryToUser(entry *goldap.Entry) LDAPUser {
 			break
 		}
 	}
+	seen := make(map[string]struct{})
 	for _, dn := range entry.GetAttributeValues("memberOf") {
 		if cn := extractCNFromDN(dn); cn != "" {
-			user.Groups = append(user.Groups, cn)
+			if _, dup := seen[cn]; !dup {
+				seen[cn] = struct{}{}
+				user.Groups = append(user.Groups, cn)
+			}
 		}
 	}
 	return user
@@ -188,7 +270,7 @@ func (c *Client) SearchUsers(query string) ([]LDAPUser, error) {
 }
 
 // SearchGroups searches for groups matching the query string.
-// Searches the cn attribute with a prefix match in ou=managedGroups.
+// Searches the cn attribute with a prefix match in the groups base DN.
 func (c *Client) SearchGroups(query string) ([]LDAPGroup, error) {
 	query = sanitizeQuery(query)
 	if len(query) < MinQueryLength {

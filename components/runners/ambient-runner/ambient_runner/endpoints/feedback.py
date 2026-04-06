@@ -2,7 +2,7 @@
 
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -17,12 +17,12 @@ class FeedbackEvent(BaseModel):
 
     type: str
     metaType: str
-    payload: Dict[str, Any]
-    threadId: Optional[str] = None
-    ts: Optional[int] = None
+    payload: dict[str, Any]
+    threadId: str | None = None
+    ts: int | None = None
 
 
-def _resolve_trace_id(request: Request, payload: Dict[str, Any]) -> str:
+def _resolve_trace_id(request: Request, payload: dict[str, Any]) -> str:
     """Resolve the Langfuse trace ID for a feedback event.
 
     Priority:

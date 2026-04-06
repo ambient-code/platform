@@ -71,6 +71,12 @@ func getOAuthProvider(provider string) (*OAuthProvider, error) {
 				"https://www.googleapis.com/auth/drive",
 				"https://www.googleapis.com/auth/drive.readonly",
 				"https://www.googleapis.com/auth/drive.file",
+				// Gmail scopes for gmail:send permission level (cumulative in workspace-mcp)
+				// Includes: readonly, organize (labels+modify), drafts (compose), and send
+				"https://www.googleapis.com/auth/gmail.readonly",
+				"https://www.googleapis.com/auth/gmail.labels",
+				"https://www.googleapis.com/auth/gmail.modify",
+				"https://www.googleapis.com/auth/gmail.compose",
 				"https://www.googleapis.com/auth/gmail.send",
 			},
 		}, nil

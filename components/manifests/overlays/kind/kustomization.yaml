@@ -16,6 +16,8 @@ resources:
 - mlflow-db-credentials.yaml
 # PostgreSQL init scripts for database creation (kind only)
 - postgresql-init-scripts.yaml
+- ldap-config.yaml
+- ldap-credentials.yaml
 
 # Patches for e2e environment
 patches:

@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { ArrowLeft, Loader2, AlertCircle, X, Info } from "lucide-react";
 import { getCronDescription, getNextRuns } from "@/lib/cron";
+import { formatScheduleDateTime } from "@/lib/format-timestamp";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,6 +33,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import {
   useCreateScheduledSession,
   useUpdateScheduledSession,
@@ -72,6 +74,7 @@ const formSchema = z.object({
       { message: "Must be a non-negative integer" }
     ),
   reuseLastSession: z.boolean().optional(),
+  stopOnRunFinished: z.boolean().optional(),
 }).refine(
   (data) => {
     if (data.schedulePreset === "custom") {
@@ -157,6 +160,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
         ? String(initialData.sessionTemplate.inactivityTimeout)
         : "",
       reuseLastSession: isEdit ? (initialData?.reuseLastSession ?? false) : false,
+      stopOnRunFinished: isEdit ? (initialData?.sessionTemplate.stopOnRunFinished ?? false) : false,
     },
   });
 
@@ -262,6 +266,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
       llmSettings: { model: values.model, temperature: 0.7, maxTokens: 4000 },
       timeout: 300,
       ...(parsedInactivityTimeout !== undefined ? { inactivityTimeout: parsedInactivityTimeout } : {}),
+      stopOnRunFinished: values.stopOnRunFinished ?? false,
       ...(activeWorkflow ? { activeWorkflow } : {}),
       ...(validRepos.length > 0 ? { repos: validRepos } : {}),
     };
@@ -394,7 +399,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                     <div className="text-xs text-muted-foreground space-y-0.5">
                       <p className="font-medium">Next 3 runs:</p>
                       {nextRuns.map((date, i) => (
-                        <p key={i}>{date.toLocaleString()}</p>
+                        <p key={i}>{formatScheduleDateTime(date)}</p>
                       ))}
                     </div>
                   )}
@@ -624,6 +629,26 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                     </FormControl>
                     <p className="text-xs text-muted-foreground">Default: 24 hours (86400s). Set to 0 to disable auto-stop.</p>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="stopOnRunFinished"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                    <div className="space-y-0.5">
+                      <FormLabel>Stop on Run Finished</FormLabel>
+                      <p className="text-xs text-muted-foreground">Automatically stop the session when the agent completes its run.</p>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={mutation.isPending}
+                      />
+                    </FormControl>
                   </FormItem>
                 )}
               />

@@ -1578,113 +1578,136 @@ export default function ProjectSessionDetailPage({
     );
   }
 
-  // Chat/FileViewer/TaskTranscript content rendering helper
+  // all tab content is rendered simultaneously and toggled via CSS `hidden`
+  // so scroll position, input state, and react query cache are preserved across tab switches
   const renderMainContent = () => {
-    if (fileTabs.activeTab.type === "task") {
-      const task = aguiState.backgroundTasks.get(fileTabs.activeTab.taskId);
-      return (
-        <TaskTranscriptViewer
-          projectName={projectName}
-          sessionName={sessionName}
-          taskId={fileTabs.activeTab.taskId}
-          task={task}
-        />
-      );
-    }
+    const isChatActive = fileTabs.activeTab.type === "chat";
 
-    if (fileTabs.activeTab.type === "file") {
-      return (
-        <FileViewer
-          projectName={projectName}
-          sessionName={sessionName}
-          filePath={fileTabs.activeTab.path}
-          sessionPhase={phase}
-        />
-      );
-    }
-
-    // Chat view
     return (
-      <Card className="relative flex-1 flex flex-col overflow-hidden py-0 border-0 rounded-none">
-        <CardContent className="px-6 pt-0 pb-0 flex-1 flex flex-col overflow-hidden">
-          {repoChanging && (
-            <div className="absolute inset-0 bg-background/90 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
-              <Alert className="max-w-md mx-4">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <AlertTitle>Updating Repositories...</AlertTitle>
-                <AlertDescription>
-                  <p>Please wait while repositories are being updated. This may take 10-20 seconds...</p>
-                </AlertDescription>
-              </Alert>
-            </div>
-          )}
+      <>
+        {/* chat -- always mounted, hidden when a file/task tab is active */}
+        <div className={cn("relative flex-1 flex flex-col overflow-hidden", !isChatActive && "hidden")}>
+          <Card className="relative flex-1 flex flex-col overflow-hidden py-0 border-0 rounded-none">
+            <CardContent className="px-6 pt-0 pb-0 flex-1 flex flex-col overflow-hidden">
+              {repoChanging && (
+                <div className="absolute inset-0 bg-background/90 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
+                  <Alert className="max-w-md mx-4">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <AlertTitle>Updating Repositories...</AlertTitle>
+                    <AlertDescription>
+                      <p>Please wait while repositories are being updated. This may take 10-20 seconds...</p>
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              )}
 
-          <div className="relative flex flex-col flex-1 overflow-hidden">
-            {(phase === "Creating" || phase === "Pending") && (
-              <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10">
-                <SessionStartingEvents
+              <div className="relative flex flex-col flex-1 overflow-hidden">
+                {(phase === "Creating" || phase === "Pending") && (
+                  <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10">
+                    <SessionStartingEvents
+                      projectName={projectName}
+                      sessionName={sessionName}
+                    />
+                  </div>
+                )}
+                <FeedbackProvider
                   projectName={projectName}
                   sessionName={sessionName}
-                />
-              </div>
-            )}
-            <FeedbackProvider
-              projectName={projectName}
-              sessionName={sessionName}
-              username={currentUser?.username || currentUser?.displayName || "anonymous"}
-              initialPrompt={session?.spec?.initialPrompt}
-              activeWorkflow={workflowManagement.activeWorkflow || undefined}
-              messages={streamMessages}
-              traceId={langfuseTraceId || undefined}
-              messageFeedback={aguiState.messageFeedback}
-            >
-              <MessagesTab
-                session={session}
-                streamMessages={streamMessages}
-                chatInput={chatInput}
-                setChatInput={setChatInput}
-                onSendChat={() => Promise.resolve(sendChat())}
-                onSendToolAnswer={sendToolAnswer}
-                onInterrupt={aguiInterrupt}
-                onGoToResults={() => {}}
-                onContinue={handleContinue}
-                workflowMetadata={workflowMetadata}
-                onCommandClick={handleCommandClick}
-                isRunActive={isRunActive}
-                queuedMessages={sessionQueue.messages}
-                hasRealMessages={hasRealMessages}
-                onCancelQueuedMessage={sessionQueue.cancelMessage}
-                onUpdateQueuedMessage={sessionQueue.updateMessage}
-                onClearQueue={sessionQueue.clearMessages}
-                agentName={agentName}
-                onAddRepository={handleOpenContextModal}
-                onUploadFile={handleOpenUploadModal}
-                projectName={projectName}
-                workflowSlot={
-                  <WorkflowSelector
-                    sessionPhase={session?.status?.phase}
-                    activeWorkflow={workflowManagement.activeWorkflow}
-                    activeWorkflowDetails={
-                      workflowManagement.activeWorkflow === "custom" && session?.spec?.activeWorkflow
-                        ? {
-                            gitUrl: session.spec.activeWorkflow.gitUrl,
-                            branch: session.spec.activeWorkflow.branch || "main",
-                            path: session.spec.activeWorkflow.path || "",
-                          }
-                        : undefined
+                  username={currentUser?.username || currentUser?.displayName || "anonymous"}
+                  initialPrompt={session?.spec?.initialPrompt}
+                  activeWorkflow={workflowManagement.activeWorkflow || undefined}
+                  messages={streamMessages}
+                  traceId={langfuseTraceId || undefined}
+                  messageFeedback={aguiState.messageFeedback}
+                >
+                  <MessagesTab
+                    session={session}
+                    streamMessages={streamMessages}
+                    chatInput={chatInput}
+                    setChatInput={setChatInput}
+                    onSendChat={() => Promise.resolve(sendChat())}
+                    onSendToolAnswer={sendToolAnswer}
+                    onInterrupt={aguiInterrupt}
+                    onGoToResults={() => {}}
+                    onContinue={handleContinue}
+                    workflowMetadata={workflowMetadata}
+                    onCommandClick={handleCommandClick}
+                    isRunActive={isRunActive}
+                    queuedMessages={sessionQueue.messages}
+                    hasRealMessages={hasRealMessages}
+                    onCancelQueuedMessage={sessionQueue.cancelMessage}
+                    onUpdateQueuedMessage={sessionQueue.updateMessage}
+                    onClearQueue={sessionQueue.clearMessages}
+                    agentName={agentName}
+                    onAddRepository={handleOpenContextModal}
+                    onUploadFile={handleOpenUploadModal}
+                    projectName={projectName}
+                    workflowSlot={
+                      <WorkflowSelector
+                        sessionPhase={session?.status?.phase}
+                        activeWorkflow={workflowManagement.activeWorkflow}
+                        activeWorkflowDetails={
+                          workflowManagement.activeWorkflow === "custom" && session?.spec?.activeWorkflow
+                            ? {
+                                gitUrl: session.spec.activeWorkflow.gitUrl,
+                                branch: session.spec.activeWorkflow.branch || "main",
+                                path: session.spec.activeWorkflow.path || "",
+                              }
+                            : undefined
+                        }
+                        selectedWorkflow={workflowManagement.selectedWorkflow}
+                        workflowActivating={workflowManagement.workflowActivating}
+                        ootbWorkflows={ootbWorkflows}
+                        onWorkflowChange={handleWorkflowChange}
+                        onLoadCustom={() => setCustomWorkflowDialogOpen(true)}
+                      />
                     }
-                    selectedWorkflow={workflowManagement.selectedWorkflow}
-                    workflowActivating={workflowManagement.workflowActivating}
-                    ootbWorkflows={ootbWorkflows}
-                    onWorkflowChange={handleWorkflowChange}
-                    onLoadCustom={() => setCustomWorkflowDialogOpen(true)}
                   />
-                }
+                </FeedbackProvider>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* file tabs -- one FileViewer per open tab, only the active one is visible */}
+        {fileTabs.openTabs.map((tab) => {
+          const isActive = fileTabs.activeTab.type === "file" && fileTabs.activeTab.path === tab.path;
+          return (
+            <div
+              key={tab.path}
+              className={cn("flex-1 flex flex-col overflow-hidden", !isActive && "hidden")}
+            >
+              <FileViewer
+                projectName={projectName}
+                sessionName={sessionName}
+                filePath={tab.path}
+                sessionPhase={phase}
+                isActive={isActive}
               />
-            </FeedbackProvider>
-          </div>
-        </CardContent>
-      </Card>
+            </div>
+          );
+        })}
+
+        {/* task tabs -- same pattern */}
+        {fileTabs.openTaskTabs.map((tab) => {
+          const isActive = fileTabs.activeTab.type === "task" && fileTabs.activeTab.taskId === tab.taskId;
+          const task = aguiState.backgroundTasks.get(tab.taskId);
+          return (
+            <div
+              key={tab.taskId}
+              className={cn("flex-1 flex flex-col overflow-hidden", !isActive && "hidden")}
+            >
+              <TaskTranscriptViewer
+                projectName={projectName}
+                sessionName={sessionName}
+                taskId={tab.taskId}
+                task={task}
+                isActive={isActive}
+              />
+            </div>
+          );
+        })}
+      </>
     );
   };
 

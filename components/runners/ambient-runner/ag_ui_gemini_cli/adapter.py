@@ -8,7 +8,7 @@ import json
 import logging
 import uuid
 from datetime import datetime
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator
 
 from ag_ui.core import (
     EventType,
@@ -41,7 +41,7 @@ from .types import (
 logger = logging.getLogger(__name__)
 
 
-def _iso_to_ms(iso_timestamp: str) -> Optional[int]:
+def _iso_to_ms(iso_timestamp: str) -> int | None:
     """Convert an ISO 8601 timestamp string to epoch milliseconds."""
     try:
         dt = datetime.fromisoformat(iso_timestamp.replace("Z", "+00:00"))
@@ -96,16 +96,16 @@ class GeminiCLIAdapter:
 
         # Per-run streaming state
         text_message_open = False
-        current_message_id: Optional[str] = None
+        current_message_id: str | None = None
         accumulated_text = ""
-        message_timestamp_ms: Optional[int] = None
+        message_timestamp_ms: int | None = None
 
         # Tool tracking
-        current_tool_call_id: Optional[str] = None
+        current_tool_call_id: str | None = None
 
         # Metadata captured from init event
-        session_id: Optional[str] = None
-        model: Optional[str] = None
+        session_id: str | None = None
+        model: str | None = None
 
         # Accumulated messages for MESSAGES_SNAPSHOT
         run_messages: list[AguiAssistantMessage] = []

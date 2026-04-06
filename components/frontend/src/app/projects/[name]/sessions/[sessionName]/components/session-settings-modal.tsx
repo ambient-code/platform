@@ -89,9 +89,9 @@ export function SessionSettingsModal({
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
 
-        <div className="flex h-[540px]">
+        <div className="flex flex-col md:flex-row h-auto md:h-[540px] max-h-[70vh]">
           {/* Sidebar nav */}
-          <nav className="w-48 border-r p-2 space-y-1 flex-shrink-0">
+          <nav className="flex md:flex-col md:w-48 border-b md:border-b-0 md:border-r p-2 gap-1 flex-shrink-0 overflow-x-auto">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               return (
@@ -99,7 +99,7 @@ export function SessionSettingsModal({
                   key={tab.id}
                   variant="ghost"
                   className={cn(
-                    "w-full justify-start gap-2 font-normal",
+                    "w-auto md:w-full justify-center md:justify-start gap-2 font-normal",
                     activeTab === tab.id && "bg-accent font-medium"
                   )}
                   onClick={() => setActiveTab(tab.id)}

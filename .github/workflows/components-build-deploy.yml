@@ -235,19 +235,19 @@ jobs:
           oc wait csv "$CSV" -n redhat-ods-operator \
             --for=jsonpath='{.status.phase}'=Succeeded --timeout=600s
 
-      - name: Wait for DataScienceCluster CRD to be available
+      - name: Wait for DataScienceCluster v2 API to be available
         run: |
-          echo "Waiting for DataScienceCluster CRD to be registered..."
+          echo "Waiting for DataScienceCluster v2 API to be served..."
           for i in $(seq 1 60); do
-            if oc get crd datascienceclusters.datasciencecluster.opendatahub.io &>/dev/null; then
-              echo "DataScienceCluster CRD is available"
+            if oc api-resources --api-group=datasciencecluster.opendatahub.io 2>/dev/null | grep -q v2; then
+              echo "DataScienceCluster v2 API is available"
               break
             fi
             if [ "$i" -eq 60 ]; then
-              echo "::error::DataScienceCluster CRD did not become available within timeout"
+              echo "::error::DataScienceCluster v2 API did not become available within timeout"
               exit 1
             fi
-            echo "Attempt $i/60 - CRD not yet available, waiting 10s..."
+            echo "Attempt $i/60 - v2 API not yet available, waiting 10s..."
             sleep 10
           done
 

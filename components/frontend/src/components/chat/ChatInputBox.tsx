@@ -619,7 +619,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
                     <PopoverTrigger asChild>
                       <Button variant="outline" size="sm" className="h-7 gap-1.5" disabled={agents.length === 0}>
                         <Users className="h-3.5 w-3.5" />
-                        Agents
+                        <span className="hidden sm:inline">Agents</span>
                         {agents.length > 0 && (
                           <Badge variant="secondary" className="ml-0.5 h-4 px-1.5 text-[10px] font-medium">
                             {agents.length}
@@ -645,7 +645,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
                     <PopoverTrigger asChild>
                       <Button variant="outline" size="sm" className="h-7 gap-1.5" disabled={commands.length === 0}>
                         <Terminal className="h-3.5 w-3.5" />
-                        Commands
+                        <span className="hidden sm:inline">Commands</span>
                         {commands.length > 0 && (
                           <Badge variant="secondary" className="ml-0.5 h-4 px-1.5 text-[10px] font-medium">
                             {commands.length}

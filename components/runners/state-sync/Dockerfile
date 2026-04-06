@@ -1,7 +1,6 @@
-FROM quay.io/fedora/fedora:latest
+FROM alpine:3.21
 
-RUN dnf install -y rclone git-core jq && \
-    dnf clean all
+RUN apk add --no-cache rclone git jq bash sqlite
 
 # Copy scripts
 COPY hydrate.sh /usr/local/bin/hydrate.sh

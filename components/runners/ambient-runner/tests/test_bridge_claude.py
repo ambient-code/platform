@@ -6,7 +6,11 @@ import pytest
 
 from ag_ui.core import RunAgentInput
 
-from ambient_runner.bridge import FrameworkCapabilities, PlatformBridge
+from ambient_runner.bridge import (
+    FrameworkCapabilities,
+    PlatformBridge,
+    setup_bridge_observability,
+)
 from ambient_runner.bridges.claude import ClaudeBridge
 from ambient_runner.platform.context import RunnerContext
 
@@ -219,7 +223,6 @@ class TestClaudeBridgeSetupObservability:
 
     async def test_forwards_workflow_env_vars_to_initialize(self):
         """Verify the three ACTIVE_WORKFLOW_* env vars are read from context and forwarded."""
-        bridge = ClaudeBridge()
         ctx = RunnerContext(
             session_id="sess-1",
             workspace_path="/workspace",
@@ -232,7 +235,6 @@ class TestClaudeBridgeSetupObservability:
                 "USER_NAME": "Test",
             },
         )
-        bridge.set_context(ctx)
 
         mock_obs_instance = AsyncMock()
         mock_obs_instance.initialize = AsyncMock(return_value=False)
@@ -241,7 +243,6 @@ class TestClaudeBridgeSetupObservability:
             "ambient_runner.observability.ObservabilityManager",
             return_value=mock_obs_instance,
         ) as mock_obs_cls:
-            from ambient_runner.bridge import setup_bridge_observability
 
             await setup_bridge_observability(ctx, "claude-sonnet-4-5")
 
@@ -257,7 +258,6 @@ class TestClaudeBridgeSetupObservability:
 
     async def test_forwards_empty_defaults_when_workflow_vars_unset(self):
         """Verify empty-string defaults are forwarded when workflow env vars are absent."""
-        bridge = ClaudeBridge()
         ctx = RunnerContext(
             session_id="sess-2",
             workspace_path="/workspace",
@@ -267,7 +267,6 @@ class TestClaudeBridgeSetupObservability:
                 "USER_NAME": "Test",
             },
         )
-        bridge.set_context(ctx)
 
         mock_obs_instance = AsyncMock()
         mock_obs_instance.initialize = AsyncMock(return_value=False)
@@ -276,7 +275,6 @@ class TestClaudeBridgeSetupObservability:
             "ambient_runner.observability.ObservabilityManager",
             return_value=mock_obs_instance,
         ):
-            from ambient_runner.bridge import setup_bridge_observability
 
             await setup_bridge_observability(ctx, "claude-sonnet-4-5")
 

@@ -140,7 +140,7 @@ export default function ScheduledSessionDetailPage() {
             <div className="flex items-center gap-2 mt-1">
               <Calendar className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">
-                {getCronDescription(scheduledSession.schedule)}
+                {getCronDescription(scheduledSession.schedule)} (UTC)
               </span>
               {scheduledSession.suspend ? (
                 <Badge variant="secondary">Suspended</Badge>

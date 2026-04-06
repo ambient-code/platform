@@ -31,13 +31,15 @@ import (
 	authv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 )
 
 const (
 	// activityDebounceInterval is the minimum interval between CR status updates for lastActivityTime.
-	// Inactivity timeout is measured in hours, so minute-level granularity is sufficient.
-	activityDebounceInterval = 60 * time.Second
+	// Must be significantly shorter than the smallest inactivity timeout to prevent
+	// false inactivity detection while the session is actively processing.
+	activityDebounceInterval = 10 * time.Second
 
 	// activityUpdateTimeout bounds how long a single activity status update can take.
 	activityUpdateTimeout = 10 * time.Second
@@ -55,6 +57,11 @@ var activityUpdateSem = make(chan struct{}, 50)
 // lastActivityUpdateTimes tracks the last time we updated lastActivityTime on the CR
 // for each session to avoid excessive API calls. Key: "namespace/sessionName"
 var lastActivityUpdateTimes sync.Map
+
+// stopOnRunFinishedCache tracks which sessions have stopOnRunFinished set.
+// Populated lazily on first RUN_FINISHED event, avoids repeated k8s API calls.
+// Key: sessionName, Value: bool
+var stopOnRunFinishedCache sync.Map
 
 // sessionProjectMap maps sessionName → projectName so that persistStreamedEvent
 // (which only receives sessionID) can look up the project for activity tracking.
@@ -106,6 +113,7 @@ func cleanupStaleSessions() {
 					betweenRunListeners.Delete(proj.(string) + "/" + sessionName)
 				}
 				sessionProjectMap.Delete(sessionName)
+				stopOnRunFinishedCache.Delete(sessionName)
 				// lastActivityUpdateTimes is keyed by "project/session";
 				// remove any entry whose suffix matches this session.
 				lastActivityUpdateTimes.Range(func(k, _ interface{}) bool {
@@ -533,10 +541,17 @@ func persistStreamedEvent(sessionID, runID, threadID, jsonData string) {
 	// sessionID-to-project mapping populated by HandleAGUIRunProxy.
 	eventType, _ := event["type"].(string)
 
-	// Update lastActivityTime on CR for activity events (debounced).
-	if isActivityEvent(eventType) {
+	// Update lastActivityTime on CR for any event (debounced).
+	if eventType != "" {
 		if projectName, ok := sessionProjectMap.Load(sessionID); ok {
 			updateLastActivityTime(projectName.(string), sessionID, eventType == types.EventTypeRunStarted)
+		}
+	}
+
+	// Stop session on RUN_FINISHED if stopOnRunFinished is set.
+	if eventType == types.EventTypeRunFinished {
+		if projectName, ok := sessionProjectMap.Load(sessionID); ok {
+			go checkAndStopOnRunFinished(projectName.(string), sessionID)
 		}
 	}
 
@@ -984,17 +999,56 @@ func triggerDisplayNameGenerationIfNeeded(projectName, sessionName string, messa
 	handlers.GenerateDisplayNameAsync(projectName, sessionName, userMessage, sessionCtx)
 }
 
-// isActivityEvent returns true for AG-UI event types that indicate session activity.
-func isActivityEvent(eventType string) bool {
-	switch eventType {
-	case types.EventTypeRunStarted,
-		types.EventTypeTextMessageStart,
-		types.EventTypeTextMessageContent,
-		types.EventTypeToolCallStart:
-		return true
-	default:
-		return false
+// checkAndStopOnRunFinished checks if stopOnRunFinished is set for a session
+// and triggers a stop. Uses an in-memory cache to avoid k8s API calls for
+// sessions that don't have the flag set.
+func checkAndStopOnRunFinished(projectName, sessionName string) {
+	if handlers.DynamicClient == nil {
+		return
 	}
+
+	// Check cache first — skip k8s API call for sessions we've already checked
+	if cached, ok := stopOnRunFinishedCache.Load(sessionName); ok {
+		if !cached.(bool) {
+			return
+		}
+	}
+
+	gvr := schema.GroupVersionResource{
+		Group:    "vteam.ambient-code",
+		Version:  "v1alpha1",
+		Resource: "agenticsessions",
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), activityUpdateTimeout)
+	defer cancel()
+
+	obj, err := handlers.DynamicClient.Resource(gvr).Namespace(projectName).Get(ctx, sessionName, metav1.GetOptions{})
+	if err != nil {
+		log.Printf("stopOnRunFinished: failed to get session %s/%s: %v", projectName, sessionName, err)
+		return
+	}
+
+	stopOnFinish, _, _ := unstructured.NestedBool(obj.Object, "spec", "stopOnRunFinished")
+	stopOnRunFinishedCache.Store(sessionName, stopOnFinish)
+	if !stopOnFinish {
+		return
+	}
+
+	annotations := obj.GetAnnotations()
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+	annotations["ambient-code.io/desired-phase"] = "Stopped"
+	annotations["ambient-code.io/stop-reason"] = "run-finished"
+	obj.SetAnnotations(annotations)
+
+	_, err = handlers.DynamicClient.Resource(gvr).Namespace(projectName).Update(ctx, obj, metav1.UpdateOptions{})
+	if err != nil {
+		log.Printf("stopOnRunFinished: failed to update session %s/%s: %v", projectName, sessionName, err)
+		return
+	}
+
+	log.Printf("stopOnRunFinished: session %s/%s set to Stopped after RUN_FINISHED", projectName, sessionName)
 }
 
 // updateLastActivityTime updates the lastActivityTime field on the AgenticSession CR status.

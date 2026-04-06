@@ -268,16 +268,22 @@ func TestCacheMiss(t *testing.T) {
 }
 
 func TestNewClient(t *testing.T) {
-	client := NewClient("ldaps://ldap.example.com", "ou=users,dc=redhat,dc=com", "", false)
+	client, err := NewClient("ldaps://ldap.example.com", "", "cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com", "", "uid=svc,cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com", "pass", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if client.url != "ldaps://ldap.example.com" {
 		t.Errorf("expected url 'ldaps://ldap.example.com', got %q", client.url)
 	}
-	if client.baseDN != "ou=users,dc=redhat,dc=com" {
-		t.Errorf("expected baseDN 'ou=users,dc=redhat,dc=com', got %q", client.baseDN)
+	if client.baseDN != "cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com" {
+		t.Errorf("expected baseDN 'cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com', got %q", client.baseDN)
 	}
-	if client.groupBaseDN != "ou=managedGroups,dc=redhat,dc=com" {
-		t.Errorf("expected groupBaseDN 'ou=managedGroups,dc=redhat,dc=com', got %q", client.groupBaseDN)
+	if client.groupBaseDN != "cn=groups,cn=accounts,dc=ipa,dc=redhat,dc=com" {
+		t.Errorf("expected groupBaseDN 'cn=groups,cn=accounts,dc=ipa,dc=redhat,dc=com', got %q", client.groupBaseDN)
+	}
+	if client.bindDN != "uid=svc,cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com" {
+		t.Errorf("expected bindDN 'uid=svc,cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com', got %q", client.bindDN)
 	}
 	if client.cacheTTL != defaultCacheTTL {
 		t.Errorf("expected cacheTTL %v, got %v", defaultCacheTTL, client.cacheTTL)
@@ -285,15 +291,21 @@ func TestNewClient(t *testing.T) {
 }
 
 func TestNewClientExplicitGroupBaseDN(t *testing.T) {
-	client := NewClient("ldaps://ldap.example.com", "ou=users,dc=example,dc=com", "ou=groups,dc=example,dc=com", false)
+	client, err := NewClient("ldaps://ldap.example.com", "", "cn=users,cn=accounts,dc=example,dc=com", "cn=groups,cn=accounts,dc=example,dc=com", "", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	if client.groupBaseDN != "ou=groups,dc=example,dc=com" {
-		t.Errorf("expected explicit groupBaseDN 'ou=groups,dc=example,dc=com', got %q", client.groupBaseDN)
+	if client.groupBaseDN != "cn=groups,cn=accounts,dc=example,dc=com" {
+		t.Errorf("expected explicit groupBaseDN 'cn=groups,cn=accounts,dc=example,dc=com', got %q", client.groupBaseDN)
 	}
 }
 
 func TestSearchUsersShortQuery(t *testing.T) {
-	client := NewClient("ldaps://ldap.example.com", "ou=users,dc=redhat,dc=com", "", false)
+	client, err := NewClient("ldaps://ldap.example.com", "", "cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com", "", "", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// Query too short should return nil without connecting
 	users, err := client.SearchUsers("m")
@@ -306,7 +318,10 @@ func TestSearchUsersShortQuery(t *testing.T) {
 }
 
 func TestSearchGroupsShortQuery(t *testing.T) {
-	client := NewClient("ldaps://ldap.example.com", "ou=users,dc=redhat,dc=com", "", false)
+	client, err := NewClient("ldaps://ldap.example.com", "", "cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com", "", "", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	groups, err := client.SearchGroups("a")
 	if err != nil {
@@ -318,7 +333,10 @@ func TestSearchGroupsShortQuery(t *testing.T) {
 }
 
 func TestGetUserEmptyUID(t *testing.T) {
-	client := NewClient("ldaps://ldap.example.com", "ou=users,dc=redhat,dc=com", "", false)
+	client, err := NewClient("ldaps://ldap.example.com", "", "cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com", "", "", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	user, err := client.GetUser("")
 	if err != nil {

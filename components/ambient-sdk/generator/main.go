@@ -115,9 +115,9 @@ type ProtoGeneratedHeader struct {
 }
 
 type ProtoRPC struct {
-	Name           string
-	InputType      string
-	OutputType     string
+	Name            string
+	InputType       string
+	OutputType      string
 	ServerStreaming bool
 }
 
@@ -218,9 +218,9 @@ func parseRPCLine(line string) *ProtoRPC {
 	}
 	outputType := strings.TrimSpace(rest[openParen+1 : closeParen])
 	return &ProtoRPC{
-		Name:           name,
-		InputType:      inputType,
-		OutputType:     outputType,
+		Name:            name,
+		InputType:       inputType,
+		OutputType:      outputType,
 		ServerStreaming: serverStreaming,
 	}
 }

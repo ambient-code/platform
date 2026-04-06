@@ -265,10 +265,15 @@ export function SessionsSidebar({
           <Button
             variant="ghost"
             size="sm"
-            className="w-full justify-start text-muted-foreground hover:text-foreground"
+            className="w-full justify-between text-muted-foreground hover:text-foreground"
           >
-            <ChevronLeft className="w-4 h-4 mr-2" />
-            Workspaces
+            <span className="flex items-center">
+              <ChevronLeft className="w-4 h-4 mr-2" />
+              Workspaces
+            </span>
+            <span className="text-xs font-semibold text-foreground truncate max-w-[60%]" title={projectName}>
+              {projectName}
+            </span>
           </Button>
         </Link>
 
