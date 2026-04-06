@@ -328,10 +328,24 @@ func (h sessionHandler) StreamRunnerEvents(w http.ResponseWriter, r *http.Reques
 		f.Flush()
 	}
 
-	if _, copyErr := io.Copy(w, resp.Body); copyErr != nil {
-		glog.V(4).Infof("StreamRunnerEvents: stream ended for session %s: %v", id, copyErr)
-	}
-	if f, ok := w.(http.Flusher); ok {
-		f.Flush()
+	flusher, canFlush := w.(http.Flusher)
+	buf := make([]byte, 4096)
+	for {
+		n, readErr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+				glog.V(4).Infof("StreamRunnerEvents: write error for session %s: %v", id, writeErr)
+				return
+			}
+			if canFlush {
+				flusher.Flush()
+			}
+		}
+		if readErr != nil {
+			if readErr != io.EOF {
+				glog.V(4).Infof("StreamRunnerEvents: read error for session %s: %v", id, readErr)
+			}
+			return
+		}
 	}
 }
