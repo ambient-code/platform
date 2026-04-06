@@ -314,7 +314,9 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | `GET /sessions/{id}` | `acpctl describe session <id>` | ✅ implemented |
 | `DELETE /sessions/{id}` | `acpctl delete session <id>` | ✅ implemented |
 | `GET /sessions/{id}/messages` | `acpctl session messages <id>` | ✅ implemented |
-| `POST /sessions/{id}/messages` | `acpctl session send <id> --body <text>` | ✅ implemented |
+| `POST /sessions/{id}/messages` | `acpctl session send <id> <message>` | ✅ implemented |
+| `POST /sessions/{id}/messages` + `GET /sessions/{id}/events` | `acpctl session send <id> <message> -f` | ✅ implemented |
+| `POST /sessions/{id}/messages` + `GET /sessions/{id}/events` | `acpctl session send <id> <message> -f --json` | ✅ implemented |
 | `GET /sessions/{id}/events` | `acpctl session events <id>` | ✅ implemented |
 
 #### Credentials
@@ -959,3 +961,42 @@ All Kinds with `labels`/`annotations` store them as JSON strings in the DB (`*st
 | Project/Agent/Session label subcommands | 🔲 no `acpctl label`/`acpctl annotate` | add typed label helpers to SDK first, then CLI |
 | `GET /roles`, `GET /role_bindings` | 🔲 list/get not exposed | add to `get` command resource switch |
 | `DELETE /role_bindings/{id}` | 🔲 not exposed | add to `delete` command resource switch |
+
+
+ Manual Test
+
+  # 1. Project
+  acpctl create project --name test-cred-1 --description "cred test"
+  acpctl project test-cred-1
+
+  # 2. Agent
+  acpctl agent create --project-id test-cred-1 --name github-agent \
+    --prompt "You are a GitHub automation agent."
+
+  AGENT_ID=$(acpctl agent list --project-id test-cred-1 -o json | python3 -c "import sys,json; print(json.load(sys.stdin)['items'][0]['id'])")
+  echo "AGENT_ID=$AGENT_ID"
+
+  # 3. Credential (apply from file — only working path)
+  printf 'kind: Credential\nname: github-pat-test\nprovider: github\ntoken: %s\ndescription: test\n' \
+    "$(cat ~/projects/secrets/github.ambient-pat.token)" > /tmp/cred.yaml
+  acpctl apply -f /tmp/cred.yaml && rm /tmp/cred.yaml
+
+  CRED_ID=$(acpctl get credentials -o json | python3 -c "import sys,json; print(next(i['id'] for i in json.load(sys.stdin)['items'] if i['name']=='github-pat-test'))")
+  echo "CRED_ID=$CRED_ID"
+
+  # 4. Role binding
+  ROLE_ID=$(acpctl get roles -o json | python3 -c "import sys,json; print(next(i['id'] for i in json.load(sys.stdin)['items'] if i['name']=='credential:token-reader'))")
+  MY_USER=$(acpctl whoami | awk '/^User:/{print $2}')
+  echo "ROLE_ID=$ROLE_ID  MY_USER=$MY_USER"
+
+  acpctl create role-binding --user-id "$MY_USER" --role-id "$ROLE_ID" \
+    --scope agent --scope-id "$AGENT_ID"
+
+  # 5. Start session
+  SESSION_ID=$(acpctl agent start github-agent --project-id test-cred-1 \
+    --prompt "Fetch credential $CRED_ID token and confirm you received it." \
+    -o json | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+  echo "SESSION_ID=$SESSION_ID"
+
+  # 6. Watch events
+  acpctl session events "$SESSION_ID"
