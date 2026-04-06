@@ -16,3 +16,22 @@ spec:
   tls:
     termination: edge
     insecureEdgeTerminationPolicy: Redirect
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: ambient-api-server-grpc
+  namespace: ambient-code--runtime-int
+  labels:
+    app: ambient-api-server
+    component: grpc
+    shard: internal
+spec:
+  to:
+    kind: Service
+    name: ambient-api-server
+  port:
+    targetPort: grpc
+  tls:
+    termination: passthrough
+    insecureEdgeTerminationPolicy: None
