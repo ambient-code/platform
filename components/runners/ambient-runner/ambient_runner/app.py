@@ -150,7 +150,7 @@ def create_ambient_app(
             # This closes the race between listener.ready and the first event fan-out.
             active_streams = getattr(bridge, "_active_streams", None)
             if active_streams is not None and session_id not in active_streams:
-                active_streams[session_id] = asyncio.Queue(maxsize=100)
+                active_streams[session_id] = asyncio.Queue()
                 logger.info("Pre-registered SSE queue for session=%s", session_id)
 
         # Auto-execute prompts when present (skipped only for resumes,

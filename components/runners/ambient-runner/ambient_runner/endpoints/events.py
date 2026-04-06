@@ -69,7 +69,7 @@ async def get_events(thread_id: str, request: Request):
         )
         queue: asyncio.Queue = existing
     else:
-        queue = asyncio.Queue(maxsize=100)
+        queue = asyncio.Queue()
         active_streams[thread_id] = queue
         logger.info(
             "[SSE TAP] Queue registered: thread=%s (active_streams count=%d)",
