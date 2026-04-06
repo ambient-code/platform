@@ -475,7 +475,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                     onValueChange={handleWorkflowChange}
                     disabled={mutation.isPending}
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger className="w-full" data-testid="workflow-select">
                       <SelectValue placeholder="Select workflow..." />
                     </SelectTrigger>
                     <SelectContent>
@@ -501,6 +501,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                         onChange={(e) => setCustomGitUrl(e.target.value)}
                         placeholder="https://github.com/org/workflow-repo.git"
                         disabled={mutation.isPending}
+                        data-testid="workflow-git-url"
                       />
                     </div>
                     <div className="space-y-1">
@@ -510,6 +511,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                         onChange={(e) => setCustomBranch(e.target.value)}
                         placeholder="main"
                         disabled={mutation.isPending}
+                        data-testid="workflow-branch"
                       />
                     </div>
                     <div className="sm:col-span-3 space-y-1">
@@ -519,6 +521,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                         onChange={(e) => setCustomPath(e.target.value)}
                         placeholder="workflows/my-workflow"
                         disabled={mutation.isPending}
+                        data-testid="workflow-path"
                       />
                     </div>
                   </div>

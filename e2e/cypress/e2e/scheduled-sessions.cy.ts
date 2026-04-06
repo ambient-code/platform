@@ -267,6 +267,114 @@ describe('Scheduled Sessions', () => {
     })
   })
 
+  // ─── Custom Workflow ────────────────────────────────────────
+
+  describe('Custom Workflow', () => {
+    it('should create a scheduled session with a custom workflow', () => {
+      cy.visit(`/projects/${workspaceSlug}/scheduled-sessions/new`)
+
+      // Fill display name
+      cy.get('[data-testid="scheduled-session-name-input"]', { timeout: 10000 })
+        .type('Custom Workflow Test')
+
+      // Leave default schedule preset (Every hour)
+
+      // Fill initial prompt
+      cy.get('[data-testid="initial-prompt-input"]').type('Run with custom workflow')
+
+      // Select "Custom workflow..." from workflow dropdown
+      cy.get('[data-testid="workflow-select"]').click()
+      cy.get('[role="option"]').contains('Custom workflow...').click()
+
+      // Fill custom workflow fields
+      cy.get('[data-testid="workflow-git-url"]', { timeout: 5000 })
+        .should('be.visible')
+        .type('https://github.com/ambient-code/workflows.git')
+      cy.get('[data-testid="workflow-branch"]').clear().type('main')
+      cy.get('[data-testid="workflow-path"]').type('workflows/bugfix')
+
+      // Wait for runner/model to load
+      cy.get('[data-testid="runner-type-select"]', { timeout: 10000 }).should('not.be.disabled')
+      cy.get('[data-testid="model-select"]', { timeout: 10000 }).should('not.be.disabled')
+
+      // Submit
+      cy.get('[data-testid="scheduled-session-submit"]').click()
+
+      // Verify redirect to list
+      cy.url({ timeout: 15000 }).should('include', `/projects/${workspaceSlug}/scheduled-sessions`)
+      cy.url().should('not.include', '/new')
+
+      // Verify it appears in the list
+      cy.contains('Custom Workflow Test', { timeout: 10000 }).should('be.visible')
+    })
+
+    it('should edit the custom workflow on an existing scheduled session', () => {
+      // Create a scheduled session with a custom workflow via API
+      cy.request({
+        method: 'POST',
+        url: `/api/projects/${workspaceSlug}/scheduled-sessions`,
+        headers: apiHeaders(),
+        body: {
+          displayName: 'Workflow Edit Test',
+          schedule: '0 * * * *',
+          sessionTemplate: {
+            initialPrompt: 'original prompt',
+            runnerType: 'claude-code',
+            llmSettings: { model: 'claude-sonnet-4-20250514', temperature: 0.7, maxTokens: 4000 },
+            timeout: 300,
+            activeWorkflow: {
+              gitUrl: 'https://github.com/ambient-code/workflows.git',
+              branch: 'main',
+              path: 'workflows/bugfix',
+            },
+          },
+        },
+      }).then((resp) => {
+        expect(resp.status).to.be.oneOf([200, 201])
+        const scheduleName = resp.body.name
+
+        // Navigate to edit page
+        cy.visit(`/projects/${workspaceSlug}/scheduled-sessions/${scheduleName}/edit`)
+
+        // Wait for form to load — workflow fields should be pre-populated
+        cy.get('[data-testid="workflow-select"]', { timeout: 10000 })
+          .should('contain.text', 'Custom workflow...')
+
+        // Verify pre-populated custom workflow fields
+        cy.get('[data-testid="workflow-git-url"]')
+          .should('have.value', 'https://github.com/ambient-code/workflows.git')
+        cy.get('[data-testid="workflow-branch"]')
+          .should('have.value', 'main')
+        cy.get('[data-testid="workflow-path"]')
+          .should('have.value', 'workflows/bugfix')
+
+        // Update the workflow fields
+        cy.get('[data-testid="workflow-git-url"]').clear().type('https://github.com/ambient-code/workflows.git')
+        cy.get('[data-testid="workflow-branch"]').clear().type('develop')
+        cy.get('[data-testid="workflow-path"]').clear().type('workflows/triage')
+
+        // Submit
+        cy.get('[data-testid="scheduled-session-submit"]').click()
+
+        // Verify redirect
+        cy.url({ timeout: 15000 }).should('include', `/projects/${workspaceSlug}/scheduled-sessions`)
+        cy.url().should('not.include', '/edit')
+
+        // Verify via API that the workflow was updated
+        cy.request({
+          url: `/api/projects/${workspaceSlug}/scheduled-sessions/${scheduleName}`,
+          headers: apiHeaders(),
+        }).then((getResp) => {
+          expect(getResp.status).to.eq(200)
+          const workflow = getResp.body.sessionTemplate.activeWorkflow
+          expect(workflow.gitUrl).to.eq('https://github.com/ambient-code/workflows.git')
+          expect(workflow.branch).to.eq('develop')
+          expect(workflow.path).to.eq('workflows/triage')
+        })
+      })
+    })
+  })
+
   // ─── Schedule Deletion ────────────────────────────────────────
 
   describe('Schedule Deletion', () => {
