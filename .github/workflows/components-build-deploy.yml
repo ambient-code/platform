@@ -208,6 +208,12 @@ jobs:
         run: |
           oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
 
+      - name: Deploy Service Mesh operator via OLM
+        run: |
+          oc apply -f components/manifests/components/openshift-ai/service-mesh-namespace.yaml
+          oc apply -f components/manifests/components/openshift-ai/service-mesh-operatorgroup.yaml
+          oc apply -f components/manifests/components/openshift-ai/service-mesh-subscription.yaml
+
       - name: Deploy RHOAI operator via OLM
         run: |
           oc apply -f components/manifests/components/openshift-ai/namespace.yaml
