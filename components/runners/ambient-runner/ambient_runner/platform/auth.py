@@ -17,7 +17,7 @@ from urllib import request as _urllib_request
 from urllib.parse import urlparse
 
 from ambient_runner.platform.context import RunnerContext
-from ambient_runner.platform.utils import get_bot_token
+from ambient_runner.platform.utils import get_bot_token, get_sa_token
 
 logger = logging.getLogger(__name__)
 
@@ -144,9 +144,14 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
             req.add_header("X-Runner-Current-User", context.current_user_id)
         logger.debug(f"Using caller token for {credential_type} credentials")
     else:
-        bot = get_bot_token()
-        if bot:
-            req.add_header("Authorization", f"Bearer {bot}")
+        sa_token = get_sa_token()
+        if sa_token:
+            req.add_header("Authorization", f"Bearer {sa_token}")
+            logger.debug(f"Using K8s SA token for {credential_type} credentials")
+        else:
+            bot = get_bot_token()
+            if bot:
+                req.add_header("Authorization", f"Bearer {bot}")
 
     loop = asyncio.get_running_loop()
 
@@ -163,9 +168,13 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
                     f"Caller token expired for {credential_type}, falling back to BOT_TOKEN"
                 )
                 fallback_req = _urllib_request.Request(url, method="GET")
-                bot = get_bot_token()
-                if bot:
-                    fallback_req.add_header("Authorization", f"Bearer {bot}")
+                sa_token = get_sa_token()
+                if sa_token:
+                    fallback_req.add_header("Authorization", f"Bearer {sa_token}")
+                else:
+                    bot = get_bot_token()
+                    if bot:
+                        fallback_req.add_header("Authorization", f"Bearer {bot}")
                 if context.current_user_id:
                     fallback_req.add_header(
                         "X-Runner-Current-User", context.current_user_id

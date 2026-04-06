@@ -728,3 +728,98 @@ class TestRefreshCredentialsTool:
 
         assert result.get("isError") is None or result.get("isError") is False
         assert "successfully" in result["content"][0]["text"].lower()
+
+
+# ---------------------------------------------------------------------------
+# _fetch_credential — K8s SA token used when no caller token (regression)
+# ---------------------------------------------------------------------------
+
+
+class TestFetchCredentialSAToken:
+    @pytest.mark.asyncio
+    async def test_uses_sa_token_when_no_caller_token(self):
+        """_fetch_credential sends the K8s SA token when caller_token is absent.
+
+        The backend's enforceCredentialRBAC treats SA tokens (system:serviceaccount:*)
+        as isBotToken=true and grants access to the session owner's credentials.
+        Using the CP OIDC token (get_bot_token()) instead fails because it is not
+        a K8s SA token and doesn't resolve as a serviceaccount identity.
+
+        Regression for: runner gets HTTP 401 on credential fetch in gRPC-initiated runs.
+        """
+        server = HTTPServer(("127.0.0.1", 0), _CredentialHandler)
+        port = server.server_address[1]
+        thread = Thread(target=server.handle_request, daemon=True)
+        thread.start()
+
+        _CredentialHandler.response_body = {"token": "gh-tok-via-sa"}
+        _CredentialHandler.captured_headers = {}
+
+        import ambient_runner.platform.utils as utils
+
+        sa_token = "k8s-sa-token-for-runner"
+
+        try:
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "BACKEND_API_URL": f"http://127.0.0.1:{port}/api",
+                        "CREDENTIAL_IDS": json.dumps({"github": "cred-gh-sa-test"}),
+                    },
+                ),
+                patch("ambient_runner.platform.auth.get_sa_token", return_value=sa_token),
+            ):
+                ctx = _make_context()  # no caller_token
+                result = await _fetch_credential(ctx, "github")
+
+            assert result.get("token") == "gh-tok-via-sa", (
+                "credential fetch must succeed using K8s SA token — "
+                "regression for HTTP 401 on gRPC-initiated runs"
+            )
+            assert _CredentialHandler.captured_headers.get("Authorization") == (
+                f"Bearer {sa_token}"
+            ), "request must use the K8s SA token, not the CP OIDC token"
+        finally:
+            server.server_close()
+            thread.join(timeout=2)
+
+    @pytest.mark.asyncio
+    async def test_sa_token_preferred_over_bot_token_when_no_caller_token(self):
+        """K8s SA token is used before get_bot_token() when caller_token is absent.
+
+        The SA token authenticates as system:serviceaccount:* (isBotToken=true in
+        the backend). The CP OIDC token from get_bot_token() does not, and would
+        result in HTTP 401.
+        """
+        import ambient_runner.platform.utils as utils
+
+        called_with = {}
+
+        def fake_urlopen(req, timeout=None):
+            called_with["auth"] = req.get_header("Authorization")
+            mock_resp = MagicMock()
+            mock_resp.read.return_value = json.dumps({"token": "ok"}).encode()
+            mock_resp.__enter__ = lambda s: s
+            mock_resp.__exit__ = MagicMock(return_value=False)
+            return mock_resp
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "BACKEND_API_URL": "http://backend.svc.cluster.local/api",
+                    "CREDENTIAL_IDS": json.dumps({"github": "cred-gh-pref"}),
+                },
+            ),
+            patch("urllib.request.urlopen", side_effect=fake_urlopen),
+            patch("ambient_runner.platform.auth.get_sa_token", return_value="sa-token-xyz"),
+            patch("ambient_runner.platform.auth.get_bot_token", return_value="cp-oidc-token"),
+        ):
+            ctx = _make_context()  # no caller_token
+            await _fetch_credential(ctx, "github")
+
+        assert called_with.get("auth") == "Bearer sa-token-xyz", (
+            "SA token must be preferred over CP OIDC token — "
+            "SA token resolves as system:serviceaccount:* (isBotToken=true)"
+        )

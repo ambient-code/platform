@@ -23,9 +23,28 @@ _TRUTHY_VALUES = frozenset({"1", "true", "yes"})
 # Kubelet automatically refreshes this file when the Secret is updated.
 _BOT_TOKEN_FILE = Path("/var/run/secrets/ambient/bot-token")
 
+# K8s SA token mounted in every pod by the kubelet.
+_SA_TOKEN_FILE = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
+
 # In-process cache for the token fetched from the CP token endpoint.
 # Set once at startup by _grpc_client.py after a successful CP token fetch.
 _cp_fetched_token: str = ""
+
+
+def get_sa_token() -> str:
+    """Return the Kubernetes ServiceAccount token mounted in the pod.
+
+    This is a long-lived K8s-managed token that authenticates to the K8s API
+    as system:serviceaccount:<namespace>:<sa-name>. The backend's
+    enforceCredentialRBAC classifies this as isBotToken=true, which grants
+    access to the session owner's credentials without an owner-match check.
+    """
+    try:
+        if _SA_TOKEN_FILE.exists():
+            return _SA_TOKEN_FILE.read_text().strip()
+    except OSError:
+        pass
+    return ""
 
 
 def set_bot_token(token: str) -> None:
