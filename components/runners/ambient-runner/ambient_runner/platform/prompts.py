@@ -68,6 +68,48 @@ GIT_PUSH_STEPS = (
     "the feature branch (`{branch}`). If push fails, do NOT fall back to main.\n\n"
 )
 
+GIT_SAFETY_INSTRUCTIONS = (
+    "## Git Safety Guardrails\n\n"
+    "You MUST follow these rules when performing git operations. Violations can "
+    "cause **irreversible data loss** including destroyed PRs, lost review history, "
+    "and corrupted branches.\n\n"
+    "### Hard Rules (NEVER violate)\n\n"
+    "1. **NEVER delete remote branches or refs** — deleting a remote branch "
+    "permanently closes any associated PR and makes it unrestorable. Do NOT use "
+    "`git push --delete`, `git push origin :branch`, or "
+    "`gh api -X DELETE .../git/refs/...`.\n\n"
+    "2. **NEVER manipulate git refs via the GitHub/GitLab REST API** — if "
+    "`git push` fails, report the failure to the user and stop. Do NOT "
+    "circumvent push failures by using `gh api` or `curl` to PATCH/POST/DELETE "
+    "refs, or to create commits/trees/blobs directly via the Git Data API.\n\n"
+    "3. **NEVER force push** — do not use `git push --force` or `git push -f`. "
+    "If you must update a remote branch after a rebase, use "
+    "`git push --force-with-lease` and ONLY after getting explicit user approval.\n\n"
+    "4. **NEVER modify the user's default/main branch** — treat `main` and "
+    "`master` as read-only. Never push commits to them, never reset them, "
+    "never rebase onto them with a force push.\n\n"
+    "5. **NEVER run destructive local operations without a backup** — before "
+    "running `git reset --hard`, `git clean -fd`, `git checkout -- .`, or "
+    "any rebase, ALWAYS create a backup branch first:\n"
+    "   ```\n"
+    "   git branch backup-$(date +%s)\n"
+    "   ```\n\n"
+    "6. **NEVER embed tokens or credentials in commands** — do not include "
+    "PATs, API keys, or passwords in git remote URLs, curl commands, or any "
+    "shell command. Use environment variables (e.g. `$GITHUB_TOKEN`) instead.\n\n"
+    "### Escalation Protocol\n\n"
+    "When a git operation fails, you MUST follow this protocol:\n"
+    "1. **Stop** — do not retry with a more aggressive variant.\n"
+    "2. **Diagnose** — read the error message and identify the root cause "
+    "(auth scope, permissions, branch protection, etc.).\n"
+    "3. **Report** — tell the user what failed and why.\n"
+    "4. **Wait** — let the user decide the next step. Do NOT autonomously "
+    "escalate to force pushes, API workarounds, or destructive operations.\n\n"
+    "Violating these rules can permanently destroy user work, close PRs, "
+    "and lose review history. When in doubt, ask the user.\n\n"
+)
+
+
 RUBRIC_EVALUATION_HEADER = "## Rubric Evaluation\n\n"
 
 RUBRIC_EVALUATION_INTRO = (
@@ -214,6 +256,10 @@ def build_workspace_context_prompt(
                 repo_name = repo.get("name", "unknown")
                 prompt += f"- **repos/{repo_name}/**\n"
             prompt += GIT_PUSH_STEPS.format(branch=push_branch)
+
+    # Git safety guardrails (always included when repos are present)
+    if repos_cfg:
+        prompt += GIT_SAFETY_INSTRUCTIONS
 
     # Human-in-the-loop instructions
     prompt += HUMAN_INPUT_INSTRUCTIONS

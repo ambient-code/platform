@@ -317,6 +317,46 @@ class TestBuildWorkspaceContextPrompt:
         # repo3 should not be in git instructions since autoPush=false
         # (but it will be in the general repos list)
 
+    def test_prompt_includes_git_safety_guardrails_with_repos(self):
+        """Test that git safety guardrails are included when repos are present."""
+        repos_cfg = [
+            {
+                "name": "my-repo",
+                "url": "https://github.com/owner/my-repo.git",
+                "branch": "main",
+                "autoPush": False,
+            }
+        ]
+
+        prompt = build_workspace_context_prompt(
+            repos_cfg=repos_cfg,
+            workflow_name=None,
+            artifacts_path="artifacts",
+            ambient_config={},
+            workspace_path="/workspace",
+        )
+
+        # Verify git safety guardrails are present
+        assert "Git Safety Guardrails" in prompt
+        assert "NEVER delete remote branches" in prompt
+        assert "NEVER force push" in prompt
+        assert "NEVER modify the user's default/main branch" in prompt
+        assert "NEVER run destructive local operations without a backup" in prompt
+        assert "NEVER embed tokens or credentials" in prompt
+        assert "Escalation Protocol" in prompt
+
+    def test_prompt_excludes_git_safety_guardrails_without_repos(self):
+        """Test that git safety guardrails are excluded when no repos are present."""
+        prompt = build_workspace_context_prompt(
+            repos_cfg=[],
+            workflow_name=None,
+            artifacts_path="artifacts",
+            ambient_config={},
+            workspace_path="/workspace",
+        )
+
+        assert "Git Safety Guardrails" not in prompt
+
     def test_prompt_without_repos(self):
         """Test prompt generation when no repos are configured."""
         prompt = build_workspace_context_prompt(
