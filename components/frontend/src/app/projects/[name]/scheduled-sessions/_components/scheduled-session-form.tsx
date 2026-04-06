@@ -101,6 +101,29 @@ function resolveSchedulePreset(schedule: string): { preset: string; customCron: 
   return { preset: "custom", customCron: schedule };
 }
 
+function resolveWorkflowState(
+  activeWorkflow: WorkflowSelection | undefined,
+  ootbWorkflows: { id: string; gitUrl: string; branch: string; path?: string }[]
+): { selectedWorkflow: string; customGitUrl: string; customBranch: string; customPath: string } {
+  if (!activeWorkflow) {
+    return { selectedWorkflow: "none", customGitUrl: "", customBranch: "main", customPath: "" };
+  }
+  const match = ootbWorkflows.find(
+    (w) => w.gitUrl === activeWorkflow.gitUrl
+      && w.branch === activeWorkflow.branch
+      && (w.path ?? "") === (activeWorkflow.path ?? "")
+  );
+  if (match) {
+    return { selectedWorkflow: match.id, customGitUrl: "", customBranch: "main", customPath: "" };
+  }
+  return {
+    selectedWorkflow: "custom",
+    customGitUrl: activeWorkflow.gitUrl,
+    customBranch: activeWorkflow.branch || "main",
+    customPath: activeWorkflow.path ?? "",
+  };
+}
+
 export function ScheduledSessionForm({ projectName, mode, initialData }: ScheduledSessionFormProps) {
   const router = useRouter();
   const isEdit = mode === "edit";
@@ -122,6 +145,9 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
   const [customGitUrl, setCustomGitUrl] = useState(initialWorkflow.customGitUrl);
   const [customBranch, setCustomBranch] = useState(initialWorkflow.customBranch);
   const [customPath, setCustomPath] = useState(initialWorkflow.customPath);
+  const [workflowResolved, setWorkflowResolved] = useState(
+    !isEdit || !initialData?.sessionTemplate.activeWorkflow
+  );
   const [repos, setRepos] = useState<SessionRepo[]>(
     isEdit && initialData?.sessionTemplate.repos ? [...initialData.sessionTemplate.repos] : []
   );
@@ -184,8 +210,24 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
     }
   }, [modelsData?.defaultModel, form, isEdit, initialData]);
 
-  // Workflow state is initialized from initialData in useState above.
-  // No useEffect needed — avoids timing issues with Radix Select.
+  // Resolve workflow state once OOTB workflows finish loading. The Skeleton
+  // guard on the Select (workflowsLoading || !workflowResolved) ensures Radix
+  // never sees a value change after mount — the Select only mounts after this
+  // effect has set the final selectedWorkflow value.
+  useEffect(() => {
+    if (workflowResolved) return;
+    if (workflowsLoading) return;
+
+    const resolved = resolveWorkflowState(
+      initialData!.sessionTemplate.activeWorkflow,
+      ootbWorkflows
+    );
+    setSelectedWorkflow(resolved.selectedWorkflow);
+    setCustomGitUrl(resolved.customGitUrl);
+    setCustomBranch(resolved.customBranch);
+    setCustomPath(resolved.customPath);
+    setWorkflowResolved(true);
+  }, [workflowResolved, workflowsLoading, ootbWorkflows, initialData]);
 
   const effectiveCron = schedulePreset === "custom" ? (customCron ?? "") : schedulePreset;
   const nextRuns = useMemo(() => getNextRuns(effectiveCron, 3), [effectiveCron]);
@@ -444,7 +486,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
 
               <div className="space-y-2">
                 <FormLabel>Workflow</FormLabel>
-                {workflowsLoading ? (
+                {(workflowsLoading || !workflowResolved) ? (
                   <Skeleton className="h-10 w-full" />
                 ) : (
                   <Select
@@ -469,7 +511,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                     </SelectContent>
                   </Select>
                 )}
-                {selectedWorkflow === "custom" && (
+                {selectedWorkflow === "custom" && workflowResolved && (
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                     <div className="sm:col-span-2 space-y-1">
                       <FormLabel className="text-xs">Git Repository URL *</FormLabel>

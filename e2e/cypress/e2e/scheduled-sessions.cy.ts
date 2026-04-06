@@ -310,6 +310,7 @@ describe('Scheduled Sessions', () => {
 
     it('should edit the custom workflow on an existing scheduled session', () => {
       // Create a scheduled session with a custom workflow via API
+      // Use fields that do NOT match any OOTB workflow so it stays as "Custom workflow..."
       cy.request({
         method: 'POST',
         url: `/api/projects/${workspaceSlug}/scheduled-sessions`,
@@ -319,6 +320,71 @@ describe('Scheduled Sessions', () => {
           schedule: '0 * * * *',
           sessionTemplate: {
             initialPrompt: 'original prompt',
+            runnerType: 'claude-code',
+            llmSettings: { model: 'claude-sonnet-4-20250514', temperature: 0.7, maxTokens: 4000 },
+            timeout: 300,
+            activeWorkflow: {
+              gitUrl: 'https://github.com/my-org/my-custom-workflows.git',
+              branch: 'main',
+              path: 'workflows/custom-one',
+            },
+          },
+        },
+      }).then((resp) => {
+        expect(resp.status).to.be.oneOf([200, 201])
+        const scheduleName = resp.body.name
+
+        // Navigate to edit page
+        cy.visit(`/projects/${workspaceSlug}/scheduled-sessions/${scheduleName}/edit`)
+
+        // Wait for form to load — should show "Custom workflow..." (no OOTB match)
+        cy.get('[data-testid="workflow-select"]', { timeout: 10000 })
+          .should('contain.text', 'Custom workflow...')
+
+        // Verify pre-populated custom workflow fields
+        cy.get('[data-testid="workflow-git-url"]')
+          .should('have.value', 'https://github.com/my-org/my-custom-workflows.git')
+        cy.get('[data-testid="workflow-branch"]')
+          .should('have.value', 'main')
+        cy.get('[data-testid="workflow-path"]')
+          .should('have.value', 'workflows/custom-one')
+
+        // Update the workflow fields
+        cy.get('[data-testid="workflow-branch"]').clear().type('develop')
+        cy.get('[data-testid="workflow-path"]').clear().type('workflows/custom-two')
+
+        // Submit
+        cy.get('[data-testid="scheduled-session-submit"]').click()
+
+        // Verify redirect
+        cy.url({ timeout: 15000 }).should('include', `/projects/${workspaceSlug}/scheduled-sessions`)
+        cy.url().should('not.include', '/edit')
+
+        // Verify via API that the workflow was updated
+        cy.request({
+          url: `/api/projects/${workspaceSlug}/scheduled-sessions/${scheduleName}`,
+          headers: apiHeaders(),
+        }).then((getResp) => {
+          expect(getResp.status).to.eq(200)
+          const workflow = getResp.body.sessionTemplate.activeWorkflow
+          expect(workflow.gitUrl).to.eq('https://github.com/my-org/my-custom-workflows.git')
+          expect(workflow.branch).to.eq('develop')
+          expect(workflow.path).to.eq('workflows/custom-two')
+        })
+      })
+    })
+
+    it('should show OOTB workflow name when editing a session created with an OOTB workflow', () => {
+      // Create a session with fields that match the "bugfix" OOTB workflow
+      cy.request({
+        method: 'POST',
+        url: `/api/projects/${workspaceSlug}/scheduled-sessions`,
+        headers: apiHeaders(),
+        body: {
+          displayName: 'OOTB Workflow Edit Test',
+          schedule: '0 * * * *',
+          sessionTemplate: {
+            initialPrompt: 'run bugfix workflow',
             runnerType: 'claude-code',
             llmSettings: { model: 'claude-sonnet-4-20250514', temperature: 0.7, maxTokens: 4000 },
             timeout: 300,
@@ -336,41 +402,27 @@ describe('Scheduled Sessions', () => {
         // Navigate to edit page
         cy.visit(`/projects/${workspaceSlug}/scheduled-sessions/${scheduleName}/edit`)
 
-        // Wait for form to load — workflow fields should be pre-populated
+        // The workflow select should show the OOTB workflow name, not "Custom workflow..."
         cy.get('[data-testid="workflow-select"]', { timeout: 10000 })
-          .should('contain.text', 'Custom workflow...')
+          .should('contain.text', 'Fix a bug')
 
-        // Verify pre-populated custom workflow fields
-        cy.get('[data-testid="workflow-git-url"]')
-          .should('have.value', 'https://github.com/ambient-code/workflows.git')
-        cy.get('[data-testid="workflow-branch"]')
-          .should('have.value', 'main')
-        cy.get('[data-testid="workflow-path"]')
-          .should('have.value', 'workflows/bugfix')
+        // Custom workflow fields should NOT be visible (OOTB selected, not custom)
+        cy.get('[data-testid="workflow-git-url"]').should('not.exist')
+      })
+    })
 
-        // Update the workflow fields
-        cy.get('[data-testid="workflow-git-url"]').clear().type('https://github.com/ambient-code/workflows.git')
-        cy.get('[data-testid="workflow-branch"]').clear().type('develop')
-        cy.get('[data-testid="workflow-path"]').clear().type('workflows/triage')
+    it('should show General chat when editing a session with no workflow', () => {
+      // Create a session without any workflow
+      createScheduledSessionViaApi('0 * * * *', 'No Workflow Edit Test').then((scheduleName) => {
+        // Navigate to edit page
+        cy.visit(`/projects/${workspaceSlug}/scheduled-sessions/${scheduleName}/edit`)
 
-        // Submit
-        cy.get('[data-testid="scheduled-session-submit"]').click()
+        // The workflow select should show "General chat"
+        cy.get('[data-testid="workflow-select"]', { timeout: 10000 })
+          .should('contain.text', 'General chat')
 
-        // Verify redirect
-        cy.url({ timeout: 15000 }).should('include', `/projects/${workspaceSlug}/scheduled-sessions`)
-        cy.url().should('not.include', '/edit')
-
-        // Verify via API that the workflow was updated
-        cy.request({
-          url: `/api/projects/${workspaceSlug}/scheduled-sessions/${scheduleName}`,
-          headers: apiHeaders(),
-        }).then((getResp) => {
-          expect(getResp.status).to.eq(200)
-          const workflow = getResp.body.sessionTemplate.activeWorkflow
-          expect(workflow.gitUrl).to.eq('https://github.com/ambient-code/workflows.git')
-          expect(workflow.branch).to.eq('develop')
-          expect(workflow.path).to.eq('workflows/triage')
-        })
+        // Custom workflow fields should NOT be visible
+        cy.get('[data-testid="workflow-git-url"]').should('not.exist')
       })
     })
   })
