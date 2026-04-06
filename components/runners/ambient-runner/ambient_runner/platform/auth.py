@@ -147,6 +147,7 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
         bot = get_bot_token()
         if bot:
             req.add_header("Authorization", f"Bearer {bot}")
+            logger.debug(f"Using CP OIDC token for {credential_type} credentials")
 
     loop = asyncio.get_running_loop()
 
