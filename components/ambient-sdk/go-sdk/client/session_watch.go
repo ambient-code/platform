@@ -25,7 +25,7 @@ import (
 
 const grpcDefaultPort = "9000"
 
-var defaultOpenShiftPatterns = []string{"apps.rosa", "apps.ocp", "apps.openshift"}
+var defaultOpenShiftPatterns = []string{"apps.rosa", "apps.ocp", "apps.openshift", "paas.redhat.com"}
 
 // MessageWatcher streams session messages from a single session via gRPC.
 type MessageWatcher struct {

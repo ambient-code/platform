@@ -31,5 +31,16 @@ spec:
             - --jwk-cert-file=/configs/authentication/jwks.json
             - --enable-grpc=true
             - --grpc-server-bindaddress=:9000
+            - --grpc-enable-tls=true
+            - --grpc-tls-cert-file=/etc/tls/tls.crt
+            - --grpc-tls-key-file=/etc/tls/tls.key
             - --alsologtostderr
             - -v=4
+          volumeMounts:
+            - name: tls-certs
+              mountPath: /etc/tls
+              readOnly: true
+      volumes:
+        - name: tls-certs
+          secret:
+            secretName: ambient-api-server-tls
