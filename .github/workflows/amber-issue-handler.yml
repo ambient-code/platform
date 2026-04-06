@@ -98,7 +98,7 @@ jobs:
           wait: 'true'
           timeout: '0'
           environment-variables: >-
-            {"SLACK_WEBHOOK_URL": "${{ secrets.SLACK_WEBHOOK_URL }}", "PLATFORM_HOST": "${{ secrets.AMBIENT_API_URL }}"}
+            {"SLACK_WEBHOOK_URL": "${{ secrets.SLACK_WEBHOOK_URL }}", "PLATFORM_HOST": "${{ secrets.PLATFORM_HOST }}"}
 
       - name: Post-session labels and comment
         if: steps.existing.outputs.skip != 'true'
@@ -274,7 +274,7 @@ jobs:
           wait: 'true'
           timeout: '0'
           environment-variables: >-
-            {"SLACK_WEBHOOK_URL": "${{ secrets.SLACK_WEBHOOK_URL }}", "PLATFORM_HOST": "${{ secrets.AMBIENT_API_URL }}"}
+            {"SLACK_WEBHOOK_URL": "${{ secrets.SLACK_WEBHOOK_URL }}", "PLATFORM_HOST": "${{ secrets.PLATFORM_HOST }}"}
 
       # Custom prompt: @ambient-code <instruction> — pass user's text
       - name: Run custom prompt
@@ -299,7 +299,7 @@ jobs:
           wait: 'true'
           timeout: '0'
           environment-variables: >-
-            {"SLACK_WEBHOOK_URL": "${{ secrets.SLACK_WEBHOOK_URL }}", "PLATFORM_HOST": "${{ secrets.AMBIENT_API_URL }}"}
+            {"SLACK_WEBHOOK_URL": "${{ secrets.SLACK_WEBHOOK_URL }}", "PLATFORM_HOST": "${{ secrets.PLATFORM_HOST }}"}
 
       - name: Post check run on PR
         if: >-
@@ -369,6 +369,7 @@ jobs:
           AMBIENT_API_TOKEN: ${{ secrets.AMBIENT_BOT_TOKEN }}
           AMBIENT_PROJECT: ${{ secrets.AMBIENT_PROJECT }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          PLATFORM_HOST: ${{ secrets.PLATFORM_HOST }}
         run: |
           pip install --quiet 'requests>=2.31.0'
 
@@ -485,7 +486,7 @@ jobs:
               # Create new session
               url = f"{API_URL.rstrip('/')}/projects/{PROJECT}/agentic-sessions"
               slack_url = os.environ.get("SLACK_WEBHOOK_URL", "")
-              platform_host = os.environ.get("AMBIENT_API_URL", "").rstrip("/")
+              platform_host = os.environ.get("PLATFORM_HOST", "").rstrip("/")
               env_vars = {}
               if slack_url:
                   env_vars["SLACK_WEBHOOK_URL"] = slack_url
