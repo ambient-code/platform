@@ -230,7 +230,7 @@ jobs:
 
             ```bash
             curl -X POST -H 'Content-type: application/json' \
-              --data '{"text":"🤖 Amber needs human attention\n*PR*: ${{ steps.context.outputs.url }}\n*Session*: '"$PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME"'\n*Reason*: <brief reason>"}' \
+              --data '{"text":"I need human attention\n*PR*: ${{ steps.context.outputs.url }}\n*Session*: '"$PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME"'\n*Reason*: <brief reason>"}' \
               "$SLACK_WEBHOOK_URL"
             ```
 
@@ -568,7 +568,7 @@ jobs:
           When you need human attention — circuit breaker, stuck, or using AskUserQuestion — send:
 
           curl -X POST -H 'Content-type: application/json' \\
-            --data '{{"text":"🤖 Amber needs human attention\\n*PR*: https://github.com/{REPO}/pull/{number}\\n*Session*: '"$PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME"'\\n*Reason*: <brief reason>"}}' \\
+            --data '{{"text":"I need human attention\\n*PR*: https://github.com/{REPO}/pull/{number}\\n*Session*: '"$PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME"'\\n*Reason*: <brief reason>"}}' \\
             "$SLACK_WEBHOOK_URL"
 
           Only send if SLACK_WEBHOOK_URL is set."""
