@@ -457,9 +457,9 @@ jobs:
                  "-f", f"output[summary]=Session `{session_name}` triggered for PR #{pr_number}"]
               if session_url:
                   args.extend(["-f", f"details_url={session_url}"])
-              result = gh(*args)
-              if not result and "error" in result.lower() if result else False:
-                  print(f"  Warning: failed to create check run for PR #{pr_number}")
+              proc = subprocess.run(["gh"] + list(args), capture_output=True, text=True)
+              if proc.returncode != 0:
+                  print(f"  Warning: failed to create check run for PR #{pr_number}: {proc.stderr or proc.stdout}")
 
           def create_session_api(prompt, session_name="", model="claude-opus-4-6"):
               """Create a new session or send message to existing one."""
