@@ -93,6 +93,7 @@ type ScheduledSessionFormProps = {
   initialData?: ScheduledSession;
 };
 
+/** Maps a cron string to a preset select value, falling back to "custom". */
 function resolveSchedulePreset(schedule: string): { preset: string; customCron: string } {
   const match = SCHEDULE_PRESETS.find((p) => p.value !== "custom" && p.value === schedule);
   if (match) {
@@ -101,6 +102,7 @@ function resolveSchedulePreset(schedule: string): { preset: string; customCron: 
   return { preset: "custom", customCron: schedule };
 }
 
+/** Reverse-matches stored workflow fields against OOTB workflows, returning the select value and custom fields. */
 function resolveWorkflowState(
   activeWorkflow: WorkflowSelection | undefined,
   ootbWorkflows: { id: string; gitUrl: string; branch: string; path?: string }[]
