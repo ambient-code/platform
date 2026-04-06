@@ -93,7 +93,7 @@ export function SchedulesSection({ projectName }: SchedulesSectionProps) {
               <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
               Refresh
             </Button>
-            <Button asChild>
+            <Button asChild data-testid="new-scheduled-session-btn">
               <Link href={`/projects/${projectName}/scheduled-sessions/new`}>
                 <Plus className="w-4 h-4 mr-2" />
                 New Scheduled Session
@@ -139,7 +139,7 @@ export function SchedulesSection({ projectName }: SchedulesSectionProps) {
                     (triggerMutation.isPending && triggerMutation.variables?.name === ss.name);
 
                   return (
-                    <TableRow key={ss.name}>
+                    <TableRow key={ss.name} data-testid={`scheduled-session-row-${ss.name}`}>
                       <TableCell className="font-medium">
                         <Link
                           href={`/projects/${projectName}/scheduled-sessions/${ss.name}`}
@@ -184,7 +184,7 @@ export function SchedulesSection({ projectName }: SchedulesSectionProps) {
                         ) : (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0" data-testid={`scheduled-session-actions-${ss.name}`}>
                                 <MoreVertical className="h-4 w-4" />
                                 <span className="sr-only">Open menu</span>
                               </Button>
@@ -211,7 +211,7 @@ export function SchedulesSection({ projectName }: SchedulesSectionProps) {
                                   Suspend
                                 </DropdownMenuItem>
                               )}
-                              <DropdownMenuItem onClick={() => handleDelete(ss.name)} className="text-red-600">
+                              <DropdownMenuItem onClick={() => handleDelete(ss.name)} className="text-red-600" data-testid="scheduled-session-delete">
                                 <Trash2 className="h-4 w-4 mr-2" />
                                 Delete
                               </DropdownMenuItem>

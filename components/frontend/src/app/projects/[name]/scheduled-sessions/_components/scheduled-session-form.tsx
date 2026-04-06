@@ -345,7 +345,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                   <FormItem>
                     <FormLabel>Name</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="Enter a display name..." maxLength={50} disabled={mutation.isPending} />
+                      <Input {...field} placeholder="Enter a display name..." maxLength={50} disabled={mutation.isPending} data-testid="scheduled-session-name-input" />
                     </FormControl>
                     <p className="text-xs text-muted-foreground">{(field.value ?? "").length}/50 characters</p>
                     <FormMessage />
@@ -361,7 +361,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                     <FormLabel>Schedule</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <SelectTrigger className="w-full">
+                        <SelectTrigger className="w-full" data-testid="schedule-preset-select">
                           <SelectValue placeholder="Select a schedule" />
                         </SelectTrigger>
                       </FormControl>
@@ -384,7 +384,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                     <FormItem>
                       <FormLabel>Cron Expression</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="*/15 * * * *" disabled={mutation.isPending} />
+                        <Input {...field} placeholder="*/15 * * * *" disabled={mutation.isPending} data-testid="custom-cron-input" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -393,7 +393,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
               )}
 
               {effectiveCron && (
-                <div className="rounded-md border p-3 space-y-2">
+                <div className="rounded-md border p-3 space-y-2" data-testid="cron-preview">
                   <p className="text-sm font-medium">{cronDescription}</p>
                   {nextRuns.length > 0 && (
                     <div className="text-xs text-muted-foreground space-y-0.5">
@@ -458,7 +458,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                   <FormItem>
                     <FormLabel>Initial Prompt</FormLabel>
                     <FormControl>
-                      <Textarea {...field} placeholder="Enter the prompt for each scheduled session..." rows={4} disabled={mutation.isPending} />
+                      <Textarea {...field} placeholder="Enter the prompt for each scheduled session..." rows={4} disabled={mutation.isPending} data-testid="initial-prompt-input" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -553,7 +553,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                       ) : (
                         <Select onValueChange={(v) => handleRunnerTypeChange(v, field.onChange)} value={field.value}>
                           <FormControl>
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger className="w-full" data-testid="runner-type-select">
                               <SelectValue placeholder="Select a runner type" />
                             </SelectTrigger>
                           </FormControl>
@@ -579,7 +579,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                       <FormLabel>Model</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value} disabled={modelsLoading || (modelsError && models.length === 0)}>
                         <FormControl>
-                          <SelectTrigger className="w-full">
+                          <SelectTrigger className="w-full" data-testid="model-select">
                             <SelectValue placeholder={modelsLoading ? "Loading models..." : "Select a model"} />
                           </SelectTrigger>
                         </FormControl>
@@ -722,12 +722,13 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
 
           {/* Actions */}
           <div className="flex justify-end gap-3 pb-6">
-            <Button type="button" variant="outline" onClick={() => router.push(backUrl)} disabled={mutation.isPending}>
+            <Button type="button" variant="outline" onClick={() => router.push(backUrl)} disabled={mutation.isPending} data-testid="scheduled-session-cancel">
               Cancel
             </Button>
             <Button
               type="submit"
               disabled={mutation.isPending || runnerTypesLoading || runnerTypesError || modelsLoading || (modelsError && models.length === 0)}
+              data-testid="scheduled-session-submit"
             >
               {mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isEdit ? "Save Changes" : "Create Scheduled Session"}
