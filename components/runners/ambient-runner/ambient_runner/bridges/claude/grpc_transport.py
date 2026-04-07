@@ -299,7 +299,7 @@ class GRPCSessionListener:
         )
         run_queue = active_streams.get(thread_id)
 
-        try:
+        async def _run_once():
             async for event in self._bridge.run(input_data):
                 stream_queue = active_streams.get(thread_id)
                 if stream_queue is not None:
@@ -311,6 +311,34 @@ class GRPCSessionListener:
                             thread_id,
                         )
                 await writer.consume(event)
+
+        try:
+            await _run_once()
+        except PermissionError as exc:
+            logger.warning(
+                "[GRPC LISTENER] Credential auth failure, refreshing token and retrying: session=%s error=%s",
+                self._session_id,
+                exc,
+            )
+            try:
+                from ambient_runner.platform.utils import refresh_bot_token
+                refresh_bot_token()
+            except Exception as refresh_exc:
+                logger.warning(
+                    "[GRPC LISTENER] Token refresh failed: session=%s error=%s",
+                    self._session_id,
+                    refresh_exc,
+                )
+            try:
+                await _run_once()
+            except Exception as retry_exc:
+                logger.error(
+                    "[GRPC LISTENER] bridge.run() failed after token refresh: session=%s error=%s",
+                    self._session_id,
+                    retry_exc,
+                    exc_info=True,
+                )
+                _synthesize_run_error(thread_id, str(retry_exc), active_streams, writer)
         except Exception as exc:
             logger.error(
                 "[GRPC LISTENER] bridge.run() failed: session=%s error=%s",
