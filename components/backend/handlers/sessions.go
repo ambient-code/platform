@@ -1480,8 +1480,10 @@ func SwitchModel(c *gin.Context) {
 		return
 	}
 
-	// Proxy to runner — if runner rejects (e.g., agent is mid-generation), revert the CR
-	runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/model", sessionName, project)
+	// Proxy to runner — if runner rejects (e.g., agent is mid-generation), revert the CR.
+	// Use the validated CR name (not raw URL param) and the helper for the service name.
+	serviceName := getRunnerServiceName(item.GetName())
+	runnerURL := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001/model", serviceName, project)
 	runnerReq := map[string]string{"model": req.Model}
 	reqBody, _ := json.Marshal(runnerReq)
 
@@ -1496,9 +1498,8 @@ func SwitchModel(c *gin.Context) {
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		log.Printf("Failed to proxy model switch to runner for session %s: %v", sessionName, err)
-		// Revert the CR update
-		llmSettings["model"] = previousModel
-		_, _ = k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), updated, v1.UpdateOptions{})
+		// Revert the CR update on the server-returned object
+		revertModelSwitch(updated, previousModel, k8sDyn, gvr, project)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to reach session runner"})
 		return
 	}
@@ -1507,9 +1508,8 @@ func SwitchModel(c *gin.Context) {
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		log.Printf("Runner rejected model switch for session %s: %d %s", sessionName, resp.StatusCode, string(body))
-		// Revert the CR update
-		llmSettings["model"] = previousModel
-		_, _ = k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), updated, v1.UpdateOptions{})
+		// Revert the CR update on the server-returned object
+		revertModelSwitch(updated, previousModel, k8sDyn, gvr, project)
 		// Forward runner's status code and error
 		c.Data(resp.StatusCode, "application/json", body)
 		return
@@ -1528,6 +1528,20 @@ func SwitchModel(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, session)
+}
+
+// revertModelSwitch restores the previous model on the server-returned CR object.
+// Called when the runner rejects a model switch after the CR was already updated.
+func revertModelSwitch(updated *unstructured.Unstructured, previousModel string, k8sDyn dynamic.Interface, gvr schema.GroupVersionResource, namespace string) {
+	if updatedSpec, ok := updated.Object["spec"].(map[string]interface{}); ok {
+		if updatedLLM, ok := updatedSpec["llmSettings"].(map[string]interface{}); ok {
+			updatedLLM["model"] = previousModel
+			_, err := k8sDyn.Resource(gvr).Namespace(namespace).Update(context.TODO(), updated, v1.UpdateOptions{})
+			if err != nil {
+				log.Printf("Failed to revert model switch for session %s: %v", updated.GetName(), err)
+			}
+		}
+	}
 }
 
 // SelectWorkflow sets the active workflow for a session
