@@ -538,10 +538,49 @@ jobs:
                   print(f"  Failed to create session: {e}")
                   return None
 
-          # Get all open ambient-code:managed PRs (include updatedAt to avoid per-PR API calls)
+          BOT_USERS = {"github-actions[bot]", "ambient-code[bot]", "ambient-bot"}
+
+          def needs_attention(pr_number):
+              """Check if a PR has actionable issues that need the fixer's attention.
+              Returns (needs_work, reason) tuple."""
+              # Check CI status
+              checks_json = gh("pr", "checks", str(pr_number), "--repo", REPO,
+                               "--json", "name,state",
+                               "--jq", "[.[] | .state] | unique")
+              try:
+                  states = json.loads(checks_json) if checks_json else []
+              except json.JSONDecodeError:
+                  states = []
+
+              if "FAILURE" in states:
+                  return True, "CI failing"
+
+              # Check for merge conflicts
+              mergeable = gh("pr", "view", str(pr_number), "--repo", REPO,
+                            "--json", "mergeable", "--jq", ".mergeable")
+              if mergeable == "CONFLICTING":
+                  return True, "merge conflicts"
+
+              # Check for non-bot review comments/reviews since last_action
+              reviews_json = gh("api", f"repos/{REPO}/pulls/{pr_number}/reviews",
+                               "--jq", json.dumps([{"state": ".state", "user": ".user.login"}]))
+              # Check for changes_requested from non-bot users
+              try:
+                  reviews_raw = gh("api", f"repos/{REPO}/pulls/{pr_number}/reviews",
+                                  "--jq", '[.[] | select(.state == "CHANGES_REQUESTED" and .user.login != "github-actions[bot]")] | length')
+                  changes_requested = int(reviews_raw) if reviews_raw else 0
+              except (ValueError, TypeError):
+                  changes_requested = 0
+
+              if changes_requested > 0:
+                  return True, "changes requested"
+
+              return False, "healthy"
+
+          # Get all open ambient-code:managed PRs
           prs_json = gh("pr", "list", "--repo", REPO, "--state", "open",
                         "--label", "ambient-code:managed", "--limit", "200",
-                        "--json", "number,body,title,updatedAt")
+                        "--json", "number,body,title")
           prs = json.loads(prs_json) if prs_json else []
           print(f"Found {len(prs)} ambient-code:managed PRs")
 
@@ -562,12 +601,13 @@ jobs:
                   session_id = fm["session_id"]
                   source = fm["source"]
 
-                  # Check for changes using updatedAt from gh pr list (no extra API call)
-                  updated_at = pr.get("updatedAt", "")
-                  if updated_at and updated_at <= fm["last_action"]:
-                      print(f"PR #{number}: no changes since {fm['last_action']} (updatedAt={updated_at}), skipping")
+                  # Only trigger if the PR actually needs work
+                  needs_work, reason = needs_attention(number)
+                  if not needs_work:
+                      print(f"PR #{number}: {reason}, skipping")
                       skipped += 1
                       continue
+                  print(f"PR #{number}: {reason}")
 
               # Trigger fix — reuse session if exists, create new if not
               print(f"PR #{number}: triggering fix (session_id={session_id or 'new'})")
