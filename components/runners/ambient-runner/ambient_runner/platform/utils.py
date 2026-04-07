@@ -71,6 +71,27 @@ def get_bot_token() -> str:
     return (os.getenv("BOT_TOKEN") or "").strip()
 
 
+def refresh_bot_token() -> str:
+    """Fetch a fresh token from the CP token endpoint and update the in-process cache.
+
+    Returns the new token, or the current cached token if the CP endpoint is not
+    configured (local dev mode). Raises RuntimeError if the CP fetch fails.
+    """
+    cp_token_url = os.getenv("AMBIENT_CP_TOKEN_URL", "")
+    if not cp_token_url:
+        return get_bot_token()
+
+    public_key_pem = os.getenv("AMBIENT_CP_TOKEN_PUBLIC_KEY", "")
+    session_id = os.getenv("SESSION_ID", "")
+    if not public_key_pem or not session_id:
+        logger.warning("refresh_bot_token: CP env vars incomplete, skipping refresh")
+        return get_bot_token()
+
+    from ambient_runner._grpc_client import _fetch_token_from_cp
+
+    return _fetch_token_from_cp(cp_token_url, public_key_pem, session_id)
+
+
 def is_env_truthy(value: str) -> bool:
     """Return True for "1", "true", or "yes" (case-insensitive)."""
     return value.strip().lower() in _TRUTHY_VALUES
