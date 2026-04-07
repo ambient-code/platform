@@ -53,7 +53,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: migration
-          image: quay.io/ambient_code/vteam_api_server:mgt-001
+          image: quay.io/ambient_code/vteam_api_server:latest
           imagePullPolicy: Always
           command:
             - /usr/local/bin/ambient-api-server
@@ -76,7 +76,7 @@ spec:
                 - ALL
       containers:
         - name: api-server
-          image: quay.io/ambient_code/vteam_api_server:mgt-001
+          image: quay.io/ambient_code/vteam_api_server:latest
           imagePullPolicy: Always
           env:
             - name: AMBIENT_ENV
