@@ -1,4 +1,4 @@
-"""Dataclasses for the 6 Gemini CLI JSONL event types."""
+"""Dataclasses for Gemini CLI JSONL event types."""
 
 import json
 import logging
@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 # Type tag used to dispatch parsed events.
 _EVENT_TYPES = frozenset(
-    {"init", "message", "tool_use", "tool_result", "error", "result"}
+    {"init", "message", "tool_use", "tool_result", "error", "result", "thinking"}
 )
 
 
@@ -65,6 +65,22 @@ class ResultEvent:
     stats: dict | None = None
 
 
+@dataclass
+class ThinkingEvent:
+    """Gemini CLI thinking/reasoning event.
+
+    Emitted when the model produces reasoning traces (requires the CLI to
+    expose ``thinking`` events in its ``stream-json`` output).  The Gemini
+    CLI internally tracks thinking via a ``ThoughtSummary`` structure with
+    ``subject`` and ``description`` fields.
+    """
+
+    type: str  # "thinking"
+    timestamp: str
+    content: str = ""
+    delta: bool = False
+
+
 _TYPE_MAP = {
     "init": InitEvent,
     "message": MessageEvent,
@@ -72,12 +88,13 @@ _TYPE_MAP = {
     "tool_result": ToolResultEvent,
     "error": ErrorEvent,
     "result": ResultEvent,
+    "thinking": ThinkingEvent,
 }
 
 
 def parse_event(
     line: str,
-) -> InitEvent | MessageEvent | ToolUseEvent | ToolResultEvent | ErrorEvent | ResultEvent | None:
+) -> InitEvent | MessageEvent | ToolUseEvent | ToolResultEvent | ErrorEvent | ResultEvent | ThinkingEvent | None:
     """Parse a JSON line into the appropriate event dataclass.
 
     Returns ``None`` when the line cannot be parsed or has an unknown type.
