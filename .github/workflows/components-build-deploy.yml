@@ -288,19 +288,25 @@ jobs:
 
       - name: Ensure mlflow-db-credentials secret exists
         run: |
-          if oc get secret mlflow-db-credentials -n redhat-ods-applications &>/dev/null; then
-            echo "Secret already exists"
-          else
-            echo "Creating mlflow-db-credentials from postgresql-credentials..."
-            DB_USER=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.user}' | base64 -d)
-            DB_PASS=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.password}' | base64 -d)
-            DB_HOST=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.host}' | base64 -d)
-            DB_PORT=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.port}' | base64 -d)
-            oc create namespace redhat-ods-applications --dry-run=client -o yaml | oc apply -f -
-            oc create secret generic mlflow-db-credentials \
-              -n redhat-ods-applications \
-              --from-literal=uri="postgresql://${DB_USER}:${DB_PASS}@${DB_HOST}.ambient-code.svc.cluster.local:${DB_PORT}/mlflow?sslmode=disable"
-          fi
+          echo "Reconciling mlflow-db-credentials from postgresql-credentials..."
+          DB_USER=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.user}' | base64 -d)
+          DB_PASS=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.password}' | base64 -d)
+          DB_HOST=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.host}' | base64 -d)
+          DB_PORT=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.port}' | base64 -d)
+          ENC_USER=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$DB_USER")
+          ENC_PASS=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$DB_PASS")
+          ENCODED_URI="postgresql://${ENC_USER}:${ENC_PASS}@${DB_HOST}.ambient-code.svc.cluster.local:${DB_PORT}/mlflow?sslmode=disable"
+          oc create namespace redhat-ods-applications --dry-run=client -o yaml | oc apply -f -
+          oc apply -f - <<EOF
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: mlflow-db-credentials
+            namespace: redhat-ods-applications
+          type: Opaque
+          stringData:
+            uri: "${ENCODED_URI}"
+          EOF
 
       - name: Deploy MLflow instance
         run: |
