@@ -100,16 +100,14 @@ jobs:
                first line of the PR body (read your session ID from the
                AGENTIC_SESSION_NAME environment variable):
                <!-- acp:session_id=$AGENTIC_SESSION_NAME source=#${{ steps.issue.outputs.number }} last_action=<ISO8601_NOW> retry_count=0 -->
+               At the bottom of the PR body, add a session link:
+               ---
+               🤖 [Ambient Session]($PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME)
             6. Add the `ambient-code:managed` label to the PR.
-            7. After creating the PR, send a Slack notification:
-               ```bash
-               curl -X POST -H 'Content-type: application/json' \
-                 --data '{"text":"PR created for #${{ steps.issue.outputs.number }}\n*PR*: <PR_URL>\n*Session*: '"$PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME"'"}' \
-                 "$SLACK_WEBHOOK_URL"
-               ```
-               Only send if SLACK_WEBHOOK_URL is set.
-            8. Ensure CI passes. If it fails, investigate and fix.
-            9. Do not merge. Leave the PR open for human review.
+            7. Ensure CI passes. If it fails, investigate and fix.
+            8. Do not merge. Leave the PR open for human review.
+            9. When you comment on the PR, include this footer at the end:
+               _🤖 [Session]($PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME)_
           repos: >-
             [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
           model: claude-opus-4-6
@@ -231,13 +229,17 @@ jobs:
             4. Ensure the PR body contains this frontmatter as the first line
                (read your session ID from the AGENTIC_SESSION_NAME environment variable):
                <!-- acp:session_id=$AGENTIC_SESSION_NAME source=#${{ steps.context.outputs.number }} last_action=<ISO8601_NOW> retry_count=<N> -->
-               Increment retry_count from whatever it was before. If retry_count reaches 3 or more,
-               stop working, add `ambient-code:needs-human` label, remove `ambient-code:managed` label,
+               Only increment retry_count if you actually had to fix something (CI failure,
+               conflict, review comment). If the PR is already healthy, do NOT increment —
+               just update last_action. If retry_count reaches 3 or more, stop working,
+               add `ambient-code:needs-human` label, remove `ambient-code:managed` label,
                comment "AI was unable to resolve after 3 attempts. Needs human attention.",
                and send a Slack notification (see below).
             5. Add the `ambient-code:managed` label.
             6. Do not merge. Do not close. Do not force-push.
             7. If fundamentally broken beyond repair, add a comment explaining and stop.
+            8. When you comment on the PR, include this footer at the end:
+               _🤖 [Session]($PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME)_
 
             ## Slack Notifications
 
@@ -293,16 +295,14 @@ jobs:
                first line of the PR body (read your session ID from the
                AGENTIC_SESSION_NAME environment variable):
                <!-- acp:session_id=$AGENTIC_SESSION_NAME source=#${{ steps.context.outputs.number }} last_action=<ISO8601_NOW> retry_count=0 -->
+               At the bottom of the PR body, add a session link:
+               ---
+               🤖 [Ambient Session]($PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME)
             6. Add the `ambient-code:managed` label to the PR.
-            7. After creating the PR, send a Slack notification:
-               ```bash
-               curl -X POST -H 'Content-type: application/json' \
-                 --data '{"text":"PR created for #${{ steps.context.outputs.number }}\n*PR*: <PR_URL>\n*Session*: '"$PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME"'"}' \
-                 "$SLACK_WEBHOOK_URL"
-               ```
-               Only send if SLACK_WEBHOOK_URL is set.
-            8. Ensure CI passes. If it fails, investigate and fix.
-            9. Do not merge. Leave the PR open for human review.
+            7. Ensure CI passes. If it fails, investigate and fix.
+            8. Do not merge. Leave the PR open for human review.
+            9. When you comment on the PR, include this footer at the end:
+               _🤖 [Session]($PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME)_
           repos: >-
             [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
           model: claude-opus-4-6
@@ -552,10 +552,49 @@ jobs:
                   print(f"  Failed to create session: {e}")
                   return None
 
-          # Get all open ambient-code:managed PRs (include updatedAt to avoid per-PR API calls)
+          BOT_LOGINS = ["github-actions[bot]", "ambient-code[bot]", "ambient-bot"]
+
+          def needs_attention(pr_number):
+              """Check if a PR has actionable issues that need the fixer's attention.
+              Returns (needs_work, reason) tuple."""
+              # Check CI status
+              checks_json = gh("pr", "checks", str(pr_number), "--repo", REPO,
+                               "--json", "name,state",
+                               "--jq", "[.[] | .state] | unique")
+              try:
+                  states = json.loads(checks_json) if checks_json else []
+              except json.JSONDecodeError:
+                  states = []
+
+              if not states:
+                  pass  # No CI checks — nothing to fix
+              elif "FAILURE" in states:
+                  return True, "CI failing"
+
+              # Check for merge conflicts
+              mergeable = gh("pr", "view", str(pr_number), "--repo", REPO,
+                            "--json", "mergeable", "--jq", ".mergeable")
+              if mergeable == "CONFLICTING":
+                  return True, "merge conflicts"
+
+              # Check for changes_requested from non-bot users
+              bot_filter = " and ".join([f'.user.login != "{b}"' for b in BOT_LOGINS])
+              try:
+                  reviews_raw = gh("api", f"repos/{REPO}/pulls/{pr_number}/reviews",
+                                  "--jq", f'[.[] | select(.state == "CHANGES_REQUESTED" and {bot_filter})] | length')
+                  changes_requested = int(reviews_raw) if reviews_raw else 0
+              except (ValueError, TypeError):
+                  changes_requested = 0
+
+              if changes_requested > 0:
+                  return True, "changes requested"
+
+              return False, "healthy"
+
+          # Get all open ambient-code:managed PRs
           prs_json = gh("pr", "list", "--repo", REPO, "--state", "open",
                         "--label", "ambient-code:managed", "--limit", "200",
-                        "--json", "number,body,title,updatedAt")
+                        "--json", "number,body,title")
           prs = json.loads(prs_json) if prs_json else []
           print(f"Found {len(prs)} ambient-code:managed PRs")
 
@@ -576,12 +615,13 @@ jobs:
                   session_id = fm["session_id"]
                   source = fm["source"]
 
-                  # Check for changes using updatedAt from gh pr list (no extra API call)
-                  updated_at = pr.get("updatedAt", "")
-                  if updated_at and updated_at <= fm["last_action"]:
-                      print(f"PR #{number}: no changes since {fm['last_action']} (updatedAt={updated_at}), skipping")
+                  # Only trigger if the PR actually needs work
+                  needs_work, reason = needs_attention(number)
+                  if not needs_work:
+                      print(f"PR #{number}: {reason}, skipping")
                       skipped += 1
                       continue
+                  print(f"PR #{number}: {reason}")
 
               # Trigger fix — reuse session if exists, create new if not
               print(f"PR #{number}: triggering fix (session_id={session_id or 'new'})")
@@ -602,12 +642,17 @@ jobs:
           4. Ensure the PR body contains this frontmatter as the first line
              (read your session ID from the AGENTIC_SESSION_NAME environment variable):
              <!-- acp:session_id=$AGENTIC_SESSION_NAME source={source} last_action=<ISO8601_NOW> retry_count=<N> -->
-             The current retry_count is {current_retry}. Increment it by 1.
+             The current retry_count is {current_retry}. Only increment retry_count if
+             you actually had to fix something (CI failure, conflict, review comment).
+             If the PR is already healthy (CI green, no conflicts, no open reviews),
+             do NOT increment — just update last_action.
              If retry_count reaches 3 or more, stop working, add `ambient-code:needs-human` label,
              remove `ambient-code:managed` label, comment on the PR, and send a Slack notification.
           5. Add the `ambient-code:managed` label.
           6. Do not merge. Do not close. Do not force-push.
           7. If fundamentally broken beyond repair, add a comment explaining and stop.
+          8. When you comment on the PR, include this footer at the end:
+             _🤖 [Session]($PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME)_
 
           ## Slack Notifications
 
