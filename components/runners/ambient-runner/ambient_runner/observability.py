@@ -515,14 +515,19 @@ class ObservabilityManager:
             return
 
         try:
-            from claude_agent_sdk import TextBlock
+            # Extract text content — TextBlock is optional (claude_agent_sdk may not be installed)
+            try:
+                from claude_agent_sdk import TextBlock as _TextBlock
+            except ImportError:
+                _TextBlock = None
 
-            # Extract text content
             text_content = []
             message_content = getattr(message, "content", []) or []
             for blk in message_content:
-                if isinstance(blk, TextBlock):
+                if _TextBlock is not None and isinstance(blk, _TextBlock):
                     text_content.append(getattr(blk, "text", ""))
+                elif hasattr(blk, "text") and isinstance(getattr(blk, "text", None), str):
+                    text_content.append(blk.text)
 
             output_text = (
                 "\n".join(text_content) if text_content else "(no text output)"

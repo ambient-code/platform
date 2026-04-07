@@ -174,16 +174,6 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
                 try:
                     with _urllib_request.urlopen(fallback_req, timeout=10) as resp:
                         return resp.read().decode("utf-8", errors="replace")
-                except _urllib_request.HTTPError as fallback_err:
-                    if fallback_err.code in (401, 403):
-                        return _retry_with_fresh_bot_token(fallback_err.code)
-                    logger.warning(
-                        f"{credential_type} BOT_TOKEN fallback also failed: {fallback_err}"
-                    )
-                    raise PermissionError(
-                        f"{credential_type} authentication failed: caller token expired "
-                        f"and BOT_TOKEN fallback also failed"
-                    ) from fallback_err
                 except Exception as fallback_err:
                     logger.warning(
                         f"{credential_type} BOT_TOKEN fallback also failed: {fallback_err}"
