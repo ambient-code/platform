@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -1481,9 +1482,23 @@ func SwitchModel(c *gin.Context) {
 	}
 
 	// Proxy to runner — if runner rejects (e.g., agent is mid-generation), revert the CR.
-	// Use the validated CR name (not raw URL param) and the helper for the service name.
-	serviceName := getRunnerServiceName(item.GetName())
-	runnerURL := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001/model", serviceName, project)
+	// Sanitize the CR name against a strict allowlist to prevent SSRF.
+	sanitizedName, err := sanitizeK8sName(item.GetName())
+	if err != nil {
+		log.Printf("Invalid session name %q for model switch: %v", item.GetName(), err)
+		revertModelSwitch(updated, previousModel, k8sDyn, gvr, project)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session name"})
+		return
+	}
+	sanitizedProject, err := sanitizeK8sName(project)
+	if err != nil {
+		log.Printf("Invalid project name %q for model switch: %v", project, err)
+		revertModelSwitch(updated, previousModel, k8sDyn, gvr, project)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project name"})
+		return
+	}
+	serviceName := getRunnerServiceName(sanitizedName)
+	runnerURL := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001/model", serviceName, sanitizedProject)
 	runnerReq := map[string]string{"model": req.Model}
 	reqBody, _ := json.Marshal(runnerReq)
 
@@ -2013,6 +2028,20 @@ func RemoveRepo(c *gin.Context) {
 
 	log.Printf("Removed repository %s from session %s in project %s", repoName, sessionName, project)
 	c.JSON(http.StatusOK, gin.H{"message": "Repository removed", "session": session})
+}
+
+// k8sNameRegexp matches valid Kubernetes resource names (RFC 1123 DNS label).
+var k8sNameRegexp = regexp.MustCompile(`^[a-z0-9]([a-z0-9\-]*[a-z0-9])?$`)
+
+// sanitizeK8sName validates that name is a valid Kubernetes resource name
+// and returns it unchanged if valid, or returns an error. This breaks the
+// taint chain for static analysis (CodeQL SSRF) by proving the value matches
+// a strict allowlist before it reaches any network call.
+func sanitizeK8sName(name string) (string, error) {
+	if len(name) == 0 || len(name) > 253 || !k8sNameRegexp.MatchString(name) {
+		return "", fmt.Errorf("invalid Kubernetes resource name: %q", name)
+	}
+	return name, nil
 }
 
 // getRunnerServiceName returns the K8s Service name for a session's runner.
