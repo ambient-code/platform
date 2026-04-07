@@ -84,14 +84,32 @@ jobs:
 
             1. Read the issue and understand the problem.
             2. Explore the codebase to find the relevant code.
-            3. Implement a fix. Write tests if the area has existing test coverage.
-            4. Create a PR with a clear description. Include this frontmatter as the
+            3. Create a plan for how to fix the issue. If there is any ambiguity —
+               unclear requirements, multiple valid approaches, missing context — you
+               MUST ask for clarification. IMPORTANT: Before calling AskUserQuestion,
+               ALWAYS send a Slack notification first (the session stops streaming when
+               AskUserQuestion is called, so the notification must go out before):
+               ```bash
+               curl -X POST -H 'Content-type: application/json' \
+                 --data '{"text":"I have a question about #${{ steps.issue.outputs.number }}\n*Issue*: https://github.com/${{ github.repository }}/issues/${{ steps.issue.outputs.number }}\n*Session*: '"$PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME"'\n*Question*: <brief summary of what you need>"}' \
+                 "$SLACK_WEBHOOK_URL"
+               ```
+               Only send if SLACK_WEBHOOK_URL is set. Then call AskUserQuestion.
+            4. Implement the fix. Write tests if the area has existing test coverage.
+            5. Create a PR with a clear description. Include this frontmatter as the
                first line of the PR body (read your session ID from the
                AGENTIC_SESSION_NAME environment variable):
                <!-- acp:session_id=$AGENTIC_SESSION_NAME source=#${{ steps.issue.outputs.number }} last_action=<ISO8601_NOW> retry_count=0 -->
-            5. Add the `ambient-code:managed` label to the PR.
-            6. Ensure CI passes. If it fails, investigate and fix.
-            7. Do not merge. Leave the PR open for human review.
+            6. Add the `ambient-code:managed` label to the PR.
+            7. After creating the PR, send a Slack notification:
+               ```bash
+               curl -X POST -H 'Content-type: application/json' \
+                 --data '{"text":"PR created for #${{ steps.issue.outputs.number }}\n*PR*: <PR_URL>\n*Session*: '"$PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME"'"}' \
+                 "$SLACK_WEBHOOK_URL"
+               ```
+               Only send if SLACK_WEBHOOK_URL is set.
+            8. Ensure CI passes. If it fails, investigate and fix.
+            9. Do not merge. Leave the PR open for human review.
           repos: >-
             [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
           model: claude-opus-4-6
@@ -259,14 +277,32 @@ jobs:
 
             1. Read the issue and understand the problem.
             2. Explore the codebase to find the relevant code.
-            3. Implement a fix. Write tests if the area has existing test coverage.
-            4. Create a PR with a clear description. Include this frontmatter as the
+            3. Create a plan for how to fix the issue. If there is any ambiguity —
+               unclear requirements, multiple valid approaches, missing context — you
+               MUST ask for clarification. IMPORTANT: Before calling AskUserQuestion,
+               ALWAYS send a Slack notification first (the session stops streaming when
+               AskUserQuestion is called, so the notification must go out before):
+               ```bash
+               curl -X POST -H 'Content-type: application/json' \
+                 --data '{"text":"I have a question about #${{ steps.context.outputs.number }}\n*Issue*: ${{ steps.context.outputs.url }}\n*Session*: '"$PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME"'\n*Question*: <brief summary of what you need>"}' \
+                 "$SLACK_WEBHOOK_URL"
+               ```
+               Only send if SLACK_WEBHOOK_URL is set. Then call AskUserQuestion.
+            4. Implement the fix. Write tests if the area has existing test coverage.
+            5. Create a PR with a clear description. Include this frontmatter as the
                first line of the PR body (read your session ID from the
                AGENTIC_SESSION_NAME environment variable):
                <!-- acp:session_id=$AGENTIC_SESSION_NAME source=#${{ steps.context.outputs.number }} last_action=<ISO8601_NOW> retry_count=0 -->
-            5. Add the `ambient-code:managed` label to the PR.
-            6. Ensure CI passes. If it fails, investigate and fix.
-            7. Do not merge. Leave the PR open for human review.
+            6. Add the `ambient-code:managed` label to the PR.
+            7. After creating the PR, send a Slack notification:
+               ```bash
+               curl -X POST -H 'Content-type: application/json' \
+                 --data '{"text":"PR created for #${{ steps.context.outputs.number }}\n*PR*: <PR_URL>\n*Session*: '"$PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME"'"}' \
+                 "$SLACK_WEBHOOK_URL"
+               ```
+               Only send if SLACK_WEBHOOK_URL is set.
+            8. Ensure CI passes. If it fails, investigate and fix.
+            9. Do not merge. Leave the PR open for human review.
           repos: >-
             [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
           model: claude-opus-4-6

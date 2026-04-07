@@ -208,6 +208,12 @@ jobs:
         run: |
           oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
 
+      - name: Deploy Service Mesh operator via OLM
+        run: |
+          oc apply -f components/manifests/components/openshift-ai/service-mesh-namespace.yaml
+          oc apply -f components/manifests/components/openshift-ai/service-mesh-operatorgroup.yaml
+          oc apply -f components/manifests/components/openshift-ai/service-mesh-subscription.yaml
+
       - name: Deploy RHOAI operator via OLM
         run: |
           oc apply -f components/manifests/components/openshift-ai/namespace.yaml
@@ -280,14 +286,27 @@ jobs:
           || oc exec -n ambient-code deploy/postgresql -- \
             psql -U postgres -c "CREATE DATABASE mlflow"
 
-      - name: Verify mlflow-db-credentials secret exists
+      - name: Ensure mlflow-db-credentials secret exists
         run: |
-          if ! oc get secret mlflow-db-credentials -n redhat-ods-applications &>/dev/null; then
-            echo "::error::Secret mlflow-db-credentials not found in redhat-ods-applications."
-            echo "::error::Create it before applying the MLflow resource."
-            echo "::error::See components/manifests/base/mlflow-db-credentials-secret.yaml.example"
-            exit 1
-          fi
+          echo "Reconciling mlflow-db-credentials from postgresql-credentials..."
+          DB_USER=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.user}' | base64 -d)
+          DB_PASS=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.password}' | base64 -d)
+          DB_HOST=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.host}' | base64 -d)
+          DB_PORT=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.port}' | base64 -d)
+          ENC_USER=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$DB_USER")
+          ENC_PASS=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$DB_PASS")
+          ENCODED_URI="postgresql://${ENC_USER}:${ENC_PASS}@${DB_HOST}.ambient-code.svc.cluster.local:${DB_PORT}/mlflow?sslmode=disable"
+          oc create namespace redhat-ods-applications --dry-run=client -o yaml | oc apply -f -
+          oc apply -f - <<EOF
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: mlflow-db-credentials
+            namespace: redhat-ods-applications
+          type: Opaque
+          stringData:
+            uri: "${ENCODED_URI}"
+          EOF
 
       - name: Deploy MLflow instance
         run: |
