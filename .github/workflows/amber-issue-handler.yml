@@ -538,7 +538,7 @@ jobs:
                   print(f"  Failed to create session: {e}")
                   return None
 
-          BOT_USERS = {"github-actions[bot]", "ambient-code[bot]", "ambient-bot"}
+          BOT_LOGINS = ["github-actions[bot]", "ambient-code[bot]", "ambient-bot"]
 
           def needs_attention(pr_number):
               """Check if a PR has actionable issues that need the fixer's attention.
@@ -561,13 +561,11 @@ jobs:
               if mergeable == "CONFLICTING":
                   return True, "merge conflicts"
 
-              # Check for non-bot review comments/reviews since last_action
-              reviews_json = gh("api", f"repos/{REPO}/pulls/{pr_number}/reviews",
-                               "--jq", json.dumps([{"state": ".state", "user": ".user.login"}]))
               # Check for changes_requested from non-bot users
+              bot_filter = " and ".join([f'.user.login != "{b}"' for b in BOT_LOGINS])
               try:
                   reviews_raw = gh("api", f"repos/{REPO}/pulls/{pr_number}/reviews",
-                                  "--jq", '[.[] | select(.state == "CHANGES_REQUESTED" and .user.login != "github-actions[bot]")] | length')
+                                  "--jq", f'[.[] | select(.state == "CHANGES_REQUESTED" and {bot_filter})] | length')
                   changes_requested = int(reviews_raw) if reviews_raw else 0
               except (ValueError, TypeError):
                   changes_requested = 0

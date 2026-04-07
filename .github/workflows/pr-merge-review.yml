@@ -36,8 +36,8 @@ jobs:
           SLACK_URL = os.environ.get("SLACK_WEBHOOK_URL", "")
           MILESTONE_NAME = "Review Queue"
 
-          def gh(*args):
-              result = subprocess.run(["gh"] + list(args), capture_output=True, text=True)
+          def gh(*args, input_text=None):
+              result = subprocess.run(["gh"] + list(args), capture_output=True, text=True, input=input_text)
               return result.stdout.strip()
 
           def get_or_create_milestone():
@@ -76,6 +76,9 @@ jobs:
                   states = json.loads(status_checks) if status_checks else []
               except json.JSONDecodeError:
                   states = []
+
+              if not states:
+                  return False, "CI unknown"
 
               if "FAILURE" in states:
                   return False, "CI failing"
@@ -143,7 +146,7 @@ jobs:
                   if number in current_milestone_prs:
                       gh("api", f"repos/{REPO}/issues/{number}",
                          "-X", "PATCH", "--input", "-",
-                         input=json.dumps({"milestone": None}))
+                         input_text=json.dumps({"milestone": None}))
                       print(f"  PR #{number}: removed from milestone ({reason})")
                   else:
                       print(f"  PR #{number}: not ready ({reason})")
