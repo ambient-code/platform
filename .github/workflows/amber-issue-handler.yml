@@ -229,8 +229,10 @@ jobs:
             4. Ensure the PR body contains this frontmatter as the first line
                (read your session ID from the AGENTIC_SESSION_NAME environment variable):
                <!-- acp:session_id=$AGENTIC_SESSION_NAME source=#${{ steps.context.outputs.number }} last_action=<ISO8601_NOW> retry_count=<N> -->
-               Increment retry_count from whatever it was before. If retry_count reaches 3 or more,
-               stop working, add `ambient-code:needs-human` label, remove `ambient-code:managed` label,
+               Only increment retry_count if you actually had to fix something (CI failure,
+               conflict, review comment). If the PR is already healthy, do NOT increment —
+               just update last_action. If retry_count reaches 3 or more, stop working,
+               add `ambient-code:needs-human` label, remove `ambient-code:managed` label,
                comment "AI was unable to resolve after 3 attempts. Needs human attention.",
                and send a Slack notification (see below).
             5. Add the `ambient-code:managed` label.
@@ -638,7 +640,10 @@ jobs:
           4. Ensure the PR body contains this frontmatter as the first line
              (read your session ID from the AGENTIC_SESSION_NAME environment variable):
              <!-- acp:session_id=$AGENTIC_SESSION_NAME source={source} last_action=<ISO8601_NOW> retry_count=<N> -->
-             The current retry_count is {current_retry}. Increment it by 1.
+             The current retry_count is {current_retry}. Only increment retry_count if
+             you actually had to fix something (CI failure, conflict, review comment).
+             If the PR is already healthy (CI green, no conflicts, no open reviews),
+             do NOT increment — just update last_action.
              If retry_count reaches 3 or more, stop working, add `ambient-code:needs-human` label,
              remove `ambient-code:managed` label, comment on the PR, and send a Slack notification.
           5. Add the `ambient-code:managed` label.
