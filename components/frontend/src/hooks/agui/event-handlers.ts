@@ -1070,6 +1070,7 @@ function handleCustomEvent(
       id: `model-switch-${Date.now()}`,
       role: 'assistant',
       content: `Model switched from **${previousModel}** to **${newModel}**`,
+      timestamp: new Date().toISOString(),
       metadata: { isModelSwitch: true },
     }
     return { ...state, messages: [...state.messages, msg] }

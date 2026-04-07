@@ -29,7 +29,7 @@ export function LiveModelSelector({
   switching,
   onSelect,
 }: LiveModelSelectorProps) {
-  const { data: modelsData } = useModels(projectName, true, provider);
+  const { data: modelsData, isLoading, isError } = useModels(projectName, true, provider);
 
   const models = useMemo(() => {
     return modelsData?.models.map((m) => ({ id: m.id, name: m.label })) ?? [];
@@ -57,7 +57,15 @@ export function LiveModelSelector({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" side="top" sideOffset={4}>
-        {models.length > 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center px-2 py-4">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          </div>
+        ) : isError ? (
+          <div className="px-2 py-4 text-center text-sm text-destructive">
+            Failed to load models
+          </div>
+        ) : models.length > 0 ? (
           <DropdownMenuRadioGroup
             value={currentModel}
             onValueChange={(modelId) => {

@@ -52,14 +52,15 @@ async def switch_model(request: Request):
                 detail="Cannot switch model while agent is generating a response. Wait for the current turn to complete.",
             )
 
-    if not _model_change_lock.locked():
-        async with _model_change_lock:
-            return await _perform_model_switch(bridge, context, new_model, previous_model)
-    else:
+    # Fast-reject if another switch is already in progress.
+    # asyncio is single-threaded, so no yield between locked() and acquire().
+    if _model_change_lock.locked():
         raise HTTPException(
             status_code=409,
             detail="A model switch is already in progress",
         )
+    async with _model_change_lock:
+        return await _perform_model_switch(bridge, context, new_model, previous_model)
 
 
 async def _perform_model_switch(bridge, context, new_model: str, previous_model: str) -> dict:
@@ -75,11 +76,11 @@ async def _perform_model_switch(bridge, context, new_model: str, previous_model:
         # Clear the manifest override so auth.py re-derives from the new LLM_MODEL
         os.environ.pop("LLM_MODEL_VERTEX_ID", None)
 
+    # Emit confirmation event BEFORE mark_dirty destroys the session manager
+    _emit_model_switched_event(bridge, context, new_model, previous_model)
+
     # Signal adapter rebuild — stops current workers, preserves session IDs
     bridge.mark_dirty()
-
-    # Emit confirmation event via between-run queue
-    _emit_model_switched_event(bridge, context, new_model, previous_model)
 
     logger.info(f"Model switch complete: {previous_model} -> {new_model}")
 

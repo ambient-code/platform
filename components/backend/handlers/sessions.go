@@ -1464,7 +1464,23 @@ func SwitchModel(c *gin.Context) {
 		return
 	}
 
-	// Proxy to runner first — if runner rejects (e.g., agent is mid-generation), abort
+	// Update the CR first to validate RBAC (user needs update permission).
+	// This ensures a user with only get access cannot trigger a runner-side
+	// model switch without also being allowed to persist the change.
+	if llmSettings == nil {
+		llmSettings = map[string]interface{}{}
+	}
+	llmSettings["model"] = req.Model
+	spec["llmSettings"] = llmSettings
+
+	updated, err := k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
+	if err != nil {
+		log.Printf("Failed to update session CR %s for model switch: %v", sessionName, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update session record"})
+		return
+	}
+
+	// Proxy to runner — if runner rejects (e.g., agent is mid-generation), revert the CR
 	runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/model", sessionName, project)
 	runnerReq := map[string]string{"model": req.Model}
 	reqBody, _ := json.Marshal(runnerReq)
@@ -1480,6 +1496,9 @@ func SwitchModel(c *gin.Context) {
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		log.Printf("Failed to proxy model switch to runner for session %s: %v", sessionName, err)
+		// Revert the CR update
+		llmSettings["model"] = previousModel
+		_, _ = k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), updated, v1.UpdateOptions{})
 		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to reach session runner"})
 		return
 	}
@@ -1488,22 +1507,11 @@ func SwitchModel(c *gin.Context) {
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		log.Printf("Runner rejected model switch for session %s: %d %s", sessionName, resp.StatusCode, string(body))
+		// Revert the CR update
+		llmSettings["model"] = previousModel
+		_, _ = k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), updated, v1.UpdateOptions{})
 		// Forward runner's status code and error
 		c.Data(resp.StatusCode, "application/json", body)
-		return
-	}
-
-	// Runner accepted — update the CR
-	if llmSettings == nil {
-		llmSettings = map[string]interface{}{}
-	}
-	llmSettings["model"] = req.Model
-	spec["llmSettings"] = llmSettings
-
-	updated, err := k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
-	if err != nil {
-		log.Printf("Failed to update session CR %s after model switch: %v", sessionName, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Model switched in runner but failed to update session record"})
 		return
 	}
 
