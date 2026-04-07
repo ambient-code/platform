@@ -566,7 +566,9 @@ jobs:
               except json.JSONDecodeError:
                   states = []
 
-              if "FAILURE" in states:
+              if not states:
+                  pass  # No CI checks — nothing to fix
+              elif "FAILURE" in states:
                   return True, "CI failing"
 
               # Check for merge conflicts
