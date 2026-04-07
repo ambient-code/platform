@@ -136,6 +136,8 @@ func runSend(cmd *cobra.Command, args []string) error {
 				}
 				fmt.Fprintf(out, "→ %s\n", preview)
 			}
+		case "RUN_FINISHED", "RUN_ERROR":
+			return nil
 		}
 	}
 
