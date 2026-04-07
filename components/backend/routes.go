@@ -18,6 +18,12 @@ func registerRoutes(r *gin.Engine) {
 
 		api.POST("/projects/:projectName/agentic-sessions/:sessionName/github/token", handlers.MintSessionGitHubToken)
 
+		// Runner-accessible feedback endpoint — accepts service account tokens
+		// (BOT_TOKEN) so that in-session workflows (e.g. Amber) can submit
+		// feedback without requiring a user OAuth token.  The handler performs
+		// its own auth via GetK8sClientsForRequest + SSAR check.
+		api.POST("/projects/:projectName/agentic-sessions/:sessionName/runner/feedback", websocket.HandleAGUIFeedback)
+
 		projectGroup := api.Group("/projects/:projectName", handlers.ValidateProjectContext())
 		{
 			projectGroup.GET("/models", handlers.ListModelsForProject)
