@@ -10,7 +10,7 @@ export async function GET() {
     const response = await fetch(`${BACKEND_URL}/cluster-info`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
     });
 

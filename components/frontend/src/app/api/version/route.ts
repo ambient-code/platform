@@ -9,7 +9,7 @@ export async function GET() {
     const response = await fetch(`${BACKEND_URL}/version`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
     });
 
