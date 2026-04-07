@@ -7,6 +7,8 @@ metadata:
     app: ambient-api-server
     component: api
     shard: internal
+  annotations:
+    haproxy.router.openshift.io/timeout: 10m
 spec:
   to:
     kind: Service

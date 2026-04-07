@@ -17,7 +17,7 @@ from urllib import request as _urllib_request
 from urllib.parse import urlparse
 
 from ambient_runner.platform.context import RunnerContext
-from ambient_runner.platform.utils import get_bot_token
+from ambient_runner.platform.utils import get_bot_token, refresh_bot_token
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +174,16 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
                 try:
                     with _urllib_request.urlopen(fallback_req, timeout=10) as resp:
                         return resp.read().decode("utf-8", errors="replace")
+                except _urllib_request.HTTPError as fallback_err:
+                    if fallback_err.code in (401, 403):
+                        return _retry_with_fresh_bot_token()
+                    logger.warning(
+                        f"{credential_type} BOT_TOKEN fallback also failed: {fallback_err}"
+                    )
+                    raise PermissionError(
+                        f"{credential_type} authentication failed: caller token expired "
+                        f"and BOT_TOKEN fallback also failed"
+                    ) from fallback_err
                 except Exception as fallback_err:
                     logger.warning(
                         f"{credential_type} BOT_TOKEN fallback also failed: {fallback_err}"
@@ -183,17 +193,39 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
                         f"and BOT_TOKEN fallback also failed"
                     ) from fallback_err
             if e.code in (401, 403):
-                logger.warning(
-                    f"{credential_type} credential fetch failed with HTTP {e.code}: {e}"
-                )
-                raise PermissionError(
-                    f"{credential_type} authentication failed with HTTP {e.code}"
-                ) from e
+                # BOT_TOKEN may have expired — refresh from CP endpoint and retry once.
+                return _retry_with_fresh_bot_token()
             logger.warning(f"{credential_type} credential fetch failed: {e}")
             return ""
         except Exception as e:
             logger.warning(f"{credential_type} credential fetch failed: {e}")
             return ""
+
+    def _retry_with_fresh_bot_token():
+        logger.info(
+            f"{credential_type} got 401 with cached BOT_TOKEN — refreshing from CP endpoint and retrying"
+        )
+        try:
+            fresh_bot = refresh_bot_token()
+        except Exception as refresh_err:
+            logger.warning(f"{credential_type} CP token refresh failed: {refresh_err}")
+            raise PermissionError(
+                f"{credential_type} authentication failed with HTTP 401"
+            ) from refresh_err
+        retry_req = _urllib_request.Request(url, method="GET")
+        if fresh_bot:
+            retry_req.add_header("Authorization", f"Bearer {fresh_bot}")
+        if context.current_user_id:
+            retry_req.add_header("X-Runner-Current-User", context.current_user_id)
+        try:
+            with _urllib_request.urlopen(retry_req, timeout=10) as resp:
+                logger.info(f"{credential_type} retry with fresh BOT_TOKEN succeeded")
+                return resp.read().decode("utf-8", errors="replace")
+        except Exception as retry_err:
+            logger.warning(f"{credential_type} retry with fresh BOT_TOKEN failed: {retry_err}")
+            raise PermissionError(
+                f"{credential_type} authentication failed with HTTP 401"
+            ) from retry_err
 
     resp_text = await loop.run_in_executor(None, _do_req)
     if not resp_text:
