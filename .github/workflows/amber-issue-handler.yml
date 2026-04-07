@@ -100,9 +100,14 @@ jobs:
                first line of the PR body (read your session ID from the
                AGENTIC_SESSION_NAME environment variable):
                <!-- acp:session_id=$AGENTIC_SESSION_NAME source=#${{ steps.issue.outputs.number }} last_action=<ISO8601_NOW> retry_count=0 -->
+               At the bottom of the PR body, add a session link:
+               ---
+               🤖 [Ambient Session]($PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME)
             6. Add the `ambient-code:managed` label to the PR.
             7. Ensure CI passes. If it fails, investigate and fix.
             8. Do not merge. Leave the PR open for human review.
+            9. When you comment on the PR, include this footer at the end:
+               _🤖 [Session]($PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME)_
           repos: >-
             [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
           model: claude-opus-4-6
@@ -231,6 +236,8 @@ jobs:
             5. Add the `ambient-code:managed` label.
             6. Do not merge. Do not close. Do not force-push.
             7. If fundamentally broken beyond repair, add a comment explaining and stop.
+            8. When you comment on the PR, include this footer at the end:
+               _🤖 [Session]($PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME)_
 
             ## Slack Notifications
 
@@ -286,9 +293,14 @@ jobs:
                first line of the PR body (read your session ID from the
                AGENTIC_SESSION_NAME environment variable):
                <!-- acp:session_id=$AGENTIC_SESSION_NAME source=#${{ steps.context.outputs.number }} last_action=<ISO8601_NOW> retry_count=0 -->
+               At the bottom of the PR body, add a session link:
+               ---
+               🤖 [Ambient Session]($PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME)
             6. Add the `ambient-code:managed` label to the PR.
             7. Ensure CI passes. If it fails, investigate and fix.
             8. Do not merge. Leave the PR open for human review.
+            9. When you comment on the PR, include this footer at the end:
+               _🤖 [Session]($PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME)_
           repos: >-
             [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
           model: claude-opus-4-6
@@ -632,6 +644,8 @@ jobs:
           5. Add the `ambient-code:managed` label.
           6. Do not merge. Do not close. Do not force-push.
           7. If fundamentally broken beyond repair, add a comment explaining and stop.
+          8. When you comment on the PR, include this footer at the end:
+             _🤖 [Session]($PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME)_
 
           ## Slack Notifications
 
