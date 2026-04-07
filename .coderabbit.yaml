@@ -110,7 +110,8 @@ reviews:
       - "dependabot[bot]"
       - "renovate[bot]"
     base_branches:
-      - ".*"
+      - "main"
+      - "alpha"
 
   # ---------------------------------------------------------------------------
   # Finishing touches
