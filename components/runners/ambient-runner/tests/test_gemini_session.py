@@ -97,6 +97,24 @@ class TestWorkerSubprocessConfig:
             call_kwargs = mock_exec.call_args[1]
             assert call_kwargs["limit"] == 10 * 1024 * 1024
 
+    @pytest.mark.asyncio
+    async def test_large_stdout_line_does_not_crash(self):
+        """A real subprocess outputting >64 KB on one line must not raise ValueError.
+
+        Without the 10 MB limit the default 64 KB StreamReader would blow up with:
+            ValueError: Separator is found, but chunk is longer than limit
+        """
+        payload = "x" * 100_000  # 100 KB — well above the old 64 KB default
+        proc = await asyncio.create_subprocess_exec(
+            "python3", "-c", f'print("{payload}")',
+            stdout=asyncio.subprocess.PIPE,
+            limit=10 * 1024 * 1024,
+        )
+        line = await proc.stdout.readline()
+        await proc.wait()
+        assert len(line) > 64 * 1024
+        assert proc.returncode == 0
+
 
 class TestWorkerCommandConstruction:
     """Verify the CLI command built by query()."""
