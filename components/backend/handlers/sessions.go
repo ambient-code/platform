@@ -1400,6 +1400,128 @@ func UpdateSessionDisplayName(c *gin.Context) {
 	c.JSON(http.StatusOK, session)
 }
 
+// SwitchModel switches the LLM model for a running session
+// POST /api/projects/:projectName/agentic-sessions/:sessionName/model
+func SwitchModel(c *gin.Context) {
+	project := c.GetString("project")
+	sessionName := c.Param("sessionName")
+	_, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+
+	var req struct {
+		Model string `json:"model" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body: model is required"})
+		return
+	}
+
+	if req.Model == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "model must not be empty"})
+		return
+	}
+
+	gvr := GetAgenticSessionV1Alpha1Resource()
+
+	// Get current session
+	item, err := k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get session"})
+		return
+	}
+
+	// Ensure session is Running
+	if err := ensureRuntimeMutationAllowed(item); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get current model for comparison
+	spec := item.Object["spec"].(map[string]interface{})
+	llmSettings, _, _ := unstructured.NestedMap(spec, "llmSettings")
+	previousModel, _ := llmSettings["model"].(string)
+
+	// No-op if same model
+	if previousModel == req.Model {
+		session := types.AgenticSession{
+			APIVersion: item.GetAPIVersion(),
+			Kind:       item.GetKind(),
+			Metadata:   item.Object["metadata"].(map[string]interface{}),
+		}
+		session.Spec = parseSpec(spec)
+		if status, ok := item.Object["status"].(map[string]interface{}); ok {
+			session.Status = parseStatus(status)
+		}
+		c.JSON(http.StatusOK, session)
+		return
+	}
+
+	// Proxy to runner first — if runner rejects (e.g., agent is mid-generation), abort
+	runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/model", sessionName, project)
+	runnerReq := map[string]string{"model": req.Model}
+	reqBody, _ := json.Marshal(runnerReq)
+
+	httpReq, err := http.NewRequestWithContext(c.Request.Context(), "POST", runnerURL, bytes.NewReader(reqBody))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create runner request"})
+		return
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		log.Printf("Failed to proxy model switch to runner for session %s: %v", sessionName, err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to reach session runner"})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("Runner rejected model switch for session %s: %d %s", sessionName, resp.StatusCode, string(body))
+		// Forward runner's status code and error
+		c.Data(resp.StatusCode, "application/json", body)
+		return
+	}
+
+	// Runner accepted — update the CR
+	if llmSettings == nil {
+		llmSettings = map[string]interface{}{}
+	}
+	llmSettings["model"] = req.Model
+	spec["llmSettings"] = llmSettings
+
+	updated, err := k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
+	if err != nil {
+		log.Printf("Failed to update session CR %s after model switch: %v", sessionName, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Model switched in runner but failed to update session record"})
+		return
+	}
+
+	session := types.AgenticSession{
+		APIVersion: updated.GetAPIVersion(),
+		Kind:       updated.GetKind(),
+		Metadata:   updated.Object["metadata"].(map[string]interface{}),
+	}
+	if s, ok := updated.Object["spec"].(map[string]interface{}); ok {
+		session.Spec = parseSpec(s)
+	}
+	if status, ok := updated.Object["status"].(map[string]interface{}); ok {
+		session.Status = parseStatus(status)
+	}
+
+	c.JSON(http.StatusOK, session)
+}
+
 // SelectWorkflow sets the active workflow for a session
 // POST /api/projects/:projectName/agentic-sessions/:sessionName/workflow
 func SelectWorkflow(c *gin.Context) {
