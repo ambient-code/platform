@@ -348,7 +348,7 @@ jobs:
     if: github.event.label.name == 'auto-fix'
     runs-on: ubuntu-latest
     steps:
-      - uses: ambient-code/ambient-action@v0.0.5
+      - uses: ambient-code/ambient-action@v2
         with:
           api-url: ${{ secrets.ACP_URL }}
           api-token: ${{ secrets.ACP_TOKEN }}
