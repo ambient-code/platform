@@ -86,8 +86,10 @@ jobs:
                   return False, "CI pending"
 
               # Check for unresolved critical/major review comments
+              bot_logins = ["github-actions[bot]", "ambient-code[bot]", "ambient-bot"]
+              bot_filter = " and ".join([f'.user.login != "{b}"' for b in bot_logins])
               reviews = gh("api", f"repos/{REPO}/pulls/{number}/reviews",
-                          "--jq", '[.[] | select(.state == "CHANGES_REQUESTED")] | length')
+                          "--jq", f'[.[] | select(.state == "CHANGES_REQUESTED" and {bot_filter})] | length')
               try:
                   changes_requested = int(reviews) if reviews else 0
               except ValueError:
@@ -157,7 +159,7 @@ jobs:
               lines = [f"📋 *{len(newly_added)} PR{'s' if len(newly_added) > 1 else ''} ready for review*\n"]
               for pr in newly_added:
                   lines.append(f"• <{pr['url']}|#{pr['number']}> — {pr['title']}")
-              lines.append(f"\n_Total in <https://github.com/{REPO}/milestone|Review Queue>: {len(ready_prs)}_")
+              lines.append(f"\n_Total in <https://github.com/{REPO}/milestone/{milestone_number}|Review Queue>: {len(ready_prs)}_")
               slack_notify("\n".join(lines))
               print(f"\nSlack: notified about {len(newly_added)} new PR(s)")
           else:
