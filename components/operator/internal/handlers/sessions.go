@@ -25,6 +25,7 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	intstr "k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
 )
 
@@ -1332,6 +1333,9 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		}
 	}
 
+	// Mount trusted CA bundle if present in the session namespace (e.g. OpenShift CA injection)
+	applyTrustedCABundle(config.K8sClient, sessionNamespace, pod)
+
 	// NOTE: Google credentials are now fetched at runtime via backend API
 	// No longer mounting credentials.json as volume
 	// This ensures tokens are always fresh and automatically refreshed
@@ -2178,6 +2182,55 @@ func deleteAmbientLangfuseSecret(ctx context.Context, namespace string) error {
 	}
 
 	return nil
+}
+
+// applyTrustedCABundle mounts the cluster's injected CA bundle into the runner
+// container so it trusts cluster-internal TLS certificates (e.g. on OpenShift).
+// Clusters without the ConfigMap are silently unaffected.
+func applyTrustedCABundle(k8sClient kubernetes.Interface, namespace string, pod *corev1.Pod) {
+	cm, err := k8sClient.CoreV1().ConfigMaps(namespace).Get(
+		context.TODO(), types.TrustedCABundleConfigMapName, v1.GetOptions{})
+	if errors.IsNotFound(err) {
+		return
+	}
+	if err != nil {
+		log.Printf("Warning: failed to check for %s ConfigMap in %s: %v",
+			types.TrustedCABundleConfigMapName, namespace, err)
+		return
+	}
+	if _, ok := cm.Data["ca-bundle.crt"]; !ok {
+		if _, ok := cm.BinaryData["ca-bundle.crt"]; !ok {
+			log.Printf("Warning: %s ConfigMap in %s is missing required key ca-bundle.crt; skipping mount",
+				types.TrustedCABundleConfigMapName, namespace)
+			return
+		}
+	}
+	pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+		Name: "trusted-ca-bundle",
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: types.TrustedCABundleConfigMapName,
+				},
+			},
+		},
+	})
+	for i := range pod.Spec.Containers {
+		if pod.Spec.Containers[i].Name == "ambient-code-runner" {
+			pod.Spec.Containers[i].VolumeMounts = append(
+				pod.Spec.Containers[i].VolumeMounts,
+				corev1.VolumeMount{
+					Name:      "trusted-ca-bundle",
+					MountPath: "/etc/pki/tls/certs/ca-bundle.crt",
+					SubPath:   "ca-bundle.crt",
+					ReadOnly:  true,
+				},
+			)
+			log.Printf("Mounted %s ConfigMap to /etc/pki/tls/certs/ca-bundle.crt in runner container",
+				types.TrustedCABundleConfigMapName)
+			break
+		}
+	}
 }
 
 // LEGACY: getBackendAPIURL removed - AG-UI migration

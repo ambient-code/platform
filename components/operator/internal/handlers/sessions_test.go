@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"ambient-code-operator/internal/config"
@@ -13,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
+	clienttesting "k8s.io/client-go/testing"
 )
 
 // setupTestClient initializes a fake Kubernetes client for testing
@@ -565,6 +567,193 @@ func TestDeleteAmbientVertexSecret_NotFound(t *testing.T) {
 	err := deleteAmbientVertexSecret(ctx, "test-ns")
 	if err != nil {
 		t.Errorf("deleteAmbientVertexSecret should not error on non-existent secret: %v", err)
+	}
+}
+
+// TestApplyTrustedCABundle_ConfigMapPresent verifies that applyTrustedCABundle adds the volume
+// and VolumeMount when the trusted-ca-bundle ConfigMap exists in the session namespace.
+func TestApplyTrustedCABundle_ConfigMapPresent(t *testing.T) {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      types.TrustedCABundleConfigMapName,
+			Namespace: "session-ns",
+		},
+		Data: map[string]string{
+			"ca-bundle.crt": "--- fake CA data ---",
+		},
+	}
+	setupTestClient(cm)
+
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "ambient-code-runner"},
+			},
+		},
+	}
+
+	applyTrustedCABundle(config.K8sClient, "session-ns", pod)
+
+	if len(pod.Spec.Volumes) != 1 {
+		t.Fatalf("expected 1 volume, got %d", len(pod.Spec.Volumes))
+	}
+	vol := pod.Spec.Volumes[0]
+	if vol.Name != "trusted-ca-bundle" {
+		t.Errorf("expected volume name 'trusted-ca-bundle', got %q", vol.Name)
+	}
+	if vol.ConfigMap == nil || vol.ConfigMap.Name != types.TrustedCABundleConfigMapName {
+		t.Errorf("expected ConfigMap volume sourced from %q", types.TrustedCABundleConfigMapName)
+	}
+
+	mounts := pod.Spec.Containers[0].VolumeMounts
+	if len(mounts) != 1 {
+		t.Fatalf("expected 1 VolumeMount, got %d", len(mounts))
+	}
+	m := mounts[0]
+	if m.Name != "trusted-ca-bundle" {
+		t.Errorf("expected mount name 'trusted-ca-bundle', got %q", m.Name)
+	}
+	if m.MountPath != "/etc/pki/tls/certs/ca-bundle.crt" {
+		t.Errorf("unexpected MountPath: %q", m.MountPath)
+	}
+	if m.SubPath != "ca-bundle.crt" {
+		t.Errorf("expected SubPath 'ca-bundle.crt', got %q", m.SubPath)
+	}
+	if !m.ReadOnly {
+		t.Error("expected ReadOnly=true")
+	}
+}
+
+// TestApplyTrustedCABundle_ConfigMapAbsent verifies that applyTrustedCABundle leaves the pod
+// unchanged when the trusted-ca-bundle ConfigMap is not present in the session namespace.
+func TestApplyTrustedCABundle_ConfigMapAbsent(t *testing.T) {
+	setupTestClient() // no ConfigMap
+
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "ambient-code-runner"},
+			},
+		},
+	}
+
+	applyTrustedCABundle(config.K8sClient, "session-ns", pod)
+
+	if len(pod.Spec.Volumes) != 0 {
+		t.Errorf("expected no volumes, got %d", len(pod.Spec.Volumes))
+	}
+	if len(pod.Spec.Containers[0].VolumeMounts) != 0 {
+		t.Errorf("expected no VolumeMounts, got %d", len(pod.Spec.Containers[0].VolumeMounts))
+	}
+}
+
+// TestApplyTrustedCABundle_ExistingMountsPreserved verifies that applyTrustedCABundle appends
+// to, rather than replacing, existing VolumeMounts on the runner container.
+func TestApplyTrustedCABundle_ExistingMountsPreserved(t *testing.T) {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      types.TrustedCABundleConfigMapName,
+			Namespace: "session-ns",
+		},
+		Data: map[string]string{
+			"ca-bundle.crt": "--- fake CA data ---",
+		},
+	}
+	setupTestClient(cm)
+
+	existingMount := corev1.VolumeMount{
+		Name:      "runner-token",
+		MountPath: "/var/run/secrets/ambient",
+		ReadOnly:  true,
+	}
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Volumes: []corev1.Volume{
+				{Name: "runner-token"},
+			},
+			Containers: []corev1.Container{
+				{
+					Name:         "ambient-code-runner",
+					VolumeMounts: []corev1.VolumeMount{existingMount},
+				},
+			},
+		},
+	}
+
+	applyTrustedCABundle(config.K8sClient, "session-ns", pod)
+
+	if len(pod.Spec.Volumes) != 2 {
+		t.Fatalf("expected 2 volumes (runner-token + trusted-ca-bundle), got %d", len(pod.Spec.Volumes))
+	}
+	mounts := pod.Spec.Containers[0].VolumeMounts
+	if len(mounts) != 2 {
+		t.Fatalf("expected 2 VolumeMounts, got %d", len(mounts))
+	}
+	// Existing mount must still be at index 0
+	if mounts[0].Name != "runner-token" {
+		t.Errorf("expected first mount to be 'runner-token', got %q", mounts[0].Name)
+	}
+	if mounts[1].Name != "trusted-ca-bundle" {
+		t.Errorf("expected second mount to be 'trusted-ca-bundle', got %q", mounts[1].Name)
+	}
+}
+
+// TestApplyTrustedCABundle_MissingKey verifies that applyTrustedCABundle leaves the pod
+// unchanged when the ConfigMap exists but lacks the ca-bundle.crt key.
+func TestApplyTrustedCABundle_MissingKey(t *testing.T) {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      types.TrustedCABundleConfigMapName,
+			Namespace: "session-ns",
+		},
+		Data: map[string]string{
+			"wrong-key.pem": "--- fake CA data ---",
+		},
+	}
+	setupTestClient(cm)
+
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "ambient-code-runner"},
+			},
+		},
+	}
+
+	applyTrustedCABundle(config.K8sClient, "session-ns", pod)
+
+	if len(pod.Spec.Volumes) != 0 {
+		t.Errorf("expected no volumes when key is missing, got %d", len(pod.Spec.Volumes))
+	}
+	if len(pod.Spec.Containers[0].VolumeMounts) != 0 {
+		t.Errorf("expected no VolumeMounts when key is missing, got %d", len(pod.Spec.Containers[0].VolumeMounts))
+	}
+}
+
+// TestApplyTrustedCABundle_APIError verifies that applyTrustedCABundle leaves the pod
+// unchanged when the ConfigMap GET returns a non-NotFound error.
+func TestApplyTrustedCABundle_APIError(t *testing.T) {
+	fakeClient := fake.NewSimpleClientset()
+	fakeClient.PrependReactor("get", "configmaps", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		return true, nil, fmt.Errorf("connection refused")
+	})
+	config.K8sClient = fakeClient
+
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "ambient-code-runner"},
+			},
+		},
+	}
+
+	applyTrustedCABundle(config.K8sClient, "session-ns", pod)
+
+	if len(pod.Spec.Volumes) != 0 {
+		t.Errorf("expected no volumes on API error, got %d", len(pod.Spec.Volumes))
+	}
+	if len(pod.Spec.Containers[0].VolumeMounts) != 0 {
+		t.Errorf("expected no VolumeMounts on API error, got %d", len(pod.Spec.Containers[0].VolumeMounts))
 	}
 }
 
