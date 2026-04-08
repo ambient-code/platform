@@ -50,7 +50,11 @@ jobs:
           NUMBER="${{ github.event.issue.number }}"
           TITLE=$(gh issue view "$NUMBER" --repo "${{ github.repository }}" --json title --jq '.title')
           echo "number=$NUMBER" >> $GITHUB_OUTPUT
-          echo "title=$TITLE" >> $GITHUB_OUTPUT
+          {
+            echo "title<<EOF"
+            echo "$TITLE"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
 
       - name: Check for existing PR
         id: existing
@@ -194,7 +198,11 @@ jobs:
             echo "url=https://github.com/${{ github.repository }}/pull/$NUMBER" >> $GITHUB_OUTPUT
 
             TITLE=$(gh pr view "$NUMBER" --repo "${{ github.repository }}" --json title --jq '.title')
-            echo "title=$TITLE" >> $GITHUB_OUTPUT
+            {
+              echo "title<<EOF"
+              echo "$TITLE"
+              echo "EOF"
+            } >> $GITHUB_OUTPUT
 
             IS_FORK=$(gh pr view "$NUMBER" --repo "${{ github.repository }}" --json isCrossRepository --jq '.isCrossRepository')
             echo "is_fork=$IS_FORK" >> $GITHUB_OUTPUT
@@ -208,7 +216,11 @@ jobs:
             echo "url=https://github.com/${{ github.repository }}/issues/$NUMBER" >> $GITHUB_OUTPUT
 
             TITLE=$(gh issue view "$NUMBER" --repo "${{ github.repository }}" --json title --jq '.title')
-            echo "title=$TITLE" >> $GITHUB_OUTPUT
+            {
+              echo "title<<EOF"
+              echo "$TITLE"
+              echo "EOF"
+            } >> $GITHUB_OUTPUT
 
             echo "is_fork=false" >> $GITHUB_OUTPUT
 
