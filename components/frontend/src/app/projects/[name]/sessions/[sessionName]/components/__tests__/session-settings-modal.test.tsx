@@ -61,7 +61,7 @@ describe('SessionSettingsModal', () => {
 
   it('renders Settings title', () => {
     render(<SessionSettingsModal {...defaultProps} />);
-    expect(screen.getByText('Settings')).toBeDefined();
+    expect(screen.getByText('Session Settings')).toBeDefined();
   });
 
   it('renders sidebar nav tabs (Session, MCP Servers, Integrations)', () => {
