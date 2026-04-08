@@ -114,6 +114,13 @@ var _ = Describe("Integration Validation", Label(test_constants.LabelUnit, test_
 			Expect(err.Error()).NotTo(ContainSubstring("/rest/api/"))
 		})
 
+		It("returns false with error for a malformed URL", func() {
+			valid, err := ValidateJiraToken(context.Background(), "://not-a-url", "user@example.com", "api-token")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to create request"))
+			Expect(valid).To(BeFalse())
+		})
+
 		It("returns true for valid credentials", func() {
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if strings.Contains(r.URL.Path, "/rest/api/3/myself") {
