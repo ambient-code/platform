@@ -701,9 +701,12 @@ jobs:
           AskUserQuestion — send a Slack notification. IMPORTANT: Always send BEFORE
           calling AskUserQuestion. Use Slack mrkdwn link format: <URL|display text>.
 
-          curl -X POST -H 'Content-type: application/json' \\
-            --data '{{"text":"🚨 *Need help with <https://github.com/{REPO}/pull/{number}|PR #{number}>*\\n<reason — what you tried and why you are stuck>\\n\\n<'"$PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME"'|View Session>"}}' \\
-            "$SLACK_WEBHOOK_URL"
+          TITLE=$(gh pr view {number} --repo {REPO} --json title --jq '.title')
+          PAYLOAD=$(jq -nc --arg text "🚨 *Need help with <https://github.com/{REPO}/pull/{number}|PR #{number} — $TITLE>*
+          <reason — what you tried and why you are stuck>
+
+          <$PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME|View Session>" '{{text: $text}}')
+          curl -X POST -H 'Content-type: application/json' --data "$PAYLOAD" "$SLACK_WEBHOOK_URL"
 
           Only send if SLACK_WEBHOOK_URL is set."""
 
