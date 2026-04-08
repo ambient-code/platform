@@ -1446,7 +1446,11 @@ func SwitchModel(c *gin.Context) {
 	}
 
 	// Get current model for comparison
-	spec := item.Object["spec"].(map[string]interface{})
+	spec, ok := item.Object["spec"].(map[string]interface{})
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid session spec"})
+		return
+	}
 	llmSettings, _, _ := unstructured.NestedMap(spec, "llmSettings")
 	previousModel, _ := llmSettings["model"].(string)
 
@@ -1455,7 +1459,9 @@ func SwitchModel(c *gin.Context) {
 		session := types.AgenticSession{
 			APIVersion: item.GetAPIVersion(),
 			Kind:       item.GetKind(),
-			Metadata:   item.Object["metadata"].(map[string]interface{}),
+			}
+		if meta, ok := item.Object["metadata"].(map[string]interface{}); ok {
+			session.Metadata = meta
 		}
 		session.Spec = parseSpec(spec)
 		if status, ok := item.Object["status"].(map[string]interface{}); ok {
@@ -1533,7 +1539,9 @@ func SwitchModel(c *gin.Context) {
 	session := types.AgenticSession{
 		APIVersion: updated.GetAPIVersion(),
 		Kind:       updated.GetKind(),
-		Metadata:   updated.Object["metadata"].(map[string]interface{}),
+	}
+	if meta, ok := updated.Object["metadata"].(map[string]interface{}); ok {
+		session.Metadata = meta
 	}
 	if s, ok := updated.Object["spec"].(map[string]interface{}); ok {
 		session.Spec = parseSpec(s)
