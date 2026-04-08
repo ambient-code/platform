@@ -5,8 +5,6 @@ import {
   Info,
   Plug,
   Link2,
-  Download,
-  FileText,
 } from "lucide-react";
 import {
   Dialog,

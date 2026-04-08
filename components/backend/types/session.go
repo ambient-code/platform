@@ -90,7 +90,7 @@ type UpdateAgenticSessionRequest struct {
 	DisplayName   *string           `json:"displayName,omitempty"`
 	Timeout       *int              `json:"timeout,omitempty"`
 	LLMSettings   *LLMSettings      `json:"llmSettings,omitempty"`
-	MCPServers    *MCPServersConfig  `json:"mcpServers,omitempty"`
+	MCPServers    *MCPServersConfig `json:"mcpServers,omitempty"`
 }
 
 type CloneAgenticSessionRequest struct {

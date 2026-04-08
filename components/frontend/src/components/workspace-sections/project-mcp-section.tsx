@@ -5,7 +5,6 @@ import {
   Plus,
   Trash2,
   Plug,
-  Save,
   Loader2,
 } from "lucide-react";
 import {

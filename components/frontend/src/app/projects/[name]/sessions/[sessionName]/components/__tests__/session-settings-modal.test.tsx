@@ -5,6 +5,7 @@ import type { AgenticSession } from '@/types/agentic-session';
 
 vi.mock('@/services/queries/use-mcp', () => ({
   useMcpStatus: vi.fn(() => ({ data: { servers: [] } })),
+  useUpdateSessionMcpServers: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }));
 
 vi.mock('@/services/queries/use-integrations', () => ({
