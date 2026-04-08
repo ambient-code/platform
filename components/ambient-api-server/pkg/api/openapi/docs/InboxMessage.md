@@ -13,7 +13,7 @@ Name | Type | Description | Notes
 **FromAgentId** | Pointer to **string** | Sender Agent id — null if sent by a human | [optional] 
 **FromName** | Pointer to **string** | Denormalized sender display name | [optional] 
 **Body** | **string** |  | 
-**Read** | Pointer to **bool** | false &#x3D; unread; drained at session ignition | [optional] [readonly] 
+**Read** | Pointer to **bool** | false &#x3D; unread; drained at session start | [optional] [readonly] 
 
 ## Methods
 

@@ -445,7 +445,7 @@ components:
             triggered_by_user_id:
               type: string
               readOnly: true
-              description: User who pressed ignite
+              description: User who started the agent
             project_id:
               type: string
               description: Immutable after creation. Set at creation time only.

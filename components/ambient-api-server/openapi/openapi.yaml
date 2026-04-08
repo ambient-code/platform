@@ -184,7 +184,7 @@ components:
       properties:
         session:
           $ref: 'openapi.sessions.yaml#/components/schemas/Session'
-        ignition_prompt:
+        start_prompt:
           type: string
           description: Assembled start prompt — Agent.prompt + Inbox + Session.prompt + peer roster
     ProjectHome:

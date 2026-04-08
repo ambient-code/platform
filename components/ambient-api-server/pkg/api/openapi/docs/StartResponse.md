@@ -5,7 +5,7 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **Session** | Pointer to [**Session**](Session.md) |  | [optional] 
-**IgnitionPrompt** | Pointer to **string** | Assembled start prompt — Agent.prompt + Inbox + Session.prompt + peer roster | [optional] 
+**StartPrompt** | Pointer to **string** | Assembled start prompt — Agent.prompt + Inbox + Session.prompt + peer roster | [optional] 
 
 ## Methods
 
@@ -51,30 +51,30 @@ SetSession sets Session field to given value.
 
 HasSession returns a boolean if a field has been set.
 
-### GetIgnitionPrompt
+### GetStartPrompt
 
-`func (o *StartResponse) GetIgnitionPrompt() string`
+`func (o *StartResponse) GetStartPrompt() string`
 
-GetIgnitionPrompt returns the IgnitionPrompt field if non-nil, zero value otherwise.
+GetStartPrompt returns the StartPrompt field if non-nil, zero value otherwise.
 
-### GetIgnitionPromptOk
+### GetStartPromptOk
 
-`func (o *StartResponse) GetIgnitionPromptOk() (*string, bool)`
+`func (o *StartResponse) GetStartPromptOk() (*string, bool)`
 
-GetIgnitionPromptOk returns a tuple with the IgnitionPrompt field if it's non-nil, zero value otherwise
+GetStartPromptOk returns a tuple with the StartPrompt field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
-### SetIgnitionPrompt
+### SetStartPrompt
 
-`func (o *StartResponse) SetIgnitionPrompt(v string)`
+`func (o *StartResponse) SetStartPrompt(v string)`
 
-SetIgnitionPrompt sets IgnitionPrompt field to given value.
+SetStartPrompt sets StartPrompt field to given value.
 
-### HasIgnitionPrompt
+### HasStartPrompt
 
-`func (o *StartResponse) HasIgnitionPrompt() bool`
+`func (o *StartResponse) HasStartPrompt() bool`
 
-HasIgnitionPrompt returns a boolean if a field has been set.
+HasStartPrompt returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

@@ -48,7 +48,7 @@ type Session struct {
 	Annotations          *string  `json:"annotations,omitempty"`
 	// The Agent that owns this session. Immutable after creation.
 	AgentId *string `json:"agent_id,omitempty"`
-	// User who pressed ignite
+	// User who started the agent
 	TriggeredByUserId *string `json:"triggered_by_user_id,omitempty"`
 	// Immutable after creation. Set at creation time only.
 	ProjectId          *string    `json:"project_id,omitempty"`

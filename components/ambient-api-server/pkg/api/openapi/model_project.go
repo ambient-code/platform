@@ -32,7 +32,7 @@ type Project struct {
 	Description *string    `json:"description,omitempty"`
 	Labels      *string    `json:"labels,omitempty"`
 	Annotations *string    `json:"annotations,omitempty"`
-	// Workspace-level context injected into every ignition in this project
+	// Workspace-level context injected into every agent start in this project
 	Prompt *string `json:"prompt,omitempty"`
 	Status *string `json:"status,omitempty"`
 }

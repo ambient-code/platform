@@ -12,11 +12,11 @@
 
 The Ambient API server provides a coordination layer for orchestrating fleets of persistent agents across projects. The model is intentionally simple:
 
-- **Project** — a workspace. Groups agents and provides shared context (`prompt`) injected into every session ignition.
+- **Project** — a workspace. Groups agents and provides shared context (`prompt`) injected into every agent start.
 - **Agent** — a project-scoped, mutable definition. Agents belong to exactly one Project. `prompt` defines who the agent is and is directly editable (subject to RBAC).
-- **Session** — an ephemeral Kubernetes execution run, created exclusively via agent ignition. Only one active session per Agent at a time.
+- **Session** — an ephemeral Kubernetes execution run, created exclusively via agent start. Only one active Session per Agent at a time.
 - **Message** — a single AG-UI event in the LLM conversation. Append-only; the canonical record of what happened in a session.
-- **Inbox** — a persistent message queue on an Agent. Messages survive across sessions and are drained into the ignition context at the next run.
+- **Inbox** — a persistent message queue on an Agent. Messages survive across sessions and are drained into the start context at the next run.
 - **Credential** — a platform-scoped, RBAC-owned secret. Stores a Personal Access Token or equivalent for an external provider (GitHub, GitLab, Jira, Google). Consumed by runners at session start.
 - **RoleBinding** — binds a Resource to a Role at a given scope (`global`, `project`, `agent`, `session`, `credential`). Ownership and access for all Kinds is expressed through RoleBindings.
 
@@ -46,7 +46,7 @@ erDiagram
         string ID PK "name-as-ID"
         string name
         string description
-        string prompt "workspace-level context injected into every ignition"
+        string prompt "workspace-level context injected into every agent start"
         jsonb  labels
         jsonb  annotations
         string status
@@ -88,18 +88,18 @@ erDiagram
         string from_agent_id FK "nullable — sender; null = human"
         string from_name "denormalized sender display name"
         text   body
-        bool   read "false = unread; drained at session ignition"
+        bool   read "false = unread; drained at session start"
         time   created_at
         time   updated_at
         time   deleted_at
     }
 
-    %% ── Session (ephemeral run — ignited from an Agent) ──────────────────────
+    %% ── Session (ephemeral run — started from an Agent) ────────────────────
 
     Session {
         string  ID PK
         string  agent_id FK
-        string  triggered_by_user_id FK "who pressed ignite"
+        string  triggered_by_user_id FK "who started the agent"
         string  prompt "task scope for this run"
         string  phase
         jsonb   labels
@@ -214,7 +214,7 @@ GET /projects/{id}/agents/{id}      → read agent
 DELETE /projects/{id}/agents/{id}   → soft delete
 ```
 
-Only one active Session per Agent at a time. Ignition is idempotent — if an active session exists, ignite returns it. If not, a new session is created.
+Only one active Session per Agent at a time. Start is idempotent — if an active session exists, start returns it. If not, a new session is created.
 
 ---
 
@@ -226,16 +226,16 @@ Inbox messages are addressed to an Agent (`agent_id`). They are distinct from Se
 |--|-------|----------------|
 | Scope | Agent (persists across sessions) | Session (ephemeral) |
 | Created by | Human or another Agent | LLM turn / runner gRPC push |
-| Drained | At session ignition | Never — append-only stream |
+| Drained | At session start | Never — append-only stream |
 | Purpose | Queued intent waiting for next run | Real LLM event stream |
 
-At ignition, all unread Inbox messages are drained: marked `read=true` and injected as context into the Session prompt before the first SessionMessage turn.
+At session start, all unread Inbox messages are drained: marked `read=true` and injected as context into the Session prompt before the first SessionMessage turn.
 
 ---
 
 ## Session — Ephemeral Run
 
-Sessions are **not directly creatable**. They are run artifacts created exclusively via `POST /projects/{project_id}/agents/{agent_id}/ignite`.
+Sessions are **not directly creatable**. They are run artifacts created exclusively via `POST /projects/{project_id}/agents/{agent_id}/start`.
 
 `Session.prompt` scopes the task for this specific run — separate from `Agent.prompt` which defines who the agent is.
 
@@ -246,7 +246,7 @@ Inbox messages  → "Please also review the RBAC middleware while you're in ther
 Session.prompt  → "Implement the session messages handler. Repo: github.com/..."
 ```
 
-All four are assembled into the ignition context in that order. Pokes roll downhill.
+All four are assembled into the start context in that order. Pokes roll downhill.
 
 ---
 
@@ -296,8 +296,8 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | `POST /projects/{id}/agents` | `acpctl agent create --project-id <p> --name <n> [--prompt <p>]` | ✅ implemented |
 | `PATCH /projects/{id}/agents/{agent_id}` | `acpctl agent update --project-id <p> --agent-id <id> [--name <n>] [--prompt <p>]` | ✅ implemented |
 | `DELETE /projects/{id}/agents/{agent_id}` | `acpctl agent delete --project-id <p> --agent-id <id> --confirm` | ✅ implemented |
-| `POST /projects/{id}/agents/{agent_id}/ignite` | `acpctl start <agent-id> --project-id <p> [--prompt <t>]` | ✅ implemented |
-| `GET /projects/{id}/agents/{agent_id}/ignition` | `acpctl agent ignition --project-id <p> --agent-id <id>` | ✅ implemented |
+| `POST /projects/{id}/agents/{agent_id}/start` | `acpctl start <agent-id> --project-id <p> [--prompt <t>]` | ✅ implemented |
+| `GET /projects/{id}/agents/{agent_id}/start` | `acpctl agent start-preview --project-id <p> --agent-id <id>` | ✅ implemented |
 | `GET /projects/{id}/agents/{agent_id}/sessions` | `acpctl agent sessions --project-id <p> --agent-id <id>` | ✅ implemented |
 | `GET /projects/{id}/agents/{agent_id}/inbox` | `acpctl inbox list --project-id <p> --pa-id <id>` | ✅ implemented |
 | `POST /projects/{id}/agents/{agent_id}/inbox` | `acpctl inbox send --project-id <p> --pa-id <id> --body <text>` | ✅ implemented |
@@ -517,8 +517,8 @@ GET    /api/ambient/v1/projects/{id}/agents/{agent_id}       read agent
 PATCH  /api/ambient/v1/projects/{id}/agents/{agent_id}       update agent (name, prompt, labels, annotations)
 DELETE /api/ambient/v1/projects/{id}/agents/{agent_id}       soft delete
 
-POST   /api/ambient/v1/projects/{id}/agents/{agent_id}/ignite    ignite — creates Session (idempotent; one active at a time)
-GET    /api/ambient/v1/projects/{id}/agents/{agent_id}/ignition  preview ignition context (dry run)
+POST   /api/ambient/v1/projects/{id}/agents/{agent_id}/start     start — creates Session (idempotent; one active at a time)
+GET    /api/ambient/v1/projects/{id}/agents/{agent_id}/start     preview start context (dry run — no session created)
 GET    /api/ambient/v1/projects/{id}/agents/{agent_id}/sessions  session run history
 GET    /api/ambient/v1/projects/{id}/agents/{agent_id}/inbox     read inbox (unread first)
 POST   /api/ambient/v1/projects/{id}/agents/{agent_id}/inbox     send message to this agent's inbox
@@ -530,10 +530,10 @@ GET    /api/ambient/v1/projects/{id}/agents/{agent_id}/role_bindings    RBAC bin
 
 #### Ignite Response
 
-`POST /projects/{id}/agents/{agent_id}/ignite` is idempotent:
+`POST /projects/{id}/agents/{agent_id}/start` is idempotent:
 - If a session is already active, it is returned as-is.
 - If no active session exists, a new one is created.
-- Unread Inbox messages are drained (marked read) and injected into the ignition context.
+- Unread Inbox messages are drained (marked read) and injected into the start context.
 
 ```json
 {
@@ -544,11 +544,11 @@ GET    /api/ambient/v1/projects/{id}/agents/{agent_id}/role_bindings    RBAC bin
     "triggered_by_user_id": "...",
     "created_at": "2026-03-20T00:00:00Z"
   },
-  "ignition_context": "# Agent: API\n\nYou are API...\n\n## Inbox\n...\n\n## Task\n..."
+  "start_context": "# Agent: API\n\nYou are API...\n\n## Inbox\n...\n\n## Task\n..."
 }
 ```
 
-The ignition context assembles in order:
+The start context assembles in order:
 1. `Project.prompt` (workspace context — shared by all agents in this project)
 2. `Agent.prompt` (who you are)
 3. Drained Inbox messages (what others have asked you to do)
@@ -814,7 +814,7 @@ This means the entire data model is a **composable JSON tree** — four nodes, e
 
 Because every node is a string, **entire agent suites and workspaces compose declaratively**.
 
-The ignition pipeline is string composition — each scope inherits and narrows the string above it:
+The start context pipeline is string composition — each scope inherits and narrows the string above it:
 
 ```
 Project.prompt        → workspace context (shared by all agents)
@@ -823,13 +823,13 @@ Project.prompt        → workspace context (shared by all agents)
       Session.prompt  → what this run is focused on
 ```
 
-To compose a new workspace: write a `Project.prompt`. To define a new agent role: write an `Agent.prompt` and create the Agent in the project. To ignite: the system assembles the full context string automatically, in order, from the tree.
+To compose a new workspace: write a `Project.prompt`. To define a new agent role: write an `Agent.prompt` and create the Agent in the project. To start: the system assembles the full context string automatically, in order, from the tree.
 
 A different `Project.prompt` = a different team with different shared context.
 An Agent with the same name in two projects = the same role operating in two different workspaces (separate records, independently mutable).
 A poke (`InboxMessage.body`) sent from one Agent to another = a string crossing a node boundary.
 
-This structure means you can define and compose bespoke agent suites — entire fleets with different roles, different workspace contexts, different session scopes — purely by composing strings at the right node in the tree. The platform assembles the ignition context; the model does the rest.
+This structure means you can define and compose bespoke agent suites — entire fleets with different roles, different workspace contexts, different session scopes — purely by composing strings at the right node in the tree. The platform assembles the start context; the model does the rest.
 
 ---
 
@@ -844,11 +844,11 @@ This structure means you can define and compose bespoke agent suites — entire 
 | Credential is platform-scoped, not project-scoped | Credentials (especially Robot Accounts) are shared across teams and projects. Nesting under a project would force duplication. |
 | Credential token is write-only | Prevents token exfiltration via the standard REST API. Raw token only surfaced to runners via the runtime credentials path, not to end users. |
 | Five-scope RBAC (`global`, `project`, `agent`, `session`, `credential`) | `credential` scope enables per-credential access grants; combined with project/global scope it allows Robot Accounts shared at any granularity. |
-| One active Session per Agent | Avoids concurrent conflicting runs; ignition is idempotent |
+| One active Session per Agent | Avoids concurrent conflicting runs; start is idempotent |
 | Inbox on Agent, not Session | Messages persist across re-ignitions; addressed to the agent, not the run |
-| Inbox drained at ignition | Unread messages become part of the ignition context; session picks up where things left off |
+| Inbox drained at start | Unread messages become part of the start context; session picks up where things left off |
 | `current_session_id` denormalized on Agent | Project Home reads Agent + session phase without joining through sessions |
-| Sessions created only via ignite | Sessions are run artifacts; direct `POST /sessions` does not exist |
+| Sessions created only via start | Sessions are run artifacts; direct `POST /sessions` does not exist |
 | Every layer carries a `prompt` | Project.prompt = workspace context; Agent.prompt = who the agent is; Session.prompt = what this run does; Inbox = prior requests. Pokes roll downhill. |
 | `SessionMessage` is append-only | Canonical record of the LLM conversation; never edited or deleted |
 | `agent:editor` role | Allows prompt updates without full operator access |
@@ -931,7 +931,7 @@ _Last updated: 2026-03-22. Use this as the authoritative index — click into co
 | **Sessions — live events (SSE proxy)** | ✅ `/events` → runner pod | ✅ `SessionAPI.StreamEvents` → `io.ReadCloser` | ✅ `session events` | Runner must be Running; 502 if unreachable |
 | **Sessions — labels/annotations** | ✅ PATCH accepts `labels`/`annotations` | ✅ fields on `Session` type; `SessionAPI.Update(patch map[string]any)` | ⚠️ no dedicated subcommand; use `acpctl get session -o json` + manual PATCH | |
 | **Agents — CRUD** | ✅ `/projects/{id}/agents` | ✅ `ProjectAgentAPI.{ListByProject,GetByProject,GetInProject,CreateInProject,UpdateInProject,DeleteInProject}` | ✅ `agent list/get/create/update/delete` | |
-| **Agents — ignite/ignition** | ✅ `/ignite` `/ignition` | ✅ `ProjectAgentAPI.{Ignite,GetIgnition}` | ✅ `start <id>`, `agent ignition` | Idempotent — returns existing session if active |
+| **Agents — start/start-preview** | ✅ `/start` | ✅ `ProjectAgentAPI.{Start,GetStartPreview}` | ✅ `start <id>`, `agent start-preview` | Idempotent — returns existing session if active |
 | **Agents — sessions history** | ✅ `/sessions` sub-resource | ✅ `ProjectAgentAPI.Sessions` | ✅ `agent sessions` | Returns `SessionList` scoped to agent |
 | **Agents — labels/annotations** | ✅ PATCH accepts `labels`/`annotations` | ✅ fields on `ProjectAgent` type; `UpdateInProject(patch map[string]any)` | ⚠️ via `agent update` with raw patch; no typed helpers | |
 | **Inbox — list/send** | ✅ GET/POST `/inbox` | ✅ `InboxMessageAPI.{ListByAgent,Send}` + `ProjectAgentAPI.{ListInboxInProject,SendInboxInProject}` | ✅ `inbox list`, `inbox send` | |
@@ -993,7 +993,7 @@ All Kinds with `labels`/`annotations` store them as JSON strings in the DB (`*st
     --scope agent --scope-id "$AGENT_ID"
 
   # 5. Start session
-  SESSION_ID=$(acpctl agent start github-agent --project-id test-cred-1 \
+  SESSION_ID=$(acpctl start github-agent --project-id test-cred-1 \
     --prompt "Fetch credential $CRED_ID token and confirm you received it." \
     -o json | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
   echo "SESSION_ID=$SESSION_ID"

@@ -184,8 +184,8 @@ Full endpoint list for `/api/ambient/v1`:
 | GET | `/projects/{id}/home/snapshot` | Project home snapshot |
 | GET/POST/PATCH/DELETE | `/project_settings` | Project settings CRUD |
 | GET/POST/PATCH/DELETE | `/agents` | Agent CRUD |
-| POST | `/agents/{id}/ignite` | Start agent |
-| GET | `/agents/{id}/ignition` | Preview ignition config |
+| POST | `/agents/{id}/start` | Start agent |
+| GET | `/agents/{id}/start` | Preview start context |
 | GET | `/agents/{id}/sessions` | Agent sessions |
 | GET | `/agents/{id}/checkins` | Agent check-ins |
 | GET/POST | `/agents/{id}/inbox` | Agent inbox |
