@@ -1019,6 +1019,25 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 					base = append(base, corev1.EnvVar{Name: "MCP_CONFIG_FILE", Value: mcpConfigFile})
 				}
 
+				// Pass custom MCP server configuration from session spec
+				if mcpServers, ok := spec["mcpServers"].(map[string]interface{}); ok && len(mcpServers) > 0 {
+					if b, err := json.Marshal(mcpServers); err == nil {
+						base = append(base, corev1.EnvVar{Name: "CUSTOM_MCP_SERVERS", Value: string(b)})
+					}
+				}
+
+				// Merge project-level MCP defaults from ProjectSettings
+				psGVR := types.GetProjectSettingsResource()
+				if ps, psErr := config.DynamicClient.Resource(psGVR).Namespace(sessionNamespace).Get(context.TODO(), "projectsettings", v1.GetOptions{}); psErr == nil {
+					if psSpec, ok := ps.Object["spec"].(map[string]interface{}); ok {
+						if projectMCP, ok := psSpec["mcpServers"].(map[string]interface{}); ok && len(projectMCP) > 0 {
+							if b, err := json.Marshal(projectMCP); err == nil {
+								base = append(base, corev1.EnvVar{Name: "PROJECT_MCP_SERVERS", Value: string(b)})
+							}
+						}
+					}
+				}
+
 				// Add user context for observability and auditing (Langfuse userId, logs, etc.)
 				if userID != "" {
 					base = append(base, corev1.EnvVar{Name: "USER_ID", Value: userID})

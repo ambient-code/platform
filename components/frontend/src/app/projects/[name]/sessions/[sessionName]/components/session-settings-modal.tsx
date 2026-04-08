@@ -84,12 +84,12 @@ export function SessionSettingsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl p-0 gap-0">
+      <DialogContent className="max-w-5xl p-0 gap-0">
         <DialogHeader className="px-6 py-4 border-b">
-          <DialogTitle>Settings</DialogTitle>
+          <DialogTitle>Session Settings</DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col md:flex-row h-auto md:h-[540px] max-h-[70vh]">
+        <div className="flex flex-col md:flex-row h-auto md:h-[600px] max-h-[80vh]">
           {/* Sidebar nav */}
           <nav className="flex md:flex-col md:w-48 border-b md:border-b-0 md:border-r p-2 gap-1 flex-shrink-0 overflow-x-auto">
             {tabs.map((tab) => {
@@ -129,6 +129,7 @@ export function SessionSettingsModal({
                 projectName={projectName}
                 sessionName={session.metadata.name}
                 sessionPhase={phase}
+                session={session}
               />
             )}
             {activeTab === "integrations" && <IntegrationsPanel />}

@@ -5,6 +5,7 @@ import type { AgenticSession } from '@/types/agentic-session';
 
 vi.mock('@/services/queries/use-mcp', () => ({
   useMcpStatus: vi.fn(() => ({ data: { servers: [] } })),
+  useUpdateSessionMcpServers: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }));
 
 vi.mock('@/services/queries/use-integrations', () => ({
@@ -61,7 +62,7 @@ describe('SessionSettingsModal', () => {
 
   it('renders Settings title', () => {
     render(<SessionSettingsModal {...defaultProps} />);
-    expect(screen.getByText('Settings')).toBeDefined();
+    expect(screen.getByText('Session Settings')).toBeDefined();
   });
 
   it('renders sidebar nav tabs (Session, MCP Servers, Integrations)', () => {
