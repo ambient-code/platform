@@ -217,6 +217,29 @@ func parseSpec(spec map[string]interface{}) types.AgenticSessionSpec {
 		result.ActiveWorkflow = ws
 	}
 
+	// Parse mcpServers
+	if mcpServers, ok := spec["mcpServers"].(map[string]interface{}); ok {
+		mcp := &types.MCPServersConfig{}
+		if custom, ok := mcpServers["custom"].(map[string]interface{}); ok {
+			mcp.Custom = make(map[string]map[string]interface{}, len(custom))
+			for name, cfg := range custom {
+				if cfgMap, ok := cfg.(map[string]interface{}); ok {
+					mcp.Custom[name] = cfgMap
+				}
+			}
+		}
+		if disabled, ok := mcpServers["disabled"].([]interface{}); ok {
+			for _, d := range disabled {
+				if s, ok := d.(string); ok {
+					mcp.Disabled = append(mcp.Disabled, s)
+				}
+			}
+		}
+		if len(mcp.Custom) > 0 || len(mcp.Disabled) > 0 {
+			result.MCPServers = mcp
+		}
+	}
+
 	return result
 }
 
@@ -820,6 +843,29 @@ func CreateSession(c *gin.Context) {
 		}
 	}
 
+	// Set MCP servers configuration if provided
+	if req.MCPServers != nil {
+		spec := session["spec"].(map[string]interface{})
+		mcpMap := map[string]interface{}{}
+		if len(req.MCPServers.Custom) > 0 {
+			customMap := make(map[string]interface{}, len(req.MCPServers.Custom))
+			for name, cfg := range req.MCPServers.Custom {
+				customMap[name] = cfg
+			}
+			mcpMap["custom"] = customMap
+		}
+		if len(req.MCPServers.Disabled) > 0 {
+			disabledArr := make([]interface{}, len(req.MCPServers.Disabled))
+			for i, d := range req.MCPServers.Disabled {
+				disabledArr[i] = d
+			}
+			mcpMap["disabled"] = disabledArr
+		}
+		if len(mcpMap) > 0 {
+			spec["mcpServers"] = mcpMap
+		}
+	}
+
 	// Set active workflow if provided
 	if req.ActiveWorkflow != nil && strings.TrimSpace(req.ActiveWorkflow.GitURL) != "" {
 		spec := session["spec"].(map[string]interface{})
@@ -1227,15 +1273,19 @@ func UpdateSession(c *gin.Context) {
 		return
 	}
 
-	// Prevent spec changes while session is running or being created
+	// Check session phase
+	isMCPOnlyUpdate := req.MCPServers != nil && req.InitialPrompt == nil && req.DisplayName == nil && req.LLMSettings == nil && req.Timeout == nil
 	if status, ok := item.Object["status"].(map[string]interface{}); ok {
 		if phase, ok := status["phase"].(string); ok {
 			if strings.EqualFold(phase, "Running") || strings.EqualFold(phase, "Creating") {
-				c.JSON(http.StatusConflict, gin.H{
-					"error": "Cannot modify session specification while the session is running",
-					"phase": phase,
-				})
-				return
+				// Allow MCP-only updates on running sessions (persisted for next restart)
+				if !isMCPOnlyUpdate {
+					c.JSON(http.StatusConflict, gin.H{
+						"error": "Cannot modify session specification while the session is running",
+						"phase": phase,
+					})
+					return
+				}
 			}
 		}
 	}
@@ -1265,6 +1315,30 @@ func UpdateSession(c *gin.Context) {
 
 	if req.Timeout != nil {
 		spec["timeout"] = *req.Timeout
+	}
+
+	// Update MCP servers configuration
+	if req.MCPServers != nil {
+		mcpMap := map[string]interface{}{}
+		if len(req.MCPServers.Custom) > 0 {
+			customMap := make(map[string]interface{}, len(req.MCPServers.Custom))
+			for name, cfg := range req.MCPServers.Custom {
+				customMap[name] = cfg
+			}
+			mcpMap["custom"] = customMap
+		}
+		if len(req.MCPServers.Disabled) > 0 {
+			disabledArr := make([]interface{}, len(req.MCPServers.Disabled))
+			for i, d := range req.MCPServers.Disabled {
+				disabledArr[i] = d
+			}
+			mcpMap["disabled"] = disabledArr
+		}
+		if len(mcpMap) > 0 {
+			spec["mcpServers"] = mcpMap
+		} else {
+			delete(spec, "mcpServers")
+		}
 	}
 
 	// Update the resource
