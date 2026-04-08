@@ -112,6 +112,10 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.POST("/keys", handlers.CreateProjectKey)
 			projectGroup.DELETE("/keys/:keyId", handlers.DeleteProjectKey)
 
+			// Project-level MCP server configuration
+			projectGroup.GET("/mcp-servers", handlers.GetProjectMCPServers)
+			projectGroup.PUT("/mcp-servers", handlers.UpdateProjectMCPServers)
+
 			projectGroup.GET("/secrets", handlers.ListNamespaceSecrets)
 			projectGroup.GET("/runner-secrets", handlers.ListRunnerSecrets)
 			projectGroup.PUT("/runner-secrets", handlers.UpdateRunnerSecrets)

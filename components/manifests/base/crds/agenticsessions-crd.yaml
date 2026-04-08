@@ -94,6 +94,21 @@ spec:
                   Common conventions: RUNNER_TYPE identifies the runner framework (e.g.
                   "claude-agent-sdk", "gemini-cli"), RUNNER_STATE_DIR sets the framework state
                   directory relative to /workspace (defaults to ".claude").
+              mcpServers:
+                type: object
+                description: "Custom MCP server configuration for this session. Merged with platform defaults at runtime."
+                properties:
+                  custom:
+                    type: object
+                    description: "Map of server name to server configuration (stdio, http, or sse type servers)"
+                    additionalProperties:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                  disabled:
+                    type: array
+                    description: "List of default MCP server names to disable for this session"
+                    items:
+                      type: string
               activeWorkflow:
                 type: object
                 description: "Active workflow configuration for dynamic workflow switching"

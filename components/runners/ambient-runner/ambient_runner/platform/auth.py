@@ -404,9 +404,10 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         if github_creds.get("email"):
             git_user_email = github_creds["email"]
 
-    # Configure git identity and credential helper
+    # Configure git identity, credential helper, and gh CLI wrapper
     await configure_git_identity(git_user_name, git_user_email)
     install_git_credential_helper()
+    install_gh_wrapper()
 
     if auth_failures:
         raise PermissionError(
@@ -533,6 +534,43 @@ async def populate_mcp_server_credentials(context: RunnerContext) -> None:
             logger.warning(f"Failed to fetch MCP credentials for {server_name}: {e}")
 
 
+_GH_WRAPPER_DIR = "/tmp/bin"
+_GH_WRAPPER_PATH = "/tmp/bin/gh"
+
+# Wrapper script for the gh CLI.  The `gh` CLI reads GITHUB_TOKEN from the
+# process environment, but the CLI subprocess's env is fixed at spawn time.
+# This wrapper reads the latest token from the token file (updated on every
+# credential refresh) and exports GH_TOKEN before calling the real `gh`,
+# ensuring mid-run refreshes are picked up.
+_GH_WRAPPER_SCRIPT = """\
+#!/bin/sh
+# Ambient gh CLI wrapper — reads fresh GitHub token from file.
+token=""
+if [ -f "/tmp/.ambient_github_token" ]; then
+    token=$(cat /tmp/.ambient_github_token 2>/dev/null)
+fi
+if [ -n "$token" ]; then
+    export GH_TOKEN="$token"
+fi
+# Find the real gh binary, skipping this wrapper directory.
+real_gh=""
+IFS=:
+for p in $PATH; do
+    if [ "$p" != "{wrapper_dir}" ] && [ -x "$p/gh" ]; then
+        real_gh="$p/gh"
+        break
+    fi
+done
+unset IFS
+if [ -z "$real_gh" ]; then
+    echo "Error: gh CLI not found" >&2
+    exit 1
+fi
+exec "$real_gh" "$@"
+""".format(wrapper_dir=_GH_WRAPPER_DIR)
+
+_gh_wrapper_installed = False  # reset on every new process / deployment
+
 _GIT_CREDENTIAL_HELPER_PATH = "/tmp/git-credential-ambient"
 
 # Injected into git's credential system so clean remote URLs (without embedded
@@ -625,6 +663,42 @@ def install_git_credential_helper() -> None:
         )
     except Exception as e:
         logger.warning(f"Failed to install git credential helper: {e}")
+
+
+def install_gh_wrapper() -> None:
+    """Install a gh CLI wrapper that reads the fresh GitHub token from file.
+
+    The ``gh`` CLI prioritises the ``GITHUB_TOKEN`` env var over all other
+    credential sources.  Since the CLI subprocess's environment is fixed at
+    spawn time, a stale ``GITHUB_TOKEN`` causes 401 errors after a mid-run
+    credential refresh.  This wrapper reads from the token file (updated on
+    every refresh) and exports ``GH_TOKEN`` before exec-ing the real ``gh``.
+    """
+    global _gh_wrapper_installed
+    if _gh_wrapper_installed:
+        return
+
+    import stat
+
+    try:
+        wrapper_dir = Path(_GH_WRAPPER_DIR)
+        wrapper_dir.mkdir(parents=True, exist_ok=True)
+
+        wrapper_path = Path(_GH_WRAPPER_PATH)
+        wrapper_path.write_text(_GH_WRAPPER_SCRIPT)
+        wrapper_path.chmod(
+            stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH
+        )  # 755
+
+        # Prepend wrapper dir to PATH so it is found before the real gh.
+        current_path = os.environ.get("PATH", "")
+        if _GH_WRAPPER_DIR not in current_path.split(":"):
+            os.environ["PATH"] = f"{_GH_WRAPPER_DIR}:{current_path}"
+
+        _gh_wrapper_installed = True
+        logger.info("Installed gh CLI wrapper at %s", _GH_WRAPPER_PATH)
+    except Exception as e:
+        logger.warning(f"Failed to install gh CLI wrapper: {e}")
 
 
 def ensure_git_auth(
