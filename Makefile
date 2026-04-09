@@ -185,8 +185,8 @@ build-operator: ## Build operator image
 
 build-runner: ## Build Claude Code runner image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building runner with $(CONTAINER_ENGINE)..."
-	@cd components/runners && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
-		-t $(RUNNER_IMAGE) -f ambient-runner/Dockerfile .
+	@cd components/runners/ambient-runner && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-t $(RUNNER_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Runner built: $(RUNNER_IMAGE)"
 
 build-state-sync: ## Build state-sync image for S3 persistence
