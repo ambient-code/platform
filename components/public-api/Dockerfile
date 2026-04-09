@@ -18,6 +18,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o public-api .
 # Runtime stage
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7
 
+ARG GIT_COMMIT=unknown
+
 WORKDIR /app
 
 # Copy binary from builder
@@ -36,4 +38,6 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -sf http://localhost:8081/health || exit 1
 
 # Run the binary
+LABEL org.opencontainers.image.revision=$GIT_COMMIT
+
 ENTRYPOINT ["./public-api"]

@@ -168,6 +168,7 @@ build-all: build-frontend build-backend build-operator build-runner build-state-
 build-frontend: ## Build frontend image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building frontend with $(CONTAINER_ENGINE)..."
 	@cd components/frontend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(FRONTEND_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Frontend built: $(FRONTEND_IMAGE)"
 
@@ -175,36 +176,42 @@ build-backend: ## Build backend image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building backend with $(CONTAINER_ENGINE)..."
 	@cd components/backend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
 		--build-arg AMBIENT_VERSION=$(shell git describe --tags --always --dirty) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(BACKEND_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Backend built: $(BACKEND_IMAGE)"
 
 build-operator: ## Build operator image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building operator with $(CONTAINER_ENGINE)..."
 	@cd components/operator && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(OPERATOR_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Operator built: $(OPERATOR_IMAGE)"
 
 build-runner: ## Build Claude Code runner image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building runner with $(CONTAINER_ENGINE)..."
 	@cd components/runners/ambient-runner && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(RUNNER_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Runner built: $(RUNNER_IMAGE)"
 
 build-state-sync: ## Build state-sync image for S3 persistence
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building state-sync with $(CONTAINER_ENGINE)..."
 	@cd components/runners/state-sync && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(STATE_SYNC_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) State-sync built: $(STATE_SYNC_IMAGE)"
 
 build-public-api: ## Build public API gateway image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building public-api with $(CONTAINER_ENGINE)..."
 	@cd components/public-api && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(PUBLIC_API_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Public API built: $(PUBLIC_API_IMAGE)"
 
 build-api-server: ## Build ambient API server image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building ambient-api-server with $(CONTAINER_ENGINE)..."
 	@cd components/ambient-api-server && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(API_SERVER_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) API server built: $(API_SERVER_IMAGE)"
 
@@ -347,7 +354,7 @@ local-status: check-kubectl ## Show status of local deployment
 
 local-reload-api-server: check-local-context ## Rebuild and reload ambient-api-server only
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding ambient-api-server..."
-	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t $(API_SERVER_IMAGE) components/ambient-api-server >/dev/null 2>&1
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) --build-arg GIT_COMMIT=$(shell git rev-parse HEAD) -t $(API_SERVER_IMAGE) components/ambient-api-server >/dev/null 2>&1
 	@$(CONTAINER_ENGINE) tag $(API_SERVER_IMAGE) localhost/$(API_SERVER_IMAGE) 2>/dev/null || true
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading image into kind cluster ($(KIND_CLUSTER_NAME))..."
 	@$(CONTAINER_ENGINE) save localhost/$(API_SERVER_IMAGE) | \
@@ -962,6 +969,7 @@ kind-reload-backend: check-kind check-kubectl check-local-context ## Rebuild and
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding backend..."
 	@cd components/backend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) \
 		--build-arg AMBIENT_VERSION=$(shell git describe --tags --always --dirty) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(BACKEND_IMAGE) . $(QUIET_REDIRECT)
 	@$(CONTAINER_ENGINE) tag $(BACKEND_IMAGE) localhost/$(BACKEND_IMAGE) 2>/dev/null || true
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading image into kind cluster ($(KIND_CLUSTER_NAME))..."
@@ -976,6 +984,7 @@ kind-reload-backend: check-kind check-kubectl check-local-context ## Rebuild and
 kind-reload-frontend: check-kind check-kubectl check-local-context ## Rebuild and reload frontend only (kind)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding frontend..."
 	@cd components/frontend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(FRONTEND_IMAGE) . $(QUIET_REDIRECT)
 	@$(CONTAINER_ENGINE) tag $(FRONTEND_IMAGE) localhost/$(FRONTEND_IMAGE) 2>/dev/null || true
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading image into kind cluster ($(KIND_CLUSTER_NAME))..."
@@ -990,6 +999,7 @@ kind-reload-frontend: check-kind check-kubectl check-local-context ## Rebuild an
 kind-reload-operator: check-kind check-kubectl check-local-context ## Rebuild and reload operator only (kind)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding operator..."
 	@cd components/operator && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(OPERATOR_IMAGE) . $(QUIET_REDIRECT)
 	@$(CONTAINER_ENGINE) tag $(OPERATOR_IMAGE) localhost/$(OPERATOR_IMAGE) 2>/dev/null || true
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading image into kind cluster ($(KIND_CLUSTER_NAME))..."
