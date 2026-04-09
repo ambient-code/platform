@@ -83,7 +83,7 @@ jobs:
           -f components/operator/Dockerfile components/operator
 
         docker build -t quay.io/ambient_code/vteam_claude_runner:claude-test \
-          -f components/runners/ambient-runner/Dockerfile components/runners
+          components/runners/ambient-runner
 
         echo "✅ All images built"
 
