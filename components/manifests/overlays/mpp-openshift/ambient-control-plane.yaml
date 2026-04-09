@@ -83,7 +83,7 @@ spec:
             - name: CP_TOKEN_URL
               value: "http://ambient-control-plane.ambient-code--ambient-s0.svc:8080/token"
             - name: MCP_IMAGE
-              value: "quay.io/ambient_code/vteam_ambient_mcp:latest"
+              value: "quay.io/ambient_code/vteam_mcp:latest"
             - name: MCP_API_SERVER_URL
               value: "http://ambient-api-server.ambient-code--runtime-int.svc:8000"
           volumeMounts:
