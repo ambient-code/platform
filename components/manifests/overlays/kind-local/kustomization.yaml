@@ -74,6 +74,6 @@ images:
 - name: quay.io/ambient_code/vteam_api_server
   newName: localhost/vteam_api_server
   newTag: latest
-- name: quay.io/ambient_code/vteam_observability_dashboard
-  newName: localhost/vteam_observability_dashboard
+- name: ghcr.io/ambient-code/observability
+  newName: localhost/observability
   newTag: latest
