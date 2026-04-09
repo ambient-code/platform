@@ -36,7 +36,7 @@ File format (one or more documents separated by ---):
   name: my-project
   description: "..."
   prompt: |
-    Workspace context injected into every agent ignition.
+    Workspace context injected into every agent start.
   labels:
     env: dev
   annotations:
@@ -55,7 +55,7 @@ File format (one or more documents separated by ---):
   inbox:
     - from_name: platform-bootstrap
       body: |
-        First ignition. Bootstrap: read project annotations...
+        First start. Bootstrap: read project annotations...
 
 Examples:
 
@@ -515,15 +515,15 @@ func parseManifests(r io.Reader) ([]resource, error) {
 // ── Kustomize ─────────────────────────────────────────────────────────────────
 
 type kustomization struct {
-	Kind      string        `yaml:"kind"`
-	Resources []string      `yaml:"resources"`
-	Bases     []string      `yaml:"bases"`
-	Patches   []kustPatch   `yaml:"patches"`
+	Kind      string      `yaml:"kind"`
+	Resources []string    `yaml:"resources"`
+	Bases     []string    `yaml:"bases"`
+	Patches   []kustPatch `yaml:"patches"`
 }
 
 type kustPatch struct {
-	Path   string      `yaml:"path"`
-	Target kustTarget  `yaml:"target"`
+	Path   string     `yaml:"path"`
+	Target kustTarget `yaml:"target"`
 }
 
 type kustTarget struct {

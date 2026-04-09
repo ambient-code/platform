@@ -9,6 +9,7 @@ metadata:
     shard: internal
   annotations:
     haproxy.router.openshift.io/timeout: 10m
+    haproxy.router.openshift.io/timeout-tunnel: 10m
 spec:
   to:
     kind: Service
@@ -30,6 +31,7 @@ metadata:
     shard: internal
   annotations:
     haproxy.router.openshift.io/timeout: 10m
+    haproxy.router.openshift.io/timeout-tunnel: 10m
 spec:
   to:
     kind: Service

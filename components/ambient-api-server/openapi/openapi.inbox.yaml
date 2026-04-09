@@ -212,7 +212,7 @@ components:
             read:
               type: boolean
               readOnly: true
-              description: false = unread; drained at session ignition
+              description: false = unread; drained at session start
     # NEW SCHEMA START
     InboxMessageList:
     # NEW SCHEMA END

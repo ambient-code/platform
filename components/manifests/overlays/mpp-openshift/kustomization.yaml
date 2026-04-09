@@ -30,12 +30,14 @@ patches:
 
 images:
 - name: quay.io/ambient_code/vteam_api_server
-  newTag: mgt-001
+  newTag: latest
 - name: quay.io/ambient_code/vteam_api_server:latest
   newName: quay.io/ambient_code/vteam_api_server
-  newTag: mgt-001
+  newTag: latest
 - name: quay.io/ambient_code/vteam_control_plane
-  newTag: mgt-001
+  newTag: latest
 - name: quay.io/ambient_code/vteam_control_plane:latest
   newName: quay.io/ambient_code/vteam_control_plane
-  newTag: mgt-001
+  newTag: latest
+- name: quay.io/ambient_code/vteam_ambient_mcp
+  newTag: latest

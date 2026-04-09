@@ -27,7 +27,7 @@ Name | Type | Description | Notes
 **Labels** | Pointer to **string** |  | [optional] 
 **Annotations** | Pointer to **string** |  | [optional] 
 **AgentId** | Pointer to **string** | The Agent that owns this session. Immutable after creation. | [optional] 
-**TriggeredByUserId** | Pointer to **string** | User who pressed ignite | [optional] [readonly] 
+**TriggeredByUserId** | Pointer to **string** | User who started the agent | [optional] [readonly] 
 **ProjectId** | Pointer to **string** | Immutable after creation. Set at creation time only. | [optional] 
 **Phase** | Pointer to **string** |  | [optional] [readonly] 
 **StartTime** | Pointer to **time.Time** |  | [optional] [readonly] 

@@ -2208,7 +2208,7 @@ paths:
       security:
       - Bearer: []
       summary: Start an agent — creates a Session (idempotent)
-  /api/ambient/v1/projects/{id}/agents/{agent_id}/ignition:
+  /api/ambient/v1/projects/{id}/agents/{agent_id}/start/preview:
     get:
       parameters:
       - description: The id of record
@@ -3117,7 +3117,7 @@ components:
             description: The Agent that owns this session. Immutable after creation.
             type: string
           triggered_by_user_id:
-            description: User who pressed ignite
+            description: User who started the agent
             readOnly: true
             type: string
           project_id:
@@ -3387,7 +3387,7 @@ components:
           annotations:
             type: string
           prompt:
-            description: Workspace-level context injected into every ignition in this
+            description: Workspace-level context injected into every agent start in this
               project
             type: string
           status:
@@ -4052,11 +4052,11 @@ components:
           conditions: conditions
           kube_namespace: kube_namespace
           prompt: prompt
-        ignition_prompt: ignition_prompt
+        start_prompt: start_prompt
       properties:
         session:
           $ref: "#/components/schemas/Session"
-        ignition_prompt:
+        start_prompt:
           description: Assembled start prompt — Agent.prompt + Inbox + Session.prompt
             + peer roster
           type: string
@@ -4118,7 +4118,7 @@ components:
           body:
             type: string
           read:
-            description: false = unread; drained at session ignition
+            description: false = unread; drained at session start
             readOnly: true
             type: boolean
         required:

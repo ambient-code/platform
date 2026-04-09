@@ -35,7 +35,7 @@ type InboxMessage struct {
 	// Denormalized sender display name
 	FromName *string `json:"from_name,omitempty"`
 	Body     string  `json:"body"`
-	// false = unread; drained at session ignition
+	// false = unread; drained at session start
 	Read *bool `json:"read,omitempty"`
 }
 

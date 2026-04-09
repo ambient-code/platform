@@ -89,7 +89,7 @@ Compare the spec against the current state of the code. For each component, ask:
 | **CP**       | Does middleware handle new RBAC scopes and auth requirements?                                         |
 | **CLI**      | Does `acpctl` implement every route marked ✅ in the spec CLI table?                                  |
 | **Operator** | Do CRD reconcilers handle Agent-scoped session start?                                                 |
-| **Runners**  | Does the runner drain inbox at ignition and push correct event types?                                 |
+| **Runners**  | Does the runner drain inbox at session start and push correct event types?                            |
 | **FE**       | Do API service layer, queries, and components exist for all new entities?                             |
 
 **The gap table must compare Spec against every component simultaneously.** A field removal touches API, SDK, BE (model + migration), and CLI — all four must be in the gap table from the start. Do not discover mid-wave that the CLI still has a flag the API no longer accepts.
@@ -145,8 +145,8 @@ Decompose the gap table into per-agent work items, sequenced by pipeline order:
 **Wave 5 — CLI + Operator + Runners** (parallel after Wave 3 + BE)
 
 - **CLI**: implement all 🔲 commands that are now unblocked — see `.claude/context/cli-development.md`
-- **Operator**: CRD reconciler updates for Agent ignition — see `.claude/context/operator-development.md`
-- **Runners**: inbox drain at ignition, correct event types — see `.claude/context/control-plane-development.md`
+- **Operator**: CRD reconciler updates for Agent start — see `.claude/context/operator-development.md`
+- **Runners**: inbox drain at session start, correct event types — see `.claude/context/control-plane-development.md`
 - **Security gate (Operator):** all Job pods set `SecurityContext` with `AllowPrivilegeEscalation: false`, capabilities dropped; OwnerReferences set on all child resources
 - **Acceptance:** CLI `make test` passes; Operator `go vet ./... && golangci-lint run` clean; Runner `python -m pytest tests/` passes; all tested in kind cluster
 

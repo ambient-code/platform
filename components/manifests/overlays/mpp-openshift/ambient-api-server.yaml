@@ -53,7 +53,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: migration
-          image: quay.io/ambient_code/vteam_api_server:mgt-001
+          image: quay.io/ambient_code/vteam_api_server:latest
           imagePullPolicy: Always
           command:
             - /usr/local/bin/ambient-api-server
@@ -68,6 +68,13 @@ spec:
           volumeMounts:
             - name: db-secrets
               mountPath: /secrets/db
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: false
@@ -76,7 +83,7 @@ spec:
                 - ALL
       containers:
         - name: api-server
-          image: quay.io/ambient_code/vteam_api_server:mgt-001
+          image: quay.io/ambient_code/vteam_api_server:latest
           imagePullPolicy: Always
           env:
             - name: AMBIENT_ENV

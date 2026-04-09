@@ -38,7 +38,7 @@ The CP is a standalone Go service (`ambient-control-plane`) that:
 
 1. **Watches** the api-server for session events via gRPC `WatchSessions`
 2. **Provisions** Kubernetes resources for each session (namespace, secret, service account, pod, service)
-3. **Assembles** the ignition context (Project.prompt + Agent.prompt + Inbox messages + Session.prompt) and injects it as `INITIAL_PROMPT` env var into the runner pod
+3. **Assembles** the start context (Project.prompt + Agent.prompt + Inbox messages + Session.prompt) and injects it as `INITIAL_PROMPT` env var into the runner pod
 4. **Updates** session phase via `sdk.Sessions().UpdateStatus()` as pods transition through states
 
 The CP does not proxy traffic. It does not fan out events. It does not hold any persistent state. It is a pure Kubernetes reconciler driven by the api-server event stream.
@@ -87,7 +87,7 @@ The CP creates a Pod (not a Job) for each session. Key pod attributes:
 | CPU request/limit | 500m / 2000m | Generous for Claude Code |
 | Memory request/limit | 512Mi / 4Gi | Claude Code is memory-intensive |
 
-### Ignition Context Assembly
+### Start Context Assembly
 
 `assembleInitialPrompt` builds `INITIAL_PROMPT` from four sources in order:
 
@@ -510,7 +510,7 @@ The `ambient-control-plane` ServiceAccount does not have `delete` on `namespaces
 | Decision | Rationale |
 |---|---|
 | CP provisions Pods, not Jobs | Sessions are single-run; operator-style Job retry semantics don't apply |
-| CP assembles INITIAL_PROMPT, not api-server | CP has K8s access and can read the full ignition context; api-server does not know which pod to address |
+| CP assembles INITIAL_PROMPT, not api-server | CP has K8s access and can read the full start context; api-server does not know which pod to address |
 | gRPC listener started eagerly, not lazily | Prevents chicken-and-egg: listener must be subscribed before INITIAL_PROMPT push |
 | Runner self-pushes INITIAL_PROMPT via gRPC | Avoids HTTP call to old backend; ensures message is durable before Claude runs |
 | `WatchSessionMessages` as the inbound trigger | User messages arrive once (persisted in DB); listener replays from last_seq on reconnect |

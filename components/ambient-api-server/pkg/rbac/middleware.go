@@ -138,7 +138,7 @@ func pathToAction(method, path string) string {
 			switch last {
 			case "token":
 				return "token"
-			case "start", "stop", "ignite", "ignition":
+			case "start", "stop":
 				return last
 			}
 		}

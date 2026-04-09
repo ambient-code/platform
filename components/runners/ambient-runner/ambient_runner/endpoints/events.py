@@ -101,7 +101,7 @@ async def get_events(thread_id: str, request: Request):
 
                     encoder = EventEncoder(accept="text/event-stream")
                     encoded = encoder.encode(event)
-                    logger.info(
+                    logger.debug(
                         "[SSE TAP] Yielding event: thread=%s type=%s", thread_id, et
                     )
                     yield encoded

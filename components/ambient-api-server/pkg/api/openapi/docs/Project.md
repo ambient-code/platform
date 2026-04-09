@@ -13,7 +13,7 @@ Name | Type | Description | Notes
 **Description** | Pointer to **string** |  | [optional] 
 **Labels** | Pointer to **string** |  | [optional] 
 **Annotations** | Pointer to **string** |  | [optional] 
-**Prompt** | Pointer to **string** | Workspace-level context injected into every ignition in this project | [optional] 
+**Prompt** | Pointer to **string** | Workspace-level context injected into every agent start in this project | [optional] 
 **Status** | Pointer to **string** |  | [optional] 
 
 ## Methods

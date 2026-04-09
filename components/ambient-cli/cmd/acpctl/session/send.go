@@ -136,6 +136,16 @@ func runSend(cmd *cobra.Command, args []string) error {
 				}
 				fmt.Fprintf(out, "→ %s\n", preview)
 			}
+		case "RUN_FINISHED":
+			if inText {
+				fmt.Fprintln(out)
+			}
+			return nil
+		case "RUN_ERROR":
+			if inText {
+				fmt.Fprintln(out)
+			}
+			return fmt.Errorf("run failed")
 		}
 	}
 

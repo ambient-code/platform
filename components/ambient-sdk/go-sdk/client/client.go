@@ -100,11 +100,14 @@ func NewClient(baseURL, token, project string, opts ...ClientOption) (*Client, e
 		return nil, fmt.Errorf("invalid base URL: %w", err)
 	}
 
+	streamingTransport := http.DefaultTransport.(*http.Transport).Clone()
+	streamingTransport.DisableCompression = true
+
 	c := &Client{
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		streamingClient: &http.Client{},
+		streamingClient: &http.Client{Transport: streamingTransport},
 		baseURL:         strings.TrimSuffix(baseURL, "/"),
 		token:           token,
 		project:         project,

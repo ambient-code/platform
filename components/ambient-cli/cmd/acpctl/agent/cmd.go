@@ -406,18 +406,18 @@ var agentStartCmd = &cobra.Command{
 	},
 }
 
-var ignitionArgs struct {
+var startPreviewArgs struct {
 	projectID string
 }
 
-var ignitionCmd = &cobra.Command{
+var startPreviewCmd = &cobra.Command{
 	Use:   "start-preview <name-or-id>",
 	Short: "Preview start context for an agent (dry run)",
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl agent start-preview api
   acpctl agent start-preview <id> --project-id <id>`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectID, err := resolveProject(ignitionArgs.projectID)
+		projectID, err := resolveProject(startPreviewArgs.projectID)
 		if err != nil {
 			return err
 		}
@@ -513,7 +513,7 @@ func init() {
 	Cmd.AddCommand(updateCmd)
 	Cmd.AddCommand(deleteCmd)
 	Cmd.AddCommand(agentStartCmd)
-	Cmd.AddCommand(ignitionCmd)
+	Cmd.AddCommand(startPreviewCmd)
 	Cmd.AddCommand(sessionsCmd)
 
 	listCmd.Flags().StringVar(&listArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
@@ -543,7 +543,7 @@ func init() {
 	agentStartCmd.Flags().StringVar(&agentStartArgs.prompt, "prompt", "", "Task prompt for this run")
 	agentStartCmd.Flags().StringVarP(&agentStartArgs.outputFormat, "output", "o", "", "Output format: json")
 
-	ignitionCmd.Flags().StringVar(&ignitionArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	startPreviewCmd.Flags().StringVar(&startPreviewArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
 
 	sessionsCmd.Flags().StringVar(&sessionsArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
 	sessionsCmd.Flags().StringVarP(&sessionsArgs.outputFormat, "output", "o", "", "Output format: json")
