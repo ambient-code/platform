@@ -57,6 +57,14 @@ export type SessionRepo = {
     autoPush?: boolean;
 };
 
+// MCP server configuration stored in session/project spec
+export type MCPServerConfig = Record<string, unknown>;
+
+export type MCPServersConfig = {
+	custom?: Record<string, MCPServerConfig>;
+	disabled?: string[];
+};
+
 export type AgenticSessionSpec = {
 	initialPrompt?: string;
 	llmSettings: LLMSettings;
@@ -75,6 +83,8 @@ export type AgenticSessionSpec = {
 		branch: string;
 		path?: string;
 	};
+	// Custom MCP server configuration
+	mcpServers?: MCPServersConfig;
 };
 
 export type ReconciledRepo = {
@@ -243,6 +253,8 @@ export type CreateAgenticSessionRequest = {
 	labels?: Record<string, string>;
 	annotations?: Record<string, string>;
 	runnerType?: string;
+	// Custom MCP server configuration
+	mcpServers?: MCPServersConfig;
 	// TODO: Backend handler must unmarshal this field and write it into the
 	// AgenticSession CR spec. Until then, Go encoding/json silently drops it.
 	// Safe while the `advanced-agent-options` Unleash flag defaults to off.

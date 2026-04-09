@@ -97,7 +97,7 @@ make lint
 make test
 
 # Test locally
-make local-up
+make kind-up
 ```
 
 ### 4. Submit PR
@@ -119,7 +119,7 @@ make build-backend          # Build backend only
 
 ### Local Development
 ```bash
-make local-up               # Start local environment
+make kind-up                # Start local environment
 make local-status           # Check status
 make local-logs             # View logs
 make local-down             # Stop environment

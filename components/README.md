@@ -65,10 +65,10 @@ CONTAINER_REGISTRY=$REGISTRY ./deploy.sh
 
 ### Rebuild Components
 ```bash
-make local-rebuild           # Rebuild and reload all components
-make local-reload-backend    # Rebuild and reload backend only
-make local-reload-frontend   # Rebuild and reload frontend only
-make local-reload-operator   # Rebuild and reload operator only
+make kind-rebuild             # Rebuild and reload all components
+make kind-reload-backend     # Rebuild and reload backend only
+make kind-reload-frontend    # Rebuild and reload frontend only
+make kind-reload-operator    # Rebuild and reload operator only
 ```
 
 ## Quick Deploy

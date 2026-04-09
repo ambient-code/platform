@@ -23,6 +23,7 @@ export const projectKeys = {
   detail: (name: string) => [...projectKeys.details(), name] as const,
   permissions: (name: string) => [...projectKeys.detail(name), 'permissions'] as const,
   integrationStatus: (name: string) => [...projectKeys.detail(name), 'integration-status'] as const,
+  mcpServers: (name: string) => [...projectKeys.detail(name), 'mcp-servers'] as const,
 };
 
 /**
@@ -237,5 +238,33 @@ export function useProjectIntegrationStatus(projectName: string) {
     enabled: !!projectName,
     staleTime: 60000, // Cache for 1 minute
     refetchOnMount: 'always', // Ensure fresh status when viewing session/accordion
+  });
+}
+
+/**
+ * Hook to fetch project-level MCP server configuration
+ */
+export function useProjectMcpServers(projectName: string) {
+  return useQuery({
+    queryKey: projectKeys.mcpServers(projectName),
+    queryFn: () => projectsApi.getProjectMcpServers(projectName),
+    enabled: !!projectName,
+    staleTime: 30000,
+  });
+}
+
+/**
+ * Hook to update project-level MCP server configuration
+ */
+export function useUpdateProjectMcpServers(projectName: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (config: import("@/types/agentic-session").MCPServersConfig) =>
+      projectsApi.updateProjectMcpServers(projectName, config),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: projectKeys.mcpServers(projectName),
+      });
+    },
   });
 }
