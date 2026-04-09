@@ -206,8 +206,7 @@ jobs:
 
       - name: Log in to OpenShift Cluster
         run: |
-          echo "${{ secrets.OPENSHIFT_CA_BUNDLE }}" > "$RUNNER_TEMP/openshift-ca.crt"
-          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --certificate-authority="$RUNNER_TEMP/openshift-ca.crt"
+          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }}
 
       - name: Deploy Service Mesh operator via OLM
         run: |
@@ -328,8 +327,7 @@ jobs:
 
       - name: Log in to OpenShift Cluster
         run: |
-          echo "${{ secrets.OPENSHIFT_CA_BUNDLE }}" > "$RUNNER_TEMP/openshift-ca.crt"
-          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --certificate-authority="$RUNNER_TEMP/openshift-ca.crt"
+          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }}
 
       - name: Apply RBAC and CRD manifests
         run: |
@@ -362,8 +360,7 @@ jobs:
 
       - name: Log in to OpenShift Cluster
         run: |
-          echo "${{ secrets.OPENSHIFT_CA_BUNDLE }}" > "$RUNNER_TEMP/openshift-ca.crt"
-          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --certificate-authority="$RUNNER_TEMP/openshift-ca.crt"
+          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }}
 
       - name: Update kustomization with SHA image tags
         working-directory: components/manifests/overlays/production
@@ -438,8 +435,7 @@ jobs:
 
       - name: Log in to OpenShift Cluster
         run: |
-          echo "${{ secrets.OPENSHIFT_CA_BUNDLE }}" > "$RUNNER_TEMP/openshift-ca.crt"
-          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --certificate-authority="$RUNNER_TEMP/openshift-ca.crt"
+          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }}
 
       - name: Update kustomization with SHA image tags
         working-directory: components/manifests/overlays/production

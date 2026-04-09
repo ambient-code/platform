@@ -345,8 +345,7 @@ jobs:
 
       - name: Log in to OpenShift Cluster
         run: |
-          echo "${{ secrets.PROD_OPENSHIFT_CA_BUNDLE }}" > "$RUNNER_TEMP/openshift-ca.crt"
-          oc login ${{ secrets.PROD_OPENSHIFT_SERVER }} --token=${{ secrets.PROD_OPENSHIFT_TOKEN }} --certificate-authority="$RUNNER_TEMP/openshift-ca.crt"
+          oc login ${{ secrets.PROD_OPENSHIFT_SERVER }} --token=${{ secrets.PROD_OPENSHIFT_TOKEN }}
 
       - name: Deploy Service Mesh operator via OLM
         run: |
@@ -473,8 +472,7 @@ jobs:
 
       - name: Log in to OpenShift Cluster
         run: |
-          echo "${{ secrets.PROD_OPENSHIFT_CA_BUNDLE }}" > "$RUNNER_TEMP/openshift-ca.crt"
-          oc login ${{ secrets.PROD_OPENSHIFT_SERVER }} --token=${{ secrets.PROD_OPENSHIFT_TOKEN }} --certificate-authority="$RUNNER_TEMP/openshift-ca.crt"
+          oc login ${{ secrets.PROD_OPENSHIFT_SERVER }} --token=${{ secrets.PROD_OPENSHIFT_TOKEN }}
 
       - name: Deploy observability stack
         run: |
