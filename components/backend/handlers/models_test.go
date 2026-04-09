@@ -277,7 +277,7 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			modelsCopy := make([]types.ModelEntry, len(manifest.Models))
 			copy(modelsCopy, manifest.Models)
 			manifest.Models = modelsCopy
-			manifest.Models[1].Available = false // claude-opus-4-6
+			manifest.Models[2].Available = false // claude-opus-4-6
 
 			manifestBytes, err := json.Marshal(manifest)
 			Expect(err).NotTo(HaveOccurred())
@@ -512,7 +512,7 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			modelsCopy := make([]types.ModelEntry, len(manifest.Models))
 			copy(modelsCopy, manifest.Models)
 			manifest.Models = modelsCopy
-			manifest.Models[1].Available = false // claude-opus-4-6
+			manifest.Models[2].Available = false // claude-opus-4-6
 
 			manifestBytes, err := json.Marshal(manifest)
 			Expect(err).NotTo(HaveOccurred())
