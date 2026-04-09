@@ -44,10 +44,10 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 		},
 		Models: []types.ModelEntry{
 			{ID: "claude-sonnet-4-5", Label: "Claude Sonnet 4.5", VertexID: "claude-sonnet-4-5@20250929", Provider: "anthropic", Available: true, FeatureGated: false},
-			{ID: "claude-sonnet-4-6", Label: "Claude Sonnet 4.6", VertexID: "claude-sonnet-4-6@default", Provider: "anthropic", Available: true, FeatureGated: false},
 			{ID: "claude-opus-4-6", Label: "Claude Opus 4.6", VertexID: "claude-opus-4-6@default", Provider: "anthropic", Available: true, FeatureGated: true},
 			{ID: "claude-opus-4-5", Label: "Claude Opus 4.5", VertexID: "claude-opus-4-5@20251101", Provider: "anthropic", Available: true, FeatureGated: false},
 			{ID: "claude-haiku-4-5", Label: "Claude Haiku 4.5", VertexID: "claude-haiku-4-5@20251001", Provider: "anthropic", Available: true, FeatureGated: false},
+			{ID: "claude-sonnet-4-6", Label: "Claude Sonnet 4.6", VertexID: "claude-sonnet-4-6@default", Provider: "anthropic", Available: true, FeatureGated: false},
 			{ID: "gemini-2.5-flash", Label: "Gemini 2.5 Flash", VertexID: "gemini-2.5-flash", Provider: "google", Available: true, FeatureGated: false},
 			{ID: "gemini-2.5-pro", Label: "Gemini 2.5 Pro", VertexID: "gemini-2.5-pro", Provider: "google", Available: true, FeatureGated: true},
 		},
