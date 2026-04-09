@@ -322,7 +322,7 @@ class GRPCSessionListener:
             )
             try:
                 from ambient_runner.platform.utils import refresh_bot_token
-                refresh_bot_token()
+                await asyncio.get_running_loop().run_in_executor(None, refresh_bot_token)
             except Exception as refresh_exc:
                 logger.warning(
                     "[GRPC LISTENER] Token refresh failed: session=%s error=%s",
@@ -330,6 +330,11 @@ class GRPCSessionListener:
                     refresh_exc,
                 )
             try:
+                writer = GRPCMessageWriter(
+                    session_id=self._session_id,
+                    run_id=run_id,
+                    grpc_client=self._grpc_client,
+                )
                 await _run_once()
             except Exception as retry_exc:
                 logger.error(
