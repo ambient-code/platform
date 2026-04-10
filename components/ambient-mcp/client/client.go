@@ -9,12 +9,14 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
 type Client struct {
 	httpClient *http.Client
 	baseURL    string
+	mu         sync.RWMutex
 	token      string
 }
 
@@ -27,7 +29,18 @@ func New(baseURL, token string) *Client {
 }
 
 func (c *Client) BaseURL() string { return c.baseURL }
-func (c *Client) Token() string   { return c.token }
+
+func (c *Client) Token() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.token
+}
+
+func (c *Client) SetToken(token string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.token = token
+}
 
 func (c *Client) do(ctx context.Context, method, path string, body []byte, result interface{}, expectedStatuses ...int) error {
 	reqURL := c.baseURL + "/api/ambient/v1" + path
@@ -42,7 +55,7 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte, resul
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Authorization", "Bearer "+c.Token())
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.httpClient.Do(req)

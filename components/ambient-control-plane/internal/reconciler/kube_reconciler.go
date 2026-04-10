@@ -441,12 +441,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 	}
 
 	if useMCPSidecar {
-		ambientToken, err := r.factory.Token(ctx)
-		if err != nil {
-			r.logger.Warn().Err(err).Str("session_id", session.ID).Msg("failed to fetch token for MCP sidecar; sidecar will start without AMBIENT_TOKEN")
-			ambientToken = ""
-		}
-		containers = append(containers, r.buildMCPSidecar(ambientToken))
+		containers = append(containers, r.buildMCPSidecar(session.ID))
 		r.logger.Info().Str("session_id", session.ID).Msg("MCP sidecar enabled for session")
 	}
 
@@ -816,7 +811,7 @@ func boolToStr(b bool) string {
 	return "false"
 }
 
-func (r *SimpleKubeReconciler) buildMCPSidecar(ambientToken string) interface{} {
+func (r *SimpleKubeReconciler) buildMCPSidecar(sessionID string) interface{} {
 	mcpImage := r.cfg.MCPImage
 	imagePullPolicy := "Always"
 	if strings.HasPrefix(mcpImage, "localhost/") {
@@ -828,9 +823,7 @@ func (r *SimpleKubeReconciler) buildMCPSidecar(ambientToken string) interface{} 
 		envVar("AMBIENT_API_URL", r.cfg.MCPAPIServerURL),
 		envVar("AMBIENT_CP_TOKEN_URL", r.cfg.CPTokenURL),
 		envVar("AMBIENT_CP_TOKEN_PUBLIC_KEY", r.cfg.CPTokenPublicKey),
-	}
-	if ambientToken != "" {
-		env = append(env, envVar("AMBIENT_TOKEN", ambientToken))
+		envVar("SESSION_ID", sessionID),
 	}
 	return map[string]interface{}{
 		"name":            "ambient-mcp",
