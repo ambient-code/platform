@@ -15,9 +15,9 @@ func TestLoadS3ConfigFromEnv(t *testing.T) {
 		{
 			name: "all env vars set with http endpoint",
 			envVars: map[string]string{
-				"S3_ENDPOINT":        "http://minio.svc:9000",
-				"S3_BUCKET":          "test-bucket",
-				"AWS_ACCESS_KEY_ID":  "testkey",
+				"S3_ENDPOINT":           "http://minio.svc:9000",
+				"S3_BUCKET":             "test-bucket",
+				"AWS_ACCESS_KEY_ID":     "testkey",
 				"AWS_SECRET_ACCESS_KEY": "testsecret",
 			},
 			wantErr: false,
@@ -36,9 +36,9 @@ func TestLoadS3ConfigFromEnv(t *testing.T) {
 		{
 			name: "https endpoint enables SSL",
 			envVars: map[string]string{
-				"S3_ENDPOINT":        "https://s3.amazonaws.com",
-				"S3_BUCKET":          "prod-bucket",
-				"AWS_ACCESS_KEY_ID":  "key",
+				"S3_ENDPOINT":           "https://s3.amazonaws.com",
+				"S3_BUCKET":             "prod-bucket",
+				"AWS_ACCESS_KEY_ID":     "key",
 				"AWS_SECRET_ACCESS_KEY": "secret",
 			},
 			wantErr: false,
@@ -54,7 +54,7 @@ func TestLoadS3ConfigFromEnv(t *testing.T) {
 		{
 			name: "missing endpoint and bucket",
 			envVars: map[string]string{
-				"AWS_ACCESS_KEY_ID":  "key",
+				"AWS_ACCESS_KEY_ID":     "key",
 				"AWS_SECRET_ACCESS_KEY": "secret",
 			},
 			wantErr: true,
