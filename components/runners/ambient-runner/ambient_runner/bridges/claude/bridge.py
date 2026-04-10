@@ -63,6 +63,7 @@ class ClaudeBridge(PlatformBridge):
         self._mcp_servers: dict = {}
         self._allowed_tools: list[str] = []
         self._system_prompt: dict = {}
+        self._plugins: list[dict[str, str]] = []
         self._stderr_lines: list[str] = []
         # Preserved session IDs across adapter rebuilds (e.g. repo additions)
         self._saved_session_ids: dict[str, str] = {}
@@ -578,6 +579,28 @@ class ClaudeBridge(PlatformBridge):
 
         system_prompt = build_sdk_system_prompt(self._context.workspace_path, cwd_path)
 
+        # Discover plugins cloned by init container
+        plugins_json = os.getenv("PLUGINS_JSON", "").strip()
+        plugins: list[dict[str, str]] = []
+        if plugins_json:
+            import json as _json
+
+            try:
+                for entry in _json.loads(plugins_json):
+                    name = entry.get("url", "").rstrip("/").split("/")[-1]
+                    if name.endswith(".git"):
+                        name = name[:-4]
+                    plugin_path = os.path.join(
+                        self._context.workspace_path, "plugins", name
+                    )
+                    if os.path.isdir(plugin_path):
+                        plugins.append({"type": "local", "path": plugin_path})
+                        logger.info(f"Plugin discovered: {name} at {plugin_path}")
+                    else:
+                        logger.warning(f"Plugin dir not found: {plugin_path}")
+            except Exception as exc:
+                logger.warning(f"Failed to parse PLUGINS_JSON: {exc}")
+
         # Store results
         self._configured_model = configured_model
         self._cwd_path = cwd_path
@@ -585,6 +608,7 @@ class ClaudeBridge(PlatformBridge):
         self._mcp_servers = mcp_servers
         self._allowed_tools = allowed_tools
         self._system_prompt = system_prompt
+        self._plugins = plugins
 
     def _rebuild_mcp_servers(self) -> None:
         """Rebuild MCP server config with current env vars.
@@ -634,6 +658,8 @@ class ClaudeBridge(PlatformBridge):
             options["add_dirs"] = self._add_dirs
         if self._configured_model:
             options["model"] = self._configured_model
+        if self._plugins:
+            options["plugins"] = self._plugins
 
         adapter = ClaudeAgentAdapter(
             name="claude_code_runner",

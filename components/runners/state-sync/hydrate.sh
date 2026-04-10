@@ -300,6 +300,46 @@ else
     echo "No repositories configured in spec"
 fi
 
+# Clone plugins from PLUGINS_JSON
+if [ -n "$PLUGINS_JSON" ] && [ "$PLUGINS_JSON" != "null" ] && [ "$PLUGINS_JSON" != "" ]; then
+    echo "Cloning plugins from spec..."
+    PLUGIN_COUNT=$(echo "$PLUGINS_JSON" | jq -e 'if type == "array" then length else 0 end' 2>/dev/null || echo "0")
+    echo "Found $PLUGIN_COUNT plugins to clone"
+    if [ "$PLUGIN_COUNT" -gt 0 ]; then
+        mkdir -p /workspace/plugins
+        i=0
+        while [ $i -lt $PLUGIN_COUNT ]; do
+            PLUGIN_URL=$(echo "$PLUGINS_JSON" | jq -r ".[$i].url // empty" 2>/dev/null || echo "")
+            PLUGIN_BRANCH=$(echo "$PLUGINS_JSON" | jq -r ".[$i].branch // empty" 2>/dev/null || echo "")
+            PLUGIN_NAME=$(basename "$PLUGIN_URL" .git 2>/dev/null || echo "")
+
+            if [ -n "$PLUGIN_NAME" ] && [ -n "$PLUGIN_URL" ] && [ "$PLUGIN_URL" != "null" ]; then
+                PLUGIN_DIR="/workspace/plugins/$PLUGIN_NAME"
+                git config --global --add safe.directory "$PLUGIN_DIR" 2>/dev/null || true
+
+                if [ -n "$PLUGIN_BRANCH" ]; then
+                    echo "  Cloning plugin $PLUGIN_NAME (branch: $PLUGIN_BRANCH)..."
+                    if git clone --branch "$PLUGIN_BRANCH" --single-branch --depth 1 "$PLUGIN_URL" "$PLUGIN_DIR" 2>&1; then
+                        echo "  ✓ Cloned plugin $PLUGIN_NAME"
+                    else
+                        echo "  ⚠ Failed to clone plugin $PLUGIN_NAME"
+                    fi
+                else
+                    echo "  Cloning plugin $PLUGIN_NAME (default branch)..."
+                    if git clone --single-branch --depth 1 "$PLUGIN_URL" "$PLUGIN_DIR" 2>&1; then
+                        echo "  ✓ Cloned plugin $PLUGIN_NAME"
+                    else
+                        echo "  ⚠ Failed to clone plugin $PLUGIN_NAME"
+                    fi
+                fi
+            fi
+            i=$((i + 1))
+        done
+    fi
+else
+    echo "No plugins configured in spec"
+fi
+
 # Clone workflow repository
 if [ -n "$ACTIVE_WORKFLOW_GIT_URL" ] && [ "$ACTIVE_WORKFLOW_GIT_URL" != "null" ]; then
     WORKFLOW_BRANCH="${ACTIVE_WORKFLOW_BRANCH:-main}"
