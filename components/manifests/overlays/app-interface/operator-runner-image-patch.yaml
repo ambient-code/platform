@@ -1,0 +1,13 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentic-operator
+spec:
+  template:
+    spec:
+      containers:
+      - name: agentic-operator
+        env:
+        - name: AMBIENT_CODE_RUNNER_IMAGE
+          value: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-ambient-runner-main:latest

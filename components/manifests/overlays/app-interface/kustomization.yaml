@@ -1,0 +1,103 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: ambient-code-app-interface
+
+# Target namespace on hcmais01ue1 cluster
+namespace: ambient-code
+
+# Include base resources (CRDs, RBAC, core deployments, platform)
+resources:
+- ../../base
+- route.yaml
+- backend-route.yaml
+- public-api-route.yaml
+- ambient-api-server-route.yaml
+- operator-config-openshift.yaml
+
+# Patches to configure external resources
+patches:
+# Update operator to use Konflux runner image
+- path: operator-runner-image-patch.yaml
+  target:
+    kind: Deployment
+    name: agentic-operator
+# Scale down in-cluster databases to 0 (using external RDS from Phase 2)
+- target:
+    kind: Deployment
+    name: postgresql
+  patch: |-
+    - op: replace
+      path: /spec/replicas
+      value: 0
+- target:
+    kind: Deployment
+    name: ambient-api-server-db
+  patch: |-
+    - op: replace
+      path: /spec/replicas
+      value: 0
+
+# Scale down in-cluster MinIO to 0 (using external S3 from Phase 2)
+- target:
+    kind: Deployment
+    name: minio
+  patch: |-
+    - op: replace
+      path: /spec/replicas
+      value: 0
+
+# Scale down in-cluster Unleash to 0 (will configure external instance later)
+- target:
+    kind: Deployment
+    name: unleash
+  patch: |-
+    - op: replace
+      path: /spec/replicas
+      value: 0
+
+# Patch ambient-api-server-db secret to use external RDS (from Vault)
+- path: ambient-api-server-db-secret-patch.yaml
+  target:
+    kind: Secret
+    name: ambient-api-server-db
+
+# Konflux image overrides (redhat-services-prod)
+images:
+- name: quay.io/ambient_code/vteam_operator
+  newName: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-operator-main
+  newTag: latest
+- name: quay.io/ambient_code/vteam_operator:latest
+  newName: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-operator-main
+  newTag: latest
+- name: quay.io/ambient_code/vteam_backend
+  newName: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-backend-main
+  newTag: latest
+- name: quay.io/ambient_code/vteam_backend:latest
+  newName: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-backend-main
+  newTag: latest
+- name: quay.io/ambient_code/vteam_frontend
+  newName: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-frontend-main
+  newTag: latest
+- name: quay.io/ambient_code/vteam_frontend:latest
+  newName: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-frontend-main
+  newTag: latest
+- name: quay.io/ambient_code/vteam_public_api
+  newName: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-public-api-main
+  newTag: latest
+- name: quay.io/ambient_code/vteam_public_api:latest
+  newName: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-public-api-main
+  newTag: latest
+- name: quay.io/ambient_code/vteam_api_server
+  newName: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-ambient-api-server-main
+  newTag: latest
+- name: quay.io/ambient_code/vteam_api_server:latest
+  newName: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-ambient-api-server-main
+  newTag: latest
+- name: quay.io/ambient_code/vteam_claude_runner
+  newName: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-ambient-runner-main
+  newTag: latest
+- name: quay.io/ambient_code/vteam_claude_runner:latest
+  newName: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-ambient-runner-main
+  newTag: latest
