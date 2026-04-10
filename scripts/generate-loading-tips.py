@@ -131,10 +131,9 @@ STATIC_TIPS = [
     "Tip: Stopped sessions can be resumed without losing your progress",
     "Tip: Check MCP Servers to see which tools are available in your session",
     "Tip: Repository URLs are remembered for quick re-use across sessions",
-    "Tip: Adjust temperature and max tokens in session settings for different tasks",
     "Tip: Connect Google Drive to export chats directly to your Drive",
     "Tip: Load custom workflows from your own Git repositories",
-    "Tip: Use the artifacts panel to browse and download files created by AI",
+    "Tip: Use the Explorer panel to browse and download files created by AI",
 ]
 
 
