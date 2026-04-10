@@ -203,6 +203,21 @@ export async function updateSessionDisplayName(
 }
 
 /**
+ * Update MCP servers configuration for a session.
+ * Can be called on running sessions (changes take effect on next restart).
+ */
+export async function updateSessionMcpServers(
+  projectName: string,
+  sessionName: string,
+  mcpServers: import("@/types/agentic-session").MCPServersConfig
+): Promise<AgenticSession> {
+  return apiClient.put<AgenticSession, { mcpServers: import("@/types/agentic-session").MCPServersConfig }>(
+    `/projects/${projectName}/agentic-sessions/${sessionName}`,
+    { mcpServers }
+  );
+}
+
+/**
  * Export session chat data
  */
 export type SessionExportResponse = {

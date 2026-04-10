@@ -16,6 +16,7 @@ import { useProject, useUpdateProject } from "@/services/queries/use-projects";
 import { useSecretsValues, useUpdateSecrets, useIntegrationSecrets, useUpdateIntegrationSecrets } from "@/services/queries/use-secrets";
 import { useClusterInfo } from "@/hooks/use-cluster-info";
 import { FeatureFlagsSection } from "./feature-flags-section";
+import { ProjectMcpSection } from "./project-mcp-section";
 import { useRunnerTypes } from "@/services/queries/use-runner-types";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -615,6 +616,8 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
           </div>
         </CardContent>
       </Card>
+
+      <ProjectMcpSection projectName={projectName} />
 
       <FeatureFlagsSection projectName={projectName} />
     </div>

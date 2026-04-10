@@ -16,7 +16,7 @@ type Agent struct {
 	Prompt               *string `json:"prompt"                 gorm:"type:text"`
 	RepoUrl              *string `json:"repo_url"`
 	WorkflowId           *string `json:"workflow_id"`
-	LlmModel             string  `json:"llm_model"              gorm:"default:'sonnet'"`
+	LlmModel             string  `json:"llm_model"              gorm:"default:'claude-sonnet-4-6'"`
 	LlmTemperature       float64 `json:"llm_temperature"        gorm:"default:0.7"`
 	LlmMaxTokens         int32   `json:"llm_max_tokens"         gorm:"default:4000"`
 	BotAccountName       *string `json:"bot_account_name"`
@@ -41,7 +41,7 @@ func (l AgentList) Index() AgentIndex {
 func (d *Agent) BeforeCreate(tx *gorm.DB) error {
 	d.ID = api.NewID()
 	if d.LlmModel == "" {
-		d.LlmModel = "sonnet"
+		d.LlmModel = "claude-sonnet-4-6"
 	}
 	if d.LlmTemperature == 0 {
 		d.LlmTemperature = 0.7

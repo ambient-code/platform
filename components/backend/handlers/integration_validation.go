@@ -92,11 +92,13 @@ func ValidateJiraToken(ctx context.Context, url, email, apiToken string) (bool, 
 
 	var got401 bool
 	var lastNetErr error
+	var lastReqErr error
 	var sawHTTPResponse bool
 
 	for _, apiURL := range apiURLs {
 		req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 		if err != nil {
+			lastReqErr = err
 			continue
 		}
 
@@ -130,6 +132,12 @@ func ValidateJiraToken(ctx context.Context, url, email, apiToken string) (bool, 
 	// If all attempts failed with network errors, surface the cause
 	if lastNetErr != nil && !sawHTTPResponse {
 		return false, fmt.Errorf("request failed: %w", lastNetErr)
+	}
+
+	// If no HTTP response was ever received and request construction failed,
+	// surface the request-construction error instead of assuming valid.
+	if !sawHTTPResponse && lastReqErr != nil {
+		return false, fmt.Errorf("failed to create request: %w", lastReqErr)
 	}
 
 	// Couldn't validate - assume valid to avoid false negatives

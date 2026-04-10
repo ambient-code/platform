@@ -29,7 +29,7 @@ RUN pip3 install --break-system-packages --no-cache-dir uv==${UV_VERSION} pre-co
 WORKDIR /app
 
 # Copy ambient-runner package
-COPY ambient-runner /app/ambient-runner
+COPY . /app/ambient-runner
 
 # Install runner as a package, then remove build-only deps in same layer
 RUN pip3 install --break-system-packages --no-cache-dir '/app/ambient-runner[all]' && \
