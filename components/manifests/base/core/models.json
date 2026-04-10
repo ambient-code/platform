@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "defaultModel": "claude-sonnet-4-5",
+  "defaultModel": "claude-sonnet-4-6",
   "providerDefaults": {
-    "anthropic": "claude-sonnet-4-5",
+    "anthropic": "claude-sonnet-4-6",
     "google": "gemini-2.5-flash"
   },
   "models": [
@@ -44,7 +44,7 @@
       "vertexId": "claude-sonnet-4-6@default",
       "provider": "anthropic",
       "available": true,
-      "featureGated": true
+      "featureGated": false
     },
     {
       "id": "gemini-2.5-flash",

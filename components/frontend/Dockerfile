@@ -32,6 +32,8 @@ RUN npm run build
 # Production image, copy all the files and run next
 FROM registry.access.redhat.com/ubi9/nodejs-20-minimal AS runner
 
+ARG GIT_COMMIT=unknown
+
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -64,4 +66,6 @@ ENV HOSTNAME="0.0.0.0"
 
 # server.js is created by next build from the standalone output
 # https://nextjs.org/docs/pages/api-reference/next-config-js/output
+LABEL org.opencontainers.image.revision=$GIT_COMMIT
+
 CMD ["node", "server.js"]

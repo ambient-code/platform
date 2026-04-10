@@ -57,6 +57,7 @@ export type ChatInputBoxProps = {
   onAddRepository?: () => void;
   onUploadFile?: () => void;
   workflowSlot?: React.ReactNode;
+  modelSlot?: React.ReactNode;
   projectName?: string;
 };
 
@@ -181,6 +182,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
   onAddRepository,
   onUploadFile,
   workflowSlot,
+  modelSlot,
   projectName,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -667,8 +669,9 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
 
                 </div>
 
-                {/* Right side: Workflow selector + Send/Stop buttons */}
+                {/* Right side: Model + Workflow selector + Send/Stop buttons */}
                 <div className="flex gap-2 items-center">
+                  {modelSlot}
                   {workflowSlot}
 
                   {isRunActive ? (

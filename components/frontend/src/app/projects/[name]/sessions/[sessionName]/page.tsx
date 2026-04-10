@@ -30,6 +30,7 @@ import { TaskTranscriptViewer } from "./components/task-transcript-viewer";
 import { ExplorerPanel } from "./components/explorer/explorer-panel";
 import { SessionSettingsModal } from "./components/session-settings-modal";
 import { WorkflowSelector } from "./components/workflow-selector";
+import { LiveModelSelector } from "./components/live-model-selector";
 import { useExplorerState } from "./hooks/use-explorer-state";
 import { useFileTabs } from "./hooks/use-file-tabs";
 
@@ -58,6 +59,7 @@ import {
   useCurrentUser,
   sessionKeys,
   useRunnerTypes,
+  useSwitchSessionModel,
 } from "@/services/queries";
 import { useCapabilities } from "@/services/queries/use-capabilities";
 import {
@@ -188,13 +190,13 @@ export default function ProjectSessionDetailPage({
   // Fetch runner capabilities and derive agent display name
   const { data: capabilities } = useCapabilities(projectName, sessionName, phase === "Running");
   const { data: runnerTypes } = useRunnerTypes(projectName);
-  const agentName = useMemo(() => {
+  const currentRunner = useMemo(() => {
     if (capabilities?.framework && runnerTypes) {
-      const matched = runnerTypes.find((rt) => rt.id === capabilities.framework);
-      if (matched) return matched.displayName;
+      return runnerTypes.find((rt) => rt.id === capabilities.framework);
     }
     return undefined;
   }, [capabilities?.framework, runnerTypes]);
+  const agentName = currentRunner?.displayName;
 
   // Track the current Langfuse trace ID for feedback association
   const [langfuseTraceId, setLangfuseTraceId] = useState<string | null>(null);
@@ -215,6 +217,7 @@ export default function ProjectSessionDetailPage({
   const aguiSendMessage = aguiStream.sendMessage;
   const aguiInterrupt = aguiStream.interrupt;
   const isRunActive = aguiStream.isRunActive;
+  const switchModelMutation = useSwitchSessionModel();
   const aguiConnectRef = useRef(aguiStream.connect);
 
   // Keep connect ref up to date
@@ -738,6 +741,17 @@ export default function ProjectSessionDetailPage({
       workflowManagement.activateWorkflow(workflow, session?.status?.phase);
     }
   };
+
+  const handleModelSwitch = useCallback((model: string) => {
+    switchModelMutation.mutate(
+      { projectName, sessionName, model },
+      {
+        onError: (error: Error) => {
+          toast.error(`Failed to switch model: ${error.message}`);
+        },
+      },
+    );
+  }, [projectName, sessionName, switchModelMutation]);
 
   // Phase 1: convert committed messages + streaming tool cards into display format.
   // Does NOT depend on currentMessage / currentReasoning so it skips the full
@@ -1642,6 +1656,18 @@ export default function ProjectSessionDetailPage({
                     onAddRepository={handleOpenContextModal}
                     onUploadFile={handleOpenUploadModal}
                     projectName={projectName}
+                    modelSlot={
+                      phase === "Running" ? (
+                        <LiveModelSelector
+                          projectName={projectName}
+                          currentModel={session?.spec?.llmSettings?.model || ""}
+                          provider={currentRunner?.provider}
+                          disabled={isRunActive}
+                          switching={switchModelMutation.isPending}
+                          onSelect={handleModelSwitch}
+                        />
+                      ) : undefined
+                    }
                     workflowSlot={
                       <WorkflowSelector
                         sessionPhase={session?.status?.phase}

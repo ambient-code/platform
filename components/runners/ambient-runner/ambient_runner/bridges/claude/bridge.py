@@ -74,11 +74,15 @@ class ClaudeBridge(PlatformBridge):
     # ------------------------------------------------------------------
 
     def capabilities(self) -> FrameworkCapabilities:
-        has_tracing = (
-            self._obs is not None
-            and hasattr(self._obs, "langfuse_client")
-            and self._obs.langfuse_client is not None
-        )
+        tracing_label = None
+        if self._obs is not None:
+            cap = getattr(self._obs, "tracing_capability_label", None)
+            if isinstance(cap, str) and cap:
+                tracing_label = cap
+            elif getattr(self._obs, "langfuse_client", None):
+                tracing_label = "langfuse"
+            elif getattr(self._obs, "mlflow_tracing_active", False):
+                tracing_label = "mlflow"
         return FrameworkCapabilities(
             framework="claude-agent-sdk",
             agent_features=[
@@ -90,7 +94,7 @@ class ClaudeBridge(PlatformBridge):
             ],
             file_system=True,
             mcp=True,
-            tracing="langfuse" if has_tracing else None,
+            tracing=tracing_label,
             session_persistence=True,
         )
 

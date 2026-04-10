@@ -302,6 +302,20 @@ export async function saveToGoogleDrive(
   );
 }
 
+/**
+ * Switch the LLM model for a running session
+ */
+export async function switchSessionModel(
+  projectName: string,
+  sessionName: string,
+  model: string
+): Promise<AgenticSession> {
+  return apiClient.post<AgenticSession, { model: string }>(
+    `/projects/${projectName}/agentic-sessions/${sessionName}/model`,
+    { model }
+  );
+}
+
 // --- Capabilities ---
 
 export type CapabilitiesResponse = {
