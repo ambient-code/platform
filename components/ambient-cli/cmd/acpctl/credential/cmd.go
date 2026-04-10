@@ -356,12 +356,12 @@ func init() {
 
 	listCmd.Flags().StringVarP(&listArgs.outputFormat, "output", "o", "", "Output format: json")
 	listCmd.Flags().IntVar(&listArgs.limit, "limit", 100, "Maximum number of items to return")
-	listCmd.Flags().StringVar(&listArgs.provider, "provider", "", "Filter by provider (github|gitlab|jira|google)")
+	listCmd.Flags().StringVar(&listArgs.provider, "provider", "", "Filter by provider (github|gitlab|jira|google|kubeconfig)")
 
 	getCmd.Flags().StringVarP(&getArgs.outputFormat, "output", "o", "", "Output format: json")
 
 	createCmd.Flags().StringVar(&createArgs.name, "name", "", "Credential name (required)")
-	createCmd.Flags().StringVar(&createArgs.provider, "provider", "", "Provider (github|gitlab|jira|google) (required)")
+	createCmd.Flags().StringVar(&createArgs.provider, "provider", "", "Provider (github|gitlab|jira|google|kubeconfig) (required)")
 	createCmd.Flags().StringVar(&createArgs.token, "token", "", "Secret token or API key")
 	createCmd.Flags().StringVar(&createArgs.description, "description", "", "Description")
 	createCmd.Flags().StringVar(&createArgs.url, "url", "", "Service URL")

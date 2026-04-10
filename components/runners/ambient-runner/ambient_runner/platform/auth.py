@@ -41,6 +41,7 @@ _GOOGLE_WORKSPACE_CREDS_FILE = Path(
 # time), so updating os.environ mid-run would not reach it without these files.
 _GITHUB_TOKEN_FILE = Path("/tmp/.ambient_github_token")
 _GITLAB_TOKEN_FILE = Path("/tmp/.ambient_gitlab_token")
+_KUBECONFIG_FILE = Path("/tmp/.ambient_kubeconfig")
 
 
 # ---------------------------------------------------------------------------
@@ -315,6 +316,10 @@ async def fetch_gitlab_token(context: RunnerContext) -> str:
     return data.get("token", "")
 
 
+async def fetch_kubeconfig_credential(context: RunnerContext) -> dict:
+    return await _fetch_credential(context, "kubeconfig")
+
+
 async def fetch_token_for_url(context: RunnerContext, url: str) -> str:
     """Fetch appropriate token based on repository URL host."""
     try:
@@ -337,11 +342,12 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     logger.info("Fetching fresh credentials from backend API...")
 
     # Fetch all credentials concurrently
-    google_creds, jira_creds, gitlab_creds, github_creds = await asyncio.gather(
+    google_creds, jira_creds, gitlab_creds, github_creds, kubeconfig_creds = await asyncio.gather(
         fetch_google_credentials(context),
         fetch_jira_credentials(context),
         fetch_gitlab_credentials(context),
         fetch_github_credentials(context),
+        fetch_kubeconfig_credential(context),
         return_exceptions=True,
     )
 
@@ -425,6 +431,25 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         if github_creds.get("email"):
             git_user_email = github_creds["email"]
 
+    if isinstance(kubeconfig_creds, Exception):
+        logger.warning(f"Failed to refresh kubeconfig credentials: {kubeconfig_creds}")
+        if isinstance(kubeconfig_creds, PermissionError):
+            auth_failures.append(str(kubeconfig_creds))
+    elif kubeconfig_creds.get("token"):
+        # Setting KUBECONFIG in os.environ is safe here: the runner's own platform
+        # communication (backend REST API, gRPC to API server) uses the mounted SA
+        # token and CA cert directly from /var/run/secrets/..., not via any kube
+        # client library or KUBECONFIG. This env var only affects child processes
+        # (Claude CLI, MCP servers, kubectl/oc) so they can reach the user's
+        # remote cluster without interfering with the pod's own identity.
+        try:
+            _KUBECONFIG_FILE.write_text(kubeconfig_creds["token"])
+            _KUBECONFIG_FILE.chmod(0o600)
+            os.environ["KUBECONFIG"] = str(_KUBECONFIG_FILE)
+            logger.info(f"Written kubeconfig to {_KUBECONFIG_FILE}")
+        except OSError as e:
+            logger.warning(f"Failed to write kubeconfig file: {e}")
+
     # Configure git identity and credential helper
     await configure_git_identity(git_user_name, git_user_email)
     install_git_credential_helper()
@@ -452,6 +477,7 @@ def clear_runtime_credentials() -> None:
         "JIRA_URL",
         "JIRA_EMAIL",
         "USER_GOOGLE_EMAIL",
+        "KUBECONFIG",
     ]:
         if os.environ.pop(key, None) is not None:
             cleared.append(key)
@@ -468,7 +494,7 @@ def clear_runtime_credentials() -> None:
         cleared.append(key)
 
     # Remove token files used by the git credential helper.
-    for token_file in (_GITHUB_TOKEN_FILE, _GITLAB_TOKEN_FILE):
+    for token_file in (_GITHUB_TOKEN_FILE, _GITLAB_TOKEN_FILE, _KUBECONFIG_FILE):
         try:
             token_file.unlink(missing_ok=True)
             cleared.append(token_file.name)
