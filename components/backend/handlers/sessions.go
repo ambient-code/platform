@@ -1459,7 +1459,7 @@ func SwitchModel(c *gin.Context) {
 		session := types.AgenticSession{
 			APIVersion: item.GetAPIVersion(),
 			Kind:       item.GetKind(),
-			}
+		}
 		if meta, ok := item.Object["metadata"].(map[string]interface{}); ok {
 			session.Metadata = meta
 		}
