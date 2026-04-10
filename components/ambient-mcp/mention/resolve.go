@@ -18,16 +18,18 @@ type Doer interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
+type TokenFunc func() string
+
 type Resolver struct {
 	baseURL string
-	token   string
+	tokenFn TokenFunc
 	http    *http.Client
 }
 
-func NewResolver(baseURL, token string) *Resolver {
+func NewResolver(baseURL string, tokenFn TokenFunc) *Resolver {
 	return &Resolver{
 		baseURL: strings.TrimSuffix(baseURL, "/"),
-		token:   token,
+		tokenFn: tokenFn,
 		http:    &http.Client{},
 	}
 }
@@ -43,7 +45,7 @@ func (r *Resolver) Resolve(ctx context.Context, projectID, identifier string) (s
 	if uuidPattern.MatchString(strings.ToLower(identifier)) {
 		path := r.baseURL + "/api/ambient/v1/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(identifier)
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, path, nil)
-		req.Header.Set("Authorization", "Bearer "+r.token)
+		req.Header.Set("Authorization", "Bearer "+r.tokenFn())
 		resp, err := r.http.Do(req)
 		if err != nil {
 			return "", fmt.Errorf("lookup agent by ID: %w", err)
@@ -66,7 +68,7 @@ func (r *Resolver) Resolve(ctx context.Context, projectID, identifier string) (s
 
 	path := r.baseURL + "/api/ambient/v1/projects/" + url.PathEscape(projectID) + "/agents?search=name='" + url.QueryEscape(identifier) + "'"
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, path, nil)
-	req.Header.Set("Authorization", "Bearer "+r.token)
+	req.Header.Set("Authorization", "Bearer "+r.tokenFn())
 	resp, err := r.http.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("search agent by name: %w", err)
