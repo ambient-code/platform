@@ -7,13 +7,13 @@ USER 0
 
 # Copy go mod files first for caching
 COPY go.mod go.sum* ./
-RUN go mod download
+RUN GOTOOLCHAIN=auto go mod download
 
 # Copy source code
 COPY . .
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o public-api .
+RUN GOTOOLCHAIN=auto CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o public-api .
 
 # Runtime stage
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7
