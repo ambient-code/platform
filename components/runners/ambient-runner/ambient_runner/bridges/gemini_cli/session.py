@@ -14,7 +14,7 @@ import signal
 import time
 from collections import deque
 from pathlib import Path
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator
 
 logger = logging.getLogger(__name__)
 
@@ -62,9 +62,9 @@ class GeminiSessionWorker:
         self._use_vertex = use_vertex
         self._cwd = cwd or os.getenv("WORKSPACE_PATH", "/workspace")
         self._include_directories = include_directories or []
-        self._process: Optional[asyncio.subprocess.Process] = None
+        self._process: asyncio.subprocess.Process | None = None
         self._stderr_lines: deque[str] = deque(maxlen=_MAX_STDERR_LINES)
-        self._stderr_task: Optional[asyncio.Task] = None
+        self._stderr_task: asyncio.Task | None = None
 
     @property
     def stderr_lines(self) -> list[str]:
@@ -89,7 +89,7 @@ class GeminiSessionWorker:
     async def query(
         self,
         prompt: str,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
     ) -> AsyncIterator[str]:
         """Spawn the Gemini CLI and yield NDJSON lines from stdout.
 
@@ -328,7 +328,7 @@ class GeminiSessionManager:
             self._locks[thread_id] = asyncio.Lock()
         return self._locks[thread_id]
 
-    def get_session_id(self, thread_id: str) -> Optional[str]:
+    def get_session_id(self, thread_id: str) -> str | None:
         """Return the last known session_id for a thread."""
         return self._session_ids.get(thread_id)
 

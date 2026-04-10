@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -24,6 +25,7 @@ import (
 	"ambient-code-backend/types"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	authnv1 "k8s.io/api/authentication/v1"
 	authzv1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -216,6 +218,29 @@ func parseSpec(spec map[string]interface{}) types.AgenticSessionSpec {
 		result.ActiveWorkflow = ws
 	}
 
+	// Parse mcpServers
+	if mcpServers, ok := spec["mcpServers"].(map[string]interface{}); ok {
+		mcp := &types.MCPServersConfig{}
+		if custom, ok := mcpServers["custom"].(map[string]interface{}); ok {
+			mcp.Custom = make(map[string]map[string]interface{}, len(custom))
+			for name, cfg := range custom {
+				if cfgMap, ok := cfg.(map[string]interface{}); ok {
+					mcp.Custom[name] = cfgMap
+				}
+			}
+		}
+		if disabled, ok := mcpServers["disabled"].([]interface{}); ok {
+			for _, d := range disabled {
+				if s, ok := d.(string); ok {
+					mcp.Disabled = append(mcp.Disabled, s)
+				}
+			}
+		}
+		if len(mcp.Custom) > 0 || len(mcp.Disabled) > 0 {
+			result.MCPServers = mcp
+		}
+	}
+
 	return result
 }
 
@@ -374,9 +399,41 @@ func parseStatus(status map[string]interface{}) *types.AgenticSessionStatus {
 
 // V2 API Handlers - Multi-tenant session management
 
+// agentStatusCache caches DeriveAgentStatus results to avoid scanning the
+// event log file on every list request.  Agent status doesn't change faster
+// than the frontend polling interval (2-15s), so a 5s TTL is safe.
+var agentStatusCache = struct {
+	sync.RWMutex
+	entries map[string]agentStatusCacheEntry
+}{entries: make(map[string]agentStatusCacheEntry)}
+
+type agentStatusCacheEntry struct {
+	status    string
+	expiresAt time.Time
+}
+
+func init() {
+	// Sweep expired entries every 30 seconds to prevent unbounded growth.
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		for range ticker.C {
+			now := time.Now()
+			agentStatusCache.Lock()
+			for k, v := range agentStatusCache.entries {
+				if now.After(v.expiresAt) {
+					delete(agentStatusCache.entries, k)
+				}
+			}
+			agentStatusCache.Unlock()
+		}
+	}()
+}
+
+const agentStatusCacheTTL = 5 * time.Second
+
 // enrichAgentStatus derives agentStatus from the persisted event log for
-// Running sessions.  This is the source of truth — it replaces the stale
-// CR-cached value which was subject to goroutine race conditions.
+// Running sessions.  Uses a short TTL cache to avoid redundant file scans
+// when multiple list requests arrive within the same polling interval.
 func enrichAgentStatus(session *types.AgenticSession) {
 	if session.Status == nil || session.Status.Phase != "Running" {
 		return
@@ -388,7 +445,30 @@ func enrichAgentStatus(session *types.AgenticSession) {
 	if name == "" {
 		return
 	}
-	if derived := DeriveAgentStatusFromEvents(name); derived != "" {
+
+	// Check cache
+	agentStatusCache.RLock()
+	if entry, ok := agentStatusCache.entries[name]; ok && time.Now().Before(entry.expiresAt) {
+		agentStatusCache.RUnlock()
+		if entry.status != "" {
+			session.Status.AgentStatus = types.StringPtr(entry.status)
+		}
+		return
+	}
+	agentStatusCache.RUnlock()
+
+	// Cache miss — derive from event log
+	derived := DeriveAgentStatusFromEvents(name)
+
+	// Store in cache
+	agentStatusCache.Lock()
+	agentStatusCache.entries[name] = agentStatusCacheEntry{
+		status:    derived,
+		expiresAt: time.Now().Add(agentStatusCacheTTL),
+	}
+	agentStatusCache.Unlock()
+
+	if derived != "" {
 		session.Status.AgentStatus = types.StringPtr(derived)
 	}
 }
@@ -658,7 +738,7 @@ func CreateSession(c *gin.Context) {
 
 	// Set defaults for LLM settings if not provided
 	llmSettings := types.LLMSettings{
-		Model:       "claude-sonnet-4-5",
+		Model:       "claude-sonnet-4-6",
 		Temperature: 0.7,
 		MaxTokens:   4000,
 	}
@@ -695,10 +775,9 @@ func CreateSession(c *gin.Context) {
 		timeout = *req.Timeout
 	}
 
-	// Generate unique name (timestamp-based)
+	// Generate unique name (UUID-based)
 	// Note: Runner will create branch as "ambient/{session-name}"
-	timestamp := time.Now().Unix()
-	name := fmt.Sprintf("session-%d", timestamp)
+	name := fmt.Sprintf("session-%s", uuid.New().String())
 
 	// Create the custom resource
 	// Metadata
@@ -741,6 +820,9 @@ func CreateSession(c *gin.Context) {
 		}
 		spec["inactivityTimeout"] = *req.InactivityTimeout
 	}
+	if req.StopOnRunFinished != nil && *req.StopOnRunFinished {
+		spec["stopOnRunFinished"] = true
+	}
 
 	session := map[string]interface{}{
 		"apiVersion": "vteam.ambient-code/v1alpha1",
@@ -760,6 +842,15 @@ func CreateSession(c *gin.Context) {
 	}
 	for k, v := range req.EnvironmentVariables {
 		envVars[k] = v
+	}
+
+	// When the jira-write flag is enabled for this workspace, let the Jira MCP server write.
+	overrides, err := getWorkspaceOverrides(c.Request.Context(), reqK8s, project)
+	if err != nil {
+		log.Printf("WARNING: failed to read feature flag overrides for project %s: %v", project, err)
+	}
+	if isRunnerEnabledWithOverrides("jira-write", overrides) {
+		envVars["JIRA_READ_ONLY_MODE"] = "false"
 	}
 
 	// Handle session continuation
@@ -808,6 +899,29 @@ func CreateSession(c *gin.Context) {
 		}
 	}
 
+	// Set MCP servers configuration if provided
+	if req.MCPServers != nil {
+		spec := session["spec"].(map[string]interface{})
+		mcpMap := map[string]interface{}{}
+		if len(req.MCPServers.Custom) > 0 {
+			customMap := make(map[string]interface{}, len(req.MCPServers.Custom))
+			for name, cfg := range req.MCPServers.Custom {
+				customMap[name] = cfg
+			}
+			mcpMap["custom"] = customMap
+		}
+		if len(req.MCPServers.Disabled) > 0 {
+			disabledArr := make([]interface{}, len(req.MCPServers.Disabled))
+			for i, d := range req.MCPServers.Disabled {
+				disabledArr[i] = d
+			}
+			mcpMap["disabled"] = disabledArr
+		}
+		if len(mcpMap) > 0 {
+			spec["mcpServers"] = mcpMap
+		}
+	}
+
 	// Set active workflow if provided
 	if req.ActiveWorkflow != nil && strings.TrimSpace(req.ActiveWorkflow.GitURL) != "" {
 		spec := session["spec"].(map[string]interface{})
@@ -826,45 +940,71 @@ func CreateSession(c *gin.Context) {
 	}
 
 	// Add userContext from authenticated caller identity.
-	// Prefer forwarded headers (OAuth proxy); fall back to SelfSubjectReview
+	// When a parent session is specified, inherit the parent's userContext so that
+	// child sessions created by a runner service account retain the original user's
+	// identity (and therefore their credentials, e.g. GitHub tokens).
+	// Otherwise, prefer forwarded headers (OAuth proxy); fall back to SelfSubjectReview
 	// for headless/API callers that authenticate directly with a bearer token.
 	{
-		uidVal, _ := c.Get("userID")
-		uid, _ := uidVal.(string)
-		uid = strings.TrimSpace(uid)
+		var parentUserContext map[string]interface{}
 
-		if uid == "" {
-			if resolved, err := resolveTokenIdentity(c.Request.Context(), reqK8s); err == nil {
-				uid = strings.ReplaceAll(resolved, ":", "-")
-				log.Printf("Resolved token identity via SelfSubjectReview: %s", uid)
+		// If this is a child session, fetch the parent's userContext
+		if req.ParentSessionID != "" {
+			gvr := GetAgenticSessionV1Alpha1Resource()
+			parentObj, err := k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), req.ParentSessionID, v1.GetOptions{})
+			if err != nil {
+				log.Printf("Warning: could not fetch parent session %s/%s to inherit userContext: %v", project, req.ParentSessionID, err)
 			} else {
-				log.Printf("Could not resolve token identity: %v", err)
+				uc, found, _ := unstructured.NestedMap(parentObj.Object, "spec", "userContext")
+				if found && len(uc) > 0 {
+					parentUserContext = uc
+					log.Printf("Inheriting userContext from parent session %s (userId=%v)", req.ParentSessionID, uc["userId"])
+				}
 			}
 		}
 
-		if uid != "" {
-			displayName := ""
-			if v, ok := c.Get("userName"); ok {
-				if s, ok2 := v.(string); ok2 {
-					displayName = s
+		if parentUserContext != nil {
+			// Use the parent's userContext directly
+			session["spec"].(map[string]interface{})["userContext"] = parentUserContext
+		} else {
+			// No parent — resolve from the caller's identity
+			uidVal, _ := c.Get("userID")
+			uid, _ := uidVal.(string)
+			uid = strings.TrimSpace(uid)
+
+			if uid == "" {
+				if resolved, err := resolveTokenIdentity(c.Request.Context(), reqK8s); err == nil {
+					uid = strings.ReplaceAll(resolved, ":", "-")
+					log.Printf("Resolved token identity via SelfSubjectReview: %s", uid)
+				} else {
+					log.Printf("Could not resolve token identity: %v", err)
 				}
 			}
-			groups := []string{}
-			if v, ok := c.Get("userGroups"); ok {
-				if gg, ok2 := v.([]string); ok2 {
-					groups = gg
+
+			if uid != "" {
+				displayName := ""
+				if v, ok := c.Get("userName"); ok {
+					if s, ok2 := v.(string); ok2 {
+						displayName = s
+					}
 				}
-			}
-			if displayName == "" && req.UserContext != nil {
-				displayName = req.UserContext.DisplayName
-			}
-			if len(groups) == 0 && req.UserContext != nil {
-				groups = req.UserContext.Groups
-			}
-			session["spec"].(map[string]interface{})["userContext"] = map[string]interface{}{
-				"userId":      uid,
-				"displayName": displayName,
-				"groups":      groups,
+				groups := []string{}
+				if v, ok := c.Get("userGroups"); ok {
+					if gg, ok2 := v.([]string); ok2 {
+						groups = gg
+					}
+				}
+				if displayName == "" && req.UserContext != nil {
+					displayName = req.UserContext.DisplayName
+				}
+				if len(groups) == 0 && req.UserContext != nil {
+					groups = req.UserContext.Groups
+				}
+				session["spec"].(map[string]interface{})["userContext"] = map[string]interface{}{
+					"userId":      uid,
+					"displayName": displayName,
+					"groups":      groups,
+				}
 			}
 		}
 	}
@@ -1189,15 +1329,19 @@ func UpdateSession(c *gin.Context) {
 		return
 	}
 
-	// Prevent spec changes while session is running or being created
+	// Check session phase
+	isMCPOnlyUpdate := req.MCPServers != nil && req.InitialPrompt == nil && req.DisplayName == nil && req.LLMSettings == nil && req.Timeout == nil
 	if status, ok := item.Object["status"].(map[string]interface{}); ok {
 		if phase, ok := status["phase"].(string); ok {
 			if strings.EqualFold(phase, "Running") || strings.EqualFold(phase, "Creating") {
-				c.JSON(http.StatusConflict, gin.H{
-					"error": "Cannot modify session specification while the session is running",
-					"phase": phase,
-				})
-				return
+				// Allow MCP-only updates on running sessions (persisted for next restart)
+				if !isMCPOnlyUpdate {
+					c.JSON(http.StatusConflict, gin.H{
+						"error": "Cannot modify session specification while the session is running",
+						"phase": phase,
+					})
+					return
+				}
 			}
 		}
 	}
@@ -1227,6 +1371,30 @@ func UpdateSession(c *gin.Context) {
 
 	if req.Timeout != nil {
 		spec["timeout"] = *req.Timeout
+	}
+
+	// Update MCP servers configuration
+	if req.MCPServers != nil {
+		mcpMap := map[string]interface{}{}
+		if len(req.MCPServers.Custom) > 0 {
+			customMap := make(map[string]interface{}, len(req.MCPServers.Custom))
+			for name, cfg := range req.MCPServers.Custom {
+				customMap[name] = cfg
+			}
+			mcpMap["custom"] = customMap
+		}
+		if len(req.MCPServers.Disabled) > 0 {
+			disabledArr := make([]interface{}, len(req.MCPServers.Disabled))
+			for i, d := range req.MCPServers.Disabled {
+				disabledArr[i] = d
+			}
+			mcpMap["disabled"] = disabledArr
+		}
+		if len(mcpMap) > 0 {
+			spec["mcpServers"] = mcpMap
+		} else {
+			delete(spec, "mcpServers")
+		}
 	}
 
 	// Update the resource
@@ -1362,12 +1530,183 @@ func UpdateSessionDisplayName(c *gin.Context) {
 	c.JSON(http.StatusOK, session)
 }
 
+// SwitchModel switches the LLM model for a running session
+// POST /api/projects/:projectName/agentic-sessions/:sessionName/model
+func SwitchModel(c *gin.Context) {
+	project := c.GetString("project")
+	sessionName := c.Param("sessionName")
+	_, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+
+	var req struct {
+		Model string `json:"model" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body: model is required"})
+		return
+	}
+
+	if req.Model == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "model must not be empty"})
+		return
+	}
+
+	gvr := GetAgenticSessionV1Alpha1Resource()
+
+	// Get current session
+	item, err := k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get session"})
+		return
+	}
+
+	// Ensure session is Running
+	if err := ensureRuntimeMutationAllowed(item); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get current model for comparison
+	spec, ok := item.Object["spec"].(map[string]interface{})
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid session spec"})
+		return
+	}
+	llmSettings, _, _ := unstructured.NestedMap(spec, "llmSettings")
+	previousModel, _ := llmSettings["model"].(string)
+
+	// No-op if same model
+	if previousModel == req.Model {
+		session := types.AgenticSession{
+			APIVersion: item.GetAPIVersion(),
+			Kind:       item.GetKind(),
+		}
+		if meta, ok := item.Object["metadata"].(map[string]interface{}); ok {
+			session.Metadata = meta
+		}
+		session.Spec = parseSpec(spec)
+		if status, ok := item.Object["status"].(map[string]interface{}); ok {
+			session.Status = parseStatus(status)
+		}
+		c.JSON(http.StatusOK, session)
+		return
+	}
+
+	// Update the CR first to validate RBAC (user needs update permission).
+	// This ensures a user with only get access cannot trigger a runner-side
+	// model switch without also being allowed to persist the change.
+	if llmSettings == nil {
+		llmSettings = map[string]interface{}{}
+	}
+	llmSettings["model"] = req.Model
+	spec["llmSettings"] = llmSettings
+
+	updated, err := k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
+	if err != nil {
+		log.Printf("Failed to update session CR %s for model switch: %v", sessionName, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update session record"})
+		return
+	}
+
+	// Proxy to runner — if runner rejects (e.g., agent is mid-generation), revert the CR.
+	// Sanitize the CR name against a strict allowlist to prevent SSRF.
+	sanitizedName, err := sanitizeK8sName(item.GetName())
+	if err != nil {
+		log.Printf("Invalid session name %q for model switch: %v", item.GetName(), err)
+		revertModelSwitch(updated, previousModel, k8sDyn, gvr, project)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session name"})
+		return
+	}
+	sanitizedProject, err := sanitizeK8sName(project)
+	if err != nil {
+		log.Printf("Invalid project name %q for model switch: %v", project, err)
+		revertModelSwitch(updated, previousModel, k8sDyn, gvr, project)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project name"})
+		return
+	}
+	serviceName := getRunnerServiceName(sanitizedName)
+	runnerURL := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001/model", serviceName, sanitizedProject)
+	runnerReq := map[string]string{"model": req.Model}
+	reqBody, _ := json.Marshal(runnerReq)
+
+	httpReq, err := http.NewRequestWithContext(c.Request.Context(), "POST", runnerURL, bytes.NewReader(reqBody))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create runner request"})
+		return
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		log.Printf("Failed to proxy model switch to runner for session %s: %v", sessionName, err)
+		// Revert the CR update on the server-returned object
+		revertModelSwitch(updated, previousModel, k8sDyn, gvr, project)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to reach session runner"})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("Runner rejected model switch for session %s: %d %s", sessionName, resp.StatusCode, string(body))
+		// Revert the CR update on the server-returned object
+		revertModelSwitch(updated, previousModel, k8sDyn, gvr, project)
+		// Forward runner's status code and error
+		c.Data(resp.StatusCode, "application/json", body)
+		return
+	}
+
+	session := types.AgenticSession{
+		APIVersion: updated.GetAPIVersion(),
+		Kind:       updated.GetKind(),
+	}
+	if meta, ok := updated.Object["metadata"].(map[string]interface{}); ok {
+		session.Metadata = meta
+	}
+	if s, ok := updated.Object["spec"].(map[string]interface{}); ok {
+		session.Spec = parseSpec(s)
+	}
+	if status, ok := updated.Object["status"].(map[string]interface{}); ok {
+		session.Status = parseStatus(status)
+	}
+
+	c.JSON(http.StatusOK, session)
+}
+
+// revertModelSwitch restores the previous model on the server-returned CR object.
+// Called when the runner rejects a model switch after the CR was already updated.
+func revertModelSwitch(updated *unstructured.Unstructured, previousModel string, k8sDyn dynamic.Interface, gvr schema.GroupVersionResource, namespace string) {
+	if updatedSpec, ok := updated.Object["spec"].(map[string]interface{}); ok {
+		if updatedLLM, ok := updatedSpec["llmSettings"].(map[string]interface{}); ok {
+			updatedLLM["model"] = previousModel
+			_, err := k8sDyn.Resource(gvr).Namespace(namespace).Update(context.TODO(), updated, v1.UpdateOptions{})
+			if err != nil {
+				log.Printf("Failed to revert model switch for session %s: %v", updated.GetName(), err)
+			}
+		}
+	}
+}
+
 // SelectWorkflow sets the active workflow for a session
 // POST /api/projects/:projectName/agentic-sessions/:sessionName/workflow
 func SelectWorkflow(c *gin.Context) {
 	project := c.GetString("project")
 	sessionName := c.Param("sessionName")
-	_, k8sDyn := GetK8sClientsForRequest(c)
+	if !isValidKubernetesName(sessionName) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session name format"})
+		c.Abort()
+		return
+	}
+	k8sClt, k8sDyn := GetK8sClientsForRequest(c)
 	if k8sDyn == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
 		c.Abort()
@@ -1431,6 +1770,74 @@ func SelectWorkflow(c *gin.Context) {
 	}
 
 	log.Printf("Workflow updated for session %s: %s@%s", sessionName, req.GitURL, branch)
+
+	// If the session is Running, call the runner to clone the workflow immediately
+	status, _ := item.Object["status"].(map[string]interface{})
+	phase, _ := status["phase"].(string)
+	if phase == "Running" && req.GitURL != "" {
+		runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/workflow", sessionName, project)
+		runnerReq := map[string]string{
+			"gitUrl": req.GitURL,
+			"branch": branch,
+			"path":   req.Path,
+		}
+		reqBody, _ := json.Marshal(runnerReq)
+
+		log.Printf("Calling runner to clone workflow: %s -> %s", req.GitURL, runnerURL)
+		httpReq, err := http.NewRequestWithContext(c.Request.Context(), "POST", runnerURL, bytes.NewReader(reqBody))
+		if err != nil {
+			log.Printf("Failed to create runner workflow request: %v", err)
+		} else {
+			httpReq.Header.Set("Content-Type", "application/json")
+
+			// Get userID from spec for token retrieval
+			var userID string
+			if specMap, ok := item.Object["spec"].(map[string]interface{}); ok {
+				if uc, ok := specMap["userContext"].(map[string]interface{}); ok {
+					if v, ok := uc["userId"].(string); ok {
+						userID = strings.TrimSpace(v)
+					}
+				}
+			}
+
+			// Attach GitHub or GitLab token for authenticated clone
+			if k8sClt != nil && userID != "" {
+				provider := types.DetectProvider(req.GitURL)
+				switch provider {
+				case types.ProviderGitHub:
+					if GetGitHubToken != nil {
+						if token, err := GetGitHubToken(c.Request.Context(), k8sClt, k8sDyn, project, userID); err == nil && token != "" {
+							httpReq.Header.Set("X-GitHub-Token", token)
+							log.Printf("SelectWorkflow: configured GitHub authentication for project=%s session=%s", project, sessionName)
+						}
+					}
+				case types.ProviderGitLab:
+					if GetGitLabToken != nil {
+						if token, err := GetGitLabToken(c.Request.Context(), k8sClt, project, userID); err == nil && token != "" {
+							httpReq.Header.Set("X-GitLab-Token", token)
+							log.Printf("SelectWorkflow: configured GitLab authentication for project=%s session=%s", project, sessionName)
+						}
+					}
+				default:
+					log.Printf("SelectWorkflow: unknown provider detected, proceeding without authentication")
+				}
+			}
+
+			client := &http.Client{Timeout: 120 * time.Second}
+			resp, err := client.Do(httpReq)
+			if err != nil {
+				log.Printf("Failed to call runner to clone workflow: %v", err)
+			} else {
+				defer resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					body, _ := io.ReadAll(resp.Body)
+					log.Printf("Runner failed to clone workflow (status %d): %s", resp.StatusCode, string(body))
+				} else {
+					log.Printf("Runner successfully cloned workflow %s for session %s", req.GitURL, sessionName)
+				}
+			}
+		}
+	}
 
 	// Respond with updated session summary
 	session := types.AgenticSession{
@@ -1760,6 +2167,20 @@ func RemoveRepo(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Repository removed", "session": session})
 }
 
+// k8sNameRegexp matches valid Kubernetes resource names (RFC 1123 DNS label).
+var k8sNameRegexp = regexp.MustCompile(`^[a-z0-9]([a-z0-9\-]*[a-z0-9])?$`)
+
+// sanitizeK8sName validates that name is a valid Kubernetes resource name
+// and returns it unchanged if valid, or returns an error. This breaks the
+// taint chain for static analysis (CodeQL SSRF) by proving the value matches
+// a strict allowlist before it reaches any network call.
+func sanitizeK8sName(name string) (string, error) {
+	if len(name) == 0 || len(name) > 253 || !k8sNameRegexp.MatchString(name) {
+		return "", fmt.Errorf("invalid Kubernetes resource name: %q", name)
+	}
+	return name, nil
+}
+
 // getRunnerServiceName returns the K8s Service name for a session's runner.
 // The runner serves both AG-UI and content endpoints on port 8001.
 func getRunnerServiceName(session string) string {
@@ -2028,12 +2449,19 @@ func ListOOTBWorkflows(c *gin.Context) {
 		var ambientConfig struct {
 			Name        string `json:"name"`
 			Description string `json:"description"`
+			Enabled     *bool  `json:"enabled,omitempty"`
 		}
 		if err == nil {
 			// Parse ambient.json if found
 			if parseErr := json.Unmarshal(ambientData, &ambientConfig); parseErr != nil {
 				log.Printf("ListOOTBWorkflows: failed to parse ambient.json for %s: %v", entryName, parseErr)
 			}
+		}
+
+		// Skip workflows explicitly disabled in ambient.json
+		if ambientConfig.Enabled != nil && !*ambientConfig.Enabled {
+			log.Printf("ListOOTBWorkflows: skipping disabled workflow %s", entryName)
+			continue
 		}
 
 		// Use ambient.json values or fallback to directory name

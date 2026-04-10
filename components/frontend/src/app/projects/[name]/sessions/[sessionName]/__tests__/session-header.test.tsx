@@ -21,6 +21,7 @@ vi.mock('@/services/queries', () => ({
 
 vi.mock('@/services/queries/use-mcp', () => ({
   useMcpStatus: vi.fn(() => ({ data: null })),
+  useUpdateSessionMcpServers: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }));
 
 vi.mock('@/services/queries/use-google', () => ({

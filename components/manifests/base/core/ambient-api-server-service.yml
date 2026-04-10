@@ -35,7 +35,7 @@ spec:
       initContainers:
         - name: migration
           image: quay.io/ambient_code/vteam_api_server:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           command:
             - /usr/local/bin/ambient-api-server
             - migrate
@@ -58,7 +58,7 @@ spec:
       containers:
         - name: api-server
           image: quay.io/ambient_code/vteam_api_server:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           command:
             - /usr/local/bin/ambient-api-server
             - serve

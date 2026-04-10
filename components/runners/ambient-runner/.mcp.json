@@ -20,15 +20,16 @@
         "JIRA_USERNAME": "${JIRA_EMAIL}",
         "JIRA_API_TOKEN": "${JIRA_API_TOKEN}",
         "JIRA_SSL_VERIFY": "true",
-        "READ_ONLY_MODE": "true"
+        "READ_ONLY_MODE": "${JIRA_READ_ONLY_MODE:-true}"
       }
     },
     "google-workspace": {
       "command": "uvx",
       "args": [
-        "workspace-mcp@1.6.1",
-        "--tools",
-        "drive"
+        "workspace-mcp@1.17.1",
+        "--permissions",
+        "gmail:send",
+        "drive:full"
       ],
       "env": {
         "GOOGLE_MCP_CREDENTIALS_DIR": "${GOOGLE_MCP_CREDENTIALS_DIR}",

@@ -7,6 +7,7 @@ import * as z from "zod";
 import Link from "next/link";
 import { AlertCircle, AlertTriangle, CheckCircle2, ChevronsUpDown, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useFlag } from "@/lib/feature-flags";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -40,6 +41,12 @@ import type { CreateAgenticSessionRequest } from "@/types/agentic-session";
 import type { WorkflowSelection } from "@/types/workflow";
 import { useCreateSession } from "@/services/queries/use-sessions";
 import { useRunnerTypes } from "@/services/queries/use-runner-types";
+import {
+  AgentOptionsFields,
+  claudeAgentOptionsDefaults,
+  claudeAgentOptionsSchema,
+  type ClaudeAgentOptionsForm,
+} from "@/components/claude-agent-options";
 import { DEFAULT_RUNNER_TYPE_ID } from "@/services/api/runner-types";
 import { useIntegrationsStatus } from "@/services/queries/use-integrations";
 import { useModels } from "@/services/queries/use-models";
@@ -79,7 +86,13 @@ export function CreateSessionDialog({
   const [customBranch, setCustomBranch] = useState("main");
   const [customPath, setCustomPath] = useState("");
   const router = useRouter();
+  const advancedAgentOptions = useFlag("advanced-agent-options") ?? false;
   const createSessionMutation = useCreateSession();
+
+  const agentOptionsForm = useForm<ClaudeAgentOptionsForm>({
+    resolver: zodResolver(claudeAgentOptionsSchema),
+    defaultValues: claudeAgentOptionsDefaults,
+  });
   const { data: runnerTypes, isLoading: runnerTypesLoading, isError: runnerTypesError, refetch: refetchRunnerTypes } = useRunnerTypes(projectName);
   const { data: integrationsStatus } = useIntegrationsStatus();
   const { data: ootbWorkflows = [], isLoading: workflowsLoading } = useOOTBWorkflows(projectName);
@@ -183,6 +196,12 @@ export function CreateSessionDialog({
   const onSubmit = async (values: FormValues) => {
     if (!projectName) return;
 
+    // Validate agent options form before including it in the request
+    if (advancedAgentOptions) {
+      const agentOptionsValid = await agentOptionsForm.trigger();
+      if (!agentOptionsValid) return;
+    }
+
     const request: CreateAgenticSessionRequest = {
       runnerType: values.runnerType,
       llmSettings: {
@@ -202,6 +221,10 @@ export function CreateSessionDialog({
     }
     if (workflowSelection) {
       request.activeWorkflow = workflowSelection;
+    }
+
+    if (advancedAgentOptions) {
+      request.agentOptions = agentOptionsForm.getValues();
     }
 
     createSessionMutation.mutate(
@@ -230,6 +253,7 @@ export function CreateSessionDialog({
       setCustomGitUrl("");
       setCustomBranch("main");
       setCustomPath("");
+      agentOptionsForm.reset();
     }
   };
 
@@ -241,7 +265,7 @@ export function CreateSessionDialog({
     <>
       <div onClick={handleTriggerClick}>{trigger}</div>
       <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="w-full max-w-3xl min-w-[650px]">
+        <DialogContent className="w-full max-w-3xl sm:min-w-[650px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Session</DialogTitle>
           </DialogHeader>
@@ -449,6 +473,24 @@ export function CreateSessionDialog({
                   </FormItem>
                 )}
               />
+
+              {/* Advanced Agent Options (behind feature flag) */}
+              {advancedAgentOptions && (
+                <Collapsible className="w-full space-y-2">
+                  <CollapsibleTrigger className="flex items-center justify-between w-full">
+                    <FormLabel className="cursor-pointer">Advanced Agent Options</FormLabel>
+                    <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="space-y-2 pt-2">
+                    <Form {...agentOptionsForm}>
+                      <AgentOptionsFields
+                        form={agentOptionsForm}
+                        disabled={createSessionMutation.isPending}
+                      />
+                    </Form>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
 
               {/* Integration auth status */}
               <Collapsible className="w-full space-y-2">

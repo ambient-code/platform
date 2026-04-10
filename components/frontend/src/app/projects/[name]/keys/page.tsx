@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ErrorMessage } from '@/components/error-message';
@@ -20,6 +21,7 @@ import { useKeys, useCreateKey, useDeleteKey } from '@/services/queries';
 import { toast } from 'sonner';
 import type { CreateKeyRequest } from '@/services/api/keys';
 import { ROLE_DEFINITIONS } from '@/lib/role-colors';
+import { EXPIRATION_OPTIONS, DEFAULT_EXPIRATION } from '@/lib/constants';
 
 export default function ProjectKeysPage() {
   const params = useParams();
@@ -35,6 +37,7 @@ export default function ProjectKeysPage() {
   const [newKeyName, setNewKeyName] = useState('');
   const [newKeyDesc, setNewKeyDesc] = useState('');
   const [newKeyRole, setNewKeyRole] = useState<'view' | 'edit' | 'admin'>('edit');
+  const [newKeyExpiration, setNewKeyExpiration] = useState(DEFAULT_EXPIRATION);
   const [oneTimeKey, setOneTimeKey] = useState<string | null>(null);
   const [oneTimeKeyName, setOneTimeKeyName] = useState<string>('');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -47,6 +50,7 @@ export default function ProjectKeysPage() {
       name: newKeyName.trim(),
       description: newKeyDesc.trim() || undefined,
       role: newKeyRole,
+      expirationSeconds: Number(newKeyExpiration),
     };
 
     createKeyMutation.mutate(
@@ -58,6 +62,7 @@ export default function ProjectKeysPage() {
           setOneTimeKeyName(data.name);
           setNewKeyName('');
           setNewKeyDesc('');
+          setNewKeyExpiration(DEFAULT_EXPIRATION);
           setShowCreate(false);
         },
         onError: (error) => {
@@ -65,7 +70,7 @@ export default function ProjectKeysPage() {
         },
       }
     );
-  }, [newKeyName, newKeyDesc, newKeyRole, projectName, createKeyMutation]);
+  }, [newKeyName, newKeyDesc, newKeyRole, newKeyExpiration, projectName, createKeyMutation]);
 
   const openDeleteDialog = useCallback((keyId: string, keyName: string) => {
     setKeyToDelete({ id: keyId, name: keyName });
@@ -285,6 +290,21 @@ export default function ProjectKeysPage() {
                   );
                 })}
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="key-expiration">Token Lifetime</Label>
+              <Select value={newKeyExpiration} onValueChange={setNewKeyExpiration} disabled={createKeyMutation.isPending}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select lifetime" />
+                </SelectTrigger>
+                <SelectContent>
+                  {EXPIRATION_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>

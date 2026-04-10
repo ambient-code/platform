@@ -47,6 +47,14 @@ const (
 	EventTypeToolCallArgs  = "TOOL_CALL_ARGS"
 	EventTypeToolCallEnd   = "TOOL_CALL_END"
 
+	// Reasoning events (streaming)
+	// See: https://docs.ag-ui.com/concepts/events#reasoning-events
+	EventTypeReasoningStart          = "REASONING_START"
+	EventTypeReasoningEnd            = "REASONING_END"
+	EventTypeReasoningMessageStart   = "REASONING_MESSAGE_START"
+	EventTypeReasoningMessageContent = "REASONING_MESSAGE_CONTENT"
+	EventTypeReasoningMessageEnd     = "REASONING_MESSAGE_END"
+
 	// State management events
 	EventTypeStateSnapshot = "STATE_SNAPSHOT"
 	EventTypeStateDelta    = "STATE_DELTA"
@@ -84,6 +92,7 @@ const (
 	RoleSystem    = "system"
 	RoleTool      = "tool"
 	RoleDeveloper = "developer"
+	RoleReasoning = "reasoning"
 	RoleActivity  = "activity"
 )
 

@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"ambient-code-operator/internal/config"
@@ -27,12 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	intstr "k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/util/retry"
-)
-
-// Track which pods are currently being monitored to prevent duplicate goroutines
-var (
-	monitoredPods   = make(map[string]bool)
-	monitoredPodsMu sync.Mutex
 )
 
 // handleAgenticSessionEvent is the legacy reconciliation function containing all session
@@ -306,7 +299,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		// Also cleanup ambient-vertex secret when session is stopped
 		deleteCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		if err := deleteAmbientVertexSecret(deleteCtx, sessionNamespace); err != nil {
+		if err := deleteAmbientVertexSecret(deleteCtx, sessionNamespace, name); err != nil {
 			log.Printf("Warning: Failed to cleanup %s secret from %s: %v", types.AmbientVertexSecretName, sessionNamespace, err)
 			// Continue - session cleanup is still successful
 		}
@@ -314,9 +307,13 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		// Cleanup Langfuse secret when session is stopped
 		// This only deletes secrets copied by the operator (with CopiedFromAnnotation).
 		// The platform-wide ambient-admin-langfuse-secret in the operator namespace is never deleted.
-		if err := deleteAmbientLangfuseSecret(deleteCtx, sessionNamespace); err != nil {
+		if err := deleteAmbientLangfuseSecret(deleteCtx, sessionNamespace, name); err != nil {
 			log.Printf("Warning: Failed to cleanup ambient-admin-langfuse-secret from %s: %v", sessionNamespace, err)
 			// Continue - session cleanup is still successful
+		}
+
+		if err := deleteAmbientMlflowObservabilitySecret(deleteCtx, sessionNamespace, name); err != nil {
+			log.Printf("Warning: Failed to cleanup ambient-admin-mlflow-observability-secret from %s: %v", sessionNamespace, err)
 		}
 
 		return nil
@@ -391,19 +388,9 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		podName := fmt.Sprintf("%s-runner", name)
 		_, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), podName, v1.GetOptions{})
 		if err == nil {
-			// Pod exists, start monitoring if not already running
-			monitorKey := fmt.Sprintf("%s/%s", sessionNamespace, podName)
-			monitoredPodsMu.Lock()
-			alreadyMonitoring := monitoredPods[monitorKey]
-			if !alreadyMonitoring {
-				monitoredPods[monitorKey] = true
-				monitoredPodsMu.Unlock()
-				log.Printf("Resuming monitoring for existing pod %s (session in Creating phase)", podName)
-				go monitorPod(podName, name, sessionNamespace)
-			} else {
-				monitoredPodsMu.Unlock()
-				log.Printf("Pod %s already being monitored, skipping duplicate", podName)
-			}
+			// Pod exists and session is in Creating phase — controller-runtime
+			// reconciler will handle monitoring via reconcileCreating/reconcileRunning.
+			log.Printf("Pod %s exists for Creating session %s, controller-runtime will reconcile", podName, name)
 			return nil
 		} else if errors.IsNotFound(err) {
 			// Pod doesn't exist but phase is Creating - check if this is due to a stop request
@@ -435,6 +422,17 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 				_ = statusPatch.Apply()
 				_ = clearAnnotation(sessionNamespace, name, "ambient-code.io/desired-phase")
 				_ = clearAnnotation(sessionNamespace, name, "ambient-code.io/stop-requested-at")
+
+				// Cleanup copied observability secrets (may have been copied in a prior reconciliation)
+				cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cleanupCancel()
+				if err := deleteAmbientLangfuseSecret(cleanupCtx, sessionNamespace, name); err != nil {
+					log.Printf("Warning: Failed to cleanup langfuse secret from %s during Creating→Stopped: %v", sessionNamespace, err)
+				}
+				if err := deleteAmbientMlflowObservabilitySecret(cleanupCtx, sessionNamespace, name); err != nil {
+					log.Printf("Warning: Failed to cleanup mlflow secret from %s during Creating→Stopped: %v", sessionNamespace, err)
+				}
+
 				return nil
 			}
 
@@ -591,6 +589,37 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		}
 	} else {
 		log.Printf("Langfuse disabled, skipping secret copy")
+	}
+
+	ambientMlflowObsSecretCopied := false
+	mlflowK8sAuth := false
+	mlflowTracingEnabled := os.Getenv("MLFLOW_TRACING_ENABLED") != "" && os.Getenv("MLFLOW_TRACING_ENABLED") != "0" && os.Getenv("MLFLOW_TRACING_ENABLED") != "false"
+
+	if mlflowTracingEnabled {
+		const mlflowObsSecretName = "ambient-admin-mlflow-observability-secret"
+		if mlflowSecret, err := config.K8sClient.CoreV1().Secrets(operatorNamespace).Get(context.TODO(), mlflowObsSecretName, v1.GetOptions{}); err == nil {
+			log.Printf("Found %s in %s, copying to %s", mlflowObsSecretName, operatorNamespace, sessionNamespace)
+			copyCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if err := copySecretToNamespace(copyCtx, mlflowSecret, sessionNamespace, currentObj); err != nil {
+				log.Printf("Warning: Failed to copy MLflow observability secret: %v. MLflow tracing will be disabled for this session.", err)
+			} else {
+				ambientMlflowObsSecretCopied = true
+				if authVal, ok := mlflowSecret.Data["MLFLOW_TRACKING_AUTH"]; ok {
+					switch strings.TrimSpace(string(authVal)) {
+					case "kubernetes", "kubernetes-namespaced":
+						mlflowK8sAuth = true
+					}
+				}
+				log.Printf("Successfully copied %s to %s", mlflowObsSecretName, sessionNamespace)
+			}
+		} else if !errors.IsNotFound(err) {
+			log.Printf("Warning: Failed to check for %s in %s: %v. MLflow tracing may be disabled for this session.", mlflowObsSecretName, operatorNamespace, err)
+		} else {
+			log.Printf("Warning: MLFLOW_TRACING_ENABLED is set but %s not found in namespace %s. MLflow tracing will be disabled for this session.", mlflowObsSecretName, operatorNamespace)
+		}
+	} else {
+		log.Printf("MLflow tracing disabled, skipping MLflow observability secret copy")
 	}
 
 	// Create a Kubernetes Pod for this AgenticSession
@@ -785,7 +814,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		stateSyncImage = runtime.Sandbox.StateSyncImage
 	}
 
-	runnerPort := int32(defaultRunnerPort)
+	runnerPort := int32(DefaultRunnerPort)
 	if runtime != nil && runtime.Container.Port > 0 {
 		runnerPort = int32(runtime.Container.Port)
 	}
@@ -819,7 +848,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		},
 		Limits: corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("2000m"),
-			corev1.ResourceMemory: resource.MustParse("4Gi"),
+			corev1.ResourceMemory: resource.MustParse("8Gi"),
 		},
 	}
 	if runtime != nil && runtime.Container.Resources != nil {
@@ -861,12 +890,31 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		}
 	}
 
+	// Apply annotation-based override to the runner token secret name if present.
+	// The variable was declared above at first use (line 585); this overrides the
+	// default name when the session CR carries the runner-token-secret annotation.
+	if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {
+		if anns, ok := meta["annotations"].(map[string]interface{}); ok {
+			if v, ok := anns["ambient-code.io/runner-token-secret"].(string); ok && strings.TrimSpace(v) != "" {
+				runnerTokenSecretName = strings.TrimSpace(v)
+			}
+		}
+	}
+
 	// Create the Pod directly (no Job wrapper for faster startup)
+	runnerSATokenAutomount := false
+	var runnerPodSAName string
+	if ambientMlflowObsSecretCopied && mlflowK8sAuth {
+		// MLflow MLFLOW_TRACKING_AUTH=kubernetes-namespaced reads token + namespace from
+		// /var/run/secrets/kubernetes.io/serviceaccount/ (requires automount + session SA).
+		runnerSATokenAutomount = true
+		runnerPodSAName = fmt.Sprintf("ambient-session-%s", name)
+	}
 	podSpec := corev1.PodSpec{
 		RestartPolicy:                 corev1.RestartPolicyNever,
 		TerminationGracePeriodSeconds: &terminationGrace,
-		// Explicitly set service account for pod creation permissions
-		AutomountServiceAccountToken: boolPtr(false),
+		ServiceAccountName:            runnerPodSAName,
+		AutomountServiceAccountToken:  boolPtr(runnerSATokenAutomount),
 	}
 
 	// Workspace volume: only if persistence != persistenceNone OR repos are seeded
@@ -912,6 +960,9 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 						{Name: "AWS_ACCESS_KEY_ID", Value: s3AccessKey},
 						{Name: "AWS_SECRET_ACCESS_KEY", Value: s3SecretKey},
 						// NOTE: GIT_USER_NAME and GIT_USER_EMAIL removed - auto-derived from GitHub/GitLab token via API
+						// Backend API URL so init container can fetch git tokens for cloning private repos
+						{Name: "BACKEND_API_URL", Value: fmt.Sprintf("http://backend-service.%s.svc.cluster.local:8080/api", appConfig.BackendNamespace)},
+						{Name: "PROJECT_NAME", Value: sessionNamespace},
 					}
 
 					// Add repos JSON if present
@@ -933,22 +984,12 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 						}
 					}
 
-					// Add GitHub token for private repos
-					secretName := ""
-					if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {
-						if anns, ok := meta["annotations"].(map[string]interface{}); ok {
-							if v, ok := anns["ambient-code.io/runner-token-secret"].(string); ok && strings.TrimSpace(v) != "" {
-								secretName = strings.TrimSpace(v)
-							}
-						}
-					}
-					if secretName == "" {
-						secretName = fmt.Sprintf("ambient-runner-token-%s", name)
-					}
+					// Inject BOT_TOKEN for the init container (runs once at pod startup
+					// with a freshly minted token, so env var injection is sufficient here).
 					base = append(base, corev1.EnvVar{
 						Name: "BOT_TOKEN",
 						ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+							LocalObjectReference: corev1.LocalObjectReference{Name: runnerTokenSecretName},
 							Key:                  "k8s-token",
 						}},
 					})
@@ -1032,6 +1073,25 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 					base = append(base, corev1.EnvVar{Name: "MCP_CONFIG_FILE", Value: mcpConfigFile})
 				}
 
+				// Pass custom MCP server configuration from session spec
+				if mcpServers, ok := spec["mcpServers"].(map[string]interface{}); ok && len(mcpServers) > 0 {
+					if b, err := json.Marshal(mcpServers); err == nil {
+						base = append(base, corev1.EnvVar{Name: "CUSTOM_MCP_SERVERS", Value: string(b)})
+					}
+				}
+
+				// Merge project-level MCP defaults from ProjectSettings
+				psGVR := types.GetProjectSettingsResource()
+				if ps, psErr := config.DynamicClient.Resource(psGVR).Namespace(sessionNamespace).Get(context.TODO(), "projectsettings", v1.GetOptions{}); psErr == nil {
+					if psSpec, ok := ps.Object["spec"].(map[string]interface{}); ok {
+						if projectMCP, ok := psSpec["mcpServers"].(map[string]interface{}); ok && len(projectMCP) > 0 {
+							if b, err := json.Marshal(projectMCP); err == nil {
+								base = append(base, corev1.EnvVar{Name: "PROJECT_MCP_SERVERS", Value: string(b)})
+							}
+						}
+					}
+				}
+
 				// Add user context for observability and auditing (Langfuse userId, logs, etc.)
 				if userID != "" {
 					base = append(base, corev1.EnvVar{Name: "USER_ID", Value: userID})
@@ -1110,6 +1170,73 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 					log.Printf("Langfuse env vars configured via secretKeyRef for session %s", name)
 				}
 
+				const mlflowObsSecretName = "ambient-admin-mlflow-observability-secret"
+				if ambientMlflowObsSecretCopied {
+					base = append(base,
+						corev1.EnvVar{
+							Name: "MLFLOW_TRACING_ENABLED",
+							ValueFrom: &corev1.EnvVarSource{
+								SecretKeyRef: &corev1.SecretKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{Name: mlflowObsSecretName},
+									Key:                  "MLFLOW_TRACING_ENABLED",
+									Optional:             boolPtr(true),
+								},
+							},
+						},
+						corev1.EnvVar{
+							Name: "MLFLOW_TRACKING_URI",
+							ValueFrom: &corev1.EnvVarSource{
+								SecretKeyRef: &corev1.SecretKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{Name: mlflowObsSecretName},
+									Key:                  "MLFLOW_TRACKING_URI",
+									Optional:             boolPtr(true),
+								},
+							},
+						},
+						corev1.EnvVar{
+							Name: "MLFLOW_TRACKING_AUTH",
+							ValueFrom: &corev1.EnvVarSource{
+								SecretKeyRef: &corev1.SecretKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{Name: mlflowObsSecretName},
+									Key:                  "MLFLOW_TRACKING_AUTH",
+									Optional:             boolPtr(true),
+								},
+							},
+						},
+						corev1.EnvVar{
+							Name: "MLFLOW_EXPERIMENT_NAME",
+							ValueFrom: &corev1.EnvVarSource{
+								SecretKeyRef: &corev1.SecretKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{Name: mlflowObsSecretName},
+									Key:                  "MLFLOW_EXPERIMENT_NAME",
+									Optional:             boolPtr(true),
+								},
+							},
+						},
+						corev1.EnvVar{
+							Name: "MLFLOW_WORKSPACE",
+							ValueFrom: &corev1.EnvVarSource{
+								SecretKeyRef: &corev1.SecretKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{Name: mlflowObsSecretName},
+									Key:                  "MLFLOW_WORKSPACE",
+									Optional:             boolPtr(true),
+								},
+							},
+						},
+						corev1.EnvVar{
+							Name: "OBSERVABILITY_BACKENDS",
+							ValueFrom: &corev1.EnvVarSource{
+								SecretKeyRef: &corev1.SecretKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{Name: mlflowObsSecretName},
+									Key:                  "OBSERVABILITY_BACKENDS",
+									Optional:             boolPtr(true),
+								},
+							},
+						},
+					)
+					log.Printf("MLflow observability env vars configured via secretKeyRef for session %s", name)
+				}
+
 				// Add Vertex AI configuration only if enabled
 				if vertexEnabled {
 					base = append(base,
@@ -1132,33 +1259,19 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 					log.Printf("Session %s: passing PARENT_SESSION_ID=%s to runner", name, parentSessionID)
 				}
 
-				// Add IS_RESUME if this session has been started before
-				if status, found, _ := unstructured.NestedMap(currentObj.Object, "status"); found {
+				// Add IS_RESUME if this session has been started before,
+				// unless force-execute-prompt is set (scheduled session reuse wants the prompt to run).
+				forceExecutePrompt := annotations["ambient-code.io/force-execute-prompt"] == "true"
+				if forceExecutePrompt {
+					log.Printf("Session %s: force-execute-prompt annotation set, skipping IS_RESUME", name)
+					_ = clearAnnotation(sessionNamespace, name, "ambient-code.io/force-execute-prompt")
+				} else if status, found, _ := unstructured.NestedMap(currentObj.Object, "status"); found {
 					if startTime, ok := status["startTime"].(string); ok && startTime != "" {
 						base = append(base, corev1.EnvVar{Name: "IS_RESUME", Value: "true"})
 						log.Printf("Session %s: marking as resume (IS_RESUME=true, startTime=%s)", name, startTime)
 					}
 				}
 
-				// Inject runner token secret
-				secretName := ""
-				if meta, ok := currentObj.Object["metadata"].(map[string]interface{}); ok {
-					if anns, ok := meta["annotations"].(map[string]interface{}); ok {
-						if v, ok := anns["ambient-code.io/runner-token-secret"].(string); ok && strings.TrimSpace(v) != "" {
-							secretName = strings.TrimSpace(v)
-						}
-					}
-				}
-				if secretName == "" {
-					secretName = fmt.Sprintf("ambient-runner-token-%s", name)
-				}
-				base = append(base, corev1.EnvVar{
-					Name: "BOT_TOKEN",
-					ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-						Key:                  "k8s-token",
-					}},
-				})
 				// Add CR-provided envs last (override base when same key)
 				if spec, ok := currentObj.Object["spec"].(map[string]interface{}); ok {
 					if repos, ok := spec["repos"].([]interface{}); ok && len(repos) > 0 {
@@ -1350,7 +1463,31 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	// This ensures fresh tokens for long-running sessions and automatic refresh
 	log.Printf("Session %s will fetch credentials at runtime from backend API", name)
 
-	// Do not mount runner Secret volume; runner fetches tokens on demand
+	// Mount the runner-token Secret as a file so kubelet automatically refreshes
+	// it when the Secret is updated (env vars are frozen at pod start and cannot
+	// reflect token rotations for long-running sessions).
+	pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+		Name: "runner-token",
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: runnerTokenSecretName,
+				Items: []corev1.KeyToPath{
+					{Key: "k8s-token", Path: "bot-token"},
+				},
+			},
+		},
+	})
+	for i := range pod.Spec.Containers {
+		if pod.Spec.Containers[i].Name == "ambient-code-runner" {
+			pod.Spec.Containers[i].VolumeMounts = append(pod.Spec.Containers[i].VolumeMounts, corev1.VolumeMount{
+				Name:      "runner-token",
+				MountPath: "/var/run/secrets/ambient",
+				ReadOnly:  true,
+			})
+			log.Printf("Mounted runner-token secret to /var/run/secrets/ambient in runner container for session %s", name)
+			break
+		}
+	}
 
 	// Create the pod
 	createdPod, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Create(context.TODO(), pod, v1.CreateOptions{})
@@ -1400,9 +1537,13 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 
 	// Create session Service pointing to the runner's FastAPI server
 	// Backend proxies both AG-UI and content requests to this service endpoint
+	svcName := fmt.Sprintf("session-%s", name)
+	if len(svcName) > 63 {
+		return fmt.Errorf("session name %q too long: derived Service name %q is %d chars (max 63)", name, svcName, len(svcName))
+	}
 	aguiSvc := &corev1.Service{
 		ObjectMeta: v1.ObjectMeta{
-			Name:      fmt.Sprintf("session-%s", name),
+			Name:      svcName,
 			Namespace: sessionNamespace,
 			Labels: map[string]string{
 				"app":             "ambient-code",
@@ -1430,21 +1571,11 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	if _, serr := config.K8sClient.CoreV1().Services(sessionNamespace).Create(context.TODO(), aguiSvc, v1.CreateOptions{}); serr != nil && !errors.IsAlreadyExists(serr) {
 		log.Printf("Failed to create AG-UI service for %s: %v", name, serr)
 	} else {
-		log.Printf("Created AG-UI service session-%s for AgenticSession %s", name, name)
+		log.Printf("Created AG-UI service %s for AgenticSession %s", svcName, name)
 	}
 
-	// Start monitoring the pod (only if not already being monitored)
-	monitorKey := fmt.Sprintf("%s/%s", sessionNamespace, podName)
-	monitoredPodsMu.Lock()
-	alreadyMonitoring := monitoredPods[monitorKey]
-	if !alreadyMonitoring {
-		monitoredPods[monitorKey] = true
-		monitoredPodsMu.Unlock()
-		go monitorPod(podName, name, sessionNamespace)
-	} else {
-		monitoredPodsMu.Unlock()
-		log.Printf("Pod %s already being monitored, skipping duplicate goroutine", podName)
-	}
+	// Pod created — controller-runtime reconciler will handle monitoring
+	// via reconcileCreating (pod startup) and reconcileRunning (steady state).
 
 	return nil
 }
@@ -1480,18 +1611,39 @@ func appendNonConflictingEnvVars(base []corev1.EnvVar, extra []corev1.EnvVar) []
 	return base
 }
 
+// operatorProtectedEnvVars lists env var names that the operator manages via
+// plain Value (not ValueFrom). These must not be overridden by user-supplied
+// spec.environmentVariables.
+var operatorProtectedEnvVars = map[string]struct{}{
+	"USE_VERTEX":             {},
+	"CLAUDE_CODE_USE_VERTEX": {},
+}
+
 // replaceOrAppendEnvVars merges extra into base: replaces existing entries by name,
 // or appends if the name does not exist. Used for the runner container where
 // user-provided overrides are intentional.
+// Entries in base that use ValueFrom (e.g. SecretKeyRef from the operator) or that
+// are in operatorProtectedEnvVars are never replaced so spec.environmentVariables
+// cannot override platform-injected configuration.
 func replaceOrAppendEnvVars(base []corev1.EnvVar, extra []corev1.EnvVar) []corev1.EnvVar {
 	for _, ev := range extra {
 		replaced := false
 		for i := range base {
-			if base[i].Name == ev.Name {
-				base[i].Value = ev.Value
+			if base[i].Name != ev.Name {
+				continue
+			}
+			if base[i].ValueFrom != nil {
 				replaced = true
 				break
 			}
+			if _, protected := operatorProtectedEnvVars[base[i].Name]; protected {
+				replaced = true
+				break
+			}
+			base[i].Value = ev.Value
+			base[i].ValueFrom = ev.ValueFrom
+			replaced = true
+			break
 		}
 		if !replaced {
 			base = append(base, ev)
@@ -1821,228 +1973,6 @@ func reconcileActiveWorkflowWithPatch(sessionNamespace, sessionName string, spec
 	return nil
 }
 
-func monitorPod(podName, sessionName, sessionNamespace string) {
-	monitorKey := fmt.Sprintf("%s/%s", sessionNamespace, podName)
-
-	// Remove from monitoring map when this goroutine exits
-	defer func() {
-		monitoredPodsMu.Lock()
-		delete(monitoredPods, monitorKey)
-		monitoredPodsMu.Unlock()
-		log.Printf("Stopped monitoring pod %s (goroutine exiting)", podName)
-	}()
-
-	log.Printf("Starting pod monitoring for %s (session: %s/%s)", podName, sessionNamespace, sessionName)
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		// Create status accumulator for this tick - all updates batched into single API call
-		statusPatch := NewStatusPatch(sessionNamespace, sessionName)
-
-		gvr := types.GetAgenticSessionResource()
-		sessionObj, err := config.DynamicClient.Resource(gvr).Namespace(sessionNamespace).Get(context.TODO(), sessionName, v1.GetOptions{})
-		if err != nil {
-			if errors.IsNotFound(err) {
-				log.Printf("AgenticSession %s deleted; stopping job monitoring", sessionName)
-				return
-			}
-			log.Printf("Failed to fetch AgenticSession %s: %v", sessionName, err)
-			continue
-		}
-
-		// Check if session was stopped or is stopping - exit monitor loop immediately
-		// This prevents the monitor from overwriting phase=Stopping with phase=Failed
-		// when the pod exits with non-zero (e.g. state-sync exit 137 during termination)
-		sessionStatus, _, _ := unstructured.NestedMap(sessionObj.Object, "status")
-		if sessionStatus != nil {
-			if currentPhase, ok := sessionStatus["phase"].(string); ok {
-				if currentPhase == "Stopped" || currentPhase == "Stopping" {
-					log.Printf("AgenticSession %s phase is %s; stopping pod monitoring", sessionName, currentPhase)
-					return
-				}
-			}
-		}
-		// Also check desired-phase annotation as a belt-and-braces guard
-		// (the annotation is set before phase transitions, so catches early race)
-		sessionAnnotations := sessionObj.GetAnnotations()
-		if sessionAnnotations != nil {
-			if dp := strings.TrimSpace(sessionAnnotations["ambient-code.io/desired-phase"]); dp == "Stopped" {
-				log.Printf("AgenticSession %s has desired-phase=Stopped; stopping pod monitoring", sessionName)
-				return
-			}
-		}
-
-		// Check inactivity timeout for running sessions
-		if shouldAutoStop(sessionObj) {
-			log.Printf("[Inactivity] Session %s/%s: idle beyond timeout, triggering auto-stop", sessionNamespace, sessionName)
-			if err := triggerInactivityStop(sessionNamespace, sessionName); err != nil {
-				log.Printf("[Inactivity] Failed to auto-stop %s/%s: %v", sessionNamespace, sessionName, err)
-				continue // Retry on next tick instead of abandoning the monitor
-			}
-			return
-		}
-
-		if err := ensureFreshRunnerToken(context.TODO(), sessionObj); err != nil {
-			log.Printf("Failed to refresh runner token for %s/%s: %v", sessionNamespace, sessionName, err)
-		}
-
-		pod, err := config.K8sClient.CoreV1().Pods(sessionNamespace).Get(context.TODO(), podName, v1.GetOptions{})
-		if err != nil {
-			if errors.IsNotFound(err) {
-				log.Printf("Pod %s deleted; stopping monitor", podName)
-				return
-			}
-			log.Printf("Error fetching pod %s: %v", podName, err)
-			continue
-		}
-		// Note: We don't store pod name in status (pods are ephemeral, can be recreated)
-		// Use k8s-resources endpoint or kubectl for live pod info
-
-		if pod.Spec.NodeName != "" {
-			statusPatch.AddCondition(conditionUpdate{Type: conditionPodScheduled, Status: "True", Reason: "Scheduled", Message: fmt.Sprintf("Scheduled on %s", pod.Spec.NodeName)})
-		} else {
-			surfacePodSchedulingFailure(pod, statusPatch)
-		}
-
-		if pod.Status.Phase == corev1.PodSucceeded {
-			statusPatch.SetField("phase", "Completed")
-			statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
-			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "Completed", Message: "Session finished"})
-			_ = statusPatch.Apply()
-			_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
-			return
-		}
-
-		if pod.Status.Phase == corev1.PodFailed {
-			// Collect detailed error message from pod and containers
-			errorMsg := pod.Status.Message
-			if errorMsg == "" {
-				errorMsg = pod.Status.Reason
-			}
-
-			// Check init containers for errors
-			for _, initStatus := range pod.Status.InitContainerStatuses {
-				if initStatus.State.Terminated != nil && initStatus.State.Terminated.ExitCode != 0 {
-					msg := fmt.Sprintf("Init container %s failed (exit %d): %s",
-						initStatus.Name,
-						initStatus.State.Terminated.ExitCode,
-						initStatus.State.Terminated.Message)
-					if initStatus.State.Terminated.Reason != "" {
-						msg = fmt.Sprintf("%s - %s", msg, initStatus.State.Terminated.Reason)
-					}
-					errorMsg = msg
-					break
-				}
-				if initStatus.State.Waiting != nil && initStatus.State.Waiting.Reason != "" {
-					errorMsg = fmt.Sprintf("Init container %s: %s - %s",
-						initStatus.Name,
-						initStatus.State.Waiting.Reason,
-						initStatus.State.Waiting.Message)
-					break
-				}
-			}
-
-			// Check main containers for errors if init passed
-			if errorMsg == "" || errorMsg == "PodFailed" {
-				for _, containerStatus := range pod.Status.ContainerStatuses {
-					if containerStatus.State.Terminated != nil && containerStatus.State.Terminated.ExitCode != 0 {
-						errorMsg = fmt.Sprintf("Container %s failed (exit %d): %s - %s",
-							containerStatus.Name,
-							containerStatus.State.Terminated.ExitCode,
-							containerStatus.State.Terminated.Reason,
-							containerStatus.State.Terminated.Message)
-						break
-					}
-					if containerStatus.State.Waiting != nil {
-						errorMsg = fmt.Sprintf("Container %s: %s - %s",
-							containerStatus.Name,
-							containerStatus.State.Waiting.Reason,
-							containerStatus.State.Waiting.Message)
-						break
-					}
-				}
-			}
-
-			if errorMsg == "" {
-				errorMsg = "Pod failed with unknown error"
-			}
-
-			log.Printf("Pod %s failed: %s", podName, errorMsg)
-			statusPatch.SetField("phase", "Failed")
-			statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
-			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "PodFailed", Message: errorMsg})
-			_ = statusPatch.Apply()
-			_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
-			return
-		}
-
-		runner := getContainerStatusByName(pod, "ambient-code-runner")
-		if runner == nil {
-			// Apply any accumulated changes (e.g., PodScheduled) before continuing
-			_ = statusPatch.Apply()
-			continue
-		}
-
-		if runner.State.Running != nil {
-			statusPatch.SetField("phase", "Running")
-			statusPatch.AddCondition(conditionUpdate{Type: conditionRunnerStarted, Status: "True", Reason: "ContainerRunning", Message: "Runner container is executing"})
-			statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "True", Reason: "Running", Message: "Session is running"})
-			_ = statusPatch.Apply()
-			continue
-		}
-
-		if runner.State.Waiting != nil {
-			waiting := runner.State.Waiting
-			errorStates := map[string]bool{"ImagePullBackOff": true, "ErrImagePull": true, "CrashLoopBackOff": true, "CreateContainerConfigError": true, "InvalidImageName": true}
-			if errorStates[waiting.Reason] {
-				msg := fmt.Sprintf("Runner waiting: %s - %s", waiting.Reason, waiting.Message)
-				statusPatch.SetField("phase", "Failed")
-				statusPatch.SetField("completionTime", time.Now().UTC().Format(time.RFC3339))
-				statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: waiting.Reason, Message: msg})
-				_ = statusPatch.Apply()
-				_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
-				return
-			}
-		}
-
-		if runner.State.Terminated != nil {
-			term := runner.State.Terminated
-			now := time.Now().UTC().Format(time.RFC3339)
-
-			statusPatch.SetField("completionTime", now)
-			switch term.ExitCode {
-			case 0:
-				statusPatch.SetField("phase", "Completed")
-				statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "Completed", Message: "Runner finished"})
-			case 2:
-				msg := fmt.Sprintf("Runner exited due to prerequisite failure: %s", term.Message)
-				statusPatch.SetField("phase", "Failed")
-				statusPatch.AddCondition(conditionUpdate{
-					Type:    conditionReady,
-					Status:  "False",
-					Reason:  "PrerequisiteFailed",
-					Message: msg,
-				})
-			default:
-				msg := fmt.Sprintf("Runner exited with code %d: %s", term.ExitCode, term.Reason)
-				if term.Message != "" {
-					msg = fmt.Sprintf("%s - %s", msg, term.Message)
-				}
-				statusPatch.SetField("phase", "Failed")
-				statusPatch.AddCondition(conditionUpdate{Type: conditionReady, Status: "False", Reason: "RunnerExit", Message: msg})
-			}
-
-			_ = statusPatch.Apply()
-			_ = deletePodAndPerPodService(sessionNamespace, podName, sessionName)
-			return
-		}
-
-		// Apply any accumulated changes at end of tick
-		_ = statusPatch.Apply()
-	}
-}
-
 // getContainerStatusByName returns the ContainerStatus for a given container name
 func getContainerStatusByName(pod *corev1.Pod, name string) *corev1.ContainerStatus {
 	for i := range pod.Status.ContainerStatuses {
@@ -2147,7 +2077,7 @@ func deletePodAndPerPodService(namespace, podName, sessionName string) error {
 	// Delete the ambient-vertex secret if it was copied by the operator
 	deleteCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if err := deleteAmbientVertexSecret(deleteCtx, namespace); err != nil {
+	if err := deleteAmbientVertexSecret(deleteCtx, namespace, sessionName); err != nil {
 		log.Printf("Failed to delete %s secret from %s: %v", types.AmbientVertexSecretName, namespace, err)
 		// Don't return error - this is a non-critical cleanup step
 	}
@@ -2155,9 +2085,13 @@ func deletePodAndPerPodService(namespace, podName, sessionName string) error {
 	// Delete the Langfuse secret if it was copied by the operator
 	// This only deletes secrets copied by the operator (with CopiedFromAnnotation).
 	// The platform-wide ambient-admin-langfuse-secret in the operator namespace is never deleted.
-	if err := deleteAmbientLangfuseSecret(deleteCtx, namespace); err != nil {
+	if err := deleteAmbientLangfuseSecret(deleteCtx, namespace, sessionName); err != nil {
 		log.Printf("Failed to delete ambient-admin-langfuse-secret from %s: %v", namespace, err)
 		// Don't return error - this is a non-critical cleanup step
+	}
+
+	if err := deleteAmbientMlflowObservabilitySecret(deleteCtx, namespace, sessionName); err != nil {
+		log.Printf("Failed to delete ambient-admin-mlflow-observability-secret from %s: %v", namespace, err)
 	}
 
 	// NOTE: PVC is kept for all sessions and only deleted via garbage collection
@@ -2281,7 +2215,9 @@ func copySecretToNamespace(ctx context.Context, sourceSecret *corev1.Secret, tar
 
 // deleteAmbientVertexSecret deletes the ambient-vertex secret from a namespace if it was copied
 // and no other active sessions in the namespace still need it.
-func deleteAmbientVertexSecret(ctx context.Context, namespace string) error {
+// excludeSessionName, if non-empty, is omitted when counting Running/Creating/Pending sessions
+// (e.g. the session currently being stopped still reports Running until status is patched).
+func deleteAmbientVertexSecret(ctx context.Context, namespace, excludeSessionName string) error {
 	secret, err := config.K8sClient.CoreV1().Secrets(namespace).Get(ctx, types.AmbientVertexSecretName, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -2308,6 +2244,9 @@ func deleteAmbientVertexSecret(ctx context.Context, namespace string) error {
 
 	activeCount := 0
 	for _, session := range sessions.Items {
+		if excludeSessionName != "" && session.GetName() == excludeSessionName {
+			continue
+		}
 		status, _, _ := unstructured.NestedMap(session.Object, "status")
 		phase := ""
 		if status != nil {
@@ -2337,7 +2276,8 @@ func deleteAmbientVertexSecret(ctx context.Context, namespace string) error {
 
 // deleteAmbientLangfuseSecret deletes the ambient-admin-langfuse-secret from a namespace if it was copied
 // and no other active sessions in the namespace still need it.
-func deleteAmbientLangfuseSecret(ctx context.Context, namespace string) error {
+// excludeSessionName, if non-empty, is omitted when counting active sessions (see deleteAmbientVertexSecret).
+func deleteAmbientLangfuseSecret(ctx context.Context, namespace, excludeSessionName string) error {
 	const langfuseSecretName = "ambient-admin-langfuse-secret"
 	secret, err := config.K8sClient.CoreV1().Secrets(namespace).Get(ctx, langfuseSecretName, v1.GetOptions{})
 	if err != nil {
@@ -2365,6 +2305,9 @@ func deleteAmbientLangfuseSecret(ctx context.Context, namespace string) error {
 
 	activeCount := 0
 	for _, session := range sessions.Items {
+		if excludeSessionName != "" && session.GetName() == excludeSessionName {
+			continue
+		}
 		status, _, _ := unstructured.NestedMap(session.Object, "status")
 		phase := ""
 		if status != nil {
@@ -2387,6 +2330,62 @@ func deleteAmbientLangfuseSecret(ctx context.Context, namespace string) error {
 	err = config.K8sClient.CoreV1().Secrets(namespace).Delete(ctx, langfuseSecretName, v1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("failed to delete %s secret: %w", langfuseSecretName, err)
+	}
+
+	return nil
+}
+
+// deleteAmbientMlflowObservabilitySecret deletes the copied MLflow observability secret from a
+// session namespace when no other active sessions need it (same rules as Langfuse secret).
+// excludeSessionName, if non-empty, is omitted when counting active sessions (see deleteAmbientVertexSecret).
+func deleteAmbientMlflowObservabilitySecret(ctx context.Context, namespace, excludeSessionName string) error {
+	const mlflowObsSecretName = "ambient-admin-mlflow-observability-secret"
+	secret, err := config.K8sClient.CoreV1().Secrets(namespace).Get(ctx, mlflowObsSecretName, v1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("error checking for %s secret: %w", mlflowObsSecretName, err)
+	}
+
+	if _, ok := secret.Annotations[types.CopiedFromAnnotation]; !ok {
+		log.Printf("%s secret in namespace %s was not copied by operator, not deleting", mlflowObsSecretName, namespace)
+		return nil
+	}
+
+	gvr := types.GetAgenticSessionResource()
+	sessions, err := config.DynamicClient.Resource(gvr).Namespace(namespace).List(ctx, v1.ListOptions{})
+	if err != nil {
+		log.Printf("Warning: failed to list sessions in namespace %s, skipping secret deletion: %v", namespace, err)
+		return nil
+	}
+
+	activeCount := 0
+	for _, session := range sessions.Items {
+		if excludeSessionName != "" && session.GetName() == excludeSessionName {
+			continue
+		}
+		status, _, _ := unstructured.NestedMap(session.Object, "status")
+		phase := ""
+		if status != nil {
+			if p, ok := status["phase"].(string); ok {
+				phase = p
+			}
+		}
+		if phase == "Running" || phase == "Creating" || phase == "Pending" {
+			activeCount++
+		}
+	}
+
+	if activeCount > 0 {
+		log.Printf("Skipping %s secret deletion in namespace %s: %d active session(s) may still need it", mlflowObsSecretName, namespace, activeCount)
+		return nil
+	}
+
+	log.Printf("Deleting copied %s secret from namespace %s (no active sessions)", mlflowObsSecretName, namespace)
+	err = config.K8sClient.CoreV1().Secrets(namespace).Delete(ctx, mlflowObsSecretName, v1.DeleteOptions{})
+	if err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to delete %s secret: %w", mlflowObsSecretName, err)
 	}
 
 	return nil
@@ -2428,11 +2427,19 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 
 	// Create ServiceAccount
 	saName := fmt.Sprintf("ambient-session-%s", sessionName)
+	saAnnotations := map[string]string{}
+	// Propagate the session owner's userId so the backend middleware
+	// (resolveServiceAccountFromToken) can resolve the human identity
+	// when this SA creates child sessions or calls credential APIs.
+	if ownerUID, found, _ := unstructured.NestedString(session.Object, "spec", "userContext", "userId"); found && ownerUID != "" {
+		saAnnotations["ambient-code.io/created-by-user-id"] = ownerUID
+	}
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: v1.ObjectMeta{
 			Name:            saName,
 			Namespace:       sessionNamespace,
 			Labels:          map[string]string{"app": "ambient-runner"},
+			Annotations:     saAnnotations,
 			OwnerReferences: []v1.OwnerReference{ownerRef},
 		},
 	}
@@ -2441,6 +2448,29 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 			return fmt.Errorf("create SA: %w", err)
 		}
 		log.Printf("[TokenProvision] ServiceAccount %s already exists", saName)
+		// Ensure the annotation is present on pre-existing SAs (e.g., restarts).
+		// Skip the update if the annotation is already correct.
+		if len(saAnnotations) > 0 {
+			existingSA, getErr := config.K8sClient.CoreV1().ServiceAccounts(sessionNamespace).Get(context.TODO(), saName, v1.GetOptions{})
+			if getErr != nil {
+				return fmt.Errorf("get SA for annotation update: %w", getErr)
+			}
+			needsUpdate := false
+			if existingSA.Annotations == nil {
+				existingSA.Annotations = make(map[string]string)
+			}
+			for k, v := range saAnnotations {
+				if existingSA.Annotations[k] != v {
+					existingSA.Annotations[k] = v
+					needsUpdate = true
+				}
+			}
+			if needsUpdate {
+				if _, updErr := config.K8sClient.CoreV1().ServiceAccounts(sessionNamespace).Update(context.TODO(), existingSA, v1.UpdateOptions{}); updErr != nil {
+					return fmt.Errorf("update SA annotations: %w", updErr)
+				}
+			}
+		}
 	}
 
 	// Create Role with least-privilege permissions
@@ -2467,6 +2497,13 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 				APIGroups: []string{""},
 				Resources: []string{"secrets"},
 				Verbs:     []string{"get"},
+			},
+			{
+				// Kubeflow-style MLflow workspace: server validates bearer token against Experiment CRs.
+				// Adjust apiGroup/resource if your distribution uses a different MLflow CRD.
+				APIGroups: []string{"mlflow.kubeflow.org"},
+				Resources: []string{"experiments"},
+				Verbs:     []string{"get", "list", "update"},
 			},
 		},
 	}

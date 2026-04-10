@@ -60,6 +60,7 @@ venv.bak/
 # Environment files
 .env
 .env.local
+components/frontend/.env.local
 .env.uat
 .dev-bootstrap.env
 
@@ -87,6 +88,10 @@ dmypy.json
 
 # Claude Code
 .claude/settings.local.json
+.claude/worktrees/
+
+# Git worktrees
+.worktrees/
 
 # mkdocs
 /site
@@ -119,6 +124,9 @@ reports/
 
 # Feedback loop runtime state
 scripts/feedback-loop/.last-run
+
+# SDK version bump transient output
+.sdk-bump-output/
 
 # Secrets (use .example templates instead)
 **/minio-credentials-secret.yaml

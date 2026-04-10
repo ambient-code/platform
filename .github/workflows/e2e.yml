@@ -31,7 +31,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Check for component changes
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -135,8 +135,7 @@ jobs:
         if [ "${{ needs.detect-changes.outputs.claude-runner }}" == "true" ]; then
           echo "Building ambient-runner (changed)..."
           docker build -t quay.io/ambient_code/vteam_claude_runner:e2e-test \
-            -f components/runners/ambient-runner/Dockerfile \
-            components/runners
+            components/runners/ambient-runner
         else
           echo "Claude-runner unchanged, pulling latest..."
           docker pull quay.io/ambient_code/vteam_claude_runner:latest

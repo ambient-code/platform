@@ -37,6 +37,7 @@ The Ambient Code Platform consists of these containerized components:
 **Commands:**
 - `make kind-up` - Create cluster, deploy with Quay.io images
 - `make kind-up LOCAL_IMAGES=true` - Create cluster, build and load local images
+- `make kind-up LOCAL_IMAGES=true LOCAL_VERTEX=true` - Same but with Vertex AI enabled (reads `ANTHROPIC_VERTEX_PROJECT_ID`, `CLOUD_ML_REGION`, `GOOGLE_APPLICATION_CREDENTIALS` from shell env)
 - `make kind-down` - Destroy cluster
 - `make kind-rebuild` - Rebuild all components, reload images, restart
 - `make kind-port-forward` - Setup port forwarding
@@ -50,6 +51,54 @@ The Ambient Code Platform consists of these containerized components:
 - Test user auto-created with token in `.env.test`
 
 **Access:** `http://localhost:$KIND_FWD_FRONTEND_PORT` (run `make kind-status` for assigned ports)
+
+## CRITICAL: Always Use `make kind-up`, Never Manually Recover
+
+**If `make kind-up` fails partway through, fix the root cause and re-run `make kind-up` (after `make kind-down`).** Do NOT manually patch deployments, create buckets, or set env vars to recover — the Makefile handles MinIO bucket creation, Vertex AI setup, token extraction, and port forwarding in a specific order. Manually recovering individual steps is slower, error-prone, and skips steps you don't know about.
+
+## Vertex AI / GCP Configuration
+
+When the user needs Vertex AI (Claude via GCP) instead of Anthropic API:
+
+```bash
+# One-command setup — reads env vars from shell profile
+make kind-up LOCAL_IMAGES=true LOCAL_VERTEX=true
+```
+
+**Prerequisites:** These env vars must be set in the user's shell (check `~/.bashrc` or `~/.zshrc`):
+- `ANTHROPIC_VERTEX_PROJECT_ID` — GCP project ID
+- `CLOUD_ML_REGION` — Vertex AI region (e.g., `us-east5`)
+- `GOOGLE_APPLICATION_CREDENTIALS` — Path to service account JSON or ADC file
+
+The `LOCAL_VERTEX=true` flag runs `scripts/setup-vertex-kind.sh` which creates the `ambient-vertex` secret, patches `operator-config`, and restarts the operator. **Do not do these steps manually.**
+
+## Feature Flags (Unleash)
+
+The platform uses **Unleash** for feature flags, running in-cluster. Some endpoints are gated behind feature flags and will return 404 if the flag is not enabled. If you hit an unexpected 404 on an endpoint that exists in the code, check whether it's behind a `requireFeatureFlag()` middleware and ensure the flag is created and enabled in Unleash (admin token: `*:*.unleash-admin-token`, API at `http://localhost:4242` inside the cluster).
+
+## Custom Workflow Branches
+
+To test workflow changes from a different branch of `ambient-code/workflows`:
+
+```bash
+kubectl set env deployment/backend-api -n ambient-code \
+  OOTB_WORKFLOWS_BRANCH="your-branch-name"
+kubectl rollout restart deployment/backend-api -n ambient-code
+```
+
+The backend caches workflows for 5 minutes. Restart clears the cache immediately.
+
+## Google OAuth for Integrations
+
+Testing Google Drive or other Google integrations requires OAuth credentials on the backend:
+
+```bash
+kubectl set env deployment/backend-api -n ambient-code \
+  GOOGLE_OAUTH_CLIENT_ID="your-client-id" \
+  GOOGLE_OAUTH_CLIENT_SECRET="your-secret" \
+  OAUTH_STATE_SECRET="$(openssl rand -hex 32)" \
+  BACKEND_URL="http://localhost:$KIND_HTTP_PORT"
+```
 
 ## Workflow: Setting Up from a PR
 
@@ -294,6 +343,18 @@ kubectl describe pod -l app=backend -n ambient-code
 # - Invalid configuration
 ```
 
+### Sessions fail with init-hydrate exit code 1
+**Cause:** MinIO `ambient-sessions` bucket doesn't exist. This happens when `make kind-up` fails partway through (e.g., due to image pull errors) and the `init-minio.sh` step is skipped.
+
+**Solution:**
+```bash
+# Create the bucket manually
+kubectl exec deployment/minio -n ambient-code -- mc alias set local http://localhost:9000 minioadmin minioadmin123
+kubectl exec deployment/minio -n ambient-code -- mc mb local/ambient-sessions
+```
+
+**Prevention:** If `make kind-up` fails, fix the underlying issue and re-run it rather than manually recovering individual steps. The Makefile runs `init-minio.sh` near the end of `kind-up`.
+
 ### Port forwarding not working
 **Cause:** Port already in use or forwarding process died
 
@@ -381,6 +442,46 @@ npm run dev
 **When NOT to use:**
 - Backend, operator, or runner changes (those still need image rebuild + load)
 - Testing changes to container configuration or deployment manifests
+
+## Benchmarking Developer Loops
+
+Use the benchmark harness when the user wants measured cold-start or rebuild timing rather than ad hoc impressions.
+
+### Commands
+
+```bash
+# Human-friendly local summary
+make benchmark
+
+# Agent / automation friendly output
+make benchmark FORMAT=tsv
+
+# Single component
+make benchmark COMPONENT=frontend MODE=cold
+make benchmark COMPONENT=backend MODE=warm
+```
+
+### Agent Guidance
+
+- Prefer `FORMAT=tsv` when another agent, script, or evaluation harness will consume the output.
+- Prefer the default `human` format for interactive local use in a terminal.
+- `frontend` benchmarking requires **Node.js 20+**.
+- `warm` currently measures **rebuild proxies**, not browser-observed hot reload latency.
+- If `reports/benchmarks/` is not writable in the current environment, the harness will fall back to a temp directory and print a warning.
+- Session benchmarking is **contract-only** in v1 (`bench_session_*` stubs in `scripts/benchmarks/bench-manifest.sh`).
+- Start with the **smallest relevant benchmark**:
+  - backend/operator/public-api change -> `MODE=warm COMPONENT=<component> REPEATS=1`
+  - frontend contributor setup -> `MODE=cold COMPONENT=frontend REPEATS=1`
+  - only run all components when you explicitly need the whole matrix
+- Treat preflight failures as useful environment signals; do not work around them unless the user asks.
+- Use full-sweep benchmarking sparingly because each component still performs untimed setup before the measured warm rebuild.
+
+### Interpreting Results
+
+- `cold`: approximates first-contributor setup/install cost with isolated caches
+- `warm`: approximates incremental rebuild cost after setup has already completed
+- `budget_ok=false` on cold runs means the component exceeded the 60-second contributor budget
+- Large deltas on a single repeat should be treated cautiously; use more repeats before drawing conclusions
 
 ## Best Practices
 

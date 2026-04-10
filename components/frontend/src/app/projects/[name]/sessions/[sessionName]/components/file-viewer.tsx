@@ -5,7 +5,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Download, AlertCircle, RefreshCw } from "lucide-react";
 import { useWorkspaceFile } from "@/services/queries/use-workspace";
 import { toast } from "sonner";
-import { triggerDownload } from "@/utils/export-chat";
 import { FileContentViewer } from "@/components/file-content-viewer";
 
 type FileViewerProps = {
@@ -13,13 +12,17 @@ type FileViewerProps = {
   sessionName: string;
   filePath: string;
   sessionPhase?: string;
+  /** whether this tab is the currently visible one (gates polling to avoid background fetches) */
+  isActive?: boolean;
 };
 
+/** Displays a workspace file with download and refresh controls. */
 export function FileViewer({
   projectName,
   sessionName,
   filePath,
   sessionPhase,
+  isActive = true,
 }: FileViewerProps) {
   const {
     data: content,
@@ -27,17 +30,23 @@ export function FileViewer({
     error,
     refetch,
   } = useWorkspaceFile(projectName, sessionName, filePath, {
-    // Refetch when tab is first opened
     refetchOnMount: true,
-    // Only poll while actively viewing this file tab (component is mounted) AND session is running
-    // Automatically stops when switching to another tab (component unmounts)
-    refetchInterval: sessionPhase === "Running" ? 5000 : false,
+    // only poll when the tab is visible and session is running
+    refetchInterval: isActive && sessionPhase === "Running" ? 5000 : false,
   });
 
+  const fileName = filePath.split("/").pop() ?? "file";
+  const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
+  const fileUrl = `/api/projects/${encodeURIComponent(projectName)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${encodedPath}`;
+
   const handleDownload = () => {
-    if (!content) return;
-    const fileName = filePath.split("/").pop() ?? "file";
-    triggerDownload(content, fileName, "text/plain");
+    if (content == null) return;
+    const link = document.createElement('a');
+    link.href = fileUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleRefresh = async () => {
@@ -79,7 +88,7 @@ export function FileViewer({
     );
   }
 
-  if (!content) {
+  if (content == null) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
         <AlertCircle className="w-8 h-8" />
@@ -87,12 +96,6 @@ export function FileViewer({
       </div>
     );
   }
-
-  const fileName = filePath.split("/").pop() ?? "file";
-
-  // Build the direct workspace API URL for binary files (images, PDFs)
-  const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
-  const fileUrl = `/api/projects/${encodeURIComponent(projectName)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${encodedPath}`;
 
   return (
     <div className="flex flex-col h-full">
@@ -118,7 +121,7 @@ export function FileViewer({
             variant="ghost"
             size="sm"
             onClick={handleDownload}
-            disabled={!content}
+            disabled={content == null}
             title="Download file"
           >
             <Download className="w-4 h-4" />

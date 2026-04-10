@@ -11,7 +11,9 @@ from pathlib import Path
 import aiohttp
 from fastapi import APIRouter, HTTPException, Request
 
+from ambient_runner.platform.auth import ensure_git_auth
 from ambient_runner.platform.config import load_ambient_config
+from ambient_runner.platform.utils import get_bot_token, redact_secrets
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,14 @@ async def change_workflow(request: Request):
     branch = (body.get("branch") or "main").strip() or "main"
     path = (body.get("path") or "").strip()
 
+    github_token = request.headers.get("X-GitHub-Token", "").strip() or None
+    gitlab_token = request.headers.get("X-GitLab-Token", "").strip() or None
+
+    if github_token:
+        logger.info("Using GitHub authentication from request header")
+    elif gitlab_token:
+        logger.info("Using GitLab authentication from request header")
+
     logger.info(f"Workflow change request: {git_url}@{branch} (path: {path})")
 
     async with _workflow_change_lock:
@@ -55,7 +65,9 @@ async def change_workflow(request: Request):
             }
 
         if git_url:
-            success, _wf_path = await clone_workflow_at_runtime(git_url, branch, path)
+            success, _wf_path = await clone_workflow_at_runtime(
+                git_url, branch, path, github_token, gitlab_token
+            )
             if not success:
                 logger.warning(
                     "Failed to clone workflow, will use default workflow directory"
@@ -81,7 +93,11 @@ async def change_workflow(request: Request):
 
 
 async def clone_workflow_at_runtime(
-    git_url: str, branch: str, subpath: str
+    git_url: str,
+    branch: str,
+    subpath: str,
+    github_token_override: str | None = None,
+    gitlab_token_override: str | None = None,
 ) -> tuple[bool, str]:
     """Clone a workflow repository at runtime."""
     if not git_url:
@@ -98,16 +114,10 @@ async def clone_workflow_at_runtime(
     temp_dir = Path(tempfile.mkdtemp(prefix="workflow-clone-"))
 
     try:
-        github_token = os.getenv("GITHUB_TOKEN", "").strip()
-        gitlab_token = os.getenv("GITLAB_TOKEN", "").strip()
-
+        ensure_git_auth(
+            github_token=github_token_override, gitlab_token=gitlab_token_override
+        )
         clone_url = git_url
-        if github_token and "github" in git_url.lower():
-            clone_url = git_url.replace(
-                "https://", f"https://x-access-token:{github_token}@"
-            )
-        elif gitlab_token and "gitlab" in git_url.lower():
-            clone_url = git_url.replace("https://", f"https://oauth2:{gitlab_token}@")
 
         process = await asyncio.create_subprocess_exec(
             "git",
@@ -125,11 +135,7 @@ async def clone_workflow_at_runtime(
         stdout, stderr = await process.communicate()
 
         if process.returncode != 0:
-            error_msg = stderr.decode()
-            for tok in (github_token, gitlab_token):
-                if tok:
-                    error_msg = error_msg.replace(tok, "***REDACTED***")
-            logger.error(f"Failed to clone workflow: {error_msg}")
+            logger.error(f"Failed to clone workflow: {redact_secrets(stderr.decode())}")
             return False, ""
 
         if subpath:
@@ -211,7 +217,7 @@ async def _trigger_workflow_greeting(workflow_dir: str, context):
             ],
         }
 
-        bot_token = os.getenv("BOT_TOKEN", "").strip()
+        bot_token = get_bot_token()
         headers = {"Content-Type": "application/json"}
         if bot_token:
             headers["Authorization"] = f"Bearer {bot_token}"

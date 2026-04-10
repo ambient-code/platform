@@ -12,7 +12,8 @@ Use [Unleash](https://www.getunleash.io/) to enable or disable features without 
 - **Frontend**: Next.js proxy at `/api/feature-flags`; use `useFlag()` / `useVariant()` from `@/lib/feature-flags` in client components
 - **Backend**: Go SDK; use `handlers.FeatureEnabled()` or `handlers.FeatureEnabledForRequest()` in handlers
 - **Admin UI**: Manage feature toggles directly from the workspace UI (see below)
-- When Unleash is not configured, all flags are disabled (safe default)
+- **Workspace overrides**: ConfigMap-based per-workspace overrides take precedence over Unleash global state
+- When Unleash is not configured, general flags are disabled (fail-closed) and model flags remain enabled (fail-open). See [fail-modes.md](fail-modes.md) for details.
 
 **Environment variables:** `UNLEASH_URL`, `UNLEASH_CLIENT_KEY` (and optionally `UNLEASH_APP_NAME` for frontend). See the guide for per-component details.
 
@@ -80,6 +81,11 @@ if handlers.FeatureEnabled("my-feature") {
 ```
 
 ---
+
+## Available Documentation
+
+- **[Unleash Integration Guide](feature-flags-unleash.md)** — Setup, usage in frontend/backend, admin UI, API endpoints
+- **[Fail Modes Reference](fail-modes.md)** — Which methods fail open vs closed, where each is used, evaluation precedence
 
 ## Related Documentation
 

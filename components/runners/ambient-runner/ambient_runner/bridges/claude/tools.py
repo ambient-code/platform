@@ -81,13 +81,13 @@ def create_refresh_credentials_tool(context_ref, sdk_tool_decorator):
                     }
                 ]
             }
-        except Exception:
+        except Exception as exc:
             logger.error("Credential refresh failed", exc_info=True)
             return {
                 "content": [
                     {
                         "type": "text",
-                        "text": "Credential refresh failed. Check runner logs for details.",
+                        "text": f"Credential refresh failed: {exc}",
                     }
                 ],
                 "isError": True,

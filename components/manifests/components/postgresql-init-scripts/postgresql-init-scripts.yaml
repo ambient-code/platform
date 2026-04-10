@@ -40,8 +40,7 @@ data:
     # Unleash feature flags
     create_db_if_not_exists "unleash"
 
-    # Add more databases here as services are added:
-    # create_db_if_not_exists "langfuse"
-    # create_db_if_not_exists "other_service"
+    # MLflow experiment tracking
+    create_db_if_not_exists "mlflow"
 
     echo "All databases initialized successfully"

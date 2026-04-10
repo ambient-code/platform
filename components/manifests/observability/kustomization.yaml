@@ -10,5 +10,4 @@ namespace: ambient-code
 # Add Grafana: kubectl apply -k components/manifests/observability/overlays/with-grafana/
 
 resources:
-  - otel-collector.yaml
-  - servicemonitor.yaml
+  - base/

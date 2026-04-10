@@ -19,6 +19,22 @@ type ExportEvent = {
   timestamp?: string;
 };
 
+/** Shape of a message inside a MESSAGES_SNAPSHOT event. */
+type SnapshotMessage = {
+  id?: string;
+  role: string;
+  content?: string;
+  timestamp?: string;
+  toolCallId?: string;
+  name?: string;
+  toolCalls?: {
+    id?: string;
+    function?: { name?: string; arguments?: string };
+    result?: string;
+    error?: string;
+  }[];
+};
+
 function isExportEvent(raw: unknown): raw is ExportEvent {
   if (typeof raw !== 'object' || raw === null || !('type' in raw)) return false;
   const obj = raw as Record<string, unknown>;
@@ -34,9 +50,92 @@ type ConversationBlock =
   | { kind: 'tool'; name: string; args: string; result?: string; error?: string; timestamp?: string };
 
 /**
+ * Extract conversation blocks from a MESSAGES_SNAPSHOT event.
+ *
+ * After a run finishes, the backend compacts streaming events
+ * (TEXT_MESSAGE_*, TOOL_CALL_*) into a single MESSAGES_SNAPSHOT
+ * containing full message objects. This function converts those
+ * snapshot messages into ConversationBlocks for export.
+ */
+function blocksFromSnapshot(messages: SnapshotMessage[]): ConversationBlock[] {
+  const blocks: ConversationBlock[] = [];
+
+  for (const msg of messages) {
+    const role = msg.role;
+    const timestamp = msg.timestamp;
+
+    if (role === 'user' || role === 'assistant') {
+      const content = typeof msg.content === 'string' ? msg.content.trim() : '';
+      if (content) {
+        blocks.push({ kind: 'message', role, content, timestamp });
+      }
+
+      // Emit tool call blocks from assistant messages
+      if (role === 'assistant' && msg.toolCalls) {
+        for (const tc of msg.toolCalls) {
+          const fnArgs = tc.function?.arguments ?? '';
+          blocks.push({
+            kind: 'tool',
+            name: tc.function?.name ?? 'unknown',
+            args: fnArgs,
+            result: tc.result,
+            error: tc.error,
+            timestamp,
+          });
+        }
+      }
+    } else if (role === 'tool') {
+      // Tool result messages — attach as result to preceding tool block if possible
+      const content = typeof msg.content === 'string' ? msg.content : '';
+      const toolCallId = msg.toolCallId;
+      if (toolCallId && content) {
+        // Find the matching tool block by scanning backwards
+        for (let i = blocks.length - 1; i >= 0; i--) {
+          const b = blocks[i];
+          // Match tool blocks that don't have a result yet — the most recent
+          // unfinished tool block for the same toolCallId is the match.
+          // Since we don't store IDs on ConversationBlock, match by name if
+          // the snapshot provides msg.name, otherwise attach to last tool block.
+          if (b.kind === 'tool' && !b.result && !b.error) {
+            b.result = content;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  return blocks;
+}
+
+/**
  * Walk the raw AG-UI event array and assemble conversation blocks.
+ *
+ * Handles both streaming events (TEXT_MESSAGE_*, TOOL_CALL_*) and
+ * compacted MESSAGES_SNAPSHOT events. After a session finishes, the
+ * backend replaces streaming events with a MESSAGES_SNAPSHOT — so
+ * exports must support both formats.
  */
 function assembleBlocks(events: unknown[]): ConversationBlock[] {
+  // First pass: check for MESSAGES_SNAPSHOT events (compacted sessions).
+  // If present, extract blocks from snapshots — they are the canonical
+  // source and supersede any streaming events.
+  const snapshotBlocks: ConversationBlock[] = [];
+  for (const raw of events) {
+    if (!isExportEvent(raw)) continue;
+    if (raw.type === EventType.MESSAGES_SNAPSHOT) {
+      const snap = raw as unknown as { messages?: SnapshotMessage[] };
+      if (Array.isArray(snap.messages)) {
+        snapshotBlocks.push(...blocksFromSnapshot(snap.messages));
+      }
+    }
+  }
+
+  if (snapshotBlocks.length > 0) {
+    return snapshotBlocks;
+  }
+
+  // Fallback: assemble from streaming events (active/uncompacted sessions)
   const blocks: ConversationBlock[] = [];
   let currentRole: string | null = null;
   let currentContent = '';

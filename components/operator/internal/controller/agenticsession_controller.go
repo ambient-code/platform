@@ -261,8 +261,26 @@ func (r *AgenticSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			if !strings.HasSuffix(e.ObjectNew.Name, "-runner") {
 				return false
 			}
-			// Trigger if phase changed
-			return e.ObjectOld.Status.Phase != e.ObjectNew.Status.Phase
+			// Trigger if pod phase changed
+			if e.ObjectOld.Status.Phase != e.ObjectNew.Status.Phase {
+				return true
+			}
+			// Trigger if a container newly terminated (e.g. runner OOM).
+			// Pod phase stays Running when one container dies but
+			// the sidecar is still alive, so we must also check
+			// individual container statuses.
+			oldTerminated := make(map[string]bool, len(e.ObjectOld.Status.ContainerStatuses))
+			for _, cs := range e.ObjectOld.Status.ContainerStatuses {
+				if cs.State.Terminated != nil {
+					oldTerminated[cs.Name] = true
+				}
+			}
+			for _, cs := range e.ObjectNew.Status.ContainerStatuses {
+				if cs.State.Terminated != nil && !oldTerminated[cs.Name] {
+					return true
+				}
+			}
+			return false
 		},
 		DeleteFunc: func(e event.TypedDeleteEvent[*corev1.Pod]) bool {
 			return strings.HasSuffix(e.Object.Name, "-runner")

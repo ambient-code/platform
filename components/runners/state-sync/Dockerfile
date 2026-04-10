@@ -1,13 +1,6 @@
-FROM alpine:3.19
+FROM alpine:3.21
 
-# Install rclone, git, and utilities
-RUN apk add --no-cache \
-    rclone \
-    git \
-    bash \
-    curl \
-    jq \
-    ca-certificates
+RUN apk add --no-cache rclone git jq bash sqlite
 
 # Copy scripts
 COPY hydrate.sh /usr/local/bin/hydrate.sh

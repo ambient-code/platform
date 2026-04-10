@@ -1,0 +1,48 @@
+# SDD Manifest — Spec-Driven Development Enforcement
+#
+# Components listed here are governed by their spec-kit constitution and spec.
+# Changes to managed paths MUST go through the designated agent workflow.
+# The sdd-preflight CI job enforces this boundary.
+#
+# To add a new component:
+#   1. Create its constitution in .specify/constitutions/<component>.md
+#   2. Create its spec in .specify/specs/<component>.md
+#   3. Add an entry below with paths, spec, constitution, and agent
+#   4. The preflight job will begin enforcing on the next PR
+
+version: 1
+
+# Platform-wide constitution (all components inherit from this)
+platform-constitution: .specify/memory/constitution.md
+
+# Enforcement mode for new components during migration
+# "warn" = comment on PR but don't block; "enforce" = required check
+default-mode: warn
+
+managed-components:
+  runner:
+    description: >
+      Python runner executing Claude Code CLI in Job pods.
+      Manages AG-UI adapter, MCP integrations, and agent bridges.
+    paths:
+      - components/runners/ambient-runner/**
+      - components/frontend/src/components/claude-agent-options/**
+      - components/frontend/src/components/create-session-dialog.tsx
+      - .github/workflows/runner-tool-versions.yml
+    constitution: .specify/constitutions/runner.md
+    spec: .specify/specs/runner.md
+    mode: warn
+    added-in-pr: 1091
+    # Future: when a GitHub App or bot account is set up for the agent,
+    # set agent-login to its GitHub username for authorship checks.
+    # agent-login: ambient-runner-agent[bot]
+
+  # Uncomment to onboard the next component:
+  # backend:
+  #   description: Go REST API (Gin), manages K8s Custom Resources
+  #   paths:
+  #     - components/backend/**
+  #   constitution: .specify/constitutions/backend.md
+  #   spec: .specify/specs/backend.md
+  #   mode: warn
+  #   added-in-pr: TBD
