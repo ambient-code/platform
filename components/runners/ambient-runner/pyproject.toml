@@ -26,12 +26,16 @@ claude = [
 observability = [
   "langfuse>=3.14.5",
 ]
+mlflow-observability = [
+  "mlflow[kubernetes]>=3.11.0",
+  "opentelemetry-exporter-otlp>=1.40.0",
+]
 mcp-atlassian = [
   "mcp-atlassian>=0.21.0",
 ]
 # Install everything for the polymorphic runner
 all = [
-  "ambient-runner[claude,observability,mcp-atlassian]",
+  "ambient-runner[claude,observability,mlflow-observability,mcp-atlassian]",
 ]
 
 [dependency-groups]

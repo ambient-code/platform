@@ -16,6 +16,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from ambient_runner.observability import _privacy_masking_function
+from ambient_runner.observability_privacy import (
+    privacy_mask_message_data,
+    resolve_message_mask_fn,
+)
 
 
 def test_string_masking():
@@ -218,6 +222,17 @@ def test_real_world_trace():
     assert masked["metadata"]["turn"] == 1
     assert masked["metadata"]["session_id"] == "test-session-123"
     assert masked["metadata"]["namespace"] == "prod-namespace"
+
+
+def test_resolve_message_mask_fn_returns_mask_when_true(monkeypatch):
+    monkeypatch.setenv("LANGFUSE_MASK_MESSAGES", "true")
+    fn = resolve_message_mask_fn()
+    assert fn is privacy_mask_message_data
+
+
+def test_resolve_message_mask_fn_disabled(monkeypatch):
+    monkeypatch.setenv("LANGFUSE_MASK_MESSAGES", "false")
+    assert resolve_message_mask_fn() is None
 
 
 if __name__ == "__main__":

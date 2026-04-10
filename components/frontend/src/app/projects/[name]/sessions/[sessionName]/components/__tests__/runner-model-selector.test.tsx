@@ -26,12 +26,12 @@ const mockRunnerTypes: RunnerType[] = [
 const mockAnthropicModels: ListModelsResponse = {
   models: [
     { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', provider: 'anthropic', isDefault: false },
-    { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', provider: 'anthropic', isDefault: true },
-    { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', provider: 'anthropic', isDefault: false },
+    { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', provider: 'anthropic', isDefault: false },
+    { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', provider: 'anthropic', isDefault: true },
     { id: 'claude-opus-4-5', label: 'Claude Opus 4.5', provider: 'anthropic', isDefault: false },
     { id: 'claude-opus-4-6', label: 'Claude Opus 4.6', provider: 'anthropic', isDefault: false },
   ],
-  defaultModel: 'claude-sonnet-4-5',
+  defaultModel: 'claude-sonnet-4-6',
 };
 
 const mockUseRunnerTypes = vi.fn(() => ({ data: mockRunnerTypes }));
@@ -49,7 +49,7 @@ describe('RunnerModelSelector', () => {
   const defaultProps = {
     projectName: 'test-project',
     selectedRunner: 'claude-code',
-    selectedModel: 'claude-sonnet-4-5',
+    selectedModel: 'claude-sonnet-4-6',
     onSelect: vi.fn(),
   };
 
@@ -63,7 +63,7 @@ describe('RunnerModelSelector', () => {
     render(<RunnerModelSelector {...defaultProps} />);
     const button = screen.getByRole('button');
     expect(button.textContent).toContain('Claude Code');
-    expect(button.textContent).toContain('Claude Sonnet 4.5');
+    expect(button.textContent).toContain('Claude Sonnet 4.6');
   });
 
   it('renders trigger button with unknown runner fallback', () => {

@@ -131,3 +131,22 @@ export async function getProjectIntegrationStatus(
     `/projects/${projectName}/integration-status`
   );
 }
+
+/**
+ * Get project-level MCP server configuration
+ */
+export async function getProjectMcpServers(
+  projectName: string
+): Promise<import("@/types/agentic-session").MCPServersConfig> {
+  return apiClient.get(`/projects/${projectName}/mcp-servers`);
+}
+
+/**
+ * Update project-level MCP server configuration
+ */
+export async function updateProjectMcpServers(
+  projectName: string,
+  config: import("@/types/agentic-session").MCPServersConfig
+): Promise<import("@/types/agentic-session").MCPServersConfig> {
+  return apiClient.put(`/projects/${projectName}/mcp-servers`, config);
+}

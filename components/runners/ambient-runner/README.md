@@ -14,7 +14,7 @@ The runner follows the [Ambient Runner SDK architecture (ADR-0006)](../../../doc
 - **`auth.py`** - SDK authentication (API key, Vertex AI) and runtime credentials
 - **`workspace.py`** - Workspace validation and path resolution
 - **`mcp.py`** - MCP server configuration and tool allowlisting
-- **`observability.py`** - Langfuse integration for tracking usage and performance
+- **`observability.py`** - Langfuse + optional MLflow tracing (`observability_config.py`, `mlflow_observability.py`, `observability_privacy.py`)
 - **`context.py`** - Runner context for session and workspace management
 - **`security_utils.py`** - Security utilities for sanitizing secrets and timeouts
 
@@ -128,9 +128,34 @@ The workspace context prompt is built by `build_sdk_system_prompt()` in `prompts
 
 ### Observability
 
+**Langfuse** (unchanged defaults when `OBSERVABILITY_BACKENDS` is unset — Langfuse-only):
+
+- `LANGFUSE_ENABLED` - Enable Langfuse (`true` / `1`)
 - `LANGFUSE_PUBLIC_KEY` - Langfuse public key
 - `LANGFUSE_SECRET_KEY` - Langfuse secret key
 - `LANGFUSE_HOST` - Langfuse host URL
+- `LANGFUSE_MASK_MESSAGES` - Redact message bodies (`true` default; shared with MLflow path)
+
+**Backend selection**
+
+- `OBSERVABILITY_BACKENDS` - Comma-separated: `langfuse`, `mlflow`, or both (e.g. `langfuse,mlflow`). If unset, defaults to **`langfuse`** only so existing Langfuse behaviour is preserved.
+
+**MLflow GenAI tracing** (optional extra: `pip install 'ambient-runner[mlflow-observability]'` — pins **`mlflow[kubernetes]>=3.11`** for cluster auth)
+
+- `MLFLOW_TRACING_ENABLED` - Must be `true` / `1` together with `mlflow` in `OBSERVABILITY_BACKENDS`
+- `MLFLOW_TRACKING_URI` - MLflow tracking server URI (e.g. `https://mlflow.example.com` or `file:./mlruns` for local tests)
+- `MLFLOW_EXPERIMENT_NAME` - Experiment name (default: `ambient-code-sessions`)
+- `MLFLOW_TRACKING_AUTH` - Optional. Set to **`kubernetes-namespaced`** on OpenShift AI / Kubeflow-style MLflow so the client adds **`Authorization: Bearer <SA JWT>`** and **`X-MLFLOW-WORKSPACE`** (from the pod namespace). Requires the **`kubernetes`** Python extra (included via `mlflow[kubernetes]`). The 3.11 client is expected to work against typical 3.9–3.10 era tracking servers; align versions with your platform if you hit protocol issues.
+- `MLFLOW_WORKSPACE` - Optional. Overrides the workspace sent as `X-MLFLOW-WORKSPACE` when using Kubernetes auth (otherwise the namespace file is used).
+
+On the cluster, when the operator copies `ambient-admin-mlflow-observability-secret`, it runs the runner pod as **`ambient-session-<session>`** with **service account token automount** enabled so MLflow can read `/var/run/secrets/kubernetes.io/serviceaccount/{token,namespace}`. The session `Role` includes **`get` / `list` / `update` on `experiments`** in API group **`mlflow.kubeflow.org`** (adjust RBAC if your MLflow operator uses a different API group).
+
+**OTLP export from MLflow** (no code changes — configure before the process creates spans; see [MLflow OTLP export](https://mlflow.org/docs/latest/genai/tracing/opentelemetry/export/)):
+
+- `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` - e.g. `http://otel-collector:4318/v1/traces` with `opentelemetry-exporter-otlp` installed
+- `OTEL_SERVICE_NAME` - Service name on exported spans
+- `MLFLOW_TRACE_ENABLE_OTLP_DUAL_EXPORT=true` - Send traces to **both** the MLflow Tracking Server and OTLP
+- Optional: `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL`, `OTEL_EXPORTER_OTLP_TRACES_HEADERS`
 
 ### Backend Integration
 

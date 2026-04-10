@@ -12,6 +12,14 @@ type AgenticSession struct {
 	AutoBranch string `json:"autoBranch,omitempty"`
 }
 
+// MCPServersConfig holds custom MCP server configuration for a session or project.
+type MCPServersConfig struct {
+	// Custom MCP servers to add (map of server name -> config)
+	Custom map[string]map[string]interface{} `json:"custom,omitempty"`
+	// Default MCP server names to disable
+	Disabled []string `json:"disabled,omitempty"`
+}
+
 type AgenticSessionSpec struct {
 	InitialPrompt        string             `json:"initialPrompt,omitempty"`
 	DisplayName          string             `json:"displayName"`
@@ -28,6 +36,8 @@ type AgenticSessionSpec struct {
 	Repos []SimpleRepo `json:"repos,omitempty"`
 	// Active workflow for dynamic workflow switching
 	ActiveWorkflow *WorkflowSelection `json:"activeWorkflow,omitempty"`
+	// Custom MCP server configuration
+	MCPServers *MCPServersConfig `json:"mcpServers,omitempty"`
 }
 
 // SimpleRepo represents a simplified repository configuration
@@ -67,6 +77,7 @@ type CreateAgenticSessionRequest struct {
 	EnvironmentVariables map[string]string  `json:"environmentVariables,omitempty"`
 	Labels               map[string]string  `json:"labels,omitempty"`
 	Annotations          map[string]string  `json:"annotations,omitempty"`
+	MCPServers           *MCPServersConfig  `json:"mcpServers,omitempty"`
 }
 
 type CloneSessionRequest struct {
@@ -75,10 +86,11 @@ type CloneSessionRequest struct {
 }
 
 type UpdateAgenticSessionRequest struct {
-	InitialPrompt *string      `json:"initialPrompt,omitempty"`
-	DisplayName   *string      `json:"displayName,omitempty"`
-	Timeout       *int         `json:"timeout,omitempty"`
-	LLMSettings   *LLMSettings `json:"llmSettings,omitempty"`
+	InitialPrompt *string           `json:"initialPrompt,omitempty"`
+	DisplayName   *string           `json:"displayName,omitempty"`
+	Timeout       *int              `json:"timeout,omitempty"`
+	LLMSettings   *LLMSettings      `json:"llmSettings,omitempty"`
+	MCPServers    *MCPServersConfig `json:"mcpServers,omitempty"`
 }
 
 type CloneAgenticSessionRequest struct {
