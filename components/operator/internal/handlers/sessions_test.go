@@ -516,7 +516,7 @@ func TestDeleteAmbientVertexSecret_CopiedSecret(t *testing.T) {
 	setupTestClient(secret)
 
 	ctx := context.Background()
-	err := deleteAmbientVertexSecret(ctx, "test-ns")
+	err := deleteAmbientVertexSecret(ctx, "test-ns", "")
 	if err != nil {
 		t.Fatalf("deleteAmbientVertexSecret failed: %v", err)
 	}
@@ -542,7 +542,7 @@ func TestDeleteAmbientVertexSecret_NotCopied(t *testing.T) {
 	setupTestClient(secret)
 
 	ctx := context.Background()
-	err := deleteAmbientVertexSecret(ctx, "test-ns")
+	err := deleteAmbientVertexSecret(ctx, "test-ns", "")
 	if err != nil {
 		t.Fatalf("deleteAmbientVertexSecret failed: %v", err)
 	}
@@ -562,7 +562,7 @@ func TestDeleteAmbientVertexSecret_NotFound(t *testing.T) {
 	setupTestClient()
 
 	ctx := context.Background()
-	err := deleteAmbientVertexSecret(ctx, "test-ns")
+	err := deleteAmbientVertexSecret(ctx, "test-ns", "")
 	if err != nil {
 		t.Errorf("deleteAmbientVertexSecret should not error on non-existent secret: %v", err)
 	}
@@ -582,7 +582,7 @@ func TestDeleteAmbientVertexSecret_NilAnnotations(t *testing.T) {
 	setupTestClient(secret)
 
 	ctx := context.Background()
-	err := deleteAmbientVertexSecret(ctx, "test-ns")
+	err := deleteAmbientVertexSecret(ctx, "test-ns", "")
 	if err != nil {
 		t.Fatalf("deleteAmbientVertexSecret failed: %v", err)
 	}
@@ -594,5 +594,84 @@ func TestDeleteAmbientVertexSecret_NilAnnotations(t *testing.T) {
 	}
 	if result == nil {
 		t.Error("Secret should still exist")
+	}
+}
+
+func TestReplaceOrAppendEnvVarsPreservesValueFrom(t *testing.T) {
+	secretRef := &corev1.EnvVarSource{
+		SecretKeyRef: &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "ambient-admin-mlflow-observability-secret"},
+			Key:                  "MLFLOW_TRACKING_URI",
+			Optional:             boolPtr(true),
+		},
+	}
+	base := []corev1.EnvVar{
+		{Name: "MLFLOW_TRACKING_URI", ValueFrom: secretRef},
+		{Name: "USER_PROVIDED", Value: "keep-me"},
+	}
+	extra := []corev1.EnvVar{
+		{Name: "MLFLOW_TRACKING_URI", Value: "https://evil.example/mlflow"},
+		{Name: "USER_PROVIDED", Value: "replaced"},
+		{Name: "ONLY_IN_EXTRA", Value: "appended"},
+	}
+
+	out := replaceOrAppendEnvVars(base, extra)
+
+	var tracking *corev1.EnvVar
+	var user *corev1.EnvVar
+	var only *corev1.EnvVar
+	for i := range out {
+		switch out[i].Name {
+		case "MLFLOW_TRACKING_URI":
+			tracking = &out[i]
+		case "USER_PROVIDED":
+			user = &out[i]
+		case "ONLY_IN_EXTRA":
+			only = &out[i]
+		}
+	}
+	if tracking == nil || tracking.ValueFrom == nil || tracking.ValueFrom.SecretKeyRef == nil {
+		t.Fatalf("MLFLOW_TRACKING_URI should still use SecretKeyRef, got %+v", tracking)
+	}
+	if tracking.Value != "" {
+		t.Errorf("MLFLOW_TRACKING_URI Value should not be set, got %q", tracking.Value)
+	}
+	if user == nil || user.Value != "replaced" {
+		t.Errorf("USER_PROVIDED should be replaced by extra, got %+v", user)
+	}
+	if only == nil || only.Value != "appended" {
+		t.Errorf("ONLY_IN_EXTRA should be appended, got %+v", only)
+	}
+}
+
+func TestReplaceOrAppendEnvVarsProtectsOperatorManagedNames(t *testing.T) {
+	base := []corev1.EnvVar{
+		{Name: "USE_VERTEX", Value: "1"},
+		{Name: "CLAUDE_CODE_USE_VERTEX", Value: "1"},
+		{Name: "NORMAL_VAR", Value: "original"},
+	}
+	extra := []corev1.EnvVar{
+		{Name: "USE_VERTEX", Value: "0"},
+		{Name: "CLAUDE_CODE_USE_VERTEX", Value: "0"},
+		{Name: "NORMAL_VAR", Value: "overridden"},
+	}
+
+	out := replaceOrAppendEnvVars(base, extra)
+
+	for _, env := range out {
+		switch env.Name {
+		case "USE_VERTEX":
+			if env.Value != "1" {
+				t.Errorf("USE_VERTEX should be protected, got %q", env.Value)
+			}
+		case "CLAUDE_CODE_USE_VERTEX":
+			if env.Value != "1" {
+				t.Errorf("CLAUDE_CODE_USE_VERTEX should be protected, got %q", env.Value)
+			}
+		case "NORMAL_VAR":
+			if env.Value != "overridden" {
+				t.Errorf("NORMAL_VAR should be overridden, got %q", env.Value)
+			}
+		}
 	}
 }
