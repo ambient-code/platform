@@ -682,7 +682,7 @@ func CreateSession(c *gin.Context) {
 
 	// Set defaults for LLM settings if not provided
 	llmSettings := types.LLMSettings{
-		Model:       "claude-sonnet-4-5",
+		Model:       "claude-sonnet-4-6",
 		Temperature: 0.7,
 		MaxTokens:   4000,
 	}

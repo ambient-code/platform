@@ -42,6 +42,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Acknowledge issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/reactions \
+            -X POST -f content=eyes --silent || true
+
       - name: Resolve issue details
         id: issue
         env:
@@ -69,6 +76,14 @@ jobs:
           else
             echo "skip=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Post immediate acknowledgement
+        if: steps.existing.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ steps.issue.outputs.number }} --repo "${{ github.repository }}" \
+            --body "🤖 Amber is working on this issue. A PR will be created shortly with the \`ambient-code:managed\` label."
 
       - name: Create session
         if: steps.existing.outputs.skip != 'true'
@@ -110,14 +125,14 @@ jobs:
                <!-- acp:session_id=$AGENTIC_SESSION_NAME source=#${{ steps.issue.outputs.number }} last_action=<ISO8601_NOW> retry_count=0 -->
                At the bottom of the PR body, add a session link:
                ---
-               🤖 [Ambient Session]($PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME)
+               🤖 [Ambient Session](<SESSION_URL>)
             6. Add the `ambient-code:managed` label to the PR.
             7. After creating the PR, send a Slack notification with a brief summary
                of what you changed. Use Slack mrkdwn link format: <URL|display text>. Example:
                ```bash
                TITLE=$(gh issue view ${{ steps.issue.outputs.number }} --repo ${{ github.repository }} --json title --jq '.title')
                PAYLOAD=$(jq -nc --arg text "🔧 *PR created for <https://github.com/${{ github.repository }}/issues/${{ steps.issue.outputs.number }}|#${{ steps.issue.outputs.number }} — $TITLE>*
-               <PR_URL|View PR> · <$PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME|View Session>
+               <PR_URL|View PR> · <SESSION_URL|View Session>
 
                <1-2 sentence summary of what you changed>" '{text: $text}')
                curl -X POST -H 'Content-type: application/json' --data "$PAYLOAD" "$SLACK_WEBHOOK_URL"
@@ -126,7 +141,18 @@ jobs:
             8. Ensure CI passes. If it fails, investigate and fix.
             9. Do not merge. Leave the PR open for human review.
             10. When you comment on the PR, include this footer at the end:
-               _🤖 [Session]($PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME)_
+               _🤖 [Session](<SESSION_URL>)_
+
+            ## Session URL
+
+            IMPORTANT: Wherever a session link is needed (PR body, comments, Slack),
+            you MUST first resolve the URL by reading the environment variables. Run:
+            ```bash
+            echo "$PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME"
+            ```
+            Use the resolved output as the actual URL. Do NOT write `$PLATFORM_HOST`,
+            `$AGENTIC_SESSION_NAMESPACE`, or `$AGENTIC_SESSION_NAME` literally in any
+            markdown link — always substitute their actual values.
           repos: >-
             [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
           model: claude-opus-4-6
@@ -135,15 +161,32 @@ jobs:
           environment-variables: >-
             {"SLACK_WEBHOOK_URL": "${{ secrets.SLACK_WEBHOOK_URL }}", "PLATFORM_HOST": "${{ secrets.PLATFORM_HOST }}", "GITHUB_TOKEN": "${{ secrets.GITHUB_TOKEN }}"}
 
-      - name: Post-session labels and comment
+      - name: Post-session update comment
         if: steps.existing.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SESSION_NAME: ${{ steps.session.outputs.session-name }}
           SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
+          SESSION_URL: ${{ steps.session.outputs.session-url }}
+          PLATFORM_HOST: ${{ secrets.PLATFORM_HOST }}
+          AMBIENT_PROJECT: ${{ secrets.AMBIENT_PROJECT }}
         run: |
           if [ -n "$SESSION_NAME" ]; then
-            gh issue comment ${{ steps.issue.outputs.number }} --repo "${{ github.repository }}" --body "Session \`$SESSION_NAME\` created (phase: $SESSION_PHASE). PR will have the \`ambient-code:managed\` label."
+            # Build session link — prefer session-url output, fall back to constructed URL
+            if [ -n "$SESSION_URL" ]; then
+              LINK="$SESSION_URL"
+            elif [ -n "$PLATFORM_HOST" ] && [ -n "$AMBIENT_PROJECT" ]; then
+              LINK="${PLATFORM_HOST%/}/projects/$AMBIENT_PROJECT/sessions/$SESSION_NAME"
+            else
+              LINK=""
+            fi
+
+            if [ -n "$LINK" ]; then
+              BODY="🤖 Amber session completed (phase: $SESSION_PHASE). [View session]($LINK)"
+            else
+              BODY="🤖 Amber session \`$SESSION_NAME\` completed (phase: $SESSION_PHASE)."
+            fi
+            gh issue comment ${{ steps.issue.outputs.number }} --repo "${{ github.repository }}" --body "$BODY"
           fi
 
       - name: Session summary
@@ -175,6 +218,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Acknowledge comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions \
+            -X POST -f content=eyes --silent || true
+
       - name: Resolve context
         id: context
         env:
@@ -273,7 +323,18 @@ jobs:
             6. Do not merge. Do not close. Do not force-push.
             7. If fundamentally broken beyond repair, add a comment explaining and stop.
             8. When you comment on the PR, include this footer at the end:
-               _🤖 [Session]($PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME)_
+               _🤖 [Session](<SESSION_URL>)_
+
+            ## Session URL
+
+            IMPORTANT: Wherever a session link is needed (PR body, comments, Slack),
+            you MUST first resolve the URL by reading the environment variables. Run:
+            ```bash
+            echo "$PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME"
+            ```
+            Use the resolved output as the actual URL. Do NOT write `$PLATFORM_HOST`,
+            `$AGENTIC_SESSION_NAMESPACE`, or `$AGENTIC_SESSION_NAME` literally in any
+            markdown link — always substitute their actual values.
 
             ## Slack Notifications
 
@@ -339,14 +400,14 @@ jobs:
                <!-- acp:session_id=$AGENTIC_SESSION_NAME source=#${{ steps.context.outputs.number }} last_action=<ISO8601_NOW> retry_count=0 -->
                At the bottom of the PR body, add a session link:
                ---
-               🤖 [Ambient Session]($PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME)
+               🤖 [Ambient Session](<SESSION_URL>)
             6. Add the `ambient-code:managed` label to the PR.
             7. After creating the PR, send a Slack notification with a brief summary
                of what you changed. Use Slack mrkdwn link format: <URL|display text>. Example:
                ```bash
                TITLE=$(gh issue view ${{ steps.context.outputs.number }} --repo ${{ github.repository }} --json title --jq '.title')
                PAYLOAD=$(jq -nc --arg text "🔧 *PR created for <${{ steps.context.outputs.url }}|#${{ steps.context.outputs.number }} — $TITLE>*
-               <PR_URL|View PR> · <$PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME|View Session>
+               <PR_URL|View PR> · <SESSION_URL|View Session>
 
                <1-2 sentence summary of what you changed>" '{text: $text}')
                curl -X POST -H 'Content-type: application/json' --data "$PAYLOAD" "$SLACK_WEBHOOK_URL"
@@ -355,7 +416,18 @@ jobs:
             8. Ensure CI passes. If it fails, investigate and fix.
             9. Do not merge. Leave the PR open for human review.
             10. When you comment on the PR, include this footer at the end:
-               _🤖 [Session]($PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME)_
+               _🤖 [Session](<SESSION_URL>)_
+
+            ## Session URL
+
+            IMPORTANT: Wherever a session link is needed (PR body, comments, Slack),
+            you MUST first resolve the URL by reading the environment variables. Run:
+            ```bash
+            echo "$PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME"
+            ```
+            Use the resolved output as the actual URL. Do NOT write `$PLATFORM_HOST`,
+            `$AGENTIC_SESSION_NAMESPACE`, or `$AGENTIC_SESSION_NAME` literally in any
+            markdown link — always substitute their actual values.
           repos: >-
             [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
           model: claude-opus-4-6
@@ -705,7 +777,18 @@ jobs:
           6. Do not merge. Do not close. Do not force-push.
           7. If fundamentally broken beyond repair, add a comment explaining and stop.
           8. When you comment on the PR, include this footer at the end:
-             _🤖 [Session]($PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME)_
+             _🤖 [Session](<SESSION_URL>)_
+
+          ## Session URL
+
+          IMPORTANT: Wherever a session link is needed (PR body, comments, Slack),
+          you MUST first resolve the URL by reading the environment variables. Run:
+          ```bash
+          echo "$PLATFORM_HOST/projects/$AGENTIC_SESSION_NAMESPACE/sessions/$AGENTIC_SESSION_NAME"
+          ```
+          Use the resolved output as the actual URL. Do NOT write `$PLATFORM_HOST`,
+          `$AGENTIC_SESSION_NAMESPACE`, or `$AGENTIC_SESSION_NAME` literally in any
+          markdown link — always substitute their actual values.
 
           ## Slack Notifications
 

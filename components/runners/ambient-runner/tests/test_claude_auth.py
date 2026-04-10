@@ -155,7 +155,7 @@ class TestSetupSdkAuthentication:
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         ctx = _make_context(ANTHROPIC_API_KEY="sk-key")
         _, _, model = await setup_sdk_authentication(ctx)
-        assert model == "claude-sonnet-4-5"
+        assert model == "claude-sonnet-4-6"
         assert "@" not in model  # no Vertex date suffix for API key auth
 
     @pytest.mark.asyncio

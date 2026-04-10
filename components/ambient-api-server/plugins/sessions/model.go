@@ -58,7 +58,7 @@ func (d *Session) BeforeCreate(tx *gorm.DB) error {
 	d.KubeCrName = &d.ID
 
 	if d.LlmModel == nil || *d.LlmModel == "" {
-		defaultModel := "sonnet"
+		defaultModel := "claude-sonnet-4-6"
 		d.LlmModel = &defaultModel
 	}
 	if d.LlmTemperature == nil {
