@@ -8,6 +8,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/ambient-code/platform/components/ambient-mcp/client"
+	"github.com/ambient-code/platform/components/ambient-mcp/tokenexchange"
 )
 
 func main() {
@@ -16,18 +17,50 @@ func main() {
 		apiURL = "http://localhost:8080"
 	}
 
-	token := os.Getenv("AMBIENT_TOKEN")
-	if token == "" {
-		fmt.Fprintln(os.Stderr, "AMBIENT_TOKEN is required")
-		os.Exit(1)
-	}
-
 	transport := os.Getenv("MCP_TRANSPORT")
 	if transport == "" {
 		transport = "stdio"
 	}
 
+	cpTokenURL := os.Getenv("AMBIENT_CP_TOKEN_URL")
+	cpPublicKey := os.Getenv("AMBIENT_CP_TOKEN_PUBLIC_KEY")
+	sessionID := os.Getenv("SESSION_ID")
+
+	var token string
+	var exchanger *tokenexchange.Exchanger
+
+	if cpTokenURL != "" && cpPublicKey != "" && sessionID != "" {
+		var err error
+		exchanger, err = tokenexchange.New(cpTokenURL, cpPublicKey, sessionID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "token exchange init failed: %v\n", err)
+			os.Exit(1)
+		}
+		token, err = exchanger.FetchToken()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "initial token fetch failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Fprintln(os.Stderr, "bootstrapped token via CP token exchange")
+	} else {
+		token = os.Getenv("AMBIENT_TOKEN")
+		if token == "" {
+			fmt.Fprintln(os.Stderr, "AMBIENT_TOKEN is required when CP token exchange env vars are not set")
+			os.Exit(1)
+		}
+		fmt.Fprintln(os.Stderr, "using static AMBIENT_TOKEN (no CP token exchange)")
+	}
+
 	c := client.New(apiURL, token)
+
+	if exchanger != nil {
+		exchanger.OnRefresh(func(freshToken string) {
+			c.SetToken(freshToken)
+		})
+		exchanger.StartBackgroundRefresh()
+		defer exchanger.Stop()
+	}
+
 	s := newServer(c, transport)
 
 	switch transport {

@@ -132,7 +132,7 @@ func CreateSession(c *client.Client) func(ctx context.Context, req mcp.CallToolR
 }
 
 func PushMessage(c *client.Client) func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	resolver := mention.NewResolver(c.BaseURL(), c.Token())
+	resolver := mention.NewResolver(c.BaseURL(), c.Token)
 
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		sessionID := mcp.ParseString(req, "session_id", "")
