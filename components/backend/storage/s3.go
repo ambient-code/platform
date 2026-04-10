@@ -1,3 +1,4 @@
+// Package storage provides S3-compatible object storage operations for file uploads.
 package storage
 
 import (
