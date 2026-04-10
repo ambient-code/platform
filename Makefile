@@ -66,6 +66,7 @@ RUNNER_IMAGE ?= vteam_claude_runner:$(IMAGE_TAG)
 STATE_SYNC_IMAGE ?= vteam_state_sync:$(IMAGE_TAG)
 PUBLIC_API_IMAGE ?= vteam_public_api:$(IMAGE_TAG)
 API_SERVER_IMAGE ?= vteam_api_server:$(IMAGE_TAG)
+OBSERVABILITY_DASHBOARD_IMAGE ?= vteam_observability_dashboard:$(IMAGE_TAG)
 
 # kind-local overlay always references localhost/vteam_* images.
 # Podman produces this prefix natively; for Docker we tag before loading.
@@ -162,7 +163,7 @@ help: ## Display this help message
 
 ##@ Building
 
-build-all: build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-api-server ## Build all container images
+build-all: build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-api-server build-observability-dashboard ## Build all container images
 
 build-frontend: ## Build frontend image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building frontend with $(CONTAINER_ENGINE)..."
@@ -206,6 +207,12 @@ build-api-server: ## Build ambient API server image
 	@cd components/ambient-api-server && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
 		-t $(API_SERVER_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) API server built: $(API_SERVER_IMAGE)"
+
+build-observability-dashboard: ## Build observability dashboard image
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building observability-dashboard with $(CONTAINER_ENGINE)..."
+	@cd ../observability/dashboard && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-t $(OBSERVABILITY_DASHBOARD_IMAGE) .
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Observability dashboard built: $(OBSERVABILITY_DASHBOARD_IMAGE)"
 
 build-cli: ## Build acpctl CLI binary
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building acpctl CLI..."
@@ -251,7 +258,7 @@ registry-login: ## Login to container registry
 
 push-all: registry-login ## Push all images to registry
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Pushing images to $(REGISTRY)..."
-	@for image in $(FRONTEND_IMAGE) $(BACKEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE) $(API_SERVER_IMAGE); do \
+	@for image in $(FRONTEND_IMAGE) $(BACKEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE) $(API_SERVER_IMAGE) $(OBSERVABILITY_DASHBOARD_IMAGE); do \
 		echo "  Tagging and pushing $$image..."; \
 		$(CONTAINER_ENGINE) tag $$image $(REGISTRY)/$$image && \
 		$(CONTAINER_ENGINE) push $(REGISTRY)/$$image; \
@@ -1146,7 +1153,7 @@ check-architecture: ## Validate build architecture matches host
 
 _kind-load-images: ## Internal: Load images into kind cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading images into kind ($(KIND_CLUSTER_NAME))..."
-	@for img in $(BACKEND_IMAGE) $(FRONTEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE) $(API_SERVER_IMAGE); do \
+	@for img in $(BACKEND_IMAGE) $(FRONTEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE) $(API_SERVER_IMAGE) $(OBSERVABILITY_DASHBOARD_IMAGE); do \
 		echo "  Loading $(KIND_IMAGE_PREFIX)$$img..."; \
 		if [ -n "$(KIND_HOST)" ] || [ "$(CONTAINER_ENGINE)" = "podman" ]; then \
 			$(CONTAINER_ENGINE) save $(KIND_IMAGE_PREFIX)$$img | \

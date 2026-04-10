@@ -99,6 +99,19 @@ spec:
               name: ambient-admin-langfuse-secret
               key: LANGFUSE_SECRET_KEY
               optional: true  # Optional: only needed if Langfuse enabled
+        # MLflow tracing (runner); optional secret managed by platform admin
+        - name: MLFLOW_TRACING_ENABLED
+          valueFrom:
+            secretKeyRef:
+              name: ambient-admin-mlflow-observability-secret
+              key: MLFLOW_TRACING_ENABLED
+              optional: true
+        - name: OBSERVABILITY_BACKENDS
+          valueFrom:
+            secretKeyRef:
+              name: ambient-admin-mlflow-observability-secret
+              key: OBSERVABILITY_BACKENDS
+              optional: true
         # Google OAuth client credentials for workspace-mcp
         - name: GOOGLE_OAUTH_CLIENT_ID
           valueFrom:

@@ -345,7 +345,7 @@ jobs:
 
       - name: Log in to OpenShift Cluster
         run: |
-          oc login ${{ secrets.PROD_OPENSHIFT_SERVER }} --token=${{ secrets.PROD_OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
+          oc login ${{ secrets.PROD_OPENSHIFT_SERVER }} --token=${{ secrets.PROD_OPENSHIFT_TOKEN }}
 
       - name: Deploy Service Mesh operator via OLM
         run: |
@@ -472,7 +472,7 @@ jobs:
 
       - name: Log in to OpenShift Cluster
         run: |
-          oc login ${{ secrets.PROD_OPENSHIFT_SERVER }} --token=${{ secrets.PROD_OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
+          oc login ${{ secrets.PROD_OPENSHIFT_SERVER }} --token=${{ secrets.PROD_OPENSHIFT_TOKEN }}
 
       - name: Deploy observability stack
         run: |

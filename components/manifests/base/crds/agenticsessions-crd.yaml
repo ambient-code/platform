@@ -63,7 +63,7 @@ spec:
                 properties:
                   model:
                     type: string
-                    default: "claude-3-7-sonnet-latest"
+                    default: "claude-sonnet-4-6"
                   temperature:
                     type: number
                     default: 0.7

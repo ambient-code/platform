@@ -4,11 +4,11 @@ import { NewSessionView } from '../new-session-view';
 
 vi.mock('../runner-model-selector', () => ({
   RunnerModelSelector: ({ onSelect }: { onSelect: (r: string, m: string) => void }) => (
-    <button data-testid="runner-model-selector" onClick={() => onSelect('claude-agent-sdk', 'claude-sonnet-4-5')}>
-      claude-agent-sdk · Claude Sonnet 4.5
+    <button data-testid="runner-model-selector" onClick={() => onSelect('claude-agent-sdk', 'claude-sonnet-4-6')}>
+      claude-agent-sdk · Claude Sonnet 4.6
     </button>
   ),
-  getDefaultModel: () => 'claude-sonnet-4-5',
+  getDefaultModel: () => 'claude-sonnet-4-6',
 }));
 
 vi.mock('@/services/queries/use-runner-types', () => ({
@@ -27,10 +27,10 @@ vi.mock('@/services/queries/use-models', () => ({
   useModels: () => ({
     data: {
       models: [
-        { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', provider: 'anthropic', isDefault: true },
-        { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', provider: 'anthropic', isDefault: false },
+        { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', provider: 'anthropic', isDefault: false },
+        { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', provider: 'anthropic', isDefault: true },
       ],
-      defaultModel: 'claude-sonnet-4-5',
+      defaultModel: 'claude-sonnet-4-6',
     },
     isLoading: false,
   }),
@@ -98,7 +98,7 @@ describe('NewSessionView', () => {
       expect.objectContaining({
         prompt: 'Build a REST API',
         runner: 'claude-agent-sdk',
-        model: 'claude-sonnet-4-5',
+        model: 'claude-sonnet-4-6',
       })
     );
   });

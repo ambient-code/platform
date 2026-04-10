@@ -310,32 +310,47 @@ func ValidateProjectContext() gin.HandlerFunc {
 			return
 		}
 
-		// Ensure the caller has at least list permission on agenticsessions in the namespace
-		ssar := &authv1.SelfSubjectAccessReview{
-			Spec: authv1.SelfSubjectAccessReviewSpec{
-				ResourceAttributes: &authv1.ResourceAttributes{
-					Group:     "vteam.ambient-code",
-					Resource:  "agenticsessions",
-					Verb:      "list",
-					Namespace: projectHeader,
-				},
-			},
-		}
-		res, err := reqK8s.AuthorizationV1().SelfSubjectAccessReviews().Create(c.Request.Context(), ssar, v1.CreateOptions{})
-		if err != nil {
-			log.Printf("validateProjectContext: SSAR failed for %s: %v", projectHeader, err)
-			if errors.IsUnauthorized(err) {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "Token expired or invalid"})
-			} else {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to perform access review"})
+		// Ensure the caller has at least list permission on agenticsessions in the namespace.
+		// Check the SSAR cache first to avoid hitting the K8s API on every request.
+		token, _, _, _ := extractRequestToken(c)
+		cacheKey := ssarCacheKey(token, projectHeader, "list", "vteam.ambient-code", "agenticsessions")
+
+		if cachedAllowed, found := globalSSARCache.check(cacheKey); found {
+			if !cachedAllowed {
+				c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized to access project"})
+				c.Abort()
+				return
 			}
-			c.Abort()
-			return
-		}
-		if !res.Status.Allowed {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized to access project"})
-			c.Abort()
-			return
+			// Cache hit — allowed, skip SSAR call
+		} else {
+			// Cache miss — perform SSAR and cache the result
+			ssar := &authv1.SelfSubjectAccessReview{
+				Spec: authv1.SelfSubjectAccessReviewSpec{
+					ResourceAttributes: &authv1.ResourceAttributes{
+						Group:     "vteam.ambient-code",
+						Resource:  "agenticsessions",
+						Verb:      "list",
+						Namespace: projectHeader,
+					},
+				},
+			}
+			res, err := reqK8s.AuthorizationV1().SelfSubjectAccessReviews().Create(c.Request.Context(), ssar, v1.CreateOptions{})
+			if err != nil {
+				log.Printf("validateProjectContext: SSAR failed for %s: %v", projectHeader, err)
+				if errors.IsUnauthorized(err) {
+					c.JSON(http.StatusUnauthorized, gin.H{"error": "Token expired or invalid"})
+				} else {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to perform access review"})
+				}
+				c.Abort()
+				return
+			}
+			globalSSARCache.store(cacheKey, res.Status.Allowed)
+			if !res.Status.Allowed {
+				c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized to access project"})
+				c.Abort()
+				return
+			}
 		}
 
 		// Store project in context for handlers

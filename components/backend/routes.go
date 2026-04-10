@@ -59,6 +59,7 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.GET("/agentic-sessions/:sessionName/repos/status", handlers.GetReposStatus)
 			projectGroup.DELETE("/agentic-sessions/:sessionName/repos/:repoName", handlers.RemoveRepo)
 			projectGroup.PUT("/agentic-sessions/:sessionName/displayname", handlers.UpdateSessionDisplayName)
+			projectGroup.POST("/agentic-sessions/:sessionName/model", handlers.SwitchModel)
 
 			// OAuth integration - requires user auth like all other session endpoints
 			projectGroup.GET("/agentic-sessions/:sessionName/oauth/:provider/url", handlers.GetOAuthURL)

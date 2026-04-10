@@ -1062,6 +1062,20 @@ function handleCustomEvent(
     return { ...state, backgroundTasks: tasks }
   }
 
+  // Model switch confirmation — inject a system message into the conversation
+  if (name === 'ambient:model_switched') {
+    const previousModel = value.previousModel as string
+    const newModel = value.newModel as string
+    const msg: PlatformMessage = {
+      id: `model-switch-${Date.now()}`,
+      role: 'assistant',
+      content: `Model switched from **${previousModel}** to **${newModel}**`,
+      timestamp: new Date().toISOString(),
+      metadata: { isModelSwitch: true },
+    }
+    return { ...state, messages: [...state.messages, msg] }
+  }
+
   // Other custom events (hooks) — pass through unchanged
   return state
 }

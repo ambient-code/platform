@@ -206,7 +206,7 @@ jobs:
 
       - name: Log in to OpenShift Cluster
         run: |
-          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
+          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }}
 
       - name: Deploy Service Mesh operator via OLM
         run: |
@@ -327,7 +327,7 @@ jobs:
 
       - name: Log in to OpenShift Cluster
         run: |
-          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
+          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }}
 
       - name: Apply RBAC and CRD manifests
         run: |
@@ -360,7 +360,7 @@ jobs:
 
       - name: Log in to OpenShift Cluster
         run: |
-          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
+          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }}
 
       - name: Update kustomization with SHA image tags
         working-directory: components/manifests/overlays/production
@@ -435,7 +435,7 @@ jobs:
 
       - name: Log in to OpenShift Cluster
         run: |
-          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
+          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }}
 
       - name: Update kustomization with SHA image tags
         working-directory: components/manifests/overlays/production
