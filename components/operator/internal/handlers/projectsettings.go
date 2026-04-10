@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/watch"
@@ -149,18 +150,81 @@ func reconcileProjectSettings(obj *unstructured.Unstructured) error {
 		triggerRBACReady = false
 	}
 
+	// Ensure LimitRange for resource defaults (CA bin-packing safety net)
+	limitRangeReady := true
+	if err := ensureLimitRange(namespace, obj); err != nil {
+		log.Printf("Error ensuring LimitRange in namespace %s: %v", namespace, err)
+		limitRangeReady = false
+	}
+
 	// Update status with reconciliation results
 	statusUpdate := map[string]interface{}{
 		"groupBindingsCreated":      groupBindingsCreated,
 		"scheduledSessionRBACReady": triggerRBACReady,
+		"limitRangeReady":           limitRangeReady,
 	}
 
 	if statusErr := updateProjectSettingsStatus(namespace, name, statusUpdate); statusErr != nil {
 		log.Printf("Failed to update ProjectSettings status in namespace %s: %v", namespace, statusErr)
 	}
 
+	// LimitRange failure is non-fatal: sessions can still run without it.
+	// RBAC failure IS fatal: sessions cannot be created without trigger permissions.
 	if !triggerRBACReady {
 		return fmt.Errorf("failed to ensure session trigger RBAC in namespace %s", namespace)
+	}
+
+	return nil
+}
+
+func buildOwnerRef(owner *unstructured.Unstructured) v1.OwnerReference {
+	isController := true
+	return v1.OwnerReference{
+		APIVersion: owner.GetAPIVersion(),
+		Kind:       owner.GetKind(),
+		Name:       owner.GetName(),
+		UID:        owner.GetUID(),
+		Controller: &isController,
+	}
+}
+
+func ensureLimitRange(namespace string, owner *unstructured.Unstructured) error {
+	const lrName = "ambient-default-limits"
+
+	managedLabels := map[string]string{
+		"ambient-code.io/managed": "true",
+	}
+
+	lr := &corev1.LimitRange{
+		ObjectMeta: v1.ObjectMeta{
+			Name:            lrName,
+			Namespace:       namespace,
+			Labels:          managedLabels,
+			OwnerReferences: []v1.OwnerReference{buildOwnerRef(owner)},
+		},
+		Spec: corev1.LimitRangeSpec{
+			Limits: []corev1.LimitRangeItem{
+				{
+					Type: corev1.LimitTypeContainer,
+					DefaultRequest: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("250m"),
+						corev1.ResourceMemory: resource.MustParse("256Mi"),
+					},
+					Default: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("2"),
+						corev1.ResourceMemory: resource.MustParse("4Gi"),
+					},
+				},
+			},
+		},
+	}
+
+	if _, err := config.K8sClient.CoreV1().LimitRanges(namespace).Create(context.TODO(), lr, v1.CreateOptions{}); err != nil {
+		if !errors.IsAlreadyExists(err) {
+			return fmt.Errorf("failed to create LimitRange %s: %v", lrName, err)
+		}
+	} else {
+		log.Printf("Created LimitRange %s in namespace %s", lrName, namespace)
 	}
 
 	return nil
@@ -236,14 +300,7 @@ func ensureSessionTriggerRBAC(namespace string, owner *unstructured.Unstructured
 		"ambient-code.io/managed": "true",
 	}
 
-	isController := true
-	ownerRef := v1.OwnerReference{
-		APIVersion: owner.GetAPIVersion(),
-		Kind:       owner.GetKind(),
-		Name:       owner.GetName(),
-		UID:        owner.GetUID(),
-		Controller: &isController,
-	}
+	ownerRef := buildOwnerRef(owner)
 
 	// Create ServiceAccount (idempotent — ignore AlreadyExists)
 	sa := &corev1.ServiceAccount{
@@ -274,7 +331,7 @@ func ensureSessionTriggerRBAC(namespace string, owner *unstructured.Unstructured
 			{
 				APIGroups: []string{"vteam.ambient-code"},
 				Resources: []string{"agenticsessions"},
-				Verbs:     []string{"create", "get", "list"},
+				Verbs:     []string{"create", "get", "list", "update"},
 			},
 		},
 	}
@@ -282,6 +339,11 @@ func ensureSessionTriggerRBAC(namespace string, owner *unstructured.Unstructured
 		if !errors.IsAlreadyExists(err) {
 			return fmt.Errorf("failed to create Role %s: %v", roleName, err)
 		}
+		// Update existing Role to ensure it has the latest permissions
+		if _, err := config.K8sClient.RbacV1().Roles(namespace).Update(context.TODO(), role, v1.UpdateOptions{}); err != nil {
+			return fmt.Errorf("failed to update Role %s: %v", roleName, err)
+		}
+		log.Printf("Updated Role %s in namespace %s", roleName, namespace)
 	} else {
 		log.Printf("Created Role %s in namespace %s", roleName, namespace)
 	}

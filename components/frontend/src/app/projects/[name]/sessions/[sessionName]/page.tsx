@@ -19,16 +19,18 @@ import { SessionHeader } from "./session-header";
 
 // Extracted components
 import { AddContextModal } from "./components/modals/add-context-modal";
-import { UploadFileModal } from "./components/modals/upload-file-modal";
+import { UploadFileModal, type UploadFileSource } from "./components/modals/upload-file-modal";
 import { CustomWorkflowDialog } from "./components/modals/custom-workflow-dialog";
 import { ManageRemoteDialog } from "./components/modals/manage-remote-dialog";
 
 // New layout components
 import { ContentTabs } from "./components/content-tabs";
 import { FileViewer } from "./components/file-viewer";
+import { TaskTranscriptViewer } from "./components/task-transcript-viewer";
 import { ExplorerPanel } from "./components/explorer/explorer-panel";
 import { SessionSettingsModal } from "./components/session-settings-modal";
 import { WorkflowSelector } from "./components/workflow-selector";
+import { LiveModelSelector } from "./components/live-model-selector";
 import { useExplorerState } from "./hooks/use-explorer-state";
 import { useFileTabs } from "./hooks/use-file-tabs";
 
@@ -57,6 +59,7 @@ import {
   useCurrentUser,
   sessionKeys,
   useRunnerTypes,
+  useSwitchSessionModel,
 } from "@/services/queries";
 import { useCapabilities } from "@/services/queries/use-capabilities";
 import {
@@ -187,13 +190,13 @@ export default function ProjectSessionDetailPage({
   // Fetch runner capabilities and derive agent display name
   const { data: capabilities } = useCapabilities(projectName, sessionName, phase === "Running");
   const { data: runnerTypes } = useRunnerTypes(projectName);
-  const agentName = useMemo(() => {
+  const currentRunner = useMemo(() => {
     if (capabilities?.framework && runnerTypes) {
-      const matched = runnerTypes.find((rt) => rt.id === capabilities.framework);
-      if (matched) return matched.displayName;
+      return runnerTypes.find((rt) => rt.id === capabilities.framework);
     }
     return undefined;
   }, [capabilities?.framework, runnerTypes]);
+  const agentName = currentRunner?.displayName;
 
   // Track the current Langfuse trace ID for feedback association
   const [langfuseTraceId, setLangfuseTraceId] = useState<string | null>(null);
@@ -214,6 +217,7 @@ export default function ProjectSessionDetailPage({
   const aguiSendMessage = aguiStream.sendMessage;
   const aguiInterrupt = aguiStream.interrupt;
   const isRunActive = aguiStream.isRunActive;
+  const switchModelMutation = useSwitchSessionModel();
   const aguiConnectRef = useRef(aguiStream.connect);
 
   // Keep connect ref up to date
@@ -448,12 +452,59 @@ export default function ProjectSessionDetailPage({
 
   // File upload mutation
   const uploadFileMutation = useMutation({
-    mutationFn: async (source: {
-      type: "local" | "url";
-      file?: File;
-      url?: string;
-      filename?: string;
-    }) => {
+    mutationFn: async (source: UploadFileSource) => {
+      if (source.type === "folder" && source.files && source.files.length > 0) {
+        // Upload each file in the folder sequentially, preserving directory structure
+        const successes: string[] = [];
+        const failures: string[] = [];
+        for (const { file, relativePath } of source.files) {
+          // Split relativePath into directory + filename
+          const parts = relativePath.split("/");
+          const filename = parts.pop() || file.name;
+          const subpath = parts.join("/");
+
+          const formData = new FormData();
+          formData.append("type", "local");
+          formData.append("file", file);
+          formData.append("filename", filename);
+          if (subpath) {
+            formData.append("subpath", subpath);
+          }
+
+          try {
+            const response = await fetch(
+              `/api/projects/${projectName}/agentic-sessions/${sessionName}/workspace/upload`,
+              {
+                method: "POST",
+                body: formData,
+              },
+            );
+
+            if (!response.ok) {
+              const error = await response.json();
+              failures.push(error.error || relativePath);
+            } else {
+              successes.push(relativePath);
+            }
+          } catch {
+            failures.push(relativePath);
+          }
+        }
+
+        const folderName = source.files[0].relativePath.split("/")[0];
+
+        if (failures.length > 0 && successes.length === 0) {
+          throw new Error(`All ${failures.length} files failed to upload`);
+        }
+        if (failures.length > 0) {
+          throw new Error(
+            `${successes.length} of ${source.files.length} files uploaded; ${failures.length} failed: ${failures.join(", ")}`,
+          );
+        }
+
+        return { filename: folderName, fileCount: successes.length };
+      }
+
       const formData = new FormData();
       formData.append("type", source.type);
 
@@ -481,15 +532,23 @@ export default function ProjectSessionDetailPage({
       return response.json();
     },
     onSuccess: async (data) => {
-      toast.success(`File "${data.filename}" uploaded successfully`);
-      // Refresh workspace to show uploaded file
+      if (data.fileCount) {
+        toast.success(`Folder "${data.filename}" uploaded (${data.fileCount} files)`);
+      } else {
+        toast.success(`File "${data.filename}" uploaded successfully`);
+      }
+      // Refresh workspace to show uploaded file(s)
       await refetchFileUploadsList();
       await refetchDirectoryFiles();
       await refetchArtifactsFiles();
       setUploadModalOpen(false);
     },
-    onError: (error: Error) => {
+    onError: async (error: Error) => {
       toast.error(error.message || "Failed to upload file");
+      // Refresh workspace so partially uploaded files are visible
+      await refetchFileUploadsList();
+      await refetchDirectoryFiles();
+      await refetchArtifactsFiles();
     },
   });
 
@@ -682,6 +741,17 @@ export default function ProjectSessionDetailPage({
       workflowManagement.activateWorkflow(workflow, session?.status?.phase);
     }
   };
+
+  const handleModelSwitch = useCallback((model: string) => {
+    switchModelMutation.mutate(
+      { projectName, sessionName, model },
+      {
+        onError: (error: Error) => {
+          toast.error(`Failed to switch model: ${error.message}`);
+        },
+      },
+    );
+  }, [projectName, sessionName, switchModelMutation]);
 
   // Phase 1: convert committed messages + streaming tool cards into display format.
   // Does NOT depend on currentMessage / currentReasoning so it skips the full
@@ -1483,6 +1553,13 @@ export default function ProjectSessionDetailPage({
     removeFileMutation.mutate(fileName);
   }, [removeFileMutation]);
 
+  // Keep task tab status badges in sync with live AG-UI state
+  useEffect(() => {
+    for (const [taskId, task] of aguiState.backgroundTasks) {
+      fileTabs.updateTaskStatus(taskId, task.status);
+    }
+  }, [aguiState.backgroundTasks, fileTabs.updateTaskStatus]);
+
   // Loading state
   if (isLoading || !projectName || !sessionName) {
     return (
@@ -1515,101 +1592,148 @@ export default function ProjectSessionDetailPage({
     );
   }
 
-  // Chat/FileViewer content rendering helper
+  // all tab content is rendered simultaneously and toggled via CSS `hidden`
+  // so scroll position, input state, and react query cache are preserved across tab switches
   const renderMainContent = () => {
-    if (fileTabs.activeTab.type === "file") {
-      return (
-        <FileViewer
-          projectName={projectName}
-          sessionName={sessionName}
-          filePath={fileTabs.activeTab.path}
-          sessionPhase={phase}
-        />
-      );
-    }
+    const isChatActive = fileTabs.activeTab.type === "chat";
 
-    // Chat view
     return (
-      <Card className="relative flex-1 flex flex-col overflow-hidden py-0 border-0 rounded-none">
-        <CardContent className="px-6 pt-0 pb-0 flex-1 flex flex-col overflow-hidden">
-          {repoChanging && (
-            <div className="absolute inset-0 bg-background/90 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
-              <Alert className="max-w-md mx-4">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <AlertTitle>Updating Repositories...</AlertTitle>
-                <AlertDescription>
-                  <p>Please wait while repositories are being updated. This may take 10-20 seconds...</p>
-                </AlertDescription>
-              </Alert>
-            </div>
-          )}
+      <>
+        {/* chat -- always mounted, hidden when a file/task tab is active */}
+        <div className={cn("relative flex-1 flex flex-col overflow-hidden", !isChatActive && "hidden")}>
+          <Card className="relative flex-1 flex flex-col overflow-hidden py-0 border-0 rounded-none">
+            <CardContent className="px-6 pt-0 pb-0 flex-1 flex flex-col overflow-hidden">
+              {repoChanging && (
+                <div className="absolute inset-0 bg-background/90 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
+                  <Alert className="max-w-md mx-4">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <AlertTitle>Updating Repositories...</AlertTitle>
+                    <AlertDescription>
+                      <p>Please wait while repositories are being updated. This may take 10-20 seconds...</p>
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              )}
 
-          <div className="relative flex flex-col flex-1 overflow-hidden">
-            {(phase === "Creating" || phase === "Pending") && (
-              <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10">
-                <SessionStartingEvents
+              <div className="relative flex flex-col flex-1 overflow-hidden">
+                {(phase === "Creating" || phase === "Pending") && (
+                  <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10">
+                    <SessionStartingEvents
+                      projectName={projectName}
+                      sessionName={sessionName}
+                    />
+                  </div>
+                )}
+                <FeedbackProvider
                   projectName={projectName}
                   sessionName={sessionName}
-                />
-              </div>
-            )}
-            <FeedbackProvider
-              projectName={projectName}
-              sessionName={sessionName}
-              username={currentUser?.username || currentUser?.displayName || "anonymous"}
-              initialPrompt={session?.spec?.initialPrompt}
-              activeWorkflow={workflowManagement.activeWorkflow || undefined}
-              messages={streamMessages}
-              traceId={langfuseTraceId || undefined}
-              messageFeedback={aguiState.messageFeedback}
-            >
-              <MessagesTab
-                session={session}
-                streamMessages={streamMessages}
-                chatInput={chatInput}
-                setChatInput={setChatInput}
-                onSendChat={() => Promise.resolve(sendChat())}
-                onSendToolAnswer={sendToolAnswer}
-                onInterrupt={aguiInterrupt}
-                onGoToResults={() => {}}
-                onContinue={handleContinue}
-                workflowMetadata={workflowMetadata}
-                onCommandClick={handleCommandClick}
-                isRunActive={isRunActive}
-                queuedMessages={sessionQueue.messages}
-                hasRealMessages={hasRealMessages}
-                onCancelQueuedMessage={sessionQueue.cancelMessage}
-                onUpdateQueuedMessage={sessionQueue.updateMessage}
-                onClearQueue={sessionQueue.clearMessages}
-                agentName={agentName}
-                onAddRepository={handleOpenContextModal}
-                onUploadFile={handleOpenUploadModal}
-                projectName={projectName}
-                workflowSlot={
-                  <WorkflowSelector
-                    sessionPhase={session?.status?.phase}
-                    activeWorkflow={workflowManagement.activeWorkflow}
-                    activeWorkflowDetails={
-                      workflowManagement.activeWorkflow === "custom" && session?.spec?.activeWorkflow
-                        ? {
-                            gitUrl: session.spec.activeWorkflow.gitUrl,
-                            branch: session.spec.activeWorkflow.branch || "main",
-                            path: session.spec.activeWorkflow.path || "",
-                          }
-                        : undefined
+                  username={currentUser?.username || currentUser?.displayName || "anonymous"}
+                  initialPrompt={session?.spec?.initialPrompt}
+                  activeWorkflow={workflowManagement.activeWorkflow || undefined}
+                  messages={streamMessages}
+                  traceId={langfuseTraceId || undefined}
+                  messageFeedback={aguiState.messageFeedback}
+                >
+                  <MessagesTab
+                    session={session}
+                    streamMessages={streamMessages}
+                    chatInput={chatInput}
+                    setChatInput={setChatInput}
+                    onSendChat={() => Promise.resolve(sendChat())}
+                    onSendToolAnswer={sendToolAnswer}
+                    onInterrupt={aguiInterrupt}
+                    onGoToResults={() => {}}
+                    onContinue={handleContinue}
+                    workflowMetadata={workflowMetadata}
+                    onCommandClick={handleCommandClick}
+                    isRunActive={isRunActive}
+                    queuedMessages={sessionQueue.messages}
+                    hasRealMessages={hasRealMessages}
+                    onCancelQueuedMessage={sessionQueue.cancelMessage}
+                    onUpdateQueuedMessage={sessionQueue.updateMessage}
+                    onClearQueue={sessionQueue.clearMessages}
+                    agentName={agentName}
+                    onAddRepository={handleOpenContextModal}
+                    onUploadFile={handleOpenUploadModal}
+                    projectName={projectName}
+                    modelSlot={
+                      phase === "Running" ? (
+                        <LiveModelSelector
+                          projectName={projectName}
+                          currentModel={session?.spec?.llmSettings?.model || ""}
+                          provider={currentRunner?.provider}
+                          disabled={isRunActive}
+                          switching={switchModelMutation.isPending}
+                          onSelect={handleModelSwitch}
+                        />
+                      ) : undefined
                     }
-                    selectedWorkflow={workflowManagement.selectedWorkflow}
-                    workflowActivating={workflowManagement.workflowActivating}
-                    ootbWorkflows={ootbWorkflows}
-                    onWorkflowChange={handleWorkflowChange}
-                    onLoadCustom={() => setCustomWorkflowDialogOpen(true)}
+                    workflowSlot={
+                      <WorkflowSelector
+                        sessionPhase={session?.status?.phase}
+                        activeWorkflow={workflowManagement.activeWorkflow}
+                        activeWorkflowDetails={
+                          workflowManagement.activeWorkflow === "custom" && session?.spec?.activeWorkflow
+                            ? {
+                                gitUrl: session.spec.activeWorkflow.gitUrl,
+                                branch: session.spec.activeWorkflow.branch || "main",
+                                path: session.spec.activeWorkflow.path || "",
+                              }
+                            : undefined
+                        }
+                        selectedWorkflow={workflowManagement.selectedWorkflow}
+                        workflowActivating={workflowManagement.workflowActivating}
+                        ootbWorkflows={ootbWorkflows}
+                        onWorkflowChange={handleWorkflowChange}
+                        onLoadCustom={() => setCustomWorkflowDialogOpen(true)}
+                      />
+                    }
                   />
-                }
+                </FeedbackProvider>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* file tabs -- one FileViewer per open tab, only the active one is visible */}
+        {fileTabs.openTabs.map((tab) => {
+          const isActive = fileTabs.activeTab.type === "file" && fileTabs.activeTab.path === tab.path;
+          return (
+            <div
+              key={tab.path}
+              className={cn("flex-1 flex flex-col overflow-hidden", !isActive && "hidden")}
+            >
+              <FileViewer
+                projectName={projectName}
+                sessionName={sessionName}
+                filePath={tab.path}
+                sessionPhase={phase}
+                isActive={isActive}
               />
-            </FeedbackProvider>
-          </div>
-        </CardContent>
-      </Card>
+            </div>
+          );
+        })}
+
+        {/* task tabs -- same pattern */}
+        {fileTabs.openTaskTabs.map((tab) => {
+          const isActive = fileTabs.activeTab.type === "task" && fileTabs.activeTab.taskId === tab.taskId;
+          const task = aguiState.backgroundTasks.get(tab.taskId);
+          return (
+            <div
+              key={tab.taskId}
+              className={cn("flex-1 flex flex-col overflow-hidden", !isActive && "hidden")}
+            >
+              <TaskTranscriptViewer
+                projectName={projectName}
+                sessionName={sessionName}
+                taskId={tab.taskId}
+                task={task}
+                isActive={isActive}
+              />
+            </div>
+          );
+        })}
+      </>
     );
   };
 
@@ -1630,10 +1754,13 @@ export default function ProjectSessionDetailPage({
           {/* Tab bar */}
           <ContentTabs
             openTabs={fileTabs.openTabs}
+            taskTabs={fileTabs.openTaskTabs}
             activeTab={fileTabs.activeTab}
             onSwitchToChat={fileTabs.switchToChat}
             onSwitchToFile={fileTabs.switchToFile}
+            onSwitchToTask={fileTabs.switchToTask}
             onCloseFile={fileTabs.closeFile}
+            onCloseTask={fileTabs.closeTask}
             rightActions={
               <>
                 <Button
@@ -1695,6 +1822,7 @@ export default function ProjectSessionDetailPage({
               onTabChange={explorer.setActiveTab}
               onClose={explorer.close}
               projectName={projectName}
+              sessionName={sessionName}
               directoryOptions={directoryOptions}
               selectedDirectory={selectedDirectory}
               onDirectoryChange={setSelectedDirectory}
@@ -1715,6 +1843,16 @@ export default function ProjectSessionDetailPage({
               onUploadFile={handleOpenUploadModal}
               onRemoveRepository={handleRemoveRepository}
               onRemoveFile={handleRemoveFile}
+              backgroundTasks={aguiState.backgroundTasks}
+              onOpenTranscript={(task) => {
+                fileTabs.openTask({
+                  taskId: task.task_id,
+                  name: task.description.length > 30
+                    ? task.description.slice(0, 30) + "..."
+                    : task.description,
+                  status: task.status,
+                });
+              }}
             />
           </div>
         </div>

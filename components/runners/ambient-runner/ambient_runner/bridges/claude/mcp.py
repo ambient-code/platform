@@ -11,9 +11,10 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from ambient_runner.platform.context import RunnerContext
+from ambient_runner.platform.utils import get_bot_token
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,8 @@ DEFAULT_ALLOWED_TOOLS = [
     "Edit",
     "MultiEdit",
     "WebSearch",
+    "Skill",
+    "Agent",
 ]
 
 
@@ -145,7 +148,7 @@ def log_auth_status(mcp_servers: dict) -> None:
 
 def _read_google_credentials(
     workspace_path: Path, secret_path: Path
-) -> Dict[str, Any] | None:
+) -> dict[str, Any] | None:
     cred_path = workspace_path if workspace_path.exists() else secret_path
     if not cred_path.exists():
         return None
@@ -172,7 +175,7 @@ def _parse_token_expiry(expiry_str: str) -> datetime | None:
 
 
 def _validate_google_token(
-    user_creds: Dict[str, Any], user_email: str
+    user_creds: dict[str, Any], user_email: str
 ) -> tuple[bool | None, str]:
     if not user_creds.get("access_token") or not user_creds.get("refresh_token"):
         return False, "Google OAuth credentials incomplete - missing or empty tokens"
@@ -243,7 +246,7 @@ def check_mcp_authentication(server_name: str) -> tuple[bool | None, str | None]
             if base and project and session_id:
                 url = f"{base}/projects/{project.strip()}/agentic-sessions/{session_id}/credentials/jira"
                 req = _urllib_request.Request(url, method="GET")
-                bot = (os.getenv("BOT_TOKEN") or "").strip()
+                bot = get_bot_token()
                 if bot:
                     req.add_header("Authorization", f"Bearer {bot}")
                 try:

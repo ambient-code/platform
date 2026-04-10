@@ -3,6 +3,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { useInputHistory } from "@/hooks/use-input-history";
 
 interface InputWithHistoryProps extends React.ComponentProps<"input"> {
@@ -19,6 +20,7 @@ export function InputWithHistory({
   onFocus,
   onBlur,
   className,
+  autoComplete,
   ...props
 }: InputWithHistoryProps) {
   const { history } = useInputHistory(historyKey, maxHistoryItems);
@@ -36,6 +38,7 @@ export function InputWithHistory({
       ),
     [history, currentValue]
   );
+  const isDropdownOpen = showDropdown && filteredHistory.length > 0;
 
   const handleSelect = (item: string) => {
     const syntheticEvent = {
@@ -47,15 +50,35 @@ export function InputWithHistory({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (showDropdown && filteredHistory.length > 0) {
+    if (filteredHistory.length > 0) {
+      if (!isDropdownOpen && e.key === "ArrowDown") {
+        e.preventDefault();
+        setShowDropdown(true);
+        setSelectedIndex(0);
+        return;
+      }
+
+      if (!isDropdownOpen && e.key === "ArrowUp") {
+        e.preventDefault();
+        setShowDropdown(true);
+        setSelectedIndex(filteredHistory.length - 1);
+        return;
+      }
+    }
+
+    if (isDropdownOpen && filteredHistory.length > 0) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setSelectedIndex((prev) => Math.min(prev + 1, filteredHistory.length - 1));
+        setSelectedIndex((prev) =>
+          prev < 0 ? 0 : Math.min(prev + 1, filteredHistory.length - 1)
+        );
         return;
       }
       if (e.key === "ArrowUp") {
         e.preventDefault();
-        setSelectedIndex((prev) => Math.max(prev - 1, -1));
+        setSelectedIndex((prev) =>
+          prev < 0 ? filteredHistory.length - 1 : Math.max(prev - 1, -1)
+        );
         return;
       }
       if (e.key === "Enter" && selectedIndex >= 0) {
@@ -91,18 +114,33 @@ export function InputWithHistory({
   };
 
   return (
-    <div className="relative">
-      <Input
-        value={value}
-        onChange={handleChange}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
-        className={className}
-        {...props}
-      />
-      {showDropdown && filteredHistory.length > 0 && (
-        <div className="absolute z-[100] w-full mt-1 rounded-md border bg-popover shadow-md overflow-hidden">
+    <Popover open={isDropdownOpen}>
+      <PopoverAnchor asChild>
+        <div className="relative w-full">
+          <Input
+            value={value}
+            onChange={handleChange}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
+            className={className}
+            autoComplete={autoComplete ?? "off"}
+            aria-autocomplete="list"
+            aria-expanded={isDropdownOpen}
+            aria-controls={`${historyKey}-history-list`}
+            {...props}
+          />
+        </div>
+      </PopoverAnchor>
+      <PopoverContent
+        id={`${historyKey}-history-list`}
+        align="start"
+        side="bottom"
+        sideOffset={4}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        className="z-[100] w-[var(--radix-popover-trigger-width)] overflow-hidden p-0"
+      >
+        <div>
           {filteredHistory.map((item, index) => (
             <button
               key={item}
@@ -120,7 +158,7 @@ export function InputWithHistory({
             </button>
           ))}
         </div>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 }

@@ -47,4 +47,5 @@ export const initialState: AGUIClientState = {
   messageFeedback: new Map(),  // Track feedback for messages
   currentReasoning: null,
   currentThinking: null,
+  backgroundTasks: new Map(),
 }

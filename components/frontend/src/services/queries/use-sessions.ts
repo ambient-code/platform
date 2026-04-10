@@ -346,6 +346,31 @@ export function useUpdateSessionDisplayName() {
 }
 
 /**
+ * Hook to switch the LLM model for a running session
+ */
+export function useSwitchSessionModel() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      projectName,
+      sessionName,
+      model,
+    }: {
+      projectName: string;
+      sessionName: string;
+      model: string;
+    }) => sessionsApi.switchSessionModel(projectName, sessionName, model),
+    onSuccess: (_data, { projectName, sessionName }) => {
+      queryClient.invalidateQueries({
+        queryKey: sessionKeys.detail(projectName, sessionName),
+        refetchType: 'all',
+      });
+    },
+  });
+}
+
+/**
  * Hook to fetch session export data (AG-UI events + legacy messages)
  */
 export function useSessionExport(projectName: string, sessionName: string, enabled: boolean) {

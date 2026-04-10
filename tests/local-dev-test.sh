@@ -426,9 +426,30 @@ test_reload_commands() {
     fi
 }
 
+# Test: Benchmark Harness Syntax
+test_benchmark_syntax() {
+    log_section "Test 15: Benchmark Harness Syntax"
+
+    if bash -n scripts/benchmarks/component-bench.sh 2>/dev/null; then
+        log_success "component-bench.sh syntax is valid"
+        ((PASSED_TESTS++))
+    else
+        log_error "component-bench.sh has syntax errors"
+        ((FAILED_TESTS++))
+    fi
+
+    if make -n benchmark >/dev/null 2>&1; then
+        log_success "make benchmark syntax is valid"
+        ((PASSED_TESTS++))
+    else
+        log_error "make benchmark has syntax errors"
+        ((FAILED_TESTS++))
+    fi
+}
+
 # Test: Logging Commands
 test_logging_commands() {
-    log_section "Test 15: Logging Commands"
+    log_section "Test 16: Logging Commands"
 
     # Test that we can get logs from each component
     local components=("backend-api" "frontend" "agentic-operator")
@@ -445,7 +466,7 @@ test_logging_commands() {
 
 # Test: Storage Configuration
 test_storage() {
-    log_section "Test 16: Storage Configuration"
+    log_section "Test 17: Storage Configuration"
 
     # Check if workspace PVC exists
     if kubectl get pvc workspace-pvc -n "$NAMESPACE" >/dev/null 2>&1; then
@@ -918,6 +939,7 @@ main() {
     test_rbac
     test_build_command
     test_reload_commands
+    test_benchmark_syntax
     test_logging_commands
     test_storage
     test_environment_variables

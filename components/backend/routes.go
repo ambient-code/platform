@@ -59,6 +59,7 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.GET("/agentic-sessions/:sessionName/repos/status", handlers.GetReposStatus)
 			projectGroup.DELETE("/agentic-sessions/:sessionName/repos/:repoName", handlers.RemoveRepo)
 			projectGroup.PUT("/agentic-sessions/:sessionName/displayname", handlers.UpdateSessionDisplayName)
+			projectGroup.POST("/agentic-sessions/:sessionName/model", handlers.SwitchModel)
 
 			// OAuth integration - requires user auth like all other session endpoints
 			projectGroup.GET("/agentic-sessions/:sessionName/oauth/:provider/url", handlers.GetOAuthURL)
@@ -71,6 +72,11 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.POST("/agentic-sessions/:sessionName/agui/run", websocket.HandleAGUIRunProxy)
 			projectGroup.POST("/agentic-sessions/:sessionName/agui/interrupt", websocket.HandleAGUIInterrupt)
 			projectGroup.POST("/agentic-sessions/:sessionName/agui/feedback", websocket.HandleAGUIFeedback)
+
+			// Background task proxy endpoints
+			projectGroup.POST("/agentic-sessions/:sessionName/agui/tasks/:taskId/stop", websocket.HandleTaskStop)
+			projectGroup.GET("/agentic-sessions/:sessionName/agui/tasks/:taskId/output", websocket.HandleTaskOutput)
+			projectGroup.GET("/agentic-sessions/:sessionName/agui/tasks", websocket.HandleTaskList)
 
 			// Runner capabilities endpoint
 			projectGroup.GET("/agentic-sessions/:sessionName/agui/capabilities", websocket.HandleCapabilities)
@@ -106,6 +112,10 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.GET("/keys", handlers.ListProjectKeys)
 			projectGroup.POST("/keys", handlers.CreateProjectKey)
 			projectGroup.DELETE("/keys/:keyId", handlers.DeleteProjectKey)
+
+			// Project-level MCP server configuration
+			projectGroup.GET("/mcp-servers", handlers.GetProjectMCPServers)
+			projectGroup.PUT("/mcp-servers", handlers.UpdateProjectMCPServers)
 
 			projectGroup.GET("/secrets", handlers.ListNamespaceSecrets)
 			projectGroup.GET("/runner-secrets", handlers.ListRunnerSecrets)

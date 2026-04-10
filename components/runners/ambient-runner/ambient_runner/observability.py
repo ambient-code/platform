@@ -48,6 +48,15 @@ import os
 from typing import Any
 from urllib.parse import urlparse
 
+from ambient_runner.mlflow_observability import MLflowSessionTracer
+from ambient_runner.observability_config import use_langfuse_backend, use_mlflow_backend
+from ambient_runner.observability_privacy import (
+    privacy_mask_message_data,
+    resolve_message_mask_fn,
+)
+
+# Alias for tests and legacy imports
+_privacy_masking_function = privacy_mask_message_data
 from ambient_runner.platform.security_utils import (
     sanitize_exception_message,
     sanitize_model_name,
@@ -67,78 +76,6 @@ _TOKEN_KEYS = (
 def is_langfuse_enabled() -> bool:
     """Check whether Langfuse observability is enabled via env var."""
     return os.getenv("LANGFUSE_ENABLED", "").strip().lower() in ("1", "true", "yes")
-
-
-def _privacy_masking_function(data: Any, **kwargs) -> Any:
-    """Mask sensitive user inputs and outputs while preserving usage metrics.
-
-    This function redacts message content (user prompts and assistant responses)
-    to prevent logging potentially sensitive data, while preserving:
-    - Usage metrics (token counts, costs)
-    - Metadata (model, turn number, timestamps)
-    - Session identifiers
-
-    Controlled by LANGFUSE_MASK_MESSAGES environment variable:
-    - "true" (default): Redact all message content for privacy
-    - "false": Allow full message logging (use only in dev/testing)
-
-    Args:
-        data: Data to potentially mask (string, dict, list, or other)
-        **kwargs: Additional context (unused but required by Langfuse API)
-
-    Returns:
-        Masked data with same structure as input
-    """
-    if isinstance(data, str):
-        # Redact string content (likely message text)
-        # Short strings (< 50 chars) might be metadata, keep them
-        if len(data) > 50:
-            return "[REDACTED FOR PRIVACY]"
-        return data
-    elif isinstance(data, dict):
-        # Recursively process dict, preserving structure
-        masked = {}
-        for key, value in data.items():
-            # Preserve usage and metadata fields - these don't contain sensitive data
-            if key in (
-                "usage",
-                "usage_details",
-                "metadata",
-                "model",
-                "turn",
-                "input_tokens",
-                "output_tokens",
-                "cache_read_input_tokens",
-                "cache_creation_input_tokens",
-                "total_tokens",
-                "cost_usd",
-                "duration_ms",
-                "duration_api_ms",
-                "num_turns",
-                "session_id",
-                "tool_id",
-                "tool_name",
-                "is_error",
-                "level",
-            ):
-                masked[key] = value
-            # Redact content fields that may contain user data
-            elif key in ("content", "text", "input", "output", "prompt", "completion"):
-                if isinstance(value, str) and len(value) > 50:
-                    masked[key] = "[REDACTED FOR PRIVACY]"
-                else:
-                    # Short values might be metadata/enums, recurse
-                    masked[key] = _privacy_masking_function(value)
-            else:
-                # Recursively process other fields
-                masked[key] = _privacy_masking_function(value)
-        return masked
-    elif isinstance(data, list):
-        # Recursively process list items
-        return [_privacy_masking_function(item) for item in data]
-    else:
-        # Preserve other types (numbers, booleans, None, etc.)
-        return data
 
 
 class ObservabilityManager:
@@ -181,6 +118,7 @@ class ObservabilityManager:
         self._metric_total_cost_usd: float = 0.0
         # Track last seen usage to compute deltas (SDK may report cumulative values)
         self._metric_prev_usage: dict[str, int] = {}
+        self._mlflow: MLflowSessionTracer | None = None
 
     def _exit_turn_propagate_ctx(self) -> None:
         """Exit and clear the per-turn propagation context if active."""
@@ -202,26 +140,81 @@ class ObservabilityManager:
         workflow_branch: str = "",
         workflow_path: str = "",
     ) -> bool:
-        """Initialize Langfuse observability.
-
-        Args:
-            prompt: Initial prompt for the session
-            namespace: Kubernetes namespace
-            model: Model name to track in metadata (e.g., 'claude-3-5-sonnet-20241022')
-            workflow_url: Active workflow git URL (from ACTIVE_WORKFLOW_GIT_URL)
-            workflow_branch: Active workflow branch (from ACTIVE_WORKFLOW_BRANCH)
-            workflow_path: Active workflow subpath (from ACTIVE_WORKFLOW_PATH)
+        """Initialize observability backends (Langfuse and/or MLflow per config).
 
         Returns:
-            True if Langfuse initialized successfully
+            True if at least one backend initialized successfully.
         """
+        mask_fn = resolve_message_mask_fn()
+        if mask_fn:
+            logging.info(
+                "Observability: Privacy masking ENABLED - user messages and responses will be redacted"
+            )
+        else:
+            logging.warning(
+                "Observability: Privacy masking DISABLED - full message content may be logged "
+                "(use only for dev/testing)"
+            )
+
+        langfuse_ok = False
+        if use_langfuse_backend() and is_langfuse_enabled():
+            langfuse_ok = self._initialize_langfuse(
+                prompt=prompt,
+                namespace=namespace,
+                model=model,
+                workflow_url=workflow_url,
+                workflow_branch=workflow_branch,
+                workflow_path=workflow_path,
+                mask_fn=mask_fn,
+            )
+
+        mlflow_ok = False
+        if use_mlflow_backend():
+            self._mlflow = MLflowSessionTracer(
+                session_id=self.session_id,
+                user_id=self.user_id,
+                user_name=self.user_name,
+            )
+            try:
+                mlflow_ok = self._mlflow.initialize(
+                    prompt=prompt,
+                    namespace=namespace,
+                    model=model,
+                    workflow_url=workflow_url,
+                    workflow_branch=workflow_branch,
+                    workflow_path=workflow_path,
+                    mask_fn=mask_fn,
+                )
+            except Exception as e:
+                logging.warning(
+                    "MLflow observability init failed: %s", e, exc_info=True
+                )
+                self._mlflow = None
+
+        if (langfuse_ok or mlflow_ok) and not self.namespace:
+            self.namespace = namespace
+
+        return langfuse_ok or mlflow_ok
+
+    def _initialize_langfuse(
+        self,
+        *,
+        prompt: str,
+        namespace: str,
+        model: str | None,
+        workflow_url: str,
+        workflow_branch: str,
+        workflow_path: str,
+        mask_fn: Any,
+    ) -> bool:
+        """Initialize Langfuse only (legacy behaviour)."""
         if not is_langfuse_enabled():
             return False
 
         try:
             from langfuse import Langfuse, propagate_attributes
         except ImportError:
-            logging.debug("Langfuse not available - continuing without observability")
+            logging.debug("Langfuse not available - continuing without Langfuse")
             return False
 
         public_key = os.getenv("LANGFUSE_PUBLIC_KEY", "").strip()
@@ -241,7 +234,6 @@ class ObservabilityManager:
             )
             return False
 
-        # Validate host format
         try:
             parsed = urlparse(host)
             if (
@@ -256,47 +248,20 @@ class ObservabilityManager:
             return False
 
         try:
-            # Determine if message masking should be enabled
-            # Default: MASK messages (privacy-first approach)
-            # Set LANGFUSE_MASK_MESSAGES=false to explicitly disable masking (dev/testing only)
-            mask_messages_env = (
-                os.getenv("LANGFUSE_MASK_MESSAGES", "true").strip().lower()
-            )
-            enable_masking = mask_messages_env not in ("false", "0", "no")
-
-            if enable_masking:
-                logging.info(
-                    "Langfuse: Privacy masking ENABLED - user messages and responses will be redacted"
-                )
-                mask_fn = _privacy_masking_function
-            else:
-                logging.warning(
-                    "Langfuse: Privacy masking DISABLED - full message content will be logged (use only for dev/testing)"
-                )
-                mask_fn = None
-
-            # Initialize client with optional masking
             self.langfuse_client = Langfuse(
                 public_key=public_key, secret_key=secret_key, host=host, mask=mask_fn
             )
 
-            # Store namespace for use in session metrics span
             self.namespace = namespace
 
-            # Build metadata with model information
             metadata = {
                 "namespace": namespace,
                 "user_name": self.user_name,
                 "initial_prompt": prompt[:200] if len(prompt) > 200 else prompt,
             }
 
-            # Build tags list
             tags = ["claude-code", f"namespace:{namespace}"]
 
-            # Add model to metadata and tags if provided (after sanitization)
-            # SECURITY: Model name is sanitized via sanitize_model_name() to prevent injection attacks.
-            # Only alphanumeric chars and allowed separators (-, _, :, @, ., /) are permitted.
-            # This prevents malicious tag values from disrupting Langfuse API or metadata storage.
             if model:
                 sanitized_model = sanitize_model_name(model)
                 if sanitized_model:
@@ -310,9 +275,6 @@ class ObservabilityManager:
                         f"Langfuse: Model name '{model}' failed sanitization - omitting from metadata"
                     )
 
-            # Add workflow context to metadata and tags when a workflow is active.
-            # The operator sets ACTIVE_WORKFLOW_* env vars on runner pods; callers
-            # read those and pass the values here so traces can be filtered by workflow.
             workflow_url = (workflow_url or "").strip()
             if workflow_url:
                 raw_name = (
@@ -341,22 +303,16 @@ class ObservabilityManager:
                         "Langfuse: Workflow added to session metadata (name could not be derived)"
                     )
 
-            # Enter propagate_attributes context - all traces share session_id/user_id/tags/metadata
-            # Each turn will be a separate trace, automatically grouped by session_id
-            # Save args so we can re-enter the context per-turn (contextvars are
-            # per-asyncio-task, and each HTTP request runs in a new task).
             self._propagate_args = {
                 "user_id": self.user_id,
                 "session_id": self.session_id,
                 "tags": tags,
                 "metadata": metadata,
             }
-            # Wrap context creation and __enter__ to ensure proper cleanup on failure
             try:
                 self._propagate_ctx = propagate_attributes(**self._propagate_args)
                 self._propagate_ctx.__enter__()
             except Exception:
-                # Cleanup propagate context if __enter__ failed
                 if self._propagate_ctx:
                     try:
                         self._propagate_ctx.__exit__(None, None, None)
@@ -375,7 +331,6 @@ class ObservabilityManager:
             error_msg = sanitize_exception_message(e, secrets)
             logging.warning(f"Langfuse init failed: {error_msg}")
 
-            # Cleanup on initialization failure
             if self._propagate_ctx:
                 try:
                     self._propagate_ctx.__exit__(None, None, None)
@@ -385,6 +340,30 @@ class ObservabilityManager:
             self.langfuse_client = None
             self._propagate_ctx = None
             return False
+
+    def _has_active_turn(self) -> bool:
+        if self.langfuse_client and self._current_turn_generation:
+            return True
+        if self.mlflow_tracing_active and self._mlflow.has_active_turn:
+            return True
+        return False
+
+    @staticmethod
+    def _extract_assistant_text(message: Any) -> str:
+        """Extract assistant text from a Claude SDK message (or best-effort without SDK)."""
+        try:
+            from claude_agent_sdk import TextBlock
+        except ImportError:
+            TextBlock = None  # type: ignore[misc,assignment]
+
+        text_content: list[str] = []
+        message_content = getattr(message, "content", []) or []
+        for blk in message_content:
+            if TextBlock is not None and isinstance(blk, TextBlock):
+                text_content.append(getattr(blk, "text", ""))
+            elif hasattr(blk, "text"):
+                text_content.append(str(getattr(blk, "text", "")))
+        return "\n".join(text_content) if text_content else "(no text output)"
 
     def start_turn(self, model: str, user_input: str | None = None) -> None:
         """Start tracking a new turn as a top-level trace.
@@ -404,68 +383,67 @@ class ObservabilityManager:
             model: Model name (e.g., "claude-3-5-sonnet-20241022")
             user_input: Optional actual user input/prompt (if available)
         """
-        if not self.langfuse_client:
+        if not self.langfuse_client and not self.mlflow_tracing_active:
             return
 
-        # Guard: Prevent creating duplicate traces for the same turn
-        # SDK sends multiple AssistantMessages during streaming - only create trace once
-        if self._current_turn_generation:
+        if self._has_active_turn():
             logging.debug(
-                "Langfuse: Trace already active for current turn, skipping duplicate start_turn"
+                "Observability: Trace already active for current turn, skipping duplicate start_turn"
             )
             return
 
-        try:
-            # Re-enter propagate_attributes for this turn's async context.
-            # The context from initialize() may not be visible here because
-            # each HTTP request runs in a new asyncio task with fresh contextvars.
-            if self._propagate_args:
-                from langfuse import propagate_attributes
+        resolved_input = user_input
+        if resolved_input is None and self._pending_initial_prompt:
+            resolved_input = self._pending_initial_prompt
+            self._pending_initial_prompt = None
+            logging.debug("Langfuse: Using pending initial prompt")
 
-                self._turn_propagate_ctx = propagate_attributes(**self._propagate_args)
-                self._turn_propagate_ctx.__enter__()
+        if self.langfuse_client:
+            try:
+                if self._propagate_args:
+                    from langfuse import propagate_attributes
 
-            # Use pending initial prompt for turn 1 if available
-            if user_input is None and self._pending_initial_prompt:
-                user_input = self._pending_initial_prompt
-                self._pending_initial_prompt = None  # Clear after use
-                logging.debug("Langfuse: Using pending initial prompt")
+                    self._turn_propagate_ctx = propagate_attributes(
+                        **self._propagate_args
+                    )
+                    self._turn_propagate_ctx.__enter__()
 
-            # Use actual user input if provided, otherwise use generic placeholder
-            if user_input:
-                input_content = [{"role": "user", "content": user_input}]
-                logging.info(
-                    f"Langfuse: Starting turn trace with model={model} and actual user input"
+                if resolved_input:
+                    input_content = [{"role": "user", "content": resolved_input}]
+                    logging.info(
+                        f"Langfuse: Starting turn trace with model={model} and actual user input"
+                    )
+                else:
+                    input_content = [{"role": "user", "content": "User input"}]
+                    logging.info(f"Langfuse: Starting turn trace with model={model}")
+
+                self._current_turn_ctx = (
+                    self.langfuse_client.start_as_current_observation(
+                        as_type="generation",
+                        name="claude_interaction",
+                        input=input_content,
+                        model=model,
+                        metadata={},
+                    )
                 )
-            else:
-                input_content = [{"role": "user", "content": "User input"}]
-                logging.info(f"Langfuse: Starting turn trace with model={model}")
+                self._current_turn_generation = self._current_turn_ctx.__enter__()
+                current_tid = self.get_current_trace_id()
+                if current_tid:
+                    self._last_trace_id = current_tid
+                logging.info(
+                    f"Langfuse: Created new trace (model={model}, trace_id={current_tid})"
+                )
+            except Exception as e:
+                self._current_turn_generation = None
+                self._current_turn_ctx = None
+                self._exit_turn_propagate_ctx()
+                logging.error(f"Langfuse: Failed to start turn: {e}", exc_info=True)
 
-            # Create generation as a TRACE using start_as_current_observation()
-            # Name doesn't include turn number - that will be added to metadata in end_turn()
-            # This makes the trace a top-level observation, not nested
-            # Tools will automatically become child observations of this trace
-            self._current_turn_ctx = self.langfuse_client.start_as_current_observation(
-                as_type="generation",
-                name="claude_interaction",  # Generic name, turn number added in metadata
-                input=input_content,
-                model=model,
-                metadata={},  # Turn number will be added in end_turn()
-            )
-            self._current_turn_generation = self._current_turn_ctx.__enter__()
-            # Persist trace ID so it survives end_turn() — needed for feedback
-            current_tid = self.get_current_trace_id()
-            if current_tid:
-                self._last_trace_id = current_tid
-            logging.info(
-                f"Langfuse: Created new trace (model={model}, trace_id={current_tid})"
-            )
-
-        except Exception as e:
-            self._current_turn_generation = None
-            self._current_turn_ctx = None
-            self._exit_turn_propagate_ctx()
-            logging.error(f"Langfuse: Failed to start turn: {e}", exc_info=True)
+        if self.mlflow_tracing_active:
+            try:
+                self._mlflow.start_turn(model, resolved_input)
+            except Exception as e:
+                logging.warning("MLflow: start_turn failed: %s", e, exc_info=True)
 
     def get_current_trace_id(self) -> str | None:
         """Get the current turn's trace ID for feedback association.
@@ -491,6 +469,21 @@ class ObservabilityManager:
         """
         return self._last_trace_id
 
+    @property
+    def mlflow_tracing_active(self) -> bool:
+        """True when MLflow tracing is selected, the package initialized, and setup succeeded."""
+        return self._mlflow is not None and self._mlflow.enabled
+
+    @property
+    def tracing_capability_label(self) -> str | None:
+        """Comma-separated backends for ``FrameworkCapabilities.tracing``."""
+        parts: list[str] = []
+        if self.langfuse_client:
+            parts.append("langfuse")
+        if self.mlflow_tracing_active:
+            parts.append("mlflow")
+        return ",".join(parts) if parts else None
+
     def end_turn(
         self, turn_count: int, message: Any, usage: dict | None = None
     ) -> None:
@@ -504,103 +497,93 @@ class ObservabilityManager:
             message: AssistantMessage from Claude SDK
             usage: Usage dict from ResultMessage with input_tokens, output_tokens, cache tokens, etc.
         """
-        # Return silently if Langfuse not initialized
-        if not self.langfuse_client:
+        if not self.langfuse_client and not self.mlflow_tracing_active:
             return
 
-        if not self._current_turn_generation:
-            logging.debug(
-                f"Langfuse: end_turn called but no active turn for turn {turn_count} (may not be initialized)"
-            )
-            return
+        output_text = self._extract_assistant_text(message)
+        usage_details_dict = self._build_usage_details(usage)
+        evt_model = getattr(self, "_evt_model", "")
+        self._accumulate_usage(usage, evt_model)
 
-        try:
-            from claude_agent_sdk import TextBlock
-
-            # Extract text content
-            text_content = []
-            message_content = getattr(message, "content", []) or []
-            for blk in message_content:
-                if isinstance(blk, TextBlock):
-                    text_content.append(getattr(blk, "text", ""))
-
-            output_text = (
-                "\n".join(text_content) if text_content else "(no text output)"
-            )
-
-            # Calculate usage_details if we have usage data
-            usage_details_dict = self._build_usage_details(usage)
-
-            # Accumulate session-level usage metrics
-            evt_model = getattr(self, "_evt_model", "")
-            self._accumulate_usage(usage, evt_model)
-
-            # Update with output, usage_details, and turn number in metadata
-            # SDK v3 requires 'usage_details' parameter for usage tracking
-            update_params = {
-                "output": output_text,
-                "metadata": {"turn": turn_count},  # Add SDK's authoritative turn number
-            }
-            if usage_details_dict:
-                update_params["usage_details"] = usage_details_dict
-            self._current_turn_generation.update(**update_params)
-
-            # Exit the context manager to properly close the trace
-            if self._current_turn_ctx:
-                self._current_turn_ctx.__exit__(None, None, None)
-
-            self._exit_turn_propagate_ctx()
-
-            # Clear current turn state
-            self._current_turn_generation = None
-            self._current_turn_ctx = None
-
-            # Flush data to Langfuse immediately after turn completes
-            # This ensures traces appear in the UI during long-running sessions
-            if self.langfuse_client:
-                try:
-                    self.langfuse_client.flush()
-                    logging.info(f"Langfuse: Flushed turn {turn_count} data")
-                except Exception as e:
-                    logging.warning(
-                        f"Langfuse: Flush failed after turn {turn_count}: {e}"
-                    )
-
-            if usage_details_dict:
-                input_count = usage_details_dict.get("input", 0)
-                output_count = usage_details_dict.get("output", 0)
-                cache_read_count = usage_details_dict.get("cache_read_input_tokens", 0)
-                cache_creation_count = usage_details_dict.get(
-                    "cache_creation_input_tokens", 0
+        if self.langfuse_client:
+            if not self._current_turn_generation:
+                logging.debug(
+                    f"Langfuse: end_turn called but no active turn for turn {turn_count} (may not be initialized)"
                 )
-                total_tokens = (
-                    input_count + output_count + cache_read_count + cache_creation_count
-                )
-
-                log_msg = (
-                    f"Langfuse: Completed turn {turn_count} - "
-                    f"{input_count} input, {output_count} output"
-                )
-                if cache_read_count > 0 or cache_creation_count > 0:
-                    log_msg += f", {cache_read_count} cache_read, {cache_creation_count} cache_creation"
-                log_msg += f" (total: {total_tokens})"
-                logging.info(log_msg)
             else:
-                logging.info(f"Langfuse: Completed turn {turn_count} (no usage data)")
-
-        except Exception as e:
-            logging.error(f"Langfuse: Failed to end turn: {e}", exc_info=True)
-            # Clean up turn state even on error
-            if self._current_turn_ctx:
                 try:
-                    self._current_turn_ctx.__exit__(None, None, None)
-                except Exception as cleanup_error:
-                    logging.warning(
-                        f"Langfuse: Cleanup during error failed: {cleanup_error}"
-                    )
-            self._exit_turn_propagate_ctx()
-            self._current_turn_generation = None
-            self._current_turn_ctx = None
+                    update_params = {
+                        "output": output_text,
+                        "metadata": {"turn": turn_count},
+                    }
+                    if usage_details_dict:
+                        update_params["usage_details"] = usage_details_dict
+                    self._current_turn_generation.update(**update_params)
+
+                    if self._current_turn_ctx:
+                        self._current_turn_ctx.__exit__(None, None, None)
+
+                    self._exit_turn_propagate_ctx()
+
+                    self._current_turn_generation = None
+                    self._current_turn_ctx = None
+
+                    if self.langfuse_client:
+                        try:
+                            self.langfuse_client.flush()
+                            logging.info(f"Langfuse: Flushed turn {turn_count} data")
+                        except Exception as e:
+                            logging.warning(
+                                f"Langfuse: Flush failed after turn {turn_count}: {e}"
+                            )
+
+                    if usage_details_dict:
+                        input_count = usage_details_dict.get("input", 0)
+                        output_count = usage_details_dict.get("output", 0)
+                        cache_read_count = usage_details_dict.get(
+                            "cache_read_input_tokens", 0
+                        )
+                        cache_creation_count = usage_details_dict.get(
+                            "cache_creation_input_tokens", 0
+                        )
+                        total_tokens = (
+                            input_count
+                            + output_count
+                            + cache_read_count
+                            + cache_creation_count
+                        )
+
+                        log_msg = (
+                            f"Langfuse: Completed turn {turn_count} - "
+                            f"{input_count} input, {output_count} output"
+                        )
+                        if cache_read_count > 0 or cache_creation_count > 0:
+                            log_msg += f", {cache_read_count} cache_read, {cache_creation_count} cache_creation"
+                        log_msg += f" (total: {total_tokens})"
+                        logging.info(log_msg)
+                    else:
+                        logging.info(
+                            f"Langfuse: Completed turn {turn_count} (no usage data)"
+                        )
+
+                except Exception as e:
+                    logging.error(f"Langfuse: Failed to end turn: {e}", exc_info=True)
+                    if self._current_turn_ctx:
+                        try:
+                            self._current_turn_ctx.__exit__(None, None, None)
+                        except Exception as cleanup_error:
+                            logging.warning(
+                                f"Langfuse: Cleanup during error failed: {cleanup_error}"
+                            )
+                    self._exit_turn_propagate_ctx()
+                    self._current_turn_generation = None
+                    self._current_turn_ctx = None
+
+        if self.mlflow_tracing_active and self._mlflow.has_active_turn:
+            try:
+                self._mlflow.close_turn(turn_count, output_text, usage_details_dict)
+            except Exception as e:
+                logging.warning("MLflow: end_turn failed: %s", e, exc_info=True)
 
     def track_tool_use(self, tool_name: str, tool_id: str, tool_input: dict) -> None:
         """Track tool use for visibility in Langfuse UI.
@@ -613,7 +596,7 @@ class ObservabilityManager:
             tool_id: Unique tool use ID
             tool_input: Tool input parameters
         """
-        if not self.langfuse_client:
+        if not self.langfuse_client and not self.mlflow_tracing_active:
             return
 
         try:
@@ -621,7 +604,7 @@ class ObservabilityManager:
             # Since turn is the current observation (via start_as_current_observation),
             # tools created via start_observation automatically become children
             # IMPORTANT: No usage_details parameter - avoids cumulative usage inflation
-            if self._current_turn_generation:
+            if self.langfuse_client and self._current_turn_generation:
                 # Create as child of the current turn trace
                 span = self._current_turn_generation.start_observation(
                     as_type="span",
@@ -633,7 +616,7 @@ class ObservabilityManager:
                 logging.debug(
                     f"Langfuse: Started tool span for {tool_name} (id={tool_id}) under turn"
                 )
-            else:
+            elif self.langfuse_client:
                 # Fallback: create orphaned span if no active turn (shouldn't happen)
                 logging.warning(
                     f"No active turn for tool {tool_name}, creating orphaned span"
@@ -651,6 +634,12 @@ class ObservabilityManager:
         except Exception as e:
             logging.debug(f"Langfuse: Failed to track tool use: {e}")
 
+        if self.mlflow_tracing_active:
+            try:
+                self._mlflow.track_tool_use(tool_name, tool_id, tool_input)
+            except Exception as e:
+                logging.debug("MLflow: Failed to track tool use: %s", e)
+
     def track_tool_result(self, tool_use_id: str, content: Any, is_error: bool) -> None:
         """Track tool result for visibility in Langfuse UI.
 
@@ -661,32 +650,33 @@ class ObservabilityManager:
             content: Tool result content
             is_error: Whether execution failed
         """
-        if tool_use_id not in self._tool_spans:
-            return
+        if tool_use_id in self._tool_spans:
+            try:
+                tool_span = self._tool_spans[tool_use_id]
 
-        try:
-            tool_span = self._tool_spans[tool_use_id]
+                result_text = str(content) if content else "No output"
+                if len(result_text) > 500:
+                    result_text = result_text[:500] + "...[truncated]"
 
-            # Truncate long results for readability
-            result_text = str(content) if content else "No output"
-            if len(result_text) > 500:
-                result_text = result_text[:500] + "...[truncated]"
+                tool_span.update(
+                    output={"result": result_text},
+                    level="ERROR" if is_error else "DEFAULT",
+                    metadata={"is_error": is_error or False},
+                )
 
-            # IMPORTANT: No usage_details parameter - only result metadata
-            tool_span.update(
-                output={"result": result_text},
-                level="ERROR" if is_error else "DEFAULT",
-                metadata={"is_error": is_error or False},
-            )
+                tool_span.end()
 
-            # End the span to close it properly
-            tool_span.end()
+                del self._tool_spans[tool_use_id]
+                logging.debug(f"Langfuse: Completed tool span for {tool_use_id}")
 
-            del self._tool_spans[tool_use_id]
-            logging.debug(f"Langfuse: Completed tool span for {tool_use_id}")
+            except Exception as e:
+                logging.debug(f"Langfuse: Failed to track tool result: {e}")
 
-        except Exception as e:
-            logging.debug(f"Langfuse: Failed to track tool result: {e}")
+        if self.mlflow_tracing_active:
+            try:
+                self._mlflow.track_tool_result(tool_use_id, content, is_error)
+            except Exception as e:
+                logging.debug("MLflow: Failed to track tool result: %s", e)
 
     # ------------------------------------------------------------------
     # Session-level metrics
@@ -851,12 +841,12 @@ class ObservabilityManager:
         Creates a span with all accumulated metrics flattened into
         numeric scores for Langfuse dashboard visualization.
         """
-        if not self.langfuse_client:
+        if not self.langfuse_client and not self.mlflow_tracing_active:
             return
 
         # Skip if no metrics were collected
         if self._metric_tool_calls_total == 0 and not self._metric_accumulated_usage:
-            logging.debug("Langfuse metrics: no metrics to emit, skipping summary")
+            logging.debug("Observability metrics: no metrics to emit, skipping summary")
             return
 
         try:
@@ -879,9 +869,6 @@ class ObservabilityManager:
 
             scores = metric.to_flat_scores()
 
-            # Merge flat scores into metadata so all metrics are searchable
-            # and plottable in the Langfuse dashboard without needing
-            # individual score objects.
             span_metadata = {
                 "source": "claude-code-metrics",
                 "session_id": self.session_id,
@@ -893,27 +880,39 @@ class ObservabilityManager:
                 **scores,
             }
 
-            with self.langfuse_client.start_as_current_span(
-                name="Claude Code - Session Metrics",
-                input={
-                    "session_id": self.session_id,
-                    "user_id": self.user_id,
-                    "namespace": self.namespace,
-                    "user_name": self.user_name,
-                },
-                metadata=span_metadata,
-            ) as metrics_span:
-                metrics_span.update(output=metric.model_dump())
+            if self.langfuse_client:
+                with self.langfuse_client.start_as_current_span(
+                    name="Claude Code - Session Metrics",
+                    input={
+                        "session_id": self.session_id,
+                        "user_id": self.user_id,
+                        "namespace": self.namespace,
+                        "user_name": self.user_name,
+                    },
+                    metadata=span_metadata,
+                ) as metrics_span:
+                    metrics_span.update(output=metric.model_dump())
 
-            logging.info(
-                f"Langfuse metrics: emitted session summary as metadata "
-                f"(tools={self._metric_tool_calls_total}, "
-                f"cost=${self._metric_total_cost_usd:.4f})"
-            )
+                logging.info(
+                    f"Langfuse metrics: emitted session summary as metadata "
+                    f"(tools={self._metric_tool_calls_total}, "
+                    f"cost=${self._metric_total_cost_usd:.4f})"
+                )
+
+            if self.mlflow_tracing_active:
+                try:
+                    payload = {**span_metadata, "metric_dump": metric.model_dump()}
+                    self._mlflow.emit_session_summary_span(payload)
+                    logging.info(
+                        "MLflow metrics: emitted session summary span "
+                        f"(tools={self._metric_tool_calls_total})"
+                    )
+                except Exception as me:
+                    logging.warning("MLflow metrics: session summary failed: %s", me)
 
         except Exception as e:
             logging.error(
-                f"Langfuse metrics: failed to emit session summary: {e}",
+                f"Observability metrics: failed to emit session summary: {e}",
                 exc_info=True,
             )
 
@@ -947,7 +946,7 @@ class ObservabilityManager:
         Args:
             event: An AG-UI ``BaseEvent`` (or subclass).
         """
-        if not self.langfuse_client:
+        if not self.langfuse_client and not self.mlflow_tracing_active:
             return
 
         from ag_ui.core import EventType
@@ -1001,7 +1000,7 @@ class ObservabilityManager:
 
     def finalize_event_tracking(self) -> None:
         """Safety-net: close any open turn that was not ended by a RUN_FINISHED."""
-        if not self.langfuse_client:
+        if not self.langfuse_client and not self.mlflow_tracing_active:
             return
         if self._evt_turn_started:
             self._close_turn_with_text(
@@ -1059,132 +1058,131 @@ class ObservabilityManager:
         This is the event-driven equivalent of ``end_turn`` — it does the same
         Langfuse bookkeeping but takes plain text instead of an SDK message.
         """
-        if not self._current_turn_generation:
+        if not self.langfuse_client and not self.mlflow_tracing_active:
             return
 
-        try:
-            output_text = text or "(no text output)"
+        output_text = text or "(no text output)"
+        usage_details_dict = self._build_usage_details(usage)
 
-            usage_details_dict = self._build_usage_details(usage)
+        if self.langfuse_client and self._current_turn_generation:
+            try:
+                update_params: dict[str, Any] = {
+                    "output": output_text,
+                    "metadata": {"turn": turn_count},
+                }
+                if usage_details_dict:
+                    update_params["usage_details"] = usage_details_dict
+                self._current_turn_generation.update(**update_params)
 
-            update_params: dict[str, Any] = {
-                "output": output_text,
-                "metadata": {"turn": turn_count},
-            }
-            if usage_details_dict:
-                update_params["usage_details"] = usage_details_dict
-            self._current_turn_generation.update(**update_params)
+                if self._current_turn_ctx:
+                    self._current_turn_ctx.__exit__(None, None, None)
 
-            if self._current_turn_ctx:
-                self._current_turn_ctx.__exit__(None, None, None)
+                self._exit_turn_propagate_ctx()
+                self._current_turn_generation = None
+                self._current_turn_ctx = None
 
-            self._exit_turn_propagate_ctx()
-            self._current_turn_generation = None
-            self._current_turn_ctx = None
+                if self.langfuse_client:
+                    try:
+                        self.langfuse_client.flush()
+                        logging.info(f"Langfuse: Flushed turn {turn_count} data")
+                    except Exception as e:
+                        logging.warning(
+                            f"Langfuse: Flush failed after turn {turn_count}: {e}"
+                        )
 
-            if self.langfuse_client:
-                try:
-                    self.langfuse_client.flush()
-                    logging.info(f"Langfuse: Flushed turn {turn_count} data")
-                except Exception as e:
-                    logging.warning(
-                        f"Langfuse: Flush failed after turn {turn_count}: {e}"
+                if usage_details_dict:
+                    total = sum(usage_details_dict.values())
+                    logging.info(
+                        f"Langfuse: Completed turn {turn_count} "
+                        f"({usage_details_dict.get('input', 0)} input, "
+                        f"{usage_details_dict.get('output', 0)} output, "
+                        f"total: {total})"
+                    )
+                else:
+                    logging.info(
+                        f"Langfuse: Completed turn {turn_count} (no usage data)"
                     )
 
-            if usage_details_dict:
-                total = sum(usage_details_dict.values())
-                logging.info(
-                    f"Langfuse: Completed turn {turn_count} "
-                    f"({usage_details_dict.get('input', 0)} input, "
-                    f"{usage_details_dict.get('output', 0)} output, "
-                    f"total: {total})"
-                )
-            else:
-                logging.info(f"Langfuse: Completed turn {turn_count} (no usage data)")
+            except Exception as e:
+                logging.error(f"Langfuse: Failed to close turn: {e}", exc_info=True)
+                if self._current_turn_ctx:
+                    try:
+                        self._current_turn_ctx.__exit__(None, None, None)
+                    except Exception:
+                        pass
+                self._exit_turn_propagate_ctx()
+                self._current_turn_generation = None
+                self._current_turn_ctx = None
 
-        except Exception as e:
-            logging.error(f"Langfuse: Failed to close turn: {e}", exc_info=True)
-            if self._current_turn_ctx:
-                try:
-                    self._current_turn_ctx.__exit__(None, None, None)
-                except Exception:
-                    pass
-            self._exit_turn_propagate_ctx()
-            self._current_turn_generation = None
-            self._current_turn_ctx = None
+        if self.mlflow_tracing_active and self._mlflow.has_active_turn:
+            try:
+                self._mlflow.close_turn(turn_count, output_text, usage_details_dict)
+            except Exception as e:
+                logging.warning("MLflow: _close_turn_with_text failed: %s", e)
 
     async def finalize(self) -> None:
         """Finalize and flush observability data."""
-        if not self.langfuse_client:
+        if not self.langfuse_client and not self.mlflow_tracing_active:
             return
 
         try:
-            # Close any open turn (if SDK didn't send ResultMessage)
-            if self._current_turn_generation:
-                try:
-                    # Exit the turn context to properly close the trace
-                    if self._current_turn_ctx:
-                        self._current_turn_ctx.__exit__(None, None, None)
-                    logging.debug("Langfuse: Closed turn during finalize")
-                except Exception as e:
-                    logging.warning(f"Failed to close turn: {e}")
-                finally:
-                    self._current_turn_generation = None
-                    self._current_turn_ctx = None
+            if self.langfuse_client:
+                # Close any open turn (if SDK didn't send ResultMessage)
+                if self._current_turn_generation:
+                    try:
+                        if self._current_turn_ctx:
+                            self._current_turn_ctx.__exit__(None, None, None)
+                        logging.debug("Langfuse: Closed turn during finalize")
+                    except Exception as e:
+                        logging.warning(f"Failed to close turn: {e}")
+                    finally:
+                        self._current_turn_generation = None
+                        self._current_turn_ctx = None
 
-            self._exit_turn_propagate_ctx()
+                self._exit_turn_propagate_ctx()
 
-            # Close any open tool spans
-            for tool_id, tool_span in list(self._tool_spans.items()):
-                try:
-                    tool_span.end()
-                    logging.debug(f"Langfuse: Closed tool span {tool_id}")
-                except Exception as e:
-                    logging.warning(f"Failed to close tool span {tool_id}: {e}")
-            self._tool_spans.clear()
+                for tool_id, tool_span in list(self._tool_spans.items()):
+                    try:
+                        tool_span.end()
+                        logging.debug(f"Langfuse: Closed tool span {tool_id}")
+                    except Exception as e:
+                        logging.warning(f"Failed to close tool span {tool_id}: {e}")
+                self._tool_spans.clear()
 
-            # Emit session-level summary metrics before closing context.
-            # Re-enter propagation so the span gets userId/sessionId/tags
-            # even when finalize() runs in a different async task than initialize().
-            if self._propagate_args:
-                from langfuse import propagate_attributes
+                if self._propagate_args:
+                    from langfuse import propagate_attributes
 
-                with propagate_attributes(**self._propagate_args):
+                    with propagate_attributes(**self._propagate_args):
+                        self._emit_session_summary()
+                else:
                     self._emit_session_summary()
+
+                if self._propagate_ctx:
+                    try:
+                        self._propagate_ctx.__exit__(None, None, None)
+                    except (ValueError, RuntimeError):
+                        logging.debug(
+                            "Langfuse: propagate_attributes context detach failed "
+                            "(cross-task contextvar — safe to ignore)"
+                        )
+                    logging.info("Langfuse: Session context closed")
+
+                flush_timeout = float(os.getenv("LANGFUSE_FLUSH_TIMEOUT", "30.0"))
+                success, _ = await with_sync_timeout(
+                    self.langfuse_client.flush, flush_timeout, "Langfuse flush"
+                )
+                if success:
+                    logging.info("Langfuse: Flush completed")
+                else:
+                    logging.error(f"Langfuse: Flush timed out after {flush_timeout}s")
             else:
                 self._emit_session_summary()
 
-            # Exit propagate_attributes context.
-            # The context uses OpenTelemetry contextvars internally.  When
-            # initialize() and finalize() run in different async tasks (e.g.
-            # lifespan startup vs shutdown), the contextvar token belongs to
-            # a different Context and detach raises ValueError.  This is
-            # harmless — all trace data has already been flushed — so we
-            # suppress the error rather than letting it propagate.
-            if self._propagate_ctx:
-                try:
-                    self._propagate_ctx.__exit__(None, None, None)
-                except (ValueError, RuntimeError):
-                    logging.debug(
-                        "Langfuse: propagate_attributes context detach failed "
-                        "(cross-task contextvar — safe to ignore)"
-                    )
-                logging.info("Langfuse: Session context closed")
-
-            # Flush data
-            # Timeout is configurable via LANGFUSE_FLUSH_TIMEOUT (default: 30s)
-            # Increase for large traces or constrained networks to prevent data loss
-            flush_timeout = float(os.getenv("LANGFUSE_FLUSH_TIMEOUT", "30.0"))
-            success, _ = await with_sync_timeout(
-                self.langfuse_client.flush, flush_timeout, "Langfuse flush"
-            )
-            if success:
-                logging.info("Langfuse: Flush completed")
-            else:
-                logging.error(f"Langfuse: Flush timed out after {flush_timeout}s")
+            if self.mlflow_tracing_active:
+                self._mlflow.finalize()
 
         except Exception as e:
-            logging.error(f"Langfuse: Failed to finalize: {e}", exc_info=True)
+            logging.error(f"Observability: Failed to finalize: {e}", exc_info=True)
 
     async def cleanup_on_error(self, error: Exception) -> None:
         """Cleanup on error.
@@ -1192,55 +1190,62 @@ class ObservabilityManager:
         Args:
             error: Exception that caused failure
         """
-        if not self.langfuse_client:
+        if not self.langfuse_client and not self.mlflow_tracing_active:
             return
 
         try:
-            # Close any open turn
-            if self._current_turn_generation:
-                try:
-                    # Mark as error but don't add fake output
-                    self._current_turn_generation.update(level="ERROR")
-                    # Exit the turn context to properly close the trace
-                    if self._current_turn_ctx:
-                        self._current_turn_ctx.__exit__(None, None, None)
-                    logging.debug("Langfuse: Closed turn during error cleanup")
-                except Exception as e:
-                    logging.warning(f"Failed to close turn during error: {e}")
-                finally:
-                    self._current_turn_generation = None
-                    self._current_turn_ctx = None
+            if self.langfuse_client:
+                if self._current_turn_generation:
+                    try:
+                        self._current_turn_generation.update(level="ERROR")
+                        if self._current_turn_ctx:
+                            self._current_turn_ctx.__exit__(None, None, None)
+                        logging.debug("Langfuse: Closed turn during error cleanup")
+                    except Exception as e:
+                        logging.warning(f"Failed to close turn during error: {e}")
+                    finally:
+                        self._current_turn_generation = None
+                        self._current_turn_ctx = None
 
-            self._exit_turn_propagate_ctx()
+                self._exit_turn_propagate_ctx()
 
-            # Close any open tool spans
-            for tool_id, tool_span in list(self._tool_spans.items()):
-                try:
-                    tool_span.update(level="ERROR")
-                    tool_span.end()
-                    logging.debug(
-                        f"Langfuse: Closed tool span {tool_id} during error cleanup"
+                for tool_id, tool_span in list(self._tool_spans.items()):
+                    try:
+                        tool_span.update(level="ERROR")
+                        tool_span.end()
+                        logging.debug(
+                            f"Langfuse: Closed tool span {tool_id} during error cleanup"
+                        )
+                    except Exception as e:
+                        logging.warning(
+                            f"Failed to close tool span {tool_id} during error: {e}"
+                        )
+                self._tool_spans.clear()
+
+                if self._propagate_ctx:
+                    try:
+                        self._propagate_ctx.__exit__(None, None, None)
+                    except (ValueError, RuntimeError):
+                        pass
+
+                flush_timeout = float(os.getenv("LANGFUSE_FLUSH_TIMEOUT", "30.0"))
+                success, _ = await with_sync_timeout(
+                    self.langfuse_client.flush, flush_timeout, "Langfuse error flush"
+                )
+                if not success:
+                    logging.error(
+                        f"Langfuse: Error flush timed out after {flush_timeout}s"
                     )
-                except Exception as e:
-                    logging.warning(
-                        f"Failed to close tool span {tool_id} during error: {e}"
-                    )
-            self._tool_spans.clear()
 
-            # Close propagate context (see finalize() for cross-task note)
-            if self._propagate_ctx:
-                try:
-                    self._propagate_ctx.__exit__(None, None, None)
-                except (ValueError, RuntimeError):
-                    pass
-
-            # Timeout is configurable via LANGFUSE_FLUSH_TIMEOUT (default: 30s)
-            flush_timeout = float(os.getenv("LANGFUSE_FLUSH_TIMEOUT", "30.0"))
-            success, _ = await with_sync_timeout(
-                self.langfuse_client.flush, flush_timeout, "Langfuse error flush"
-            )
-            if not success:
-                logging.error(f"Langfuse: Error flush timed out after {flush_timeout}s")
+            if self.mlflow_tracing_active:
+                self._mlflow.cleanup_on_error()
 
         except Exception as cleanup_err:
-            logging.error(f"Langfuse: Failed to cleanup: {cleanup_err}", exc_info=True)
+            logging.error(
+                f"Observability: Failed to cleanup: {cleanup_err}", exc_info=True
+            )
+            if self.mlflow_tracing_active:
+                try:
+                    self._mlflow.cleanup_on_error()
+                except Exception:
+                    pass

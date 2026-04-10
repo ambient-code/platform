@@ -31,7 +31,6 @@ EXPOSE 8000
 ENTRYPOINT ["/usr/local/bin/ambient-api-server", "serve"]
 
 LABEL name="ambient-api-server" \
-      vendor="Ambient" \
       version="0.0.1" \
       summary="Ambient API Server" \
       description="REST API server for the Ambient Code Platform"

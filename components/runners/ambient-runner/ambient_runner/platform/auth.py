@@ -17,6 +17,7 @@ from urllib import request as _urllib_request
 from urllib.parse import urlparse
 
 from ambient_runner.platform.context import RunnerContext
+from ambient_runner.platform.utils import get_bot_token
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,13 @@ _EXPIRY_BUFFER_SEC = 5 * 60
 _GOOGLE_WORKSPACE_CREDS_FILE = Path(
     "/workspace/.google_workspace_mcp/credentials/credentials.json"
 )
+
+# Token files written on every credential refresh so the git credential helper
+# can read the latest token even after the CLI subprocess has already been spawned.
+# The helper runs inside the CLI subprocess's environment (which is fixed at spawn
+# time), so updating os.environ mid-run would not reach it without these files.
+_GITHUB_TOKEN_FILE = Path("/tmp/.ambient_github_token")
+_GITLAB_TOKEN_FILE = Path("/tmp/.ambient_gitlab_token")
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +141,7 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
             req.add_header("X-Runner-Current-User", context.current_user_id)
         logger.debug(f"Using caller token for {credential_type} credentials")
     else:
-        bot = (os.getenv("BOT_TOKEN") or "").strip()
+        bot = get_bot_token()
         if bot:
             req.add_header("Authorization", f"Bearer {bot}")
 
@@ -152,7 +160,7 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
                     f"Caller token expired for {credential_type}, falling back to BOT_TOKEN"
                 )
                 fallback_req = _urllib_request.Request(url, method="GET")
-                bot = (os.getenv("BOT_TOKEN") or "").strip()
+                bot = get_bot_token()
                 if bot:
                     fallback_req.add_header("Authorization", f"Bearer {bot}")
                 if context.current_user_id:
@@ -166,7 +174,17 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
                     logger.warning(
                         f"{credential_type} BOT_TOKEN fallback also failed: {fallback_err}"
                     )
-                    return ""
+                    raise PermissionError(
+                        f"{credential_type} authentication failed: caller token expired "
+                        f"and BOT_TOKEN fallback also failed"
+                    ) from fallback_err
+            if e.code in (401, 403):
+                logger.warning(
+                    f"{credential_type} credential fetch failed with HTTP {e.code}: {e}"
+                )
+                raise PermissionError(
+                    f"{credential_type} authentication failed with HTTP {e.code}"
+                ) from e
             logger.warning(f"{credential_type} credential fetch failed: {e}")
             return ""
         except Exception as e:
@@ -299,10 +317,13 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     # Track git identity from provider credentials
     git_user_name = ""
     git_user_email = ""
+    auth_failures: list[str] = []
 
     # Google credentials
     if isinstance(google_creds, Exception):
         logger.warning(f"Failed to refresh Google credentials: {google_creds}")
+        if isinstance(google_creds, PermissionError):
+            auth_failures.append(str(google_creds))
     elif google_creds.get("accessToken"):
         try:
             creds_dir = _GOOGLE_WORKSPACE_CREDS_FILE.parent
@@ -335,6 +356,8 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     # Jira credentials
     if isinstance(jira_creds, Exception):
         logger.warning(f"Failed to refresh Jira credentials: {jira_creds}")
+        if isinstance(jira_creds, PermissionError):
+            auth_failures.append(str(jira_creds))
     elif jira_creds.get("apiToken"):
         os.environ["JIRA_URL"] = jira_creds.get("url", "")
         os.environ["JIRA_API_TOKEN"] = jira_creds.get("apiToken", "")
@@ -344,8 +367,17 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     # GitLab credentials (with user identity)
     if isinstance(gitlab_creds, Exception):
         logger.warning(f"Failed to refresh GitLab credentials: {gitlab_creds}")
+        if isinstance(gitlab_creds, PermissionError):
+            auth_failures.append(str(gitlab_creds))
     elif gitlab_creds.get("token"):
         os.environ["GITLAB_TOKEN"] = gitlab_creds["token"]
+        # Also write to file so the git credential helper picks up mid-run
+        # refreshes even after the CLI subprocess has been spawned.
+        try:
+            _GITLAB_TOKEN_FILE.write_text(gitlab_creds["token"])
+            _GITLAB_TOKEN_FILE.chmod(0o600)
+        except OSError as e:
+            logger.warning(f"Failed to write GitLab token file: {e}")
         logger.info("Updated GitLab token in environment")
         if gitlab_creds.get("userName"):
             git_user_name = gitlab_creds["userName"]
@@ -355,17 +387,33 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     # GitHub credentials (with user identity — takes precedence)
     if isinstance(github_creds, Exception):
         logger.warning(f"Failed to refresh GitHub credentials: {github_creds}")
+        if isinstance(github_creds, PermissionError):
+            auth_failures.append(str(github_creds))
     elif github_creds.get("token"):
         os.environ["GITHUB_TOKEN"] = github_creds["token"]
+        # Also write to file so the git credential helper picks up mid-run
+        # refreshes even after the CLI subprocess has been spawned.
+        try:
+            _GITHUB_TOKEN_FILE.write_text(github_creds["token"])
+            _GITHUB_TOKEN_FILE.chmod(0o600)
+        except OSError as e:
+            logger.warning(f"Failed to write GitHub token file: {e}")
         logger.info("Updated GitHub token in environment")
         if github_creds.get("userName"):
             git_user_name = github_creds["userName"]
         if github_creds.get("email"):
             git_user_email = github_creds["email"]
 
-    # Configure git identity and credential helper
+    # Configure git identity, credential helper, and gh CLI wrapper
     await configure_git_identity(git_user_name, git_user_email)
     install_git_credential_helper()
+    install_gh_wrapper()
+
+    if auth_failures:
+        raise PermissionError(
+            "Credential refresh failed due to authentication errors: "
+            + "; ".join(auth_failures)
+        )
 
     logger.info("Runtime credentials populated successfully")
 
@@ -398,6 +446,14 @@ def clear_runtime_credentials() -> None:
     for key in mcp_cred_keys:
         os.environ.pop(key, None)
         cleared.append(key)
+
+    # Remove token files used by the git credential helper.
+    for token_file in (_GITHUB_TOKEN_FILE, _GITLAB_TOKEN_FILE):
+        try:
+            token_file.unlink(missing_ok=True)
+            cleared.append(token_file.name)
+        except OSError as e:
+            logger.warning(f"Failed to remove token file {token_file}: {e}")
 
     # Remove Google Workspace credential file if present (uses same hardcoded path as populate_runtime_credentials)
     google_cred_file = _GOOGLE_WORKSPACE_CREDS_FILE
@@ -478,6 +534,43 @@ async def populate_mcp_server_credentials(context: RunnerContext) -> None:
             logger.warning(f"Failed to fetch MCP credentials for {server_name}: {e}")
 
 
+_GH_WRAPPER_DIR = "/tmp/bin"
+_GH_WRAPPER_PATH = "/tmp/bin/gh"
+
+# Wrapper script for the gh CLI.  The `gh` CLI reads GITHUB_TOKEN from the
+# process environment, but the CLI subprocess's env is fixed at spawn time.
+# This wrapper reads the latest token from the token file (updated on every
+# credential refresh) and exports GH_TOKEN before calling the real `gh`,
+# ensuring mid-run refreshes are picked up.
+_GH_WRAPPER_SCRIPT = """\
+#!/bin/sh
+# Ambient gh CLI wrapper — reads fresh GitHub token from file.
+token=""
+if [ -f "/tmp/.ambient_github_token" ]; then
+    token=$(cat /tmp/.ambient_github_token 2>/dev/null)
+fi
+if [ -n "$token" ]; then
+    export GH_TOKEN="$token"
+fi
+# Find the real gh binary, skipping this wrapper directory.
+real_gh=""
+IFS=:
+for p in $PATH; do
+    if [ "$p" != "{wrapper_dir}" ] && [ -x "$p/gh" ]; then
+        real_gh="$p/gh"
+        break
+    fi
+done
+unset IFS
+if [ -z "$real_gh" ]; then
+    echo "Error: gh CLI not found" >&2
+    exit 1
+fi
+exec "$real_gh" "$@"
+""".format(wrapper_dir=_GH_WRAPPER_DIR)
+
+_gh_wrapper_installed = False  # reset on every new process / deployment
+
 _GIT_CREDENTIAL_HELPER_PATH = "/tmp/git-credential-ambient"
 
 # Injected into git's credential system so clean remote URLs (without embedded
@@ -485,6 +578,10 @@ _GIT_CREDENTIAL_HELPER_PATH = "/tmp/git-credential-ambient"
 # time, so refreshes are picked up without mutating .git/config.
 _GIT_CREDENTIAL_HELPER_SCRIPT = """\
 #!/bin/sh
+# Ambient git credential helper.
+# Reads tokens from files first so mid-run MCP refreshes are picked up even
+# after the CLI subprocess was already spawned (subprocess env is fixed at
+# creation time; the files are updated by the runner on every refresh).
 case "$1" in
     get)
         while IFS='=' read -r key value; do
@@ -495,13 +592,27 @@ case "$1" in
 
         case "$HOST" in
             *github*)
-                if [ -n "$GITHUB_TOKEN" ]; then
-                    printf 'protocol=https\\nhost=%s\\nusername=x-access-token\\npassword=%s\\n' "$HOST" "$GITHUB_TOKEN"
+                token=""
+                if [ -f "/tmp/.ambient_github_token" ]; then
+                    token=$(cat /tmp/.ambient_github_token 2>/dev/null)
+                fi
+                if [ -z "$token" ]; then
+                    token="$GITHUB_TOKEN"
+                fi
+                if [ -n "$token" ]; then
+                    printf 'protocol=https\\nhost=%s\\nusername=x-access-token\\npassword=%s\\n' "$HOST" "$token"
                 fi
                 ;;
             *gitlab*)
-                if [ -n "$GITLAB_TOKEN" ]; then
-                    printf 'protocol=https\\nhost=%s\\nusername=oauth2\\npassword=%s\\n' "$HOST" "$GITLAB_TOKEN"
+                token=""
+                if [ -f "/tmp/.ambient_gitlab_token" ]; then
+                    token=$(cat /tmp/.ambient_gitlab_token 2>/dev/null)
+                fi
+                if [ -z "$token" ]; then
+                    token="$GITLAB_TOKEN"
+                fi
+                if [ -n "$token" ]; then
+                    printf 'protocol=https\\nhost=%s\\nusername=oauth2\\npassword=%s\\n' "$HOST" "$token"
                 fi
                 ;;
         esac
@@ -509,7 +620,7 @@ case "$1" in
 esac
 """
 
-_credential_helper_installed = False
+_credential_helper_installed = False  # reset on every new process / deployment
 
 
 def install_git_credential_helper() -> None:
@@ -552,6 +663,42 @@ def install_git_credential_helper() -> None:
         )
     except Exception as e:
         logger.warning(f"Failed to install git credential helper: {e}")
+
+
+def install_gh_wrapper() -> None:
+    """Install a gh CLI wrapper that reads the fresh GitHub token from file.
+
+    The ``gh`` CLI prioritises the ``GITHUB_TOKEN`` env var over all other
+    credential sources.  Since the CLI subprocess's environment is fixed at
+    spawn time, a stale ``GITHUB_TOKEN`` causes 401 errors after a mid-run
+    credential refresh.  This wrapper reads from the token file (updated on
+    every refresh) and exports ``GH_TOKEN`` before exec-ing the real ``gh``.
+    """
+    global _gh_wrapper_installed
+    if _gh_wrapper_installed:
+        return
+
+    import stat
+
+    try:
+        wrapper_dir = Path(_GH_WRAPPER_DIR)
+        wrapper_dir.mkdir(parents=True, exist_ok=True)
+
+        wrapper_path = Path(_GH_WRAPPER_PATH)
+        wrapper_path.write_text(_GH_WRAPPER_SCRIPT)
+        wrapper_path.chmod(
+            stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH
+        )  # 755
+
+        # Prepend wrapper dir to PATH so it is found before the real gh.
+        current_path = os.environ.get("PATH", "")
+        if _GH_WRAPPER_DIR not in current_path.split(":"):
+            os.environ["PATH"] = f"{_GH_WRAPPER_DIR}:{current_path}"
+
+        _gh_wrapper_installed = True
+        logger.info("Installed gh CLI wrapper at %s", _GH_WRAPPER_PATH)
+    except Exception as e:
+        logger.warning(f"Failed to install gh CLI wrapper: {e}")
 
 
 def ensure_git_auth(
