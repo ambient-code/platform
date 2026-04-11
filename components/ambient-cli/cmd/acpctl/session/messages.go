@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,12 +16,12 @@ import (
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/output"
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
-	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	"github.com/spf13/cobra"
 )
 
 var msgArgs struct {
 	follow       bool
+	followJSON   bool
 	outputFormat string
 	afterSeq     int
 }
@@ -30,17 +31,24 @@ var messagesCmd = &cobra.Command{
 	Short: "List or stream messages for a session",
 	Long: `List or stream messages for a session.
 
+Without -f, fetches a snapshot of messages from the message store.
+With -f, connects to the live SSE event stream and renders events
+as readable text. The stream stays open until Ctrl+C.
+With -f --json, emits raw AG-UI JSON events instead of text.
+
 Examples:
-  acpctl session messages <id>           # snapshot
-  acpctl session messages <id> -f        # live stream (Ctrl+C to stop)
-  acpctl session messages <id> -o json   # JSON snapshot
-  acpctl session messages <id> --after 5 # messages after seq 5`,
+  acpctl session messages <id>              # snapshot
+  acpctl session messages <id> -f           # live SSE stream (Ctrl+C to stop)
+  acpctl session messages <id> -f --json    # raw AG-UI JSON events
+  acpctl session messages <id> -o json      # JSON snapshot
+  acpctl session messages <id> --after 5    # messages after seq 5`,
 	Args: cobra.ExactArgs(1),
 	RunE: runMessages,
 }
 
 func init() {
-	messagesCmd.Flags().BoolVarP(&msgArgs.follow, "follow", "f", false, "Stream messages live")
+	messagesCmd.Flags().BoolVarP(&msgArgs.follow, "follow", "f", false, "Stream live SSE events (same stream as send -f)")
+	messagesCmd.Flags().BoolVar(&msgArgs.followJSON, "json", false, "with -f: emit raw AG-UI JSON events instead of text")
 	messagesCmd.Flags().StringVarP(&msgArgs.outputFormat, "output", "o", "", "Output format: json")
 	messagesCmd.Flags().IntVar(&msgArgs.afterSeq, "after", 0, "Only show messages after this sequence number")
 }
@@ -397,47 +405,102 @@ func streamMessages(cmd *cobra.Command, client *sdkclient.Client, sessionID stri
 	ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
 	defer cancel()
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Streaming messages for session %s (Ctrl+C to stop)...\n\n", sessionID)
-
-	watcher, err := client.Sessions().WatchSessionMessages(ctx, sessionID, int64(msgArgs.afterSeq), nil)
+	stream, err := client.Sessions().StreamEvents(ctx, sessionID)
 	if err != nil {
-		return fmt.Errorf("watch messages: %w", err)
+		return fmt.Errorf("stream events: %w", err)
 	}
-	defer watcher.Stop()
+	defer stream.Close()
 
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-watcher.Done():
-			return nil
-		case err, ok := <-watcher.Errors():
-			if !ok {
-				return nil
-			}
-			return fmt.Errorf("stream error: %w", err)
-		case msg, ok := <-watcher.Messages():
-			if !ok {
-				return nil
-			}
-			printStreamLine(cmd, *msg)
-		}
-	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Streaming events for session %s (Ctrl+C to stop)...\n\n", sessionID)
+
+	return renderSSEStream(stream, cmd.OutOrStdout(), msgArgs.followJSON, false)
 }
 
-func printStreamLine(cmd *cobra.Command, msg sdktypes.SessionMessage) {
-	display := displayPayload(msg.EventType, msg.Payload)
-	if display == "" {
-		return
+func renderSSEStream(stream io.Reader, out io.Writer, jsonMode, exitOnRunFinished bool) error {
+	scanner := bufio.NewScanner(stream)
+	var reasoningBuf strings.Builder
+	var inText bool
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		data := line[6:]
+
+		if jsonMode {
+			fmt.Fprintln(out, data)
+			continue
+		}
+
+		var evt struct {
+			Type         string `json:"type"`
+			Delta        string `json:"delta"`
+			ToolCallName string `json:"toolCallName"`
+			Content      string `json:"content"`
+		}
+		if err := json.Unmarshal([]byte(data), &evt); err != nil {
+			continue
+		}
+		switch evt.Type {
+		case "REASONING_MESSAGE_CONTENT":
+			reasoningBuf.WriteString(evt.Delta)
+		case "REASONING_END":
+			if reasoningBuf.Len() > 0 {
+				fmt.Fprintf(out, "[thinking] %s\n", strings.TrimSpace(reasoningBuf.String()))
+				reasoningBuf.Reset()
+			}
+		case "TEXT_MESSAGE_CONTENT":
+			if evt.Delta != "" {
+				inText = true
+				fmt.Fprint(out, evt.Delta)
+			}
+		case "TEXT_MESSAGE_END":
+			if inText {
+				fmt.Fprintln(out)
+				inText = false
+			}
+		case "TOOL_CALL_START":
+			if evt.ToolCallName != "" {
+				fmt.Fprintf(out, "[%s] ", evt.ToolCallName)
+			}
+		case "TOOL_CALL_RESULT":
+			if evt.Content != "" {
+				var content string
+				if err := json.Unmarshal([]byte(evt.Content), &content); err != nil {
+					content = evt.Content
+				}
+				lines := strings.SplitN(strings.TrimSpace(content), "\n", 4)
+				preview := strings.Join(lines, " | ")
+				if len(lines) >= 4 {
+					preview += " ..."
+				}
+				fmt.Fprintf(out, "→ %s\n", preview)
+			}
+		case "RUN_FINISHED":
+			if inText {
+				fmt.Fprintln(out)
+				inText = false
+			}
+			if exitOnRunFinished {
+				return nil
+			}
+		case "RUN_ERROR":
+			if inText {
+				fmt.Fprintln(out)
+				inText = false
+			}
+			if exitOnRunFinished {
+				return fmt.Errorf("run failed")
+			}
+		}
 	}
-	w := cmd.OutOrStdout()
-	ts := msg.CreatedAt.Format("15:04:05")
-	width := output.TerminalWidthFor(w)
-	if width < 40 {
-		width = 80
+
+	if inText {
+		fmt.Fprintln(out)
 	}
-	header := fmt.Sprintf("[%s] #%-4d  %s", ts, msg.Seq, msg.EventType)
-	fmt.Fprintln(w, header)
-	printWrapped(w, display, width, "             ")
-	fmt.Fprintln(w)
+
+	if scanErr := scanner.Err(); scanErr != nil {
+		return fmt.Errorf("stream error: %w", scanErr)
+	}
+	return nil
 }

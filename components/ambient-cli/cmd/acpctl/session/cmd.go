@@ -12,9 +12,10 @@ var Cmd = &cobra.Command{
 
 Examples:
   acpctl session messages <id>               # list messages (snapshot)
-  acpctl session messages <id> -f            # stream messages live
+  acpctl session messages <id> -f            # live SSE stream (reconnectable)
   acpctl session send <id> "Hello!"          # send a message
-  acpctl session events <id>                 # stream live AG-UI events`,
+  acpctl session send <id> "Hello!" -f       # send and stream until done
+  acpctl session events <id>                 # raw AG-UI event stream`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cmd.Help()
 	},

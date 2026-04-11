@@ -13,23 +13,25 @@ import (
 	"github.com/ambient-code/platform/components/ambient-api-server/test"
 )
 
+const testProjectID = "test-project"
+
 func TestCredentialGet(t *testing.T) {
 	h, client := test.RegisterIntegration(t)
 
 	account := h.NewRandAccount()
 	ctx := h.NewAuthenticatedContext(account)
 
-	_, _, err := client.DefaultAPI.ApiAmbientV1CredentialsIdGet(context.Background(), "foo").Execute()
+	_, _, err := client.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsCredIdGet(context.Background(), testProjectID, "foo").Execute()
 	Expect(err).To(HaveOccurred(), "Expected 401 but got nil error")
 
-	_, resp, err := client.DefaultAPI.ApiAmbientV1CredentialsIdGet(ctx, "foo").Execute()
+	_, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsCredIdGet(ctx, testProjectID, "foo").Execute()
 	Expect(err).To(HaveOccurred(), "Expected 404")
 	Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
 
 	credentialModel, err := newCredential(h.NewID())
 	Expect(err).NotTo(HaveOccurred())
 
-	credentialOutput, resp, err := client.DefaultAPI.ApiAmbientV1CredentialsIdGet(ctx, credentialModel.ID).Execute()
+	credentialOutput, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsCredIdGet(ctx, testProjectID, credentialModel.ID).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
@@ -48,6 +50,7 @@ func TestCredentialPost(t *testing.T) {
 	ctx := h.NewAuthenticatedContext(account)
 
 	credentialInput := openapi.Credential{
+		ProjectId:   testProjectID,
 		Name:        "test-name",
 		Description: openapi.PtrString("test-description"),
 		Provider:    "test-provider",
@@ -58,7 +61,7 @@ func TestCredentialPost(t *testing.T) {
 		Annotations: openapi.PtrString("test-annotations"),
 	}
 
-	credentialOutput, resp, err := client.DefaultAPI.ApiAmbientV1CredentialsPost(ctx).Credential(credentialInput).Execute()
+	credentialOutput, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsPost(ctx, testProjectID).Credential(credentialInput).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error posting object:  %v", err)
 	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 	Expect(*credentialOutput.Id).NotTo(BeEmpty(), "Expected ID assigned on creation")
@@ -71,7 +74,7 @@ func TestCredentialPost(t *testing.T) {
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
 		SetBody(`{ this is invalid }`).
-		Post(h.RestURL("/credentials"))
+		Post(h.RestURL(fmt.Sprintf("/projects/%s/credentials", testProjectID)))
 
 	Expect(restyErr).NotTo(HaveOccurred())
 	Expect(restyResp.StatusCode()).To(Equal(http.StatusBadRequest))
@@ -86,7 +89,7 @@ func TestCredentialPatch(t *testing.T) {
 	credentialModel, err := newCredential(h.NewID())
 	Expect(err).NotTo(HaveOccurred())
 
-	credentialOutput, resp, err := client.DefaultAPI.ApiAmbientV1CredentialsIdPatch(ctx, credentialModel.ID).CredentialPatchRequest(openapi.CredentialPatchRequest{}).Execute()
+	credentialOutput, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsCredIdPatch(ctx, testProjectID, credentialModel.ID).CredentialPatchRequest(openapi.CredentialPatchRequest{}).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error posting object:  %v", err)
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(*credentialOutput.Id).To(Equal(credentialModel.ID))
@@ -99,7 +102,7 @@ func TestCredentialPatch(t *testing.T) {
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
 		SetBody(`{ this is invalid }`).
-		Patch(h.RestURL("/credentials/foo"))
+		Patch(h.RestURL(fmt.Sprintf("/projects/%s/credentials/foo", testProjectID)))
 
 	Expect(restyErr).NotTo(HaveOccurred())
 	Expect(restyResp.StatusCode()).To(Equal(http.StatusBadRequest))
@@ -114,14 +117,14 @@ func TestCredentialPaging(t *testing.T) {
 	_, err := newCredentialList("Bronto", 20)
 	Expect(err).NotTo(HaveOccurred())
 
-	list, _, err := client.DefaultAPI.ApiAmbientV1CredentialsGet(ctx).Execute()
+	list, _, err := client.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsGet(ctx, testProjectID).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error getting credential list: %v", err)
 	Expect(len(list.Items)).To(Equal(20))
 	Expect(list.Size).To(Equal(int32(20)))
 	Expect(list.Total).To(Equal(int32(20)))
 	Expect(list.Page).To(Equal(int32(1)))
 
-	list, _, err = client.DefaultAPI.ApiAmbientV1CredentialsGet(ctx).Page(2).Size(5).Execute()
+	list, _, err = client.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsGet(ctx, testProjectID).Page(2).Size(5).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error getting credential list: %v", err)
 	Expect(len(list.Items)).To(Equal(5))
 	Expect(list.Size).To(Equal(int32(5)))
@@ -139,7 +142,7 @@ func TestCredentialListSearch(t *testing.T) {
 	Expect(err).NotTo(HaveOccurred())
 
 	search := fmt.Sprintf("id in ('%s')", credentials[0].ID)
-	list, _, err := client.DefaultAPI.ApiAmbientV1CredentialsGet(ctx).Search(search).Execute()
+	list, _, err := client.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsGet(ctx, testProjectID).Search(search).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error getting credential list: %v", err)
 	Expect(len(list.Items)).To(Equal(1))
 	Expect(list.Total).To(Equal(int32(1)))
@@ -155,7 +158,7 @@ func TestCredentialListTokenOmitted(t *testing.T) {
 	created, err := newCredential(h.NewID())
 	Expect(err).NotTo(HaveOccurred())
 
-	list, _, err := client.DefaultAPI.ApiAmbientV1CredentialsGet(ctx).Execute()
+	list, _, err := client.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsGet(ctx, testProjectID).Execute()
 	Expect(err).NotTo(HaveOccurred())
 
 	var found *openapi.Credential
@@ -182,7 +185,7 @@ func TestCredentialToken(t *testing.T) {
 
 	restyResp, restyErr := resty.R().
 		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
-		Get(h.RestURL(fmt.Sprintf("/credentials/%s/token", created.ID)))
+		Get(h.RestURL(fmt.Sprintf("/projects/%s/credentials/%s/token", testProjectID, created.ID)))
 	Expect(restyErr).NotTo(HaveOccurred())
 	Expect(restyResp.StatusCode()).To(Equal(http.StatusOK))
 	Expect(restyResp.String()).To(ContainSubstring(`"token"`))
@@ -190,7 +193,7 @@ func TestCredentialToken(t *testing.T) {
 	Expect(restyResp.String()).To(ContainSubstring(`"credential_id"`))
 
 	restyResp, restyErr = resty.R().
-		Get(h.RestURL(fmt.Sprintf("/credentials/%s/token", created.ID)))
+		Get(h.RestURL(fmt.Sprintf("/projects/%s/credentials/%s/token", testProjectID, created.ID)))
 	Expect(restyErr).NotTo(HaveOccurred())
 	Expect(restyResp.StatusCode()).To(Equal(http.StatusUnauthorized), "unauthenticated request to /token must be rejected")
 }
@@ -204,19 +207,19 @@ func TestCredentialDelete(t *testing.T) {
 	created, err := newCredential(h.NewID())
 	Expect(err).NotTo(HaveOccurred())
 
-	_, resp, err := client.DefaultAPI.ApiAmbientV1CredentialsIdGet(ctx, created.ID).Execute()
+	_, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsCredIdGet(ctx, testProjectID, created.ID).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
-	resp, err = client.DefaultAPI.ApiAmbientV1CredentialsIdDelete(ctx, created.ID).Execute()
+	resp, err = client.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsCredIdDelete(ctx, testProjectID, created.ID).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
 
-	_, resp, err = client.DefaultAPI.ApiAmbientV1CredentialsIdGet(ctx, created.ID).Execute()
+	_, resp, err = client.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsCredIdGet(ctx, testProjectID, created.ID).Execute()
 	Expect(err).To(HaveOccurred(), "Expected 404 after delete")
 	Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
 
-	resp, err = client.DefaultAPI.ApiAmbientV1CredentialsIdDelete(context.Background(), created.ID).Execute()
+	resp, err = client.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsCredIdDelete(context.Background(), testProjectID, created.ID).Execute()
 	Expect(err).To(HaveOccurred(), "Expected 401 for unauthenticated delete")
 	_ = resp
 }

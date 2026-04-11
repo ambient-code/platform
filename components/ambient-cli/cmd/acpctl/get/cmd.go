@@ -47,8 +47,8 @@ Valid resource types:
 }
 
 var projectAgentArgs struct {
-	projectID    string
-	paID         string
+	projectID string
+	paID      string
 }
 
 func init() {
@@ -517,7 +517,7 @@ func getRoleBindings(ctx context.Context, client *sdkclient.Client, printer *out
 
 func getCredentials(ctx context.Context, client *sdkclient.Client, printer *output.Printer, name string) error {
 	if name != "" {
-		cred, err := client.Credentials().Get(ctx, name)
+		cred, err := client.Credentials().Get(ctx, client.Project(), name)
 		if err != nil {
 			return fmt.Errorf("get credential %q: %w", name, err)
 		}
@@ -527,7 +527,7 @@ func getCredentials(ctx context.Context, client *sdkclient.Client, printer *outp
 		return printCredentialTable(printer, []sdktypes.Credential{*cred})
 	}
 	opts := sdktypes.NewListOptions().Size(args.limit).Build()
-	list, err := client.Credentials().List(ctx, opts)
+	list, err := client.Credentials().List(ctx, client.Project(), opts)
 	if err != nil {
 		return fmt.Errorf("list credentials: %w", err)
 	}

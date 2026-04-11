@@ -148,7 +148,7 @@ func (r *SimpleKubeReconciler) provisionSession(ctx context.Context, session typ
 		return fmt.Errorf("ensuring service account: %w", err)
 	}
 
-	credentialIDs, err := r.resolveCredentialIDs(ctx, sdk)
+	credentialIDs, err := r.resolveCredentialIDs(ctx, sdk, session.ProjectID)
 	if err != nil {
 		r.logger.Warn().Err(err).Str("session_id", session.ID).Msg("credential resolution failed; continuing without credentials")
 		credentialIDs = map[string]string{}
@@ -640,10 +640,10 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 	return env
 }
 
-func (r *SimpleKubeReconciler) resolveCredentialIDs(ctx context.Context, sdk *sdkclient.Client) (map[string]string, error) {
+func (r *SimpleKubeReconciler) resolveCredentialIDs(ctx context.Context, sdk *sdkclient.Client, projectID string) (map[string]string, error) {
 	result := map[string]string{}
 
-	it := sdk.Credentials().ListAll(ctx, &types.ListOptions{Size: 100})
+	it := sdk.Credentials().ListAll(ctx, projectID, &types.ListOptions{Size: 100})
 	for it.Next() {
 		cred := it.Item()
 		if cred.Provider == "" || cred.ID == "" {
@@ -862,4 +862,3 @@ func min(a, b int) int {
 	}
 	return b
 }
-

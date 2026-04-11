@@ -7,6 +7,7 @@ import (
 
 type Credential struct {
 	api.Meta
+	ProjectID   string  `json:"project_id"`
 	Name        string  `json:"name"`
 	Description *string `json:"description"`
 	Provider    string  `json:"provider"`

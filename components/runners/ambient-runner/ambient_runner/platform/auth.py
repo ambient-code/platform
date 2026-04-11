@@ -117,7 +117,12 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
         logger.debug(f"No credential_id for provider {credential_type}; skipping fetch")
         return {}
 
-    url = f"{base}/api/ambient/v1/credentials/{credential_id}/token"
+    project_id = os.getenv("PROJECT_NAME", "")
+    if not project_id:
+        logger.warning("Cannot fetch credentials: PROJECT_NAME not set")
+        return {}
+
+    url = f"{base}/api/ambient/v1/projects/{project_id}/credentials/{credential_id}/token"
 
     # Reject non-cluster URLs to prevent token exfiltration via user-overridden env vars
     parsed = urlparse(base)

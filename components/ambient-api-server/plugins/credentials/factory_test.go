@@ -12,6 +12,7 @@ func newCredential(id string) (*credentials.Credential, error) {
 	credentialService := credentials.Service(&environments.Environment().Services)
 
 	credential := &credentials.Credential{
+		ProjectID:   "test-project",
 		Name:        "test-name",
 		Description: stringPtr("test-description"),
 		Provider:    "test-provider",

@@ -1,6 +1,7 @@
 package credentials
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -35,7 +36,8 @@ func (h credentialHandler) Create(w http.ResponseWriter, r *http.Request) {
 		},
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
-			credentialModel := ConvertCredential(credential)
+			projectID := mux.Vars(r)["id"]
+			credentialModel := ConvertCredential(credential, projectID)
 			credentialModel, err := h.credential.Create(ctx, credentialModel)
 			if err != nil {
 				return nil, err
@@ -56,7 +58,7 @@ func (h credentialHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		Validators: []handlers.Validate{},
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
-			id := mux.Vars(r)["id"]
+			id := mux.Vars(r)["cred_id"]
 			found, err := h.credential.Get(ctx, id)
 			if err != nil {
 				return nil, err
@@ -103,8 +105,15 @@ func (h credentialHandler) List(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
+			projectID := mux.Vars(r)["id"]
 
 			listArgs := services.NewListArguments(r.URL.Query())
+			projectFilter := fmt.Sprintf("project_id = '%s'", projectID)
+			if listArgs.Search != "" {
+				listArgs.Search = fmt.Sprintf("(%s) and %s", listArgs.Search, projectFilter)
+			} else {
+				listArgs.Search = projectFilter
+			}
 			var credentials []Credential
 			paging, err := h.generic.List(ctx, "id", listArgs, &credentials)
 			if err != nil {
@@ -139,7 +148,7 @@ func (h credentialHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h credentialHandler) Get(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
-			id := mux.Vars(r)["id"]
+			id := mux.Vars(r)["cred_id"]
 			ctx := r.Context()
 			credential, err := h.credential.Get(ctx, id)
 			if err != nil {
@@ -156,7 +165,7 @@ func (h credentialHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h credentialHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
-			id := mux.Vars(r)["id"]
+			id := mux.Vars(r)["cred_id"]
 			ctx := r.Context()
 			err := h.credential.Delete(ctx, id)
 			if err != nil {
@@ -171,7 +180,7 @@ func (h credentialHandler) Delete(w http.ResponseWriter, r *http.Request) {
 func (h credentialHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
-			id := mux.Vars(r)["id"]
+			id := mux.Vars(r)["cred_id"]
 			ctx := r.Context()
 			credential, err := h.credential.Get(ctx, id)
 			if err != nil {

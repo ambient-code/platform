@@ -308,6 +308,7 @@ class TestFetchCredentialHeaders:
                     "BACKEND_API_URL": f"http://127.0.0.1:{port}/api",
                     "BOT_TOKEN": "fake-bot-token",
                     "CREDENTIAL_IDS": json.dumps({"github": cred_id}),
+                    "PROJECT_NAME": "test-project",
                 },
             ):
                 ctx = _make_context(
@@ -350,6 +351,7 @@ class TestFetchCredentialHeaders:
                     "BACKEND_API_URL": f"http://127.0.0.1:{port}/api",
                     "BOT_TOKEN": "fake-bot-token",
                     "CREDENTIAL_IDS": json.dumps({"github": cred_id}),
+                    "PROJECT_NAME": "test-project",
                 },
             ):
                 ctx = _make_context()  # no current_user_id
@@ -452,6 +454,7 @@ class TestCredentialLifecycle:
                     "BACKEND_API_URL": f"http://127.0.0.1:{port}/api",
                     "BOT_TOKEN": "fake-bot",
                     "CREDENTIAL_IDS": credential_ids,
+                    "PROJECT_NAME": "test-project",
                 },
             ):
                 ctx = _make_context(current_user_id="userB")
@@ -503,6 +506,7 @@ class TestFetchCredentialAuthFailures:
         monkeypatch.setenv("BACKEND_API_URL", "http://backend.svc.cluster.local/api")
         monkeypatch.setenv("BOT_TOKEN", "bot-token")
         monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"github": "cred-gh-001"}))
+        monkeypatch.setenv("PROJECT_NAME", "test-project")
 
         ctx = _make_context(session_id="sess-1")
 
@@ -527,6 +531,7 @@ class TestFetchCredentialAuthFailures:
         monkeypatch.setenv("BACKEND_API_URL", "http://backend.svc.cluster.local/api")
         monkeypatch.setenv("BOT_TOKEN", "bot-token")
         monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"google": "cred-google-001"}))
+        monkeypatch.setenv("PROJECT_NAME", "test-project")
 
         ctx = _make_context(session_id="sess-1")
 
@@ -551,6 +556,7 @@ class TestFetchCredentialAuthFailures:
         monkeypatch.setenv("BACKEND_API_URL", "http://backend.svc.cluster.local/api")
         monkeypatch.setenv("BOT_TOKEN", "bot-token")
         monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"github": "cred-gh-002"}))
+        monkeypatch.setenv("PROJECT_NAME", "test-project")
 
         ctx = _make_context(session_id="sess-1", current_user_id="user@example.com")
         ctx.caller_token = "Bearer expired-caller-token"
@@ -570,6 +576,7 @@ class TestFetchCredentialAuthFailures:
         """_fetch_credential returns {} for non-auth HTTP errors (404, 500, etc.)."""
         monkeypatch.setenv("BACKEND_API_URL", "http://backend.svc.cluster.local/api")
         monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"github": "cred-gh-003"}))
+        monkeypatch.setenv("PROJECT_NAME", "test-project")
 
         ctx = _make_context(session_id="sess-1")
 
@@ -587,6 +594,7 @@ class TestFetchCredentialAuthFailures:
         monkeypatch.setenv("BACKEND_API_URL", "http://backend.svc.cluster.local/api")
         monkeypatch.setenv("BOT_TOKEN", "valid-bot-token")
         monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"github": "cred-gh-004"}))
+        monkeypatch.setenv("PROJECT_NAME", "test-project")
 
         ctx = _make_context(session_id="sess-1", current_user_id="user@example.com")
         ctx.caller_token = "Bearer expired-caller-token"
@@ -762,6 +770,7 @@ class TestFetchCredentialBotToken:
                     {
                         "BACKEND_API_URL": f"http://127.0.0.1:{port}/api",
                         "CREDENTIAL_IDS": json.dumps({"github": "cred-gh-bot-test"}),
+                        "PROJECT_NAME": "test-project",
                     },
                 ),
                 patch("ambient_runner.platform.auth.get_bot_token", return_value=cp_oidc_token),
@@ -804,6 +813,7 @@ class TestFetchCredentialBotToken:
                 {
                     "BACKEND_API_URL": "http://backend.svc.cluster.local/api",
                     "CREDENTIAL_IDS": json.dumps({"github": "cred-gh-pref"}),
+                    "PROJECT_NAME": "test-project",
                 },
             ),
             patch("urllib.request.urlopen", side_effect=fake_urlopen),

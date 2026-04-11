@@ -1,13 +1,11 @@
 package session
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
-	"strings"
 
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
@@ -56,6 +54,19 @@ func runSend(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(cmd.Context(), cfg.GetRequestTimeout())
 	defer cancel()
 
+	streamCtx, streamCancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
+	defer streamCancel()
+
+	var stream io.ReadCloser
+	if sendFollow {
+		s, err := client.Sessions().StreamEvents(streamCtx, sessionID)
+		if err != nil {
+			return fmt.Errorf("stream events: %w", err)
+		}
+		stream = s
+		defer stream.Close()
+	}
+
 	msg, err := client.Sessions().PushMessage(ctx, sessionID, payload)
 	if err != nil {
 		return fmt.Errorf("send message: %w", err)
@@ -67,94 +78,5 @@ func runSend(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	streamCtx, streamCancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
-	defer streamCancel()
-
-	stream, err := client.Sessions().StreamEvents(streamCtx, sessionID)
-	if err != nil {
-		return fmt.Errorf("stream events: %w", err)
-	}
-	defer stream.Close()
-
-	out := cmd.OutOrStdout()
-	scanner := bufio.NewScanner(stream)
-	var reasoningBuf strings.Builder
-	var inText bool
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-		data := line[6:]
-
-		if sendFollowJSON {
-			fmt.Fprintln(out, data)
-			continue
-		}
-
-		var evt struct {
-			Type         string `json:"type"`
-			Delta        string `json:"delta"`
-			ToolCallName string `json:"toolCallName"`
-			Content      string `json:"content"`
-		}
-		if err := json.Unmarshal([]byte(data), &evt); err != nil {
-			continue
-		}
-		switch evt.Type {
-		case "REASONING_MESSAGE_CONTENT":
-			reasoningBuf.WriteString(evt.Delta)
-		case "REASONING_END":
-			if reasoningBuf.Len() > 0 {
-				fmt.Fprintf(out, "[thinking] %s\n", strings.TrimSpace(reasoningBuf.String()))
-				reasoningBuf.Reset()
-			}
-		case "TEXT_MESSAGE_CONTENT":
-			if evt.Delta != "" {
-				inText = true
-				fmt.Fprint(out, evt.Delta)
-			}
-		case "TEXT_MESSAGE_END":
-			if inText {
-				fmt.Fprintln(out)
-				inText = false
-			}
-		case "TOOL_CALL_START":
-			if evt.ToolCallName != "" {
-				fmt.Fprintf(out, "[%s] ", evt.ToolCallName)
-			}
-		case "TOOL_CALL_RESULT":
-			if evt.Content != "" {
-				var content string
-				if err := json.Unmarshal([]byte(evt.Content), &content); err != nil {
-					content = evt.Content
-				}
-				lines := strings.SplitN(strings.TrimSpace(content), "\n", 4)
-				preview := strings.Join(lines, " | ")
-				if len(lines) >= 4 {
-					preview += " ..."
-				}
-				fmt.Fprintf(out, "→ %s\n", preview)
-			}
-		case "RUN_FINISHED":
-			if inText {
-				fmt.Fprintln(out)
-			}
-			return nil
-		case "RUN_ERROR":
-			if inText {
-				fmt.Fprintln(out)
-			}
-			return fmt.Errorf("run failed")
-		}
-	}
-
-	if inText {
-		fmt.Fprintln(out)
-	}
-
-	if scanErr := scanner.Err(); scanErr != nil {
-		return fmt.Errorf("stream error: %w", scanErr)
-	}
-	return nil
+	return renderSSEStream(stream, cmd.OutOrStdout(), sendFollowJSON, true)
 }

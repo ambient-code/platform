@@ -124,6 +124,10 @@ func NewClient(baseURL, token, project string, opts ...ClientOption) (*Client, e
 	return c, nil
 }
 
+func (c *Client) Project() string {
+	return c.project
+}
+
 func NewClientFromEnv(opts ...ClientOption) (*Client, error) {
 	baseURL := os.Getenv("AMBIENT_API_URL")
 	if baseURL == "" {
