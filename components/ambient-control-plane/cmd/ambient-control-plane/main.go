@@ -148,6 +148,9 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		CPRuntimeNamespace:    cfg.CPRuntimeNamespace,
 		CPTokenURL:            cfg.CPTokenURL,
 		CPTokenPublicKey:      string(kp.PublicKeyPEM),
+		HTTPProxy:             cfg.HTTPProxy,
+		HTTPSProxy:            cfg.HTTPSProxy,
+		NoProxy:               cfg.NoProxy,
 	}
 
 	conn, err := grpc.NewClient(cfg.GRPCServerAddr, grpc.WithTransportCredentials(grpcCredentials(cfg.GRPCUseTLS)))

@@ -3,6 +3,7 @@ package credentials
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 
 	"github.com/gorilla/mux"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
 )
+
+var safeProjectIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 var _ handlers.RestHandler = credentialHandler{}
 
@@ -58,10 +61,14 @@ func (h credentialHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		Validators: []handlers.Validate{},
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
+			projectID := mux.Vars(r)["id"]
 			id := mux.Vars(r)["cred_id"]
 			found, err := h.credential.Get(ctx, id)
 			if err != nil {
 				return nil, err
+			}
+			if found.ProjectID != projectID {
+				return nil, errors.NotFound("credential with id='%s' not found", id)
 			}
 
 			if patch.Name != nil {
@@ -106,6 +113,9 @@ func (h credentialHandler) List(w http.ResponseWriter, r *http.Request) {
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
 			projectID := mux.Vars(r)["id"]
+			if !safeProjectIDPattern.MatchString(projectID) {
+				return nil, errors.Validation("invalid project ID format")
+			}
 
 			listArgs := services.NewListArguments(r.URL.Query())
 			projectFilter := fmt.Sprintf("project_id = '%s'", projectID)
@@ -148,11 +158,15 @@ func (h credentialHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h credentialHandler) Get(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
+			projectID := mux.Vars(r)["id"]
 			id := mux.Vars(r)["cred_id"]
 			ctx := r.Context()
 			credential, err := h.credential.Get(ctx, id)
 			if err != nil {
 				return nil, err
+			}
+			if credential.ProjectID != projectID {
+				return nil, errors.NotFound("credential with id='%s' not found", id)
 			}
 
 			return PresentCredential(credential), nil
@@ -165,9 +179,17 @@ func (h credentialHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h credentialHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
+			projectID := mux.Vars(r)["id"]
 			id := mux.Vars(r)["cred_id"]
 			ctx := r.Context()
-			err := h.credential.Delete(ctx, id)
+			found, err := h.credential.Get(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			if found.ProjectID != projectID {
+				return nil, errors.NotFound("credential with id='%s' not found", id)
+			}
+			err = h.credential.Delete(ctx, id)
 			if err != nil {
 				return nil, err
 			}
@@ -180,11 +202,15 @@ func (h credentialHandler) Delete(w http.ResponseWriter, r *http.Request) {
 func (h credentialHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
+			projectID := mux.Vars(r)["id"]
 			id := mux.Vars(r)["cred_id"]
 			ctx := r.Context()
 			credential, err := h.credential.Get(ctx, id)
 			if err != nil {
 				return nil, err
+			}
+			if credential.ProjectID != projectID {
+				return nil, errors.NotFound("credential with id='%s' not found", id)
 			}
 
 			return PresentCredentialToken(credential), nil

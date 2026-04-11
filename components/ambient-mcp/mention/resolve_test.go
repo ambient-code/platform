@@ -15,12 +15,22 @@ func TestNewResolver_TokenFunc(t *testing.T) {
 		callCount++
 		return "dynamic-token"
 	}
-	r := NewResolver("http://localhost:8080", tokenFn)
+	r, err := NewResolver("http://localhost:8080", tokenFn)
+	if err != nil {
+		t.Fatalf("NewResolver: %v", err)
+	}
 	if r == nil {
 		t.Fatal("NewResolver returned nil")
 	}
 	if callCount != 0 {
 		t.Errorf("tokenFn called %d times at construction, want 0", callCount)
+	}
+}
+
+func TestNewResolver_NilTokenFunc(t *testing.T) {
+	_, err := NewResolver("http://localhost:8080", nil)
+	if err == nil {
+		t.Fatal("expected error for nil tokenFn")
 	}
 }
 
@@ -36,13 +46,16 @@ func TestResolve_ByUUID_SendsCurrentToken(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	r := NewResolver(srv.URL, func() string {
+	r, err := NewResolver(srv.URL, func() string {
 		idx := tokenSeq.Load()
 		if int(idx) < len(tokens) {
 			return tokens[idx]
 		}
 		return tokens[len(tokens)-1]
 	})
+	if err != nil {
+		t.Fatalf("NewResolver: %v", err)
+	}
 
 	ctx := context.Background()
 	agentID, err := r.Resolve(ctx, "proj1", "550e8400-e29b-41d4-a716-446655440000")
@@ -80,7 +93,10 @@ func TestResolve_ByName_SendsCurrentToken(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	r := NewResolver(srv.URL, func() string { return "name-lookup-token" })
+	r, err := NewResolver(srv.URL, func() string { return "name-lookup-token" })
+	if err != nil {
+		t.Fatalf("NewResolver: %v", err)
+	}
 	agentID, err := r.Resolve(context.Background(), "proj1", "my-agent")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -99,8 +115,11 @@ func TestResolve_ByUUID_NotFound(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	r := NewResolver(srv.URL, func() string { return "t" })
-	_, err := r.Resolve(context.Background(), "proj1", "550e8400-e29b-41d4-a716-446655440000")
+	r, err := NewResolver(srv.URL, func() string { return "t" })
+	if err != nil {
+		t.Fatalf("NewResolver: %v", err)
+	}
+	_, err = r.Resolve(context.Background(), "proj1", "550e8400-e29b-41d4-a716-446655440000")
 	if err == nil {
 		t.Fatal("expected error for 404")
 	}
@@ -113,8 +132,11 @@ func TestResolve_ByName_NoMatch(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	r := NewResolver(srv.URL, func() string { return "t" })
-	_, err := r.Resolve(context.Background(), "proj1", "nonexistent")
+	r, err := NewResolver(srv.URL, func() string { return "t" })
+	if err != nil {
+		t.Fatalf("NewResolver: %v", err)
+	}
+	_, err = r.Resolve(context.Background(), "proj1", "nonexistent")
 	if err == nil {
 		t.Fatal("expected error for no match")
 	}
@@ -132,8 +154,11 @@ func TestResolve_ByName_Ambiguous(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	r := NewResolver(srv.URL, func() string { return "t" })
-	_, err := r.Resolve(context.Background(), "proj1", "ambiguous")
+	r, err := NewResolver(srv.URL, func() string { return "t" })
+	if err != nil {
+		t.Fatalf("NewResolver: %v", err)
+	}
+	_, err = r.Resolve(context.Background(), "proj1", "ambiguous")
 	if err == nil {
 		t.Fatal("expected error for ambiguous match")
 	}

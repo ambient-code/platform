@@ -39,6 +39,9 @@ type ControlPlaneConfig struct {
 	ProjectKubeTokenFile string
 	CPTokenListenAddr    string
 	CPTokenURL           string
+	HTTPProxy            string
+	HTTPSProxy           string
+	NoProxy              string
 }
 
 func Load() (*ControlPlaneConfig, error) {
@@ -75,6 +78,9 @@ func Load() (*ControlPlaneConfig, error) {
 		ProjectKubeTokenFile: os.Getenv("PROJECT_KUBE_TOKEN_FILE"),
 		CPTokenListenAddr:    envOrDefault("CP_TOKEN_LISTEN_ADDR", ":8080"),
 		CPTokenURL:           os.Getenv("CP_TOKEN_URL"),
+		HTTPProxy:            os.Getenv("HTTP_PROXY"),
+		HTTPSProxy:           os.Getenv("HTTPS_PROXY"),
+		NoProxy:              os.Getenv("NO_PROXY"),
 	}
 
 	if cfg.MCPAPIServerURL == "" {

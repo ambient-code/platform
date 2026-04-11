@@ -244,6 +244,14 @@ docker login quay.io
 
 Either `build.sh` was not run or the CI build workflow failed. Check Actions → `Build and Push Component Docker Images` for the PR.
 
+### Runner pods can't reach external hosts (Squid proxy)
+
+The MPP cluster routes outbound traffic through a Squid proxy (`proxy.squi-001.prod.iad2.dc.redhat.com:3128`). The `runtime-int` deployments have `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` set in their pod specs, but runner pods spawned by the control plane did not inherit these.
+
+**Fix (merged):** The control plane reads `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` from its own environment and injects them into both the runner container (`buildEnv()`) and the MCP sidecar container (`buildMCPSidecar()`). No manifest change needed — the CP's deployment already has the proxy vars; they now propagate automatically.
+
+**Pattern:** When the CP needs to forward platform-level env vars to spawned pods, add the field to `ControlPlaneConfig` → `KubeReconcilerConfig` → `buildEnv()`/`buildMCPSidecar()`.
+
 ### JWT / UNAUTHENTICATED errors in api-server
 
 The production overlay configures JWT against Red Hat SSO. For ephemeral test instances without SSO integration:
