@@ -132,7 +132,12 @@ func CreateSession(c *client.Client) func(ctx context.Context, req mcp.CallToolR
 }
 
 func PushMessage(c *client.Client) func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	resolver := mention.NewResolver(c.BaseURL(), c.Token)
+	resolver, err := mention.NewResolver(c.BaseURL(), c.Token)
+	if err != nil {
+		return func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return errResult("CONFIG_ERROR", err.Error()), nil
+		}
+	}
 
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		sessionID := mcp.ParseString(req, "session_id", "")

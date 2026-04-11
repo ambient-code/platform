@@ -26,12 +26,15 @@ type Resolver struct {
 	http    *http.Client
 }
 
-func NewResolver(baseURL string, tokenFn TokenFunc) *Resolver {
+func NewResolver(baseURL string, tokenFn TokenFunc) (*Resolver, error) {
+	if tokenFn == nil {
+		return nil, fmt.Errorf("tokenFn must not be nil")
+	}
 	return &Resolver{
 		baseURL: strings.TrimSuffix(baseURL, "/"),
 		tokenFn: tokenFn,
 		http:    &http.Client{},
-	}
+	}, nil
 }
 
 type agentSearchResult struct {
