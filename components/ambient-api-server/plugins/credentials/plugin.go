@@ -52,13 +52,13 @@ func init() {
 		}
 		credentialHandler := NewCredentialHandler(Service(envServices), generic.Service(envServices))
 
-		credentialsRouter := apiV1Router.PathPrefix("/credentials").Subrouter()
-		credentialsRouter.HandleFunc("", credentialHandler.List).Methods(http.MethodGet)
-		credentialsRouter.HandleFunc("/{id}", credentialHandler.Get).Methods(http.MethodGet)
-		credentialsRouter.HandleFunc("/{id}/token", credentialHandler.GetToken).Methods(http.MethodGet)
-		credentialsRouter.HandleFunc("", credentialHandler.Create).Methods(http.MethodPost)
-		credentialsRouter.HandleFunc("/{id}", credentialHandler.Patch).Methods(http.MethodPatch)
-		credentialsRouter.HandleFunc("/{id}", credentialHandler.Delete).Methods(http.MethodDelete)
+		credentialsRouter := apiV1Router.PathPrefix("/projects").Subrouter()
+		credentialsRouter.HandleFunc("/{id}/credentials", credentialHandler.List).Methods(http.MethodGet)
+		credentialsRouter.HandleFunc("/{id}/credentials", credentialHandler.Create).Methods(http.MethodPost)
+		credentialsRouter.HandleFunc("/{id}/credentials/{cred_id}", credentialHandler.Get).Methods(http.MethodGet)
+		credentialsRouter.HandleFunc("/{id}/credentials/{cred_id}", credentialHandler.Patch).Methods(http.MethodPatch)
+		credentialsRouter.HandleFunc("/{id}/credentials/{cred_id}", credentialHandler.Delete).Methods(http.MethodDelete)
+		credentialsRouter.HandleFunc("/{id}/credentials/{cred_id}/token", credentialHandler.GetToken).Methods(http.MethodGet)
 		credentialsRouter.Use(authMiddleware.AuthenticateAccountJWT)
 		credentialsRouter.Use(authzMiddleware.AuthorizeApi)
 	})
@@ -83,4 +83,6 @@ func init() {
 
 	db.RegisterMigration(migration())
 	db.RegisterMigration(rolesMigration())
+	db.RegisterMigration(addProjectIDMigration())
+	db.RegisterMigration(removeCredentialReaderRoleMigration())
 }

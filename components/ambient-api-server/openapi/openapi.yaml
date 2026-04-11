@@ -64,12 +64,12 @@ paths:
     $ref: 'openapi.inbox.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents~1{agent_id}~1inbox'
   /api/ambient/v1/projects/{id}/agents/{agent_id}/inbox/{msg_id}:
     $ref: 'openapi.inbox.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents~1{agent_id}~1inbox~1{msg_id}'
-  /api/ambient/v1/credentials:
-    $ref: 'openapi.credentials.yaml#/paths/~1api~1ambient~1v1~1credentials'
-  /api/ambient/v1/credentials/{id}:
-    $ref: 'openapi.credentials.yaml#/paths/~1api~1ambient~1v1~1credentials~1{id}'
-  /api/ambient/v1/credentials/{id}/token:
-    $ref: 'openapi.credentials.yaml#/paths/~1api~1ambient~1v1~1credentials~1{id}~1token'
+  /api/ambient/v1/projects/{id}/credentials:
+    $ref: 'openapi.credentials.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1credentials'
+  /api/ambient/v1/projects/{id}/credentials/{cred_id}:
+    $ref: 'openapi.credentials.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1credentials~1{cred_id}'
+  /api/ambient/v1/projects/{id}/credentials/{cred_id}/token:
+    $ref: 'openapi.credentials.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1credentials~1{cred_id}~1token'
   # AUTO-ADD NEW PATHS
 components:
   securitySchemes:

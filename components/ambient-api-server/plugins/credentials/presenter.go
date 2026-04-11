@@ -7,11 +7,12 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/util"
 )
 
-func ConvertCredential(credential openapi.Credential) *Credential {
+func ConvertCredential(credential openapi.Credential, projectID string) *Credential {
 	c := &Credential{
 		Meta: api.Meta{
 			ID: util.NilToEmptyString(credential.Id),
 		},
+		ProjectID: projectID,
 	}
 	c.Name = credential.Name
 	c.Description = credential.Description
@@ -38,6 +39,7 @@ func PresentCredential(credential *Credential) openapi.Credential {
 		Href:        reference.Href,
 		CreatedAt:   openapi.PtrTime(credential.CreatedAt),
 		UpdatedAt:   openapi.PtrTime(credential.UpdatedAt),
+		ProjectId:   credential.ProjectID,
 		Name:        credential.Name,
 		Description: credential.Description,
 		Provider:    credential.Provider,

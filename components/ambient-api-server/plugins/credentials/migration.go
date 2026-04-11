@@ -34,6 +34,30 @@ func migration() *gormigrate.Migration {
 	}
 }
 
+func addProjectIDMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202604101200",
+		Migrate: func(tx *gorm.DB) error {
+			return tx.Exec("ALTER TABLE credentials ADD COLUMN IF NOT EXISTS project_id TEXT NOT NULL DEFAULT ''").Error
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return tx.Exec("ALTER TABLE credentials DROP COLUMN IF EXISTS project_id").Error
+		},
+	}
+}
+
+func removeCredentialReaderRoleMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202604101201",
+		Migrate: func(tx *gorm.DB) error {
+			return tx.Exec("DELETE FROM roles WHERE name = 'credential:reader'").Error
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return nil
+		},
+	}
+}
+
 func rolesMigration() *gormigrate.Migration {
 	type roleRow struct {
 		ID          string

@@ -23,14 +23,16 @@ var _ MappedNullable = &Credential{}
 
 // Credential struct for Credential
 type Credential struct {
-	Id          *string    `json:"id,omitempty"`
-	Kind        *string    `json:"kind,omitempty"`
-	Href        *string    `json:"href,omitempty"`
-	CreatedAt   *time.Time `json:"created_at,omitempty"`
-	UpdatedAt   *time.Time `json:"updated_at,omitempty"`
-	Name        string     `json:"name"`
-	Description *string    `json:"description,omitempty"`
-	Provider    string     `json:"provider"`
+	Id        *string    `json:"id,omitempty"`
+	Kind      *string    `json:"kind,omitempty"`
+	Href      *string    `json:"href,omitempty"`
+	CreatedAt *time.Time `json:"created_at,omitempty"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+	// ID of the project this credential belongs to
+	ProjectId   string  `json:"project_id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
+	Provider    string  `json:"provider"`
 	// Credential token value; write-only, never returned in GET/LIST responses
 	Token       *string `json:"token,omitempty"`
 	Url         *string `json:"url,omitempty"`
@@ -45,8 +47,9 @@ type _Credential Credential
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewCredential(name string, provider string) *Credential {
+func NewCredential(projectId string, name string, provider string) *Credential {
 	this := Credential{}
+	this.ProjectId = projectId
 	this.Name = name
 	this.Provider = provider
 	return &this
@@ -218,6 +221,30 @@ func (o *Credential) HasUpdatedAt() bool {
 // SetUpdatedAt gets a reference to the given time.Time and assigns it to the UpdatedAt field.
 func (o *Credential) SetUpdatedAt(v time.Time) {
 	o.UpdatedAt = &v
+}
+
+// GetProjectId returns the ProjectId field value
+func (o *Credential) GetProjectId() string {
+	if o == nil {
+		var ret string
+		return ret
+	}
+
+	return o.ProjectId
+}
+
+// GetProjectIdOk returns a tuple with the ProjectId field value
+// and a boolean to check if the value has been set.
+func (o *Credential) GetProjectIdOk() (*string, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.ProjectId, true
+}
+
+// SetProjectId sets field value
+func (o *Credential) SetProjectId(v string) {
+	o.ProjectId = v
 }
 
 // GetName returns the Name field value
@@ -485,6 +512,7 @@ func (o Credential) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.UpdatedAt) {
 		toSerialize["updated_at"] = o.UpdatedAt
 	}
+	toSerialize["project_id"] = o.ProjectId
 	toSerialize["name"] = o.Name
 	if !IsNil(o.Description) {
 		toSerialize["description"] = o.Description
@@ -513,6 +541,7 @@ func (o *Credential) UnmarshalJSON(data []byte) (err error) {
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
+		"project_id",
 		"name",
 		"provider",
 	}

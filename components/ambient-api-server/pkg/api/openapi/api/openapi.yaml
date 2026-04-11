@@ -2208,7 +2208,7 @@ paths:
       security:
       - Bearer: []
       summary: Start an agent — creates a Session (idempotent)
-  /api/ambient/v1/projects/{id}/agents/{agent_id}/start/preview:
+  /api/ambient/v1/projects/{id}/agents/{agent_id}/ignition:
     get:
       parameters:
       - description: The id of record
@@ -2627,9 +2627,17 @@ paths:
       security:
       - Bearer: []
       summary: Mark an inbox message as read
-  /api/ambient/v1/credentials:
+  /api/ambient/v1/projects/{id}/credentials:
     get:
       parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
       - description: Page number of record list when record list exceeds specified
           page size
         explode: true
@@ -2713,8 +2721,17 @@ paths:
           description: Unexpected error occurred
       security:
       - Bearer: []
-      summary: Returns a list of credentials
+      summary: Returns a list of credentials in a project
     post:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
       requestBody:
         content:
           application/json:
@@ -2761,8 +2778,8 @@ paths:
           description: An unexpected error occurred creating the credential
       security:
       - Bearer: []
-      summary: Create a new credential
-  /api/ambient/v1/credentials/{id}:
+      summary: Create a new credential in a project
+  /api/ambient/v1/projects/{id}/credentials/{cred_id}:
     delete:
       parameters:
       - description: The id of record
@@ -2773,6 +2790,12 @@ paths:
         schema:
           type: string
         style: simple
+      - description: The id of the credential
+        in: path
+        name: cred_id
+        required: true
+        schema:
+          type: string
       responses:
         "204":
           description: Credential deleted successfully
@@ -2813,6 +2836,12 @@ paths:
         schema:
           type: string
         style: simple
+      - description: The id of the credential
+        in: path
+        name: cred_id
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -2846,7 +2875,7 @@ paths:
           description: Unexpected error occurred
       security:
       - Bearer: []
-      summary: Get an credential by id
+      summary: Get a credential by id
     patch:
       parameters:
       - description: The id of record
@@ -2857,6 +2886,12 @@ paths:
         schema:
           type: string
         style: simple
+      - description: The id of the credential
+        in: path
+        name: cred_id
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -2909,8 +2944,8 @@ paths:
           description: Unexpected error updating credential
       security:
       - Bearer: []
-      summary: Update an credential
-  /api/ambient/v1/credentials/{id}/token:
+      summary: Update a credential
+  /api/ambient/v1/projects/{id}/credentials/{cred_id}/token:
     get:
       description: Returns the decrypted token value for the given credential. Requires
         token-reader role.
@@ -2923,6 +2958,12 @@ paths:
         schema:
           type: string
         style: simple
+      - description: The id of the credential
+        in: path
+        name: cred_id
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -3018,6 +3059,13 @@ components:
       schema:
         type: string
       style: form
+    cred_id:
+      description: The id of the credential
+      in: path
+      name: cred_id
+      required: true
+      schema:
+        type: string
   schemas:
     ObjectReference:
       properties:
@@ -3387,8 +3435,8 @@ components:
           annotations:
             type: string
           prompt:
-            description: Workspace-level context injected into every agent start in this
-              project
+            description: Workspace-level context injected into every agent start in
+              this project
             type: string
           status:
             type: string
@@ -4182,6 +4230,9 @@ components:
       allOf:
       - $ref: "#/components/schemas/ObjectReference"
       - properties:
+          project_id:
+            description: ID of the project this credential belongs to
+            type: string
           name:
             type: string
           description:
@@ -4208,6 +4259,7 @@ components:
             type: string
         required:
         - name
+        - project_id
         - provider
         type: object
       example:
@@ -4219,6 +4271,7 @@ components:
         token: token
         labels: labels
         updated_at: 2000-01-23T04:56:07.000+00:00
+        project_id: project_id
         provider: github
         name: name
         id: id
@@ -4247,6 +4300,7 @@ components:
           token: token
           labels: labels
           updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
           provider: github
           name: name
           id: id
@@ -4260,6 +4314,7 @@ components:
           token: token
           labels: labels
           updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
           provider: github
           name: name
           id: id

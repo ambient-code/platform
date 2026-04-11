@@ -78,12 +78,6 @@ All URIs are relative to *http://localhost:8000*
 
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
-*DefaultAPI* | [**ApiAmbientV1CredentialsGet**](docs/DefaultAPI.md#apiambientv1credentialsget) | **Get** /api/ambient/v1/credentials | Returns a list of credentials
-*DefaultAPI* | [**ApiAmbientV1CredentialsIdDelete**](docs/DefaultAPI.md#apiambientv1credentialsiddelete) | **Delete** /api/ambient/v1/credentials/{id} | Delete a credential
-*DefaultAPI* | [**ApiAmbientV1CredentialsIdGet**](docs/DefaultAPI.md#apiambientv1credentialsidget) | **Get** /api/ambient/v1/credentials/{id} | Get an credential by id
-*DefaultAPI* | [**ApiAmbientV1CredentialsIdPatch**](docs/DefaultAPI.md#apiambientv1credentialsidpatch) | **Patch** /api/ambient/v1/credentials/{id} | Update an credential
-*DefaultAPI* | [**ApiAmbientV1CredentialsIdTokenGet**](docs/DefaultAPI.md#apiambientv1credentialsidtokenget) | **Get** /api/ambient/v1/credentials/{id}/token | Get a decrypted token for a credential
-*DefaultAPI* | [**ApiAmbientV1CredentialsPost**](docs/DefaultAPI.md#apiambientv1credentialspost) | **Post** /api/ambient/v1/credentials | Create a new credential
 *DefaultAPI* | [**ApiAmbientV1ProjectSettingsGet**](docs/DefaultAPI.md#apiambientv1projectsettingsget) | **Get** /api/ambient/v1/project_settings | Returns a list of project settings
 *DefaultAPI* | [**ApiAmbientV1ProjectSettingsIdDelete**](docs/DefaultAPI.md#apiambientv1projectsettingsiddelete) | **Delete** /api/ambient/v1/project_settings/{id} | Delete a project settings by id
 *DefaultAPI* | [**ApiAmbientV1ProjectSettingsIdGet**](docs/DefaultAPI.md#apiambientv1projectsettingsidget) | **Get** /api/ambient/v1/project_settings/{id} | Get a project settings by id
@@ -102,6 +96,12 @@ Class | Method | HTTP request | Description
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsAgentIdStartPost**](docs/DefaultAPI.md#apiambientv1projectsidagentsagentidstartpost) | **Post** /api/ambient/v1/projects/{id}/agents/{agent_id}/start | Start an agent — creates a Session (idempotent)
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsGet**](docs/DefaultAPI.md#apiambientv1projectsidagentsget) | **Get** /api/ambient/v1/projects/{id}/agents | Returns a list of agents in a project
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsPost**](docs/DefaultAPI.md#apiambientv1projectsidagentspost) | **Post** /api/ambient/v1/projects/{id}/agents | Create an agent in a project
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsCredIdDelete**](docs/DefaultAPI.md#apiambientv1projectsidcredentialscrediddelete) | **Delete** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Delete a credential
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsCredIdGet**](docs/DefaultAPI.md#apiambientv1projectsidcredentialscredidget) | **Get** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Get a credential by id
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsCredIdPatch**](docs/DefaultAPI.md#apiambientv1projectsidcredentialscredidpatch) | **Patch** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Update a credential
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsCredIdTokenGet**](docs/DefaultAPI.md#apiambientv1projectsidcredentialscredidtokenget) | **Get** /api/ambient/v1/projects/{id}/credentials/{cred_id}/token | Get a decrypted token for a credential
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsGet**](docs/DefaultAPI.md#apiambientv1projectsidcredentialsget) | **Get** /api/ambient/v1/projects/{id}/credentials | Returns a list of credentials in a project
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsPost**](docs/DefaultAPI.md#apiambientv1projectsidcredentialspost) | **Post** /api/ambient/v1/projects/{id}/credentials | Create a new credential in a project
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdDelete**](docs/DefaultAPI.md#apiambientv1projectsiddelete) | **Delete** /api/ambient/v1/projects/{id} | Delete a project by id
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdGet**](docs/DefaultAPI.md#apiambientv1projectsidget) | **Get** /api/ambient/v1/projects/{id} | Get a project by id
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdHomeGet**](docs/DefaultAPI.md#apiambientv1projectsidhomeget) | **Get** /api/ambient/v1/projects/{id}/home | Project home — latest status for every Agent in this project
