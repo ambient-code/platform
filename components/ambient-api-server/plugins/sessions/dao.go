@@ -17,6 +17,7 @@ type SessionDao interface {
 	FindByIDs(ctx context.Context, ids []string) (SessionList, error)
 	All(ctx context.Context) (SessionList, error)
 	AllByProjectId(ctx context.Context, projectId string) (SessionList, error)
+	ActiveByAgentID(ctx context.Context, agentID string) (*Session, error)
 }
 
 var _ SessionDao = &sqlSessionDao{}
@@ -90,4 +91,16 @@ func (d *sqlSessionDao) AllByProjectId(ctx context.Context, projectId string) (S
 		return nil, err
 	}
 	return sessions, nil
+}
+
+func (d *sqlSessionDao) ActiveByAgentID(ctx context.Context, agentID string) (*Session, error) {
+	g2 := (*d.sessionFactory).New(ctx)
+	var session Session
+	err := g2.Where("agent_id = ? AND phase IN (?)", agentID, []string{"Pending", "Creating", "Running"}).
+		Order("created_at DESC").
+		Take(&session).Error
+	if err != nil {
+		return nil, err
+	}
+	return &session, nil
 }
