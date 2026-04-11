@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/rs/zerolog"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -201,7 +202,7 @@ func (kc *KubeClient) DeletePod(ctx context.Context, namespace, name string, opt
 }
 
 func (kc *KubeClient) DeletePodsByLabel(ctx context.Context, namespace, labelSelector string) error {
-	return kc.dynamic.Resource(PodGVR).Namespace(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: labelSelector})
+	return kc.deleteCollectionWithFallback(ctx, PodGVR, namespace, labelSelector)
 }
 
 // Service operations
@@ -214,7 +215,7 @@ func (kc *KubeClient) CreateService(ctx context.Context, obj *unstructured.Unstr
 }
 
 func (kc *KubeClient) DeleteServicesByLabel(ctx context.Context, namespace, labelSelector string) error {
-	return kc.dynamic.Resource(ServiceGVR).Namespace(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: labelSelector})
+	return kc.deleteCollectionWithFallback(ctx, ServiceGVR, namespace, labelSelector)
 }
 
 // Secret operations
@@ -231,7 +232,7 @@ func (kc *KubeClient) UpdateSecret(ctx context.Context, obj *unstructured.Unstru
 }
 
 func (kc *KubeClient) DeleteSecretsByLabel(ctx context.Context, namespace, labelSelector string) error {
-	return kc.dynamic.Resource(SecretGVR).Namespace(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: labelSelector})
+	return kc.deleteCollectionWithFallback(ctx, SecretGVR, namespace, labelSelector)
 }
 
 // ServiceAccount operations
@@ -244,7 +245,7 @@ func (kc *KubeClient) CreateServiceAccount(ctx context.Context, obj *unstructure
 }
 
 func (kc *KubeClient) DeleteServiceAccountsByLabel(ctx context.Context, namespace, labelSelector string) error {
-	return kc.dynamic.Resource(ServiceAccountGVR).Namespace(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: labelSelector})
+	return kc.deleteCollectionWithFallback(ctx, ServiceAccountGVR, namespace, labelSelector)
 }
 
 // Role operations
@@ -257,11 +258,38 @@ func (kc *KubeClient) CreateRole(ctx context.Context, obj *unstructured.Unstruct
 }
 
 func (kc *KubeClient) DeleteRolesByLabel(ctx context.Context, namespace, labelSelector string) error {
-	return kc.dynamic.Resource(RoleGVR).Namespace(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: labelSelector})
+	return kc.deleteCollectionWithFallback(ctx, RoleGVR, namespace, labelSelector)
 }
 
 func (kc *KubeClient) DeleteRoleBindingsByLabel(ctx context.Context, namespace, labelSelector string) error {
-	return kc.dynamic.Resource(RoleBindingGVR).Namespace(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: labelSelector})
+	return kc.deleteCollectionWithFallback(ctx, RoleBindingGVR, namespace, labelSelector)
+}
+
+func (kc *KubeClient) deleteCollectionWithFallback(ctx context.Context, gvr schema.GroupVersionResource, namespace, labelSelector string) error {
+	err := kc.dynamic.Resource(gvr).Namespace(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: labelSelector})
+	if err == nil {
+		return nil
+	}
+	if !k8serrors.IsForbidden(err) {
+		return err
+	}
+
+	kc.logger.Warn().Str("resource", gvr.Resource).Str("namespace", namespace).Msg("deletecollection forbidden, falling back to list+delete")
+
+	list, listErr := kc.dynamic.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
+	if listErr != nil {
+		return fmt.Errorf("fallback list %s: %w", gvr.Resource, listErr)
+	}
+
+	var lastErr error
+	for i := range list.Items {
+		name := list.Items[i].GetName()
+		if delErr := kc.dynamic.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{}); delErr != nil && !k8serrors.IsNotFound(delErr) {
+			kc.logger.Warn().Err(delErr).Str("resource", gvr.Resource).Str("name", name).Msg("fallback delete failed")
+			lastErr = delErr
+		}
+	}
+	return lastErr
 }
 
 func (kc *KubeClient) GetNetworkPolicy(ctx context.Context, namespace, name string) (*unstructured.Unstructured, error) {
