@@ -40,6 +40,9 @@ type KubeReconcilerConfig struct {
 	CPRuntimeNamespace    string
 	CPTokenURL            string
 	CPTokenPublicKey      string
+	HTTPProxy             string
+	HTTPSProxy            string
+	NoProxy               string
 }
 
 type SimpleKubeReconciler struct {
@@ -641,6 +644,16 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 		}
 	}
 
+	if r.cfg.HTTPProxy != "" {
+		env = append(env, envVar("HTTP_PROXY", r.cfg.HTTPProxy))
+	}
+	if r.cfg.HTTPSProxy != "" {
+		env = append(env, envVar("HTTPS_PROXY", r.cfg.HTTPSProxy))
+	}
+	if r.cfg.NoProxy != "" {
+		env = append(env, envVar("NO_PROXY", r.cfg.NoProxy))
+	}
+
 	return env
 }
 
@@ -828,6 +841,15 @@ func (r *SimpleKubeReconciler) buildMCPSidecar(sessionID string) interface{} {
 		envVar("AMBIENT_CP_TOKEN_URL", r.cfg.CPTokenURL),
 		envVar("AMBIENT_CP_TOKEN_PUBLIC_KEY", r.cfg.CPTokenPublicKey),
 		envVar("SESSION_ID", sessionID),
+	}
+	if r.cfg.HTTPProxy != "" {
+		env = append(env, envVar("HTTP_PROXY", r.cfg.HTTPProxy))
+	}
+	if r.cfg.HTTPSProxy != "" {
+		env = append(env, envVar("HTTPS_PROXY", r.cfg.HTTPSProxy))
+	}
+	if r.cfg.NoProxy != "" {
+		env = append(env, envVar("NO_PROXY", r.cfg.NoProxy))
 	}
 	return map[string]interface{}{
 		"name":            "ambient-mcp",
