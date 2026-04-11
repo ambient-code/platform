@@ -47,16 +47,27 @@ func NewStartHandler(agent AgentService, inboxSvc inbox.InboxMessageService, ses
 }
 
 func (h *startHandler) Start(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	agentID := mux.Vars(r)["agent_id"]
+
+	agent, err := h.agent.Get(ctx, agentID)
+	if err != nil {
+		handlers.HandleError(ctx, w, err)
+		return
+	}
+
+	if existing, _ := h.session.ActiveByAgentID(ctx, agentID); existing != nil {
+		resp := &StartResponse{
+			Session: sessions.PresentSession(existing),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+		return
+	}
+
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *pkgerrors.ServiceError) {
-			ctx := r.Context()
-			agentID := mux.Vars(r)["agent_id"]
-
-			agent, err := h.agent.Get(ctx, agentID)
-			if err != nil {
-				return nil, err
-			}
-
 			unread, inboxErr := h.inbox.UnreadByAgentID(ctx, agentID)
 			if inboxErr != nil {
 				return nil, inboxErr
