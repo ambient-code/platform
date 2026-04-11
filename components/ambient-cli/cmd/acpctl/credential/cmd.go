@@ -64,7 +64,7 @@ var listCmd = &cobra.Command{
 		if listArgs.provider != "" {
 			opts.Search = fmt.Sprintf("provider='%s'", listArgs.provider)
 		}
-		list, err := client.Credentials().List(ctx, opts)
+		list, err := client.Credentials().List(ctx, client.Project(), opts)
 		if err != nil {
 			return fmt.Errorf("list credentials: %w", err)
 		}
@@ -101,7 +101,7 @@ var getCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 		defer cancel()
 
-		credential, err := client.Credentials().Get(ctx, args[0])
+		credential, err := client.Credentials().Get(ctx, client.Project(), args[0])
 		if err != nil {
 			return fmt.Errorf("get credential %q: %w", args[0], err)
 		}
@@ -185,7 +185,7 @@ var createCmd = &cobra.Command{
 			return fmt.Errorf("build credential: %w", err)
 		}
 
-		created, err := client.Credentials().Create(ctx, cred)
+		created, err := client.Credentials().Create(ctx, client.Project(), cred)
 		if err != nil {
 			return fmt.Errorf("create credential: %w", err)
 		}
@@ -257,7 +257,7 @@ var updateCmd = &cobra.Command{
 			patch = patch.Annotations(updateArgs.annotations)
 		}
 
-		updated, err := client.Credentials().Update(ctx, args[0], patch.Build())
+		updated, err := client.Credentials().Update(ctx, client.Project(), args[0], patch.Build())
 		if err != nil {
 			return fmt.Errorf("update credential: %w", err)
 		}
@@ -294,7 +294,7 @@ var deleteCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 		defer cancel()
 
-		if err := client.Credentials().Delete(ctx, args[0]); err != nil {
+		if err := client.Credentials().Delete(ctx, client.Project(), args[0]); err != nil {
 			return fmt.Errorf("delete credential: %w", err)
 		}
 
@@ -327,7 +327,7 @@ var tokenCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 		defer cancel()
 
-		resp, err := client.Credentials().GetToken(ctx, args[0])
+		resp, err := client.Credentials().GetToken(ctx, client.Project(), args[0])
 		if err != nil {
 			return fmt.Errorf("get token for credential %q: %w", args[0], err)
 		}

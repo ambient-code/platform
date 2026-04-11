@@ -243,7 +243,7 @@ func applyProject(ctx context.Context, client *sdkclient.Client, doc resource) (
 }
 
 func applyCredential(ctx context.Context, client *sdkclient.Client, doc resource) (applyResult, error) {
-	existing, err := client.Credentials().Get(ctx, doc.Name)
+	existing, err := client.Credentials().Get(ctx, client.Project(), doc.Name)
 	if err != nil {
 		token := os.ExpandEnv(doc.Token)
 		builder := sdktypes.NewCredentialBuilder().
@@ -271,7 +271,7 @@ func applyCredential(ctx context.Context, client *sdkclient.Client, doc resource
 		if buildErr != nil {
 			return applyResult{}, buildErr
 		}
-		if _, createErr := client.Credentials().Create(ctx, cred); createErr != nil {
+		if _, createErr := client.Credentials().Create(ctx, client.Project(), cred); createErr != nil {
 			return applyResult{}, createErr
 		}
 		return applyResult{Kind: "Credential", Name: doc.Name, Status: "created"}, nil
@@ -281,7 +281,7 @@ func applyCredential(ctx context.Context, client *sdkclient.Client, doc resource
 	if !changed {
 		return applyResult{Kind: "Credential", Name: doc.Name, Status: "unchanged"}, nil
 	}
-	if _, err = client.Credentials().Update(ctx, existing.ID, patch); err != nil {
+	if _, err = client.Credentials().Update(ctx, client.Project(), existing.ID, patch); err != nil {
 		return applyResult{}, err
 	}
 	return applyResult{Kind: "Credential", Name: doc.Name, Status: "configured"}, nil
