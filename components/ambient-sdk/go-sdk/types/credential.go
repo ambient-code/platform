@@ -8,6 +8,7 @@ import (
 type Credential struct {
 	ObjectReference
 
+	ProjectID   string `json:"project_id"`
 	Annotations string `json:"annotations,omitempty"`
 	Description string `json:"description,omitempty"`
 	Email       string `json:"email,omitempty"`
