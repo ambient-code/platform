@@ -1,0 +1,1601 @@
+---
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: ambient-code-operator
+  annotations:
+    description: "Ambient Code Platform - Platform components (CRDs, RBAC, Operator)"
+
+parameters:
+- name: IMAGE_TAG
+  description: "Image tag to deploy (auto-generated from git commit)"
+  required: true
+- name: IMAGE_OPERATOR
+  description: "Operator image"
+  value: "quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-operator-main"
+  required: true
+- name: IMAGE_AMBIENT_RUNNER
+  description: "Ambient Runner image"
+  value: "quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-ambient-runner-main"
+  required: true
+
+objects:
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: ambient-code-platform
+  annotations:
+    description: "Ambient Code Platform - AI-powered development environment"
+
+parameters:
+- name: IMAGE_TAG
+  description: "Image tag to deploy (auto-generated from git commit)"
+  required: true
+- name: IMAGE_OPERATOR
+  description: "Operator image"
+  value: "quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-operator-main"
+  required: true
+- name: IMAGE_BACKEND
+  description: "Backend API image"
+  value: "quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-backend-main"
+  required: true
+- name: IMAGE_FRONTEND
+  description: "Frontend image"
+  value: "quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-frontend-main"
+  required: true
+- name: IMAGE_PUBLIC_API
+  description: "Public API image"
+  value: "quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-public-api-main"
+  required: true
+- name: IMAGE_AMBIENT_API_SERVER
+  description: "Ambient API Server image"
+  value: "quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-ambient-api-server-main"
+  required: true
+- name: IMAGE_AMBIENT_RUNNER
+  description: "Ambient Runner image"
+  value: "quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-ambient-runner-main"
+  required: true
+
+  apiVersion: apiextensions.k8s.io/v1
+  kind: CustomResourceDefinition
+  metadata:
+    name: agenticsessions.vteam.ambient-code
+  spec:
+    group: vteam.ambient-code
+    names:
+      kind: AgenticSession
+      plural: agenticsessions
+      shortNames:
+      - as
+      singular: agenticsession
+    scope: Namespaced
+    versions:
+    - name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          properties:
+            spec:
+              properties:
+                activeWorkflow:
+                  description: Active workflow configuration for dynamic workflow switching
+                  properties:
+                    branch:
+                      default: main
+                      description: Branch to clone
+                      type: string
+                    gitUrl:
+                      description: Git repository URL for the workflow
+                      type: string
+                    path:
+                      description: Optional path within repo (for repos with multiple
+                        workflows)
+                      type: string
+                  type: object
+                displayName:
+                  description: A descriptive display name for the agentic session generated
+                    from prompt and website
+                  type: string
+                environmentVariables:
+                  additionalProperties:
+                    type: string
+                  description: 'Key-value pairs injected as environment variables into
+                    all pod containers (init-hydrate, runner, state-sync). Reserved
+                    variables (SESSION_NAME, S3_ENDPOINT, S3_BUCKET, AWS_ACCESS_KEY_ID,
+                    AWS_SECRET_ACCESS_KEY, NAMESPACE, SYNC_INTERVAL) cannot be overridden
+                    in init-hydrate and state-sync containers. Common conventions: RUNNER_TYPE
+                    identifies the runner framework (e.g. "claude-agent-sdk", "gemini-cli"),
+                    RUNNER_STATE_DIR sets the framework state directory relative to
+                    /workspace (defaults to ".claude").'
+                  type: object
+                inactivityTimeout:
+                  description: Seconds of inactivity before auto-stopping a session.
+                    0 disables auto-shutdown. If omitted, falls back to project-level
+                    inactivityTimeoutSeconds, then 24h default.
+                  minimum: 0
+                  type: integer
+                initialPrompt:
+                  description: Initial prompt used only on first SDK invocation for
+                    brand new sessions (ignored on continuations or workflow restarts).
+                  type: string
+                llmSettings:
+                  description: LLM configuration settings
+                  properties:
+                    maxTokens:
+                      default: 4000
+                      type: integer
+                    model:
+                      default: claude-3-7-sonnet-latest
+                      type: string
+                    temperature:
+                      default: 0.7
+                      type: number
+                  type: object
+                repos:
+                  description: List of Git repositories to clone and work with
+                  items:
+                    properties:
+                      autoPush:
+                        default: false
+                        description: When true, automatically commit and push changes
+                          to this repository after session completion
+                        type: boolean
+                      branch:
+                        default: main
+                        description: Branch to checkout
+                        type: string
+                      url:
+                        description: Git repository URL
+                        type: string
+                    required:
+                    - url
+                    type: object
+                  type: array
+                stopOnRunFinished:
+                  description: When true, automatically stop the session when the agent
+                    completes its run (RUN_FINISHED event). Useful for one-shot tasks
+                    triggered by automation.
+                  type: boolean
+                timeout:
+                  default: 300
+                  description: Timeout in seconds for the agentic session
+                  type: integer
+                userContext:
+                  description: Authenticated caller identity captured at creation time
+                    (used for authorization and audit)
+                  properties:
+                    displayName:
+                      description: Human-readable display name
+                      type: string
+                    groups:
+                      description: Group memberships of the user
+                      items:
+                        type: string
+                      type: array
+                    userId:
+                      description: Stable user identifier (from SSO, always overwritten
+                        from auth token)
+                      type: string
+                  type: object
+              type: object
+            status:
+              properties:
+                completionTime:
+                  description: Timestamp when the session reached a terminal phase.
+                  format: date-time
+                  type: string
+                conditions:
+                  description: Detailed condition set describing reconciliation progress.
+                  items:
+                    properties:
+                      lastTransitionTime:
+                        format: date-time
+                        type: string
+                      message:
+                        type: string
+                      observedGeneration:
+                        format: int64
+                        type: integer
+                      reason:
+                        type: string
+                      status:
+                        enum:
+                        - "True"
+                        - "False"
+                        - Unknown
+                        type: string
+                      type:
+                        type: string
+                    required:
+                    - type
+                    - status
+                    type: object
+                  type: array
+                lastActivityTime:
+                  description: Timestamp of last recorded AG-UI activity in this session.
+                  format: date-time
+                  type: string
+                observedGeneration:
+                  description: Spec generation that the operator has fully reconciled.
+                  format: int64
+                  type: integer
+                phase:
+                  default: Pending
+                  enum:
+                  - Pending
+                  - Creating
+                  - Running
+                  - Stopping
+                  - Stopped
+                  - Completed
+                  - Failed
+                  type: string
+                reconciledRepos:
+                  description: Current reconciliation state for each repository.
+                  items:
+                    properties:
+                      branch:
+                        description: 'DEPRECATED: Use currentActiveBranch instead'
+                        type: string
+                      branches:
+                        description: All local branches available in this repository
+                        items:
+                          type: string
+                        type: array
+                      clonedAt:
+                        format: date-time
+                        type: string
+                      currentActiveBranch:
+                        description: Currently checked out branch (polled from filesystem)
+                        type: string
+                      defaultBranch:
+                        description: Default branch of the remote repository (e.g.,
+                          main, master)
+                        type: string
+                      name:
+                        type: string
+                      status:
+                        enum:
+                        - Cloning
+                        - Ready
+                        - Failed
+                        type: string
+                      url:
+                        type: string
+                    type: object
+                  type: array
+                reconciledWorkflow:
+                  description: Current reconciliation state for the active workflow.
+                  properties:
+                    appliedAt:
+                      format: date-time
+                      type: string
+                    branch:
+                      type: string
+                    gitUrl:
+                      type: string
+                    path:
+                      description: Optional path within the workflow repository
+                      type: string
+                    status:
+                      enum:
+                      - Cloning
+                      - Active
+                      - Failed
+                      type: string
+                  type: object
+                sdkRestartCount:
+                  description: Number of times the SDK has been restarted during this
+                    session.
+                  type: integer
+                sdkSessionId:
+                  description: SDK session identifier captured for resume support.
+                  type: string
+                startTime:
+                  description: Timestamp when the session runner started executing.
+                  format: date-time
+                  type: string
+                stoppedReason:
+                  description: Reason the session was stopped.
+                  enum:
+                  - user
+                  - inactivity
+                  type: string
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}
+  
+
+  apiVersion: apiextensions.k8s.io/v1
+  kind: CustomResourceDefinition
+  metadata:
+    name: projectsettings.vteam.ambient-code
+  spec:
+    group: vteam.ambient-code
+    names:
+      kind: ProjectSettings
+      plural: projectsettings
+      shortNames:
+      - ps
+      singular: projectsetting
+    scope: Namespaced
+    versions:
+    - additionalPrinterColumns:
+      - jsonPath: .metadata.creationTimestamp
+        name: Age
+        type: date
+      name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          properties:
+            spec:
+              properties:
+                groupAccess:
+                  description: Group access configuration creating RoleBindings
+                  items:
+                    properties:
+                      groupName:
+                        description: Name of the group to grant access
+                        type: string
+                      role:
+                        description: Role to assign to the group (admin/edit/view)
+                        enum:
+                        - admin
+                        - edit
+                        - view
+                        type: string
+                    required:
+                    - groupName
+                    - role
+                    type: object
+                  type: array
+                inactivityTimeoutSeconds:
+                  default: 86400
+                  description: Default inactivity timeout for sessions in this project
+                    (seconds). 0 disables. Overridden by session-level spec.inactivityTimeout.
+                  minimum: 0
+                  type: integer
+                repositories:
+                  description: Git repositories configured for this project
+                  items:
+                    properties:
+                      branch:
+                        description: Optional branch override (defaults to repository's
+                          default branch)
+                        type: string
+                      provider:
+                        description: Git hosting provider (auto-detected from URL if
+                          not specified)
+                        enum:
+                        - github
+                        - gitlab
+                        type: string
+                      url:
+                        description: Repository URL (HTTPS or SSH format)
+                        type: string
+                    required:
+                    - url
+                    type: object
+                  type: array
+                runnerSecretsName:
+                  description: Name of the Kubernetes Secret in this namespace that
+                    stores runner configuration key/value pairs
+                  type: string
+              required:
+              - groupAccess
+              type: object
+            status:
+              properties:
+                groupBindingsCreated:
+                  description: Number of group RoleBindings successfully created
+                  minimum: 0
+                  type: integer
+                limitRangeReady:
+                  description: Whether the default LimitRange for CA bin-packing is
+                    provisioned
+                  type: boolean
+                scheduledSessionRBACReady:
+                  description: Whether RBAC for scheduled session triggers is provisioned
+                  type: boolean
+              type: object
+          type: object
+          x-kubernetes-validations:
+          - message: metadata.name must be 'projectsettings' (singleton per namespace)
+            rule: self.metadata.name == 'projectsettings'
+      served: true
+      storage: true
+      subresources:
+        status: {}
+  
+
+  apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    name: agentic-operator
+    namespace: ambient-code
+  
+
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRole
+  metadata:
+    name: agentic-operator
+  rules:
+  - apiGroups:
+    - vteam.ambient-code
+    resources:
+    - agenticsessions
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+  - apiGroups:
+    - vteam.ambient-code
+    resources:
+    - agenticsessions/status
+    verbs:
+    - update
+  - apiGroups:
+    - vteam.ambient-code
+    resources:
+    - projectsettings
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+  - apiGroups:
+    - vteam.ambient-code
+    resources:
+    - projectsettings/status
+    verbs:
+    - update
+  - apiGroups:
+    - ""
+    resources:
+    - namespaces
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - batch
+    resources:
+    - jobs
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - delete
+  - apiGroups:
+    - ""
+    resources:
+    - pods
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - delete
+    - deletecollection
+  - apiGroups:
+    - ""
+    resources:
+    - pods/log
+    verbs:
+    - get
+  - apiGroups:
+    - ""
+    resources:
+    - persistentvolumeclaims
+    verbs:
+    - get
+    - list
+    - create
+    - delete
+  - apiGroups:
+    - ""
+    resources:
+    - services
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - delete
+  - apiGroups:
+    - apps
+    resources:
+    - deployments
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+  - apiGroups:
+    - ""
+    resources:
+    - serviceaccounts
+    verbs:
+    - get
+    - create
+    - delete
+  - apiGroups:
+    - ""
+    resources:
+    - serviceaccounts/token
+    verbs:
+    - create
+  - apiGroups:
+    - rbac.authorization.k8s.io
+    resources:
+    - roles
+    verbs:
+    - get
+    - create
+    - update
+    - delete
+  - apiGroups:
+    - rbac.authorization.k8s.io
+    resources:
+    - rolebindings
+    verbs:
+    - get
+    - create
+    - delete
+  - apiGroups:
+    - ""
+    resources:
+    - limitranges
+    verbs:
+    - get
+    - create
+  - apiGroups:
+    - ""
+    resources:
+    - configmaps
+    verbs:
+    - get
+  - apiGroups:
+    - ""
+    resources:
+    - secrets
+    verbs:
+    - get
+    - create
+    - delete
+    - update
+  
+
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRole
+  metadata:
+    labels:
+      rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    name: agenticsessions-aggregate-to-admin
+  rules:
+  - apiGroups:
+    - vteam.ambient-code
+    resources:
+    - agenticsessions
+    verbs:
+    - '*'
+  - apiGroups:
+    - vteam.ambient-code
+    resources:
+    - agenticsessions/status
+    verbs:
+    - get
+    - update
+    - patch
+  
+
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRole
+  metadata:
+    name: ambient-frontend-auth
+  rules:
+  - apiGroups:
+    - authentication.k8s.io
+    resources:
+    - tokenreviews
+    verbs:
+    - create
+  - apiGroups:
+    - authorization.k8s.io
+    resources:
+    - subjectaccessreviews
+    verbs:
+    - create
+  
+
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRole
+  metadata:
+    name: ambient-namespace-viewer
+  rules:
+  - apiGroups:
+    - project.openshift.io
+    resources:
+    - projects
+    verbs:
+    - get
+    - list
+    - watch
+  
+
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRole
+  metadata:
+    name: ambient-project-admin
+  rules:
+  - apiGroups:
+    - vteam.ambient-code
+    resources:
+    - projectsettings
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
+  - apiGroups:
+    - vteam.ambient-code
+    resources:
+    - agenticsessions
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
+  - apiGroups:
+    - vteam.ambient-code
+    resources:
+    - projectsettings/status
+    verbs:
+    - get
+    - list
+    - watch
+    - update
+    - patch
+  - apiGroups:
+    - vteam.ambient-code
+    resources:
+    - agenticsessions/status
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - secrets
+    - configmaps
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
+  - apiGroups:
+    - ""
+    resources:
+    - serviceaccounts
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
+  - apiGroups:
+    - ""
+    resources:
+    - serviceaccounts/token
+    verbs:
+    - create
+  - apiGroups:
+    - rbac.authorization.k8s.io
+    resources:
+    - roles
+    - rolebindings
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
+  - apiGroups:
+    - batch
+    resources:
+    - jobs
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
+  - apiGroups:
+    - ""
+    resources:
+    - pods
+    - pods/log
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - events
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - project.openshift.io
+    resources:
+    - projects
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - persistentvolumeclaims
+    verbs:
+    - get
+    - list
+    - watch
+    - delete
+  - apiGroups:
+    - ""
+    resources:
+    - services
+    verbs:
+    - get
+    - list
+    - watch
+    - delete
+  - apiGroups:
+    - apps
+    resources:
+    - deployments
+    verbs:
+    - get
+    - list
+    - watch
+    - delete
+  
+
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRole
+  metadata:
+    name: ambient-project-edit
+  rules:
+  - apiGroups:
+    - vteam.ambient-code
+    resources:
+    - agenticsessions
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+  - apiGroups:
+    - vteam.ambient-code
+    resources:
+    - agenticsessions/status
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - vteam.ambient-code
+    resources:
+    - projectsettings
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - project.openshift.io
+    resources:
+    - projects
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - configmaps
+    verbs:
+    - get
+  - apiGroups:
+    - ""
+    resourceNames:
+    - ambient-runner-secrets
+    resources:
+    - secrets
+    verbs:
+    - get
+  - apiGroups:
+    - ""
+    resources:
+    - secrets
+    verbs:
+    - create
+  - apiGroups:
+    - batch
+    resources:
+    - jobs
+    verbs:
+    - get
+    - list
+    - watch
+    - delete
+  - apiGroups:
+    - ""
+    resources:
+    - pods
+    - pods/log
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - events
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - persistentvolumeclaims
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - services
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - apps
+    resources:
+    - deployments
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - serviceaccounts
+    verbs:
+    - get
+    - list
+    - create
+    - update
+    - patch
+  - apiGroups:
+    - rbac.authorization.k8s.io
+    resources:
+    - roles
+    - rolebindings
+    verbs:
+    - get
+    - list
+    - create
+    - update
+    - patch
+    - delete
+  - apiGroups:
+    - ""
+    resources:
+    - serviceaccounts/token
+    verbs:
+    - create
+  
+
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRole
+  metadata:
+    name: ambient-project-view
+  rules:
+  - apiGroups:
+    - vteam.ambient-code
+    resources:
+    - agenticsessions
+    - projectsettings
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - vteam.ambient-code
+    resources:
+    - agenticsessions/status
+    - projectsettings/status
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - project.openshift.io
+    resources:
+    - projects
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - batch
+    resources:
+    - jobs
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - pods
+    - pods/log
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - events
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - persistentvolumeclaims
+    - services
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - apps
+    resources:
+    - deployments
+    verbs:
+    - get
+    - list
+    - watch
+  
+
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRole
+  metadata:
+    name: backend-api
+  rules:
+  - apiGroups:
+    - vteam.ambient-code
+    resources:
+    - agenticsessions
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
+  - apiGroups:
+    - vteam.ambient-code
+    resources:
+    - agenticsessions/status
+    verbs:
+    - get
+    - update
+    - patch
+  - apiGroups:
+    - ""
+    resources:
+    - serviceaccounts
+    verbs:
+    - get
+    - list
+    - create
+    - update
+    - patch
+  - apiGroups:
+    - ""
+    resources:
+    - serviceaccounts/token
+    verbs:
+    - create
+  - apiGroups:
+    - authentication.k8s.io
+    resources:
+    - tokenreviews
+    verbs:
+    - create
+  - apiGroups:
+    - rbac.authorization.k8s.io
+    resources:
+    - roles
+    - rolebindings
+    verbs:
+    - get
+    - list
+    - create
+    - update
+    - patch
+    - delete
+  - apiGroups:
+    - rbac.authorization.k8s.io
+    resourceNames:
+    - ambient-project-admin
+    - ambient-project-edit
+    - ambient-project-view
+    resources:
+    - clusterroles
+    verbs:
+    - bind
+  - apiGroups:
+    - ""
+    resources:
+    - secrets
+    verbs:
+    - get
+    - list
+    - create
+    - update
+    - patch
+    - delete
+  - apiGroups:
+    - ""
+    resources:
+    - configmaps
+    verbs:
+    - get
+    - create
+    - update
+    - patch
+  - apiGroups:
+    - ""
+    resources:
+    - namespaces
+    verbs:
+    - get
+    - list
+    - create
+    - update
+    - patch
+    - delete
+  - apiGroups:
+    - project.openshift.io
+    resources:
+    - projects
+    verbs:
+    - get
+    - list
+    - watch
+    - update
+    - patch
+  - apiGroups:
+    - batch
+    resources:
+    - jobs
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - delete
+  - apiGroups:
+    - batch
+    resources:
+    - cronjobs
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
+  - apiGroups:
+    - ""
+    resources:
+    - pods
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - delete
+    - deletecollection
+  - apiGroups:
+    - ""
+    resources:
+    - pods/log
+    verbs:
+    - get
+  - apiGroups:
+    - ""
+    resources:
+    - persistentvolumeclaims
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - services
+    verbs:
+    - get
+    - list
+    - create
+    - delete
+  - apiGroups:
+    - authorization.k8s.io
+    resources:
+    - subjectaccessreviews
+    - selfsubjectaccessreviews
+    verbs:
+    - create
+  
+
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRole
+  metadata:
+    labels:
+      rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    name: projectsettings-aggregate-to-admin
+  rules:
+  - apiGroups:
+    - vteam.ambient-code
+    resources:
+    - projectsettings
+    verbs:
+    - '*'
+  - apiGroups:
+    - vteam.ambient-code
+    resources:
+    - projectsettings/status
+    verbs:
+    - get
+    - update
+    - patch
+  
+
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRoleBinding
+  metadata:
+    name: agentic-operator
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: agentic-operator
+  subjects:
+  - kind: ServiceAccount
+    name: agentic-operator
+    namespace: ambient-code
+  
+
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRoleBinding
+  metadata:
+    name: ambient-frontend-auth
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: ambient-frontend-auth
+  subjects:
+  - kind: ServiceAccount
+    name: frontend
+    namespace: ambient-code
+  
+
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRoleBinding
+  metadata:
+    name: ambient-users-can-list-projects
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: ambient-namespace-viewer
+  subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: system:authenticated
+  
+
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRoleBinding
+  metadata:
+    name: backend-api
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: backend-api
+  subjects:
+  - kind: ServiceAccount
+    name: backend-api
+    namespace: ambient-code
+  
+
+  apiVersion: v1
+  data:
+    agent-registry.json: |
+      [
+        {
+          "id": "claude-agent-sdk",
+          "displayName": "Claude Code",
+          "description": "Anthropic Claude with full coding capabilities",
+          "framework": "claude-agent-sdk",
+          "provider": "anthropic",
+          "container": {
+            "image": "${IMAGE_AMBIENT_RUNNER}:${IMAGE_TAG}",
+            "port": 8001,
+            "env": {
+              "RUNNER_TYPE": "claude-agent-sdk",
+              "RUNNER_STATE_DIR": ".claude"
+            },
+            "resources": {
+              "requests": {"cpu": "500m", "memory": "512Mi"},
+              "limits": {"cpu": "2", "memory": "8Gi"}
+            }
+          },
+          "sandbox": {
+            "stateDir": ".claude",
+            "stateSyncImage": "quay.io/ambient_code/vteam_state_sync:latest",
+            "persistence": "s3",
+            "workspaceSize": "10Gi",
+            "terminationGracePeriod": 60,
+            "seed": {"cloneRepos": true, "hydrateState": true}
+          },
+          "auth": {
+            "requiredSecretKeys": ["ANTHROPIC_API_KEY"],
+            "secretKeyLogic": "any",
+            "vertexSupported": true
+          },
+          "featureGate": ""
+        },
+        {
+          "id": "gemini-cli",
+          "displayName": "Gemini CLI",
+          "description": "Google Gemini coding agent with built-in file, bash, and search tools",
+          "framework": "gemini-cli",
+          "provider": "google",
+          "container": {
+            "image": "${IMAGE_AMBIENT_RUNNER}:${IMAGE_TAG}",
+            "port": 8001,
+            "env": {
+              "RUNNER_TYPE": "gemini-cli",
+              "RUNNER_STATE_DIR": ".gemini"
+            }
+          },
+          "sandbox": {
+            "stateDir": ".gemini",
+            "stateSyncImage": "quay.io/ambient_code/vteam_state_sync:latest",
+            "persistence": "s3",
+            "workspaceSize": "10Gi",
+            "terminationGracePeriod": 60,
+            "seed": {"cloneRepos": true, "hydrateState": true}
+          },
+          "auth": {
+            "requiredSecretKeys": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+            "secretKeyLogic": "any",
+            "vertexSupported": true
+          },
+          "featureGate": "runner.gemini-cli.enabled"
+        }
+      ]
+  kind: ConfigMap
+  metadata:
+    name: ambient-agent-registry
+    namespace: ambient-code
+  
+
+  apiVersion: v1
+  data:
+    models.json: |
+      {
+        "version": 2,
+        "defaultModel": "claude-sonnet-4-5",
+        "providerDefaults": {
+          "anthropic": "claude-sonnet-4-5",
+          "google": "gemini-2.5-flash"
+        },
+        "models": [
+          {
+            "id": "claude-sonnet-4-5",
+            "label": "Claude Sonnet 4.5",
+            "vertexId": "claude-sonnet-4-5@20250929",
+            "provider": "anthropic",
+            "available": true,
+            "featureGated": false
+          },
+          {
+            "id": "claude-opus-4-6",
+            "label": "Claude Opus 4.6",
+            "vertexId": "claude-opus-4-6@default",
+            "provider": "anthropic",
+            "available": true,
+            "featureGated": true
+          },
+          {
+            "id": "claude-opus-4-5",
+            "label": "Claude Opus 4.5",
+            "vertexId": "claude-opus-4-5@20251101",
+            "provider": "anthropic",
+            "available": true,
+            "featureGated": false
+          },
+          {
+            "id": "claude-haiku-4-5",
+            "label": "Claude Haiku 4.5",
+            "vertexId": "claude-haiku-4-5@20251001",
+            "provider": "anthropic",
+            "available": true,
+            "featureGated": false
+          },
+          {
+            "id": "claude-sonnet-4-6",
+            "label": "Claude Sonnet 4.6",
+            "vertexId": "claude-sonnet-4-6@default",
+            "provider": "anthropic",
+            "available": true,
+            "featureGated": true
+          },
+          {
+            "id": "gemini-2.5-flash",
+            "label": "Gemini 2.5 Flash",
+            "vertexId": "gemini-2.5-flash@default",
+            "provider": "google",
+            "available": true,
+            "featureGated": false
+          },
+          {
+            "id": "gemini-2.5-pro",
+            "label": "Gemini 2.5 Pro",
+            "vertexId": "gemini-2.5-pro@default",
+            "provider": "google",
+            "available": true,
+            "featureGated": true
+          },
+          {
+            "id": "gemini-2.5-flash-lite",
+            "label": "Gemini 2.5 Flash Lite",
+            "vertexId": "gemini-2.5-flash-lite@default",
+            "provider": "google",
+            "available": true,
+            "featureGated": true
+          },
+          {
+            "id": "gemini-2.5-flash-preview-04-17",
+            "label": "Gemini 2.5 Flash Preview 04.17",
+            "vertexId": "gemini-2.5-flash-preview-04-17@default",
+            "provider": "google",
+            "available": false,
+            "featureGated": true
+          },
+          {
+            "id": "gemini-3.1-flash-image-preview",
+            "label": "Gemini 3.1 Flash Image Preview",
+            "vertexId": "gemini-3.1-flash-image-preview@default",
+            "provider": "google",
+            "available": false,
+            "featureGated": true
+          }
+        ]
+      }
+  kind: ConfigMap
+  metadata:
+    name: ambient-models
+    namespace: ambient-code
+  
+
+  apiVersion: v1
+  data:
+    ANTHROPIC_VERTEX_PROJECT_ID: ambient-code-platform
+    CLOUD_ML_REGION: global
+    GOOGLE_APPLICATION_CREDENTIALS: /app/vertex/ambient-code-key.json
+    USE_VERTEX: "1"
+  kind: ConfigMap
+  metadata:
+    labels:
+      app: agentic-operator
+      deployment-type: openshift
+    name: operator-config
+    namespace: ambient-code
+  
+
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    labels:
+      app: agentic-operator
+    name: agentic-operator
+    namespace: ambient-code
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app: agentic-operator
+    template:
+      metadata:
+        labels:
+          app: agentic-operator
+      spec:
+        containers:
+        - args:
+          - --max-concurrent-reconciles=10
+          - --health-probe-bind-address=:8081
+          - --leader-elect=false
+          env:
+          - name: AMBIENT_CODE_RUNNER_IMAGE
+            value: ${IMAGE_AMBIENT_RUNNER}:${IMAGE_TAG}
+          - name: MAX_CONCURRENT_RECONCILES
+            value: "10"
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: BACKEND_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: BACKEND_API_URL
+            value: http://backend-service:8080/api
+          - name: IMAGE_PULL_POLICY
+            value: IfNotPresent
+          - name: USE_VERTEX
+            valueFrom:
+              configMapKeyRef:
+                key: USE_VERTEX
+                name: operator-config
+                optional: true
+          - name: CLOUD_ML_REGION
+            valueFrom:
+              configMapKeyRef:
+                key: CLOUD_ML_REGION
+                name: operator-config
+                optional: true
+          - name: ANTHROPIC_VERTEX_PROJECT_ID
+            valueFrom:
+              configMapKeyRef:
+                key: ANTHROPIC_VERTEX_PROJECT_ID
+                name: operator-config
+                optional: true
+          - name: GOOGLE_APPLICATION_CREDENTIALS
+            valueFrom:
+              configMapKeyRef:
+                key: GOOGLE_APPLICATION_CREDENTIALS
+                name: operator-config
+                optional: true
+          - name: LANGFUSE_ENABLED
+            valueFrom:
+              secretKeyRef:
+                key: LANGFUSE_ENABLED
+                name: ambient-admin-langfuse-secret
+                optional: true
+          - name: LANGFUSE_HOST
+            valueFrom:
+              secretKeyRef:
+                key: LANGFUSE_HOST
+                name: ambient-admin-langfuse-secret
+                optional: true
+          - name: LANGFUSE_PUBLIC_KEY
+            valueFrom:
+              secretKeyRef:
+                key: LANGFUSE_PUBLIC_KEY
+                name: ambient-admin-langfuse-secret
+                optional: true
+          - name: LANGFUSE_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                key: LANGFUSE_SECRET_KEY
+                name: ambient-admin-langfuse-secret
+                optional: true
+          - name: GOOGLE_OAUTH_CLIENT_ID
+            valueFrom:
+              secretKeyRef:
+                key: GOOGLE_OAUTH_CLIENT_ID
+                name: google-workflow-app-secret
+                optional: true
+          - name: GOOGLE_OAUTH_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                key: GOOGLE_OAUTH_CLIENT_SECRET
+                name: google-workflow-app-secret
+                optional: true
+          - name: STATE_SYNC_IMAGE
+            value: quay.io/ambient_code/vteam_state_sync:latest
+          - name: S3_ENDPOINT
+            value: http://minio.ambient-code.svc:9000
+          - name: S3_BUCKET
+            value: ambient-sessions
+          - name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: otel-collector.ambient-code.svc:4317
+          - name: DEPLOYMENT_ENV
+            value: production
+          - name: VERSION
+            value: latest
+          image: ${IMAGE_OPERATOR}:${IMAGE_TAG}
+          imagePullPolicy: Always
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          name: agentic-operator
+          ports:
+          - containerPort: 8081
+            name: health
+            protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 200m
+              memory: 512Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi
+          volumeMounts:
+          - mountPath: /config/models
+            name: model-manifest
+            readOnly: true
+          - mountPath: /config/registry
+            name: agent-registry
+            readOnly: true
+        restartPolicy: Always
+        serviceAccountName: agentic-operator
+        volumes:
+        - configMap:
+            name: ambient-models
+            optional: true
+          name: model-manifest
+        - configMap:
+            name: ambient-agent-registry
+            optional: true
+          name: agent-registry
+  
+
