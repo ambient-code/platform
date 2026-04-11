@@ -31,7 +31,7 @@ Then re-read this file before continuing.
 
 ## Workflow Overview
 
-```
+```text
 1. Ticket (optional)
 2. Branch (from ticket name if available)
 3. Spec change (load + modify the component's .spec.md)
