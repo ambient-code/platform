@@ -57,11 +57,11 @@ patches:
       path: /spec/replicas
       value: 0
 
-# Patch ambient-api-server-db secret to use external RDS (from Vault)
+# Patch ambient-code-rds secret to use external RDS (from Vault)
 - path: ambient-api-server-db-secret-patch.yaml
   target:
     kind: Secret
-    name: ambient-api-server-db
+    name: ambient-code-rds
 
 # Konflux image overrides (redhat-services-prod)
 images:
