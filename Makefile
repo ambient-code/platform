@@ -571,9 +571,21 @@ preflight-cluster: ## Validate kind, kubectl, and container engine (daemon runni
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) kind $$KVER"; \
 	else \
 		echo "$(COLOR_RED)✗$(COLOR_RESET) kind not found"; \
-		if [ "$$OS" = "Darwin" ]; then echo "  Install: brew install kind"; else echo "  Install: go install sigs.k8s.io/kind@latest"; fi; \
-		echo "           https://kind.sigs.k8s.io/docs/user/quick-start/"; \
-		FAILED=1; \
+		if [ "$$OS" = "Darwin" ]; then \
+			echo "  Install: brew install kind"; \
+		elif command -v dnf >/dev/null 2>&1; then \
+			printf "  Install with 'sudo dnf install kind'? [y/N] "; \
+			read _ans; \
+			case "$$_ans" in y|Y|yes|YES) \
+				sudo dnf install -y kind && echo "$(COLOR_GREEN)✓$(COLOR_RESET) kind installed" ;; \
+			*) FAILED=1 ;; esac; \
+		else \
+			echo "  Install: go install sigs.k8s.io/kind@latest"; \
+		fi; \
+		if ! command -v kind >/dev/null 2>&1; then \
+			echo "           https://kind.sigs.k8s.io/docs/user/quick-start/"; \
+			FAILED=1; \
+		fi; \
 	fi; \
 	if command -v kubectl >/dev/null 2>&1; then \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) kubectl $$(kubectl version --client -o yaml 2>/dev/null | grep gitVersion | head -1 | sed 's/.*: //' || kubectl version --client 2>/dev/null | head -1)"; \
@@ -1113,9 +1125,21 @@ check-kind: ## Check if kind is installed
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) kind $$(kind version -q 2>/dev/null || kind version 2>/dev/null | head -1)"; \
 	else \
 		echo "$(COLOR_RED)✗$(COLOR_RESET) kind not found"; \
-		if [ "$$OS" = "Darwin" ]; then echo "  Install: brew install kind"; else echo "  Install: go install sigs.k8s.io/kind@latest"; fi; \
-		echo "  https://kind.sigs.k8s.io/docs/user/quick-start/"; \
-		exit 1; \
+		if [ "$$OS" = "Darwin" ]; then \
+			echo "  Install: brew install kind"; \
+		elif command -v dnf >/dev/null 2>&1; then \
+			printf "  Install with 'sudo dnf install kind'? [y/N] "; \
+			read _ans; \
+			case "$$_ans" in y|Y|yes|YES) \
+				sudo dnf install -y kind && echo "$(COLOR_GREEN)✓$(COLOR_RESET) kind installed" ;; \
+			esac; \
+		else \
+			echo "  Install: go install sigs.k8s.io/kind@latest"; \
+		fi; \
+		if ! command -v kind >/dev/null 2>&1; then \
+			echo "  https://kind.sigs.k8s.io/docs/user/quick-start/"; \
+			exit 1; \
+		fi; \
 	fi
 
 check-kubectl: ## Check if kubectl is installed
