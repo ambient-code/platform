@@ -26,7 +26,7 @@ manifests/
 │   ├── platform/                          # Cluster-level resources
 │   │   ├── namespace.yaml
 │   │   ├── ambient-api-server-db.yml      # ambient-api-server PostgreSQL deployment
-│   │   └── ambient-api-server-secrets.yml # Secret template (values injected per-env)
+│   │   └── ambient-api-server-secrets.yml # Secret template (ambient-code-rds secret for DB)
 │   ├── crds/                              # Custom Resource Definitions
 │   │   ├── agenticsessions-crd.yaml
 │   │   └── projectsettings-crd.yaml
@@ -121,7 +121,7 @@ Components are opt-in kustomize modules included via the `components:` block in 
 |---|---|---|
 | `oauth-proxy` | Adds OpenShift OAuth proxy sidecar to frontend | `production` |
 | `postgresql-rhel` | Patches PostgreSQL to use `registry.redhat.io/rhel10/postgresql-16` | `production`, `local-dev` |
-| `ambient-api-server-db` | Same RHEL patch for the ambient-api-server's dedicated DB | `production`, `local-dev` |
+| `ambient-api-server-db` | RHEL patch for ambient-api-server DB (updates ambient-code-rds secret refs) | `production`, `local-dev` |
 | `postgresql-init-scripts` | ConfigMap + volume for DB init SQL (vanilla postgres only) | `kind`, `e2e` |
 
 ## Building and Validating

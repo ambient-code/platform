@@ -65,17 +65,17 @@ spec:
               valueFrom:
                 secretKeyRef:
                   key: db.user
-                  name: ambient-api-server-db
+                  name: ambient-code-rds
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   key: db.password
-                  name: ambient-api-server-db
+                  name: ambient-code-rds
             - name: POSTGRES_DB
               valueFrom:
                 secretKeyRef:
                   key: db.name
-                  name: ambient-api-server-db
+                  name: ambient-code-rds
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           volumeMounts:

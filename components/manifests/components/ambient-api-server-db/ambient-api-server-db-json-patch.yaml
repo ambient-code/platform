@@ -11,17 +11,17 @@
   - name: POSTGRESQL_USER
     valueFrom:
       secretKeyRef:
-        name: ambient-api-server-db
+        name: ambient-code-rds
         key: db.user
   - name: POSTGRESQL_PASSWORD
     valueFrom:
       secretKeyRef:
-        name: ambient-api-server-db
+        name: ambient-code-rds
         key: db.password
   - name: POSTGRESQL_DATABASE
     valueFrom:
       secretKeyRef:
-        name: ambient-api-server-db
+        name: ambient-code-rds
         key: db.name
 - op: replace
   path: /spec/template/spec/containers/0/volumeMounts

@@ -327,7 +327,7 @@ objects:
         volumes:
         - name: db-secrets
           secret:
-            secretName: ambient-api-server-db
+            secretName: ambient-code-rds
         - name: app-secrets
           secret:
             secretName: ambient-api-server
