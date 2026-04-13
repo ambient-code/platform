@@ -1,72 +1,60 @@
----
 apiVersion: template.openshift.io/v1
 kind: Template
 metadata:
   name: ambient-code-services
   annotations:
-    description: "Ambient Code Platform - Application services"
-
+    description: Ambient Code Platform - Application services
 parameters:
 - name: IMAGE_TAG
-  description: "Image tag to deploy (auto-generated from git commit)"
+  description: Image tag to deploy (auto-generated from git commit)
   required: true
 - name: IMAGE_BACKEND
-  description: "Backend API image"
-  value: "quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-backend-main"
+  description: Backend API image
+  value: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-backend-main
   required: true
 - name: IMAGE_FRONTEND
-  description: "Frontend image"
-  value: "quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-frontend-main"
+  description: Frontend image
+  value: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-frontend-main
   required: true
 - name: IMAGE_PUBLIC_API
-  description: "Public API image"
-  value: "quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-public-api-main"
+  description: Public API image
+  value: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-public-api-main
   required: true
 - name: IMAGE_AMBIENT_API_SERVER
-  description: "Ambient API Server image"
-  value: "quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-ambient-api-server-main"
+  description: Ambient API Server image
+  value: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-ambient-api-server-main
   required: true
-
 objects:
-  apiVersion: v1
+- apiVersion: v1
   kind: ServiceAccount
   metadata:
     labels:
       app: ambient-api-server
     name: ambient-api-server
     namespace: ambient-code
-  
-
-  apiVersion: v1
+- apiVersion: v1
   kind: ServiceAccount
   metadata:
     name: backend-api
     namespace: ambient-code
-  
-
-  apiVersion: v1
+- apiVersion: v1
   kind: ServiceAccount
   metadata:
     name: frontend
     namespace: ambient-code
-  
-
-  apiVersion: v1
+- apiVersion: v1
   kind: ServiceAccount
   metadata:
     labels:
       app: public-api
     name: public-api
     namespace: ambient-code
-  
-
-  apiVersion: v1
+- apiVersion: v1
   data:
-    acl.yml: |
-      - claim: email
-        pattern: ^.*@(redhat\.com|ambient\.code)$
-    jwks.json: |
-      {"keys":[]}
+    acl.yml: "- claim: email\n  pattern: ^.*@(redhat\\.com|ambient\\.code)$\n"
+    jwks.json: '{"keys":[]}
+
+      '
   kind: ConfigMap
   metadata:
     labels:
@@ -74,62 +62,15 @@ objects:
       component: auth
     name: ambient-api-server-auth
     namespace: ambient-code
-  
-
-  apiVersion: v1
+- apiVersion: v1
   data:
-    flags.json: |
-      {
-        "flags": [
-          {
-            "name": "runner.gemini-cli.enabled",
-            "description": "Enable Gemini CLI runner type for session creation",
-            "tags": [
-              {
-                "type": "scope",
-                "value": "workspace"
-              }
-            ]
-          },
-          {
-            "name": "ldap.autocomplete.enabled",
-            "description": "Enable LDAP user and group autocomplete for workspace sharing",
-            "tags": [
-              {
-                "type": "scope",
-                "value": "workspace"
-              }
-            ]
-          },
-          {
-            "name": "scheduled-session.reuse.enabled",
-            "description": "Enable reuse last session option for scheduled sessions",
-            "tags": [
-              {
-                "type": "scope",
-                "value": "workspace"
-              }
-            ]
-          },
-          {
-            "name": "jira-write",
-            "description": "Allow Jira MCP server to perform write operations in new sessions",
-            "tags": [
-              {
-                "type": "scope",
-                "value": "workspace"
-              }
-            ]
-          }
-        ]
-      }
+    flags.json: "{\n  \"flags\": [\n    {\n      \"name\": \"runner.gemini-cli.enabled\",\n      \"description\": \"Enable Gemini CLI runner type for session creation\",\n      \"tags\": [\n        {\n          \"type\": \"scope\",\n          \"value\": \"workspace\"\n        }\n      ]\n    },\n    {\n      \"name\": \"ldap.autocomplete.enabled\",\n      \"description\": \"Enable LDAP user and group autocomplete for workspace sharing\",\n      \"tags\": [\n        {\n          \"type\": \"scope\",\n          \"value\": \"workspace\"\n        }\n      ]\n    },\n    {\n      \"name\": \"scheduled-session.reuse.enabled\",\n      \"description\": \"Enable reuse last session option for scheduled sessions\",\n      \"tags\": [\n        {\n          \"type\": \"scope\",\n          \"value\": \"workspace\"\n        }\n      ]\n    },\n    {\n      \"name\": \"jira-write\",\n      \"description\": \"Allow Jira MCP server to perform write operations in new sessions\",\n      \"tags\": [\n      \
+      \  {\n          \"type\": \"scope\",\n          \"value\": \"workspace\"\n        }\n      ]\n    }\n  ]\n}\n"
   kind: ConfigMap
   metadata:
     name: ambient-flags
     namespace: ambient-code
-  
-
-  apiVersion: v1
+- apiVersion: v1
   kind: Secret
   metadata:
     labels:
@@ -138,15 +79,13 @@ objects:
     name: ambient-api-server
     namespace: ambient-code
   stringData:
-    sentry.key: ""
+    sentry.key: ''
   type: Opaque
-  
-
-  apiVersion: v1
+- apiVersion: v1
   kind: Secret
   metadata:
     annotations:
-      qontract.recycle: "true"
+      qontract.recycle: 'true'
     labels:
       app: ambient-api-server
       component: database
@@ -156,12 +95,10 @@ objects:
     db.host: VAULT_INJECTED
     db.name: ambient_code
     db.password: VAULT_INJECTED
-    db.port: "5432"
+    db.port: '5432'
     db.user: VAULT_INJECTED
   type: Opaque
-  
-
-  apiVersion: v1
+- apiVersion: v1
   kind: Service
   metadata:
     annotations:
@@ -192,9 +129,7 @@ objects:
     selector:
       app: ambient-api-server
       component: api
-  
-
-  apiVersion: v1
+- apiVersion: v1
   kind: Service
   metadata:
     labels:
@@ -212,9 +147,7 @@ objects:
       app: ambient-api-server
       component: database
     type: ClusterIP
-  
-
-  apiVersion: v1
+- apiVersion: v1
   kind: Service
   metadata:
     labels:
@@ -230,9 +163,7 @@ objects:
     selector:
       app: backend-api
     type: ClusterIP
-  
-
-  apiVersion: v1
+- apiVersion: v1
   kind: Service
   metadata:
     labels:
@@ -248,9 +179,7 @@ objects:
     selector:
       app: frontend
     type: ClusterIP
-  
-
-  apiVersion: v1
+- apiVersion: v1
   kind: Service
   metadata:
     labels:
@@ -270,9 +199,7 @@ objects:
     selector:
       app: minio
     type: ClusterIP
-  
-
-  apiVersion: v1
+- apiVersion: v1
   kind: Service
   metadata:
     labels:
@@ -288,9 +215,7 @@ objects:
     selector:
       app: postgresql
     type: ClusterIP
-  
-
-  apiVersion: v1
+- apiVersion: v1
   kind: Service
   metadata:
     labels:
@@ -306,9 +231,7 @@ objects:
     selector:
       app: public-api
     type: ClusterIP
-  
-
-  apiVersion: v1
+- apiVersion: v1
   kind: Service
   metadata:
     labels:
@@ -324,28 +247,24 @@ objects:
     selector:
       app: unleash
     type: ClusterIP
-  
-
-  apiVersion: v1
+- apiVersion: v1
   kind: LimitRange
   metadata:
     labels:
-      ambient-code.io/managed: "true"
+      ambient-code.io/managed: 'true'
       app.kubernetes.io/managed-by: ambient-code
     name: ambient-default-limits
     namespace: ambient-code
   spec:
     limits:
     - default:
-        cpu: "2"
+        cpu: '2'
         memory: 4Gi
       defaultRequest:
         cpu: 250m
         memory: 256Mi
       type: Container
-  
-
-  apiVersion: v1
+- apiVersion: v1
   kind: PersistentVolumeClaim
   metadata:
     labels:
@@ -359,9 +278,7 @@ objects:
     resources:
       requests:
         storage: 1Gi
-  
-
-  apiVersion: v1
+- apiVersion: v1
   kind: PersistentVolumeClaim
   metadata:
     labels:
@@ -375,9 +292,7 @@ objects:
     resources:
       requests:
         storage: 5Gi
-  
-
-  apiVersion: v1
+- apiVersion: v1
   kind: PersistentVolumeClaim
   metadata:
     labels:
@@ -390,9 +305,7 @@ objects:
     resources:
       requests:
         storage: 500Gi
-  
-
-  apiVersion: v1
+- apiVersion: v1
   kind: PersistentVolumeClaim
   metadata:
     labels:
@@ -407,9 +320,7 @@ objects:
     resources:
       requests:
         storage: 10Gi
-  
-
-  apiVersion: apps/v1
+- apiVersion: apps/v1
   kind: Deployment
   metadata:
     labels:
@@ -552,9 +463,7 @@ objects:
         - configMap:
             name: ambient-api-server-auth
           name: auth-config
-  
-
-  apiVersion: apps/v1
+- apiVersion: apps/v1
   kind: Deployment
   metadata:
     labels:
@@ -625,9 +534,7 @@ objects:
         - name: ambient-api-server-db-data
           persistentVolumeClaim:
             claimName: ambient-api-server-db-data
-  
-
-  apiVersion: apps/v1
+- apiVersion: apps/v1
   kind: Deployment
   metadata:
     labels:
@@ -654,7 +561,7 @@ objects:
               fieldRef:
                 fieldPath: metadata.namespace
           - name: PORT
-            value: "8080"
+            value: '8080'
           - name: STATE_BASE_DIR
             value: /workspace
           - name: SPEC_KIT_REPO
@@ -857,7 +764,7 @@ objects:
             periodSeconds: 5
           resources:
             limits:
-              cpu: "1"
+              cpu: '1'
               memory: 1536Mi
             requests:
               cpu: 200m
@@ -905,9 +812,7 @@ objects:
             name: ldap-ca-cert
             optional: true
           name: ldap-ca-cert
-  
-
-  apiVersion: apps/v1
+- apiVersion: apps/v1
   kind: Deployment
   metadata:
     labels:
@@ -969,9 +874,7 @@ objects:
               cpu: 100m
               memory: 256Mi
         serviceAccountName: frontend
-  
-
-  apiVersion: apps/v1
+- apiVersion: apps/v1
   kind: Deployment
   metadata:
     labels:
@@ -1044,9 +947,7 @@ objects:
         - name: data
           persistentVolumeClaim:
             claimName: minio-data
-  
-
-  apiVersion: apps/v1
+- apiVersion: apps/v1
   kind: Deployment
   metadata:
     labels:
@@ -1124,9 +1025,7 @@ objects:
         - name: data
           persistentVolumeClaim:
             claimName: postgresql-data
-  
-
-  apiVersion: apps/v1
+- apiVersion: apps/v1
   kind: Deployment
   metadata:
     labels:
@@ -1147,7 +1046,7 @@ objects:
         containers:
         - env:
           - name: PORT
-            value: "8081"
+            value: '8081'
           - name: BACKEND_URL
             value: http://backend-service:8080
           - name: GIN_MODE
@@ -1155,9 +1054,9 @@ objects:
           - name: BACKEND_TIMEOUT
             value: 30s
           - name: RATE_LIMIT_RPS
-            value: "100"
+            value: '100'
           - name: RATE_LIMIT_BURST
-            value: "200"
+            value: '200'
           image: ${IMAGE_PUBLIC_API}:${IMAGE_TAG}
           imagePullPolicy: Always
           livenessProbe:
@@ -1191,9 +1090,7 @@ objects:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
         serviceAccountName: public-api
-  
-
-  apiVersion: apps/v1
+- apiVersion: apps/v1
   kind: Deployment
   metadata:
     labels:
@@ -1273,9 +1170,7 @@ objects:
             requests:
               cpu: 100m
               memory: 256Mi
-  
-
-  apiVersion: policy/v1
+- apiVersion: policy/v1
   kind: PodDisruptionBudget
   metadata:
     labels:
@@ -1287,9 +1182,7 @@ objects:
     selector:
       matchLabels:
         app: public-api
-  
-
-  apiVersion: route.openshift.io/v1
+- apiVersion: route.openshift.io/v1
   kind: Route
   metadata:
     labels:
@@ -1306,9 +1199,7 @@ objects:
     to:
       kind: Service
       name: ambient-api-server
-  
-
-  apiVersion: route.openshift.io/v1
+- apiVersion: route.openshift.io/v1
   kind: Route
   metadata:
     labels:
@@ -1325,9 +1216,7 @@ objects:
     to:
       kind: Service
       name: ambient-api-server
-  
-
-  apiVersion: route.openshift.io/v1
+- apiVersion: route.openshift.io/v1
   kind: Route
   metadata:
     labels:
@@ -1345,14 +1234,12 @@ objects:
       name: backend-service
       weight: 100
     wildcardPolicy: None
-  
-
-  apiVersion: route.openshift.io/v1
+- apiVersion: route.openshift.io/v1
   kind: Route
   metadata:
     annotations:
       haproxy.router.openshift.io/balance: roundrobin
-      haproxy.router.openshift.io/disable_cookies: "true"
+      haproxy.router.openshift.io/disable_cookies: 'true'
     labels:
       app: frontend
     name: frontend-route
@@ -1368,9 +1255,7 @@ objects:
       name: frontend-service
       weight: 100
     wildcardPolicy: None
-  
-
-  apiVersion: route.openshift.io/v1
+- apiVersion: route.openshift.io/v1
   kind: Route
   metadata:
     labels:
@@ -1388,5 +1273,3 @@ objects:
       name: public-api-service
       weight: 100
     wildcardPolicy: None
-  
-
