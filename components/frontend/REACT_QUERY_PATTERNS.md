@@ -1,5 +1,7 @@
 # React Query Usage Patterns
 
+> Part of [CLAUDE.md Critical Conventions](../../CLAUDE.md#critical-conventions)
+
 Standard patterns for data fetching, mutations, and cache management in the frontend.
 
 ## Core Principles

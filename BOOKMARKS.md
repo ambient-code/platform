@@ -6,8 +6,7 @@ Progressive disclosure for task-specific documentation and references.
 
 - [Governance](#governance)
 - [Architecture Decisions](#architecture-decisions)
-- [Development Context](#development-context)
-- [Code Patterns](#code-patterns)
+- [Component Development Guides](#component-development-guides)
 - [Component Guides](#component-guides)
 - [Development Environment](#development-environment)
 - [Testing](#testing)
@@ -38,21 +37,19 @@ Progressive disclosure for task-specific documentation and references.
 | [ADR-0006](docs/internal/adr/0006-ambient-runner-sdk-architecture.md) | Runner SDK design and architecture |
 | [ADR-0007](docs/internal/adr/0007-unleash-feature-flags.md) | Unleash with workspace-scoped overrides |
 
-## Development Context
+## Component Development Guides
 
-| Context | Scope |
-|---------|-------|
-| [Backend](.claude/context/backend-development.md) | Go patterns, K8s integration, handler conventions, user-scoped clients |
-| [Frontend](.claude/context/frontend-development.md) | NextJS patterns, Shadcn, React Query, component guidelines |
-| [Security](.claude/context/security-standards.md) | Auth flows, RBAC, token handling, container security |
+Convention documentation for each component. Loaded by review agents on demand.
 
-## Code Patterns
-
-| Pattern | Scope |
-|---------|-------|
-| [Error Handling](.claude/patterns/error-handling.md) | Consistent error patterns across backend, operator, runner |
-| [K8s Client Usage](.claude/patterns/k8s-client-usage.md) | User token vs. service account — critical for RBAC compliance |
-| [React Query](.claude/patterns/react-query-usage.md) | Data fetching hooks, mutations, cache invalidation |
+| Guide | Scope |
+|-------|-------|
+| [Backend Development](components/backend/DEVELOPMENT.md) | Go patterns, K8s integration, handler conventions, user-scoped clients |
+| [Backend Error Patterns](components/backend/ERROR_PATTERNS.md) | Consistent error patterns across backend and operator |
+| [Backend K8s Client Patterns](components/backend/K8S_CLIENT_PATTERNS.md) | User token vs. service account — critical for RBAC compliance |
+| [Frontend Development](components/frontend/DEVELOPMENT.md) | NextJS patterns, Shadcn, React Query, component guidelines |
+| [Frontend React Query Patterns](components/frontend/REACT_QUERY_PATTERNS.md) | Data fetching hooks, mutations, cache invalidation |
+| [Operator Development](components/operator/DEVELOPMENT.md) | OwnerReferences, reconciliation patterns, SecurityContext, resource limits |
+| [Security Standards](docs/security-standards.md) | Auth flows, RBAC, token handling, container security |
 
 ## Component Guides
 

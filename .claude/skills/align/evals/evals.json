@@ -1,0 +1,20 @@
+[
+  {
+    "input": "/align",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "align" },
+    "description": "Direct slash command for full codebase alignment"
+  },
+  {
+    "input": "check how well we're following our conventions",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "align" },
+    "description": "Natural language convention compliance check"
+  },
+  {
+    "input": "/align frontend",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "align", "args": "frontend" },
+    "description": "Scoped alignment check for frontend only"
+  }
+]

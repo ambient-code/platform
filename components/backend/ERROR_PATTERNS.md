@@ -1,5 +1,7 @@
 # Error Handling Patterns
 
+> Part of [CLAUDE.md Critical Conventions](../../CLAUDE.md#critical-conventions)
+
 Consistent error handling patterns across backend and operator components.
 
 ## Backend Handler Errors

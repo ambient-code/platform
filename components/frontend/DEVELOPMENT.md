@@ -1,5 +1,7 @@
 # Frontend Development Context
 
+> Part of [CLAUDE.md Critical Conventions](../../CLAUDE.md#critical-conventions)
+
 **When to load:** Working on NextJS application, UI components, or React Query integration
 
 ## Quick Reference
@@ -175,9 +177,3 @@ export function useCreateSession(projectName: string) {
 - `src/components/ui/` - Shadcn UI components
 - `src/services/queries/` - React Query hooks
 - `src/services/api/` - API client layer
-
-## Recent Issues & Learnings
-
-- **2024-11-18:** Migrated all data fetching to React Query - no more manual fetch calls
-- **2024-11-15:** Enforced Shadcn UI only - removed custom button components
-- **2024-11-10:** Added breadcrumb pattern for nested pages

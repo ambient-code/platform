@@ -1,5 +1,7 @@
 # Backend Development Context
 
+> Part of [CLAUDE.md Critical Conventions](../../CLAUDE.md#critical-conventions)
+
 **When to load:** Working on Go backend API, handlers, or Kubernetes integration
 
 ## Quick Reference
@@ -120,9 +122,3 @@ if !found || err != nil {
 - `handlers/helpers.go` - Utility functions (StringPtr, BoolPtr)
 - `types/session.go` - Type definitions
 - `server/server.go` - Server setup, token redaction
-
-## Recent Issues & Learnings
-
-- **2024-11-15:** Fixed token leak in logs - never log raw tokens
-- **2024-11-10:** Multi-repo support added - `mainRepoIndex` specifies working directory
-- **2024-10-20:** Added RBAC validation middleware - always check permissions

@@ -1,5 +1,7 @@
 # Kubernetes Client Usage Patterns
 
+> Part of [CLAUDE.md Critical Conventions](../../CLAUDE.md#critical-conventions)
+
 When to use user-scoped clients vs. backend service account clients.
 
 ## The Two Client Types

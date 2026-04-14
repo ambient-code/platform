@@ -1,5 +1,7 @@
 # Security Standards Quick Reference
 
+> Part of [CLAUDE.md Critical Conventions](../CLAUDE.md#critical-conventions)
+
 **When to load:** Working on authentication, authorization, RBAC, or handling sensitive data
 
 ## Critical Security Rules
@@ -238,12 +240,6 @@ Before committing code that handles:
 - [ ] AllowPrivilegeEscalation: false
 - [ ] Capabilities dropped (ALL)
 - [ ] OwnerReferences set for cleanup
-
-## Recent Security Issues
-
-- **2024-11-15:** Fixed token leak in logs - added custom redacting formatter
-- **2024-10-20:** Added RBAC validation middleware - prevent unauthorized access
-- **2024-10-10:** Fixed privilege escalation risk - added SecurityContext to Job pods
 
 ## Security Review Resources
 
