@@ -22,6 +22,11 @@ import (
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/roles"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/users"
+
+	// Project intelligence memory plugins
+	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/repoEvents"
+	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/repoFindings"
+	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/repoIntelligences"
 )
 
 func main() {

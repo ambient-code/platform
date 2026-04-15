@@ -383,15 +383,18 @@ export function useSessionExport(projectName: string, sessionName: string, enabl
 }
 
 /**
- * Hook to fetch repository status (branches, current branch) from runner
- * Polls every 30 seconds for real-time updates
+ * Hook to fetch repository status (branches, current branch) from runner.
+ * Polls at 5s while any repo is analyzing, 30s otherwise.
  */
 export function useReposStatus(projectName: string, sessionName: string, enabled: boolean = true) {
   return useQuery({
     queryKey: sessionKeys.reposStatus(projectName, sessionName),
     queryFn: () => sessionsApi.getReposStatus(projectName, sessionName),
     enabled: enabled && !!projectName && !!sessionName,
-    refetchInterval: 30000, // Poll every 30 seconds
-    staleTime: 25000, // Consider stale after 25 seconds
+    refetchInterval: (query) => {
+      const repos = query.state.data?.repos as Array<{ analyzing?: boolean }> | undefined;
+      return repos?.some((r) => r.analyzing) ? 5000 : 30000;
+    },
+    staleTime: 25000,
   });
 }

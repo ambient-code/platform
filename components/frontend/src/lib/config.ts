@@ -1,5 +1,6 @@
 // API configuration for frontend
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8080/api'
+const API_SERVER_URL = process.env.API_SERVER_URL || 'http://localhost:8000'
 
 /**
  * Get the API base URL for frontend requests
@@ -15,4 +16,4 @@ export function getApiUrl(): string {
   // Server-side: directly call backend
   return BACKEND_URL
 }
-export { BACKEND_URL }
+export { BACKEND_URL, API_SERVER_URL }

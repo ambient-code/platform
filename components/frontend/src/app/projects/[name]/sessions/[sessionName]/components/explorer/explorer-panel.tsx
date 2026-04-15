@@ -42,7 +42,8 @@ export type ExplorerPanelProps = {
   repositories?: Repository[];
   uploadedFiles?: UploadedFile[];
   onAddRepository: () => void;
-  onRemoveRepository: (repoName: string) => void;
+  onRemoveRepository: (repoName: string, options?: { deleteIntelligence?: boolean }) => void;
+  onReanalyzeRepository?: (repoName: string) => void;
   onRemoveFile?: (fileName: string) => void;
   // Background tasks tab props
   backgroundTasks?: Map<string, BackgroundTask>;
@@ -76,6 +77,7 @@ export function ExplorerPanel({
   uploadedFiles,
   onAddRepository,
   onRemoveRepository,
+  onReanalyzeRepository,
   onRemoveFile,
   // Background tasks tab
   backgroundTasks,
@@ -177,11 +179,13 @@ export function ExplorerPanel({
           />
         ) : (
           <ContextTab
+            projectName={projectName}
             repositories={repositories}
             uploadedFiles={uploadedFiles}
             onAddRepository={onAddRepository}
             onUploadFile={onUploadFile}
             onRemoveRepository={onRemoveRepository}
+            onReanalyzeRepository={onReanalyzeRepository}
             onRemoveFile={onRemoveFile}
             canModify={canModify}
           />

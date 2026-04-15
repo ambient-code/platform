@@ -458,6 +458,36 @@ class SessionManager:
                 result[tid] = worker.session_id
         return result
 
+    def clear_session_id(self, thread_id: str) -> None:
+        """Remove the cached session ID for a thread.
+
+        Used when a stale session ID causes resume to fail — clearing
+        it ensures the next worker creation starts fresh.
+        """
+        removed = self._session_ids.pop(thread_id, None)
+        if removed:
+            self._persist_session_ids()
+            logger.info(
+                "[SessionManager] Cleared stale session ID %s for thread=%s",
+                removed,
+                thread_id,
+            )
+
+    def clear_all_session_ids(self) -> None:
+        """Remove all cached session IDs (in memory and on disk).
+
+        Called by ``mark_dirty`` so that the replacement SessionManager
+        does not restore stale IDs via ``_restore_session_ids()``.
+        """
+        if self._session_ids:
+            count = len(self._session_ids)
+            self._session_ids.clear()
+            self._persist_session_ids()
+            logger.info(
+                "[SessionManager] Cleared all %d session ID(s) (dirty reinit)",
+                count,
+            )
+
     async def destroy(self, thread_id: str) -> None:
         """Stop and remove the worker for *thread_id*.
 

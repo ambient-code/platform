@@ -69,7 +69,7 @@ async def add_repo(request: Request):
             repos = json.loads(repos_json) if repos_json else []
         except Exception:
             repos = []
-        repos.append({"name": name, "input": {"url": url, "branch": branch}})
+        repos.append({"name": name, "url": url, "branch": branch})
         os.environ["REPOS_JSON"] = json.dumps(repos)
 
         bridge.mark_dirty()
@@ -77,6 +77,8 @@ async def add_repo(request: Request):
             f"Repo '{name}' added and cloned, adapter will reinitialize on next run"
         )
         asyncio.create_task(_trigger_repo_added_notification(name, url, context))
+        from ambient_runner.endpoints.auto_analysis import run_auto_analysis
+        asyncio.create_task(run_auto_analysis(name, url, bridge))
     else:
         logger.info(
             f"Repo '{name}' already existed, skipping notification (idempotent call)"
@@ -92,7 +94,12 @@ async def add_repo(request: Request):
 
 @router.post("/repos/remove")
 async def remove_repo(request: Request):
-    """Remove a repo from the workspace."""
+    """Remove a repo from the workspace.
+
+    Query params:
+        delete_intelligence: if "true", also delete stored intelligence
+            from the database so future sessions start fresh.
+    """
     bridge = request.app.state.bridge
     context = bridge.context
     if not context:
@@ -100,7 +107,10 @@ async def remove_repo(request: Request):
 
     body = await request.json()
     repo_name = body.get("name", "")
-    logger.info(f"Remove repo request: {repo_name}")
+    delete_intelligence = body.get("delete_intelligence", False)
+    logger.info(
+        f"Remove repo request: {repo_name} (delete_intelligence={delete_intelligence})"
+    )
 
     workspace_path = os.getenv("WORKSPACE_PATH", "/workspace")
     repo_path = Path(workspace_path) / "repos" / repo_name
@@ -122,13 +132,100 @@ async def remove_repo(request: Request):
         repos = json.loads(repos_json) if repos_json else []
     except Exception:
         repos = []
+
+    # Find the repo URL before removing (needed for intelligence deletion).
+    # Match by name field OR by deriving the name from the URL, because
+    # operator-configured repos may not have a "name" field in REPOS_JSON.
+    repo_url = ""
+    for r in repos:
+        entry_name = r.get("name", "")
+        if not entry_name:
+            entry_url = r.get("url", "")
+            entry_name = entry_url.split("/")[-1].removesuffix(".git") if entry_url else ""
+        if entry_name == repo_name:
+            repo_url = r.get("url", "")
+            break
+
     repos = [r for r in repos if r.get("name") != repo_name]
     os.environ["REPOS_JSON"] = json.dumps(repos)
+
+    # Optionally delete intelligence from the database
+    intelligence_deleted = False
+    if delete_intelligence and repo_url:
+        try:
+            from ambient_runner.tools.intelligence_api import IntelligenceAPIClient
+
+            client = IntelligenceAPIClient()
+            intelligence_deleted = client.delete_intelligence(repo_url)
+            if intelligence_deleted:
+                logger.info(
+                    f"Deleted intelligence for repo '{repo_name}' from database"
+                )
+            else:
+                logger.info(
+                    f"No intelligence found to delete for repo '{repo_name}'"
+                )
+        except Exception as e:
+            logger.error(
+                f"Failed to delete intelligence for '{repo_name}' "
+                f"(repo_url={repo_url}): {e}",
+                exc_info=True,
+            )
+    elif delete_intelligence and not repo_url:
+        logger.warning(
+            f"delete_intelligence=True but no repo_url found in REPOS_JSON "
+            f"for '{repo_name}' — cannot delete intelligence"
+        )
 
     bridge.mark_dirty()
     logger.info("Repo removed, adapter will reinitialize on next run")
 
-    return {"message": "Repository removed"}
+    return {"message": "Repository removed", "intelligence_deleted": intelligence_deleted}
+
+
+@router.post("/repos/reanalyze")
+async def reanalyze_repo(request: Request):
+    """Force re-analysis of a repo's intelligence."""
+    bridge = request.app.state.bridge
+    context = bridge.context
+    if not context:
+        raise HTTPException(status_code=503, detail="Context not initialized")
+
+    body = await request.json()
+    repo_name = body.get("name", "")
+    logger.info(f"Re-analyze request for repo: {repo_name}")
+
+    # Find the repo URL
+    repos_json = os.getenv("REPOS_JSON", "[]")
+    try:
+        repos = json.loads(repos_json) if repos_json else []
+    except Exception:
+        repos = []
+
+    repo_url = ""
+    for r in repos:
+        if r.get("name") == repo_name:
+            repo_url = r.get("url", "")
+            break
+
+    if not repo_url:
+        raise HTTPException(status_code=404, detail=f"Repo '{repo_name}' not found")
+
+    # Delete existing intelligence first
+    try:
+        from ambient_runner.tools.intelligence_api import IntelligenceAPIClient
+
+        client = IntelligenceAPIClient()
+        client.delete_intelligence(repo_url)
+        logger.info(f"Deleted existing intelligence for '{repo_name}'")
+    except Exception as e:
+        logger.warning(f"Could not delete existing intelligence: {e}")
+
+    # Trigger fresh analysis
+    from ambient_runner.endpoints.auto_analysis import run_auto_analysis
+    asyncio.create_task(run_auto_analysis(repo_name, repo_url, bridge))
+
+    return {"message": f"Re-analysis started for {repo_name}"}
 
 
 @router.get("/repos/status")
@@ -174,8 +271,12 @@ async def get_repos_status():
             )
             stdout, stderr = await process.communicate()
             current_branch = (
-                stdout.decode().strip() if process.returncode == 0 else "unknown"
+                stdout.decode().strip() if process.returncode == 0 else None
             )
+            # If branch detection failed or returned HEAD (detached),
+            # fall back to the default branch.
+            if not current_branch or current_branch == "HEAD":
+                current_branch = await get_default_branch(str(repo_path))
 
             process = await asyncio.create_subprocess_exec(
                 "git",
@@ -195,6 +296,8 @@ async def get_repos_status():
 
             default_branch = await get_default_branch(str(repo_path))
 
+            from ambient_runner.endpoints.auto_analysis import is_analyzing
+
             repos_status.append(
                 {
                     "url": repo_url,
@@ -202,6 +305,7 @@ async def get_repos_status():
                     "branches": branches,
                     "currentActiveBranch": current_branch,
                     "defaultBranch": default_branch,
+                    "analyzing": is_analyzing(repo_name),
                 }
             )
         except Exception as e:
@@ -505,3 +609,4 @@ async def _trigger_repo_added_notification(repo_name: str, repo_url: str, contex
                     )
     except Exception as e:
         logger.error(f"Failed to trigger repo notification: {e}")
+

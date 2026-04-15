@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { MessageSquarePlus, ArrowUp, Loader2, Plus, GitBranch, Upload, X, Settings2 } from "lucide-react";
+import { MessageSquarePlus, ArrowUp, Loader2, Plus, GitBranch, Upload, X, Settings2, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,6 +26,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RunnerModelSelector, getDefaultModel } from "./runner-model-selector";
 import { WorkflowSelector } from "./workflow-selector";
 import { AddContextModal } from "./modals/add-context-modal";
@@ -60,6 +62,7 @@ type NewSessionViewProps = {
     workflow?: string;
     repos?: Array<{ url: string; branch?: string; autoPush?: boolean }>;
     sdkOptions?: Record<string, unknown>;
+    disableIntelligence?: boolean;
   }) => void;
   ootbWorkflows: WorkflowConfig[];
   onLoadCustomWorkflow?: () => void;
@@ -136,6 +139,8 @@ export function NewSessionView({
   const [selectedWorkflow, setSelectedWorkflow] = useState("none");
   const [pendingRepos, setPendingRepos] = useState<PendingRepo[]>([]);
   const [contextModalOpen, setContextModalOpen] = useState(false);
+  const [disableIntelligence, setDisableIntelligence] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize the textarea as the user types.
@@ -187,8 +192,9 @@ export function NewSessionView({
       workflow: hasWorkflow ? selectedWorkflow : undefined,
       repos: pendingRepos.length > 0 ? pendingRepos.map((r) => ({ url: r.url, branch: r.branch, autoPush: r.autoPush })) : undefined,
       sdkOptions: Object.keys(sdkOptions).length > 0 ? sdkOptions : undefined,
+      disableIntelligence: disableIntelligence || undefined,
     });
-  }, [prompt, selectedRunner, selectedModel, selectedWorkflow, pendingRepos, sdkOptionsForm, onCreateSession]);
+  }, [prompt, selectedRunner, selectedModel, selectedWorkflow, pendingRepos, sdkOptionsForm, disableIntelligence, onCreateSession]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -277,6 +283,7 @@ export function NewSessionView({
               />
               <Button
                 size="icon"
+                data-testid="send-button"
                 className="h-8 w-8 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground"
                 disabled={(!prompt.trim() && selectedWorkflow === "none") || isSubmitting}
                 onClick={handleSubmit}
@@ -320,6 +327,36 @@ export function NewSessionView({
             ))}
           </div>
         )}
+
+        {/* Advanced options */}
+        <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            >
+              <Settings2 className="h-3 w-3" />
+              <span>Advanced options</span>
+              <ChevronDown className={`h-3 w-3 transition-transform ${advancedOpen ? "rotate-180" : ""}`} />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="mt-2 rounded-lg border bg-muted/30 p-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <Checkbox
+                  checked={disableIntelligence}
+                  onCheckedChange={(checked) => setDisableIntelligence(checked === true)}
+                />
+                <div className="space-y-0.5">
+                  <span className="text-sm">Disable project intelligence</span>
+                  <p className="text-xs text-muted-foreground">
+                    Skip auto-analysis and knowledge injection
+                  </p>
+                </div>
+              </label>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
 
       </div>
 

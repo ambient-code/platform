@@ -680,6 +680,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 	model, _, _ := unstructured.NestedString(llmSettings, "model")
 	temperature, _, _ := unstructured.NestedFloat64(llmSettings, "temperature")
 	maxTokens, _, _ := unstructured.NestedInt64(llmSettings, "maxTokens")
+	disableIntelligence, _, _ := unstructured.NestedBool(spec, "disableIntelligence")
 
 	// Hardcoded secret names (convention over configuration)
 	const runnerSecretsName = "ambient-runner-secrets"               // ANTHROPIC_API_KEY only (ignored when Vertex enabled)
@@ -1110,7 +1111,12 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 					corev1.EnvVar{Name: "USE_AGUI", Value: "true"},
 					corev1.EnvVar{Name: "TIMEOUT", Value: fmt.Sprintf("%d", timeout)},
 					corev1.EnvVar{Name: "BACKEND_API_URL", Value: fmt.Sprintf("http://backend-service.%s.svc.cluster.local:8080/api", appConfig.BackendNamespace)},
+					corev1.EnvVar{Name: "API_SERVER_URL", Value: fmt.Sprintf("http://ambient-api-server.%s.svc.cluster.local:8000", appConfig.BackendNamespace)},
 				)
+
+				if disableIntelligence {
+					base = append(base, corev1.EnvVar{Name: "AMBIENT_DISABLE_INTELLIGENCE", Value: "true"})
+				}
 
 				// Resolve Vertex AI model ID from the model manifest ConfigMap.
 				if model != "" {
@@ -2104,8 +2110,15 @@ func deletePodAndPerPodService(namespace, podName, sessionName string) error {
 	return nil
 }
 
-// copySecretToNamespace copies a secret to a target namespace with owner references
+// copySecretToNamespace copies a secret to a target namespace with owner references.
+// If source and target namespace are the same, the secret is already available and
+// must not be modified — it is shared infrastructure, not a session-owned copy.
 func copySecretToNamespace(ctx context.Context, sourceSecret *corev1.Secret, targetNamespace string, ownerObj *unstructured.Unstructured) error {
+	if sourceSecret.Namespace == targetNamespace {
+		log.Printf("Secret %s is already in namespace %s (same as source), skipping copy", sourceSecret.Name, targetNamespace)
+		return nil
+	}
+
 	// Check if secret already exists in target namespace
 	existingSecret, err := config.K8sClient.CoreV1().Secrets(targetNamespace).Get(ctx, sourceSecret.Name, v1.GetOptions{})
 	secretExists := err == nil

@@ -253,6 +253,7 @@ export type CreateAgenticSessionRequest = {
 	labels?: Record<string, string>;
 	annotations?: Record<string, string>;
 	runnerType?: string;
+	disableIntelligence?: boolean;
 	// Custom MCP server configuration
 	mcpServers?: MCPServersConfig;
 	// TODO: Backend handler must unmarshal this field and write it into the

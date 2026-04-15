@@ -9,6 +9,7 @@ Owns the entire Claude session lifecycle:
 - Interrupt and graceful shutdown
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -150,8 +151,13 @@ class ClaudeBridge(PlatformBridge):
         self._stderr_lines: list[str] = []
         # Preserved session IDs across adapter rebuilds (e.g. repo additions)
         self._saved_session_ids: dict[str, str] = {}
+        self._skip_resume: bool = False
         # Per-thread halt tracking to avoid race conditions on shared adapter
         self._halted_by_thread: dict[str, bool] = {}
+        # Deferred dirty: avoid killing active Claude Code runs when
+        # mark_dirty() is called mid-run (e.g. auto-analysis completing).
+        self._active_run_count: int = 0
+        self._pending_dirty: bool = False
 
     # ------------------------------------------------------------------
     # PlatformBridge interface
@@ -229,6 +235,10 @@ class ClaudeBridge(PlatformBridge):
             # Force adapter rebuild so ClaudeAgentOptions uses new mcp_servers
             self._adapter = None
 
+        # Rebuild the system prompt to pick up any intelligence that was
+        # stored since the last run (e.g. by auto-analysis background task).
+        self._refresh_system_prompt()
+
         self._ensure_adapter()
 
     async def run(
@@ -251,86 +261,139 @@ class ClaudeBridge(PlatformBridge):
 
         user_msg, _ = process_messages(input_data)
 
-        api_key = os.getenv("ANTHROPIC_API_KEY", "")
-        saved_session_id = self._saved_session_ids.pop(
-            thread_id, None
-        ) or self._session_manager.get_session_id(thread_id)
-        sdk_options = self._adapter.build_options(
-            input_data, resume_from=saved_session_id
-        )
-        worker = await self._session_manager.get_or_create(
-            thread_id, sdk_options, api_key
-        )
+        self._active_run_count += 1
+        try:
+            api_key = os.getenv("ANTHROPIC_API_KEY", "")
+            if self._skip_resume:
+                saved_session_id = None
+                self._skip_resume = False
+                logger.info("Skipping --resume after dirty reinit (system prompt changed)")
+            else:
+                saved_session_id = self._saved_session_ids.pop(
+                    thread_id, None
+                ) or self._session_manager.get_session_id(thread_id)
+            sdk_options = self._adapter.build_options(
+                input_data, resume_from=saved_session_id
+            )
+            worker = await self._session_manager.get_or_create(
+                thread_id, sdk_options, api_key
+            )
 
-        # 5. Run adapter with message stream, wrapped in tracing
-        session_label = self._session_manager.get_session_id(thread_id) or thread_id
-        async with self._session_manager.get_lock(thread_id):
-            try:
-                message_stream = worker.query(user_msg, session_id=session_label)
+            # 5. Run adapter with message stream, wrapped in tracing
+            session_label = self._session_manager.get_session_id(thread_id) or thread_id
+            async with self._session_manager.get_lock(thread_id):
+                try:
+                    message_stream = worker.query(user_msg, session_id=session_label)
 
-                from ambient_runner.middleware import (
-                    secret_redaction_middleware,
-                    tracing_middleware,
-                )
-
-                wrapped_stream = tracing_middleware(
-                    secret_redaction_middleware(
-                        self._adapter.run(input_data, message_stream=message_stream),
-                    ),
-                    obs=self._obs,
-                    model=self._configured_model,
-                    prompt=user_msg,
-                )
-
-                async for event in wrapped_stream:
-                    yield event
-
-                # Detect resume failure (session ID already persisted
-                # eagerly by the _on_session_id callback at init time).
-                if (
-                    saved_session_id
-                    and worker.session_id
-                    and worker.session_id != saved_session_id
-                ):
-                    logger.warning(
-                        "Session resume failed: requested --resume %s "
-                        "but CLI created new session %s. "
-                        "Previous conversation history was lost "
-                        "(likely caused by ungraceful runner shutdown).",
-                        saved_session_id,
-                        worker.session_id,
+                    from ambient_runner.middleware import (
+                        secret_redaction_middleware,
+                        tracing_middleware,
                     )
 
-                # Capture halt state for this thread to avoid race conditions
-                # with concurrent runs modifying the shared adapter's halted flag
-                self._halted_by_thread[thread_id] = self._adapter.halted
-
-                # If the adapter halted (frontend tool or built-in HITL tool like
-                # AskUserQuestion), interrupt the worker to prevent the SDK from
-                # auto-approving the tool call with a placeholder result.
-                if self._halted_by_thread.get(thread_id, False):
-                    logger.info(
-                        f"Adapter halted for thread={thread_id}, "
-                        "interrupting worker to await user input"
+                    wrapped_stream = tracing_middleware(
+                        secret_redaction_middleware(
+                            self._adapter.run(input_data, message_stream=message_stream),
+                        ),
+                        obs=self._obs,
+                        model=self._configured_model,
+                        prompt=user_msg,
                     )
-                    await worker.interrupt()
-                    # Clear the halt flag for this thread
-                    self._halted_by_thread.pop(thread_id, None)
-            finally:
-                # Clear caller token immediately — never persist between turns.
-                if self._context:
-                    self._context.caller_token = ""
 
-                # Clear credentials after turn completes (shared session security).
-                # In finally to ensure cleanup even on errors/cancellation.
-                if (
-                    self._context.get_env("KEEP_CREDENTIALS_PERSISTENT") or ""
-                ).lower() != "true":
-                    from ambient_runner.platform.auth import clear_runtime_credentials
+                    # If we're resuming, give the CLI a moment to start
+                    # and check if it crashes immediately (stale session ID).
+                    # The CLI exits with code 1 within ~2s for bad --resume.
+                    if saved_session_id:
+                        await asyncio.sleep(2)
+                        if not worker.is_alive:
+                            logger.warning(
+                                "Resume crashed for thread=%s (stale session %s), "
+                                "retrying without resume",
+                                thread_id,
+                                saved_session_id,
+                            )
+                            saved_session_id = None
+                            self._session_manager.clear_session_id(thread_id)
+                            await self._session_manager.destroy(thread_id)
 
-                    clear_runtime_credentials()
+                            sdk_options = self._adapter.build_options(
+                                input_data, resume_from=None
+                            )
+                            worker = await self._session_manager.get_or_create(
+                                thread_id, sdk_options, api_key
+                            )
+                            session_label = (
+                                self._session_manager.get_session_id(thread_id)
+                                or thread_id
+                            )
+                            message_stream = worker.query(
+                                user_msg, session_id=session_label
+                            )
+                            wrapped_stream = tracing_middleware(
+                                secret_redaction_middleware(
+                                    self._adapter.run(
+                                        input_data, message_stream=message_stream
+                                    ),
+                                ),
+                                obs=self._obs,
+                                model=self._configured_model,
+                                prompt=user_msg,
+                            )
 
-        self._first_run = False
+                    async for event in wrapped_stream:
+                        yield event
+
+                    # Detect resume failure (session ID already persisted
+                    # eagerly by the _on_session_id callback at init time).
+                    if (
+                        saved_session_id
+                        and worker.session_id
+                        and worker.session_id != saved_session_id
+                    ):
+                        logger.warning(
+                            "Session resume failed: requested --resume %s "
+                            "but CLI created new session %s. "
+                            "Previous conversation history was lost "
+                            "(likely caused by ungraceful runner shutdown).",
+                            saved_session_id,
+                            worker.session_id,
+                        )
+
+                    # Capture halt state for this thread to avoid race conditions
+                    # with concurrent runs modifying the shared adapter's halted flag.
+                    # Guard against None adapter (can happen if mark_dirty clears it during run).
+                    if self._adapter is not None:
+                        self._halted_by_thread[thread_id] = self._adapter.halted
+
+                    # If the adapter halted (frontend tool or built-in HITL tool like
+                    # AskUserQuestion), interrupt the worker to prevent the SDK from
+                    # auto-approving the tool call with a placeholder result.
+                    if self._halted_by_thread.get(thread_id, False):
+                        logger.info(
+                            f"Adapter halted for thread={thread_id}, "
+                            "interrupting worker to await user input"
+                        )
+                        await worker.interrupt()
+                        # Clear the halt flag for this thread
+                        self._halted_by_thread.pop(thread_id, None)
+                finally:
+                    # Clear caller token immediately — never persist between turns.
+                    if self._context:
+                        self._context.caller_token = ""
+
+                    # Clear credentials after turn completes (shared session security).
+                    # In finally to ensure cleanup even on errors/cancellation.
+                    if (
+                        self._context.get_env("KEEP_CREDENTIALS_PERSISTENT") or ""
+                    ).lower() != "true":
+                        from ambient_runner.platform.auth import clear_runtime_credentials
+
+                        clear_runtime_credentials()
+
+            self._first_run = False
+        finally:
+            self._active_run_count -= 1
+            if self._pending_dirty and self._active_run_count == 0:
+                self._apply_dirty()
 
     async def interrupt(self, thread_id: str | None = None) -> None:
         """Interrupt the running session for a given thread."""
@@ -486,23 +549,54 @@ class ClaudeBridge(PlatformBridge):
     def mark_dirty(self) -> None:
         """Signal adapter rebuild on next run (repo/workflow change).
 
+        If a run is currently active, defers the teardown to avoid killing
+        the Claude Code subprocess mid-work.  The pending flag is checked
+        after the active run completes and ``_apply_dirty()`` is called then.
+        """
+        if self._active_run_count > 0:
+            self._pending_dirty = True
+            logger.info(
+                "ClaudeBridge: dirty flag queued — will reinitialise "
+                "after current run completes"
+            )
+            return
+        self._apply_dirty()
+
+    def _apply_dirty(self) -> None:
+        """Perform the actual dirty reinit teardown.
+
         Destroys existing session workers so the new MCP server
         configuration (e.g. updated correction tool targets) is applied
-        to the CLI process on the next run.  Conversation state is
-        preserved via the CLI's ``--resume`` mechanism.
+        to the CLI process on the next run.
+
+        NOTE: We intentionally do NOT preserve session IDs for --resume.
+        The CLI's graceful shutdown does not reliably flush the conversation
+        JSONL to disk before the process exits, so --resume would fail with
+        "No conversation found with session ID".  Additionally, the system
+        prompt changes (e.g. intelligence injection) making the old
+        conversation context stale.  Starting fresh is the correct behavior.
         """
+        self._pending_dirty = False
         self._ready = False
         self._first_run = True
         self._adapter = None
         self._halted_by_thread.clear()
+        self._skip_resume = True
         if self._session_manager:
-            # Preserve session IDs so --resume works after adapter rebuild.
-            # Must be captured synchronously before the async shutdown task runs.
-            self._saved_session_ids.update(self._session_manager.get_all_session_ids())
+            # Do NOT save session IDs — they won't survive worker shutdown
+            # and the system prompt has changed anyway.
+            self._saved_session_ids.clear()
+            # Also clear persisted session IDs on disk so the new
+            # SessionManager doesn't restore stale IDs via
+            # _restore_session_ids() and attempt --resume with a
+            # session that no longer exists.
+            # NOTE: We also delete the file because the old worker's
+            # _graceful_disconnect may re-persist its ID after our clear.
             manager = self._session_manager
+            manager.clear_all_session_ids()
             self._session_manager = None
             _async_safe_manager_shutdown(manager)
-        logger.info("ClaudeBridge: marked dirty — will reinitialise on next run")
+        logger.info("ClaudeBridge: marked dirty — will reinitialise on next run (no resume)")
 
     def get_error_context(self) -> str:
         """Return recent Claude CLI stderr lines for error reporting."""
@@ -669,6 +763,32 @@ class ClaudeBridge(PlatformBridge):
         self._mcp_servers = mcp_servers
         self._allowed_tools = allowed_tools
         self._system_prompt = system_prompt
+
+    def _refresh_system_prompt(self) -> None:
+        """Rebuild the system prompt to include fresh intelligence.
+
+        Called at the start of every run so newly stored intelligence
+        (from auto-analysis or a previous session) is always included.
+        Forces an adapter rebuild if the prompt changed.
+        """
+        if not self._ready or not self._cwd_path:
+            return  # _setup_platform hasn't run yet
+
+        from ambient_runner.bridges.claude.prompts import build_sdk_system_prompt
+
+        new_prompt = build_sdk_system_prompt(
+            self._context.workspace_path, self._cwd_path
+        )
+        if new_prompt != self._system_prompt:
+            old_len = len(self._system_prompt.get("append", ""))
+            new_len = len(new_prompt.get("append", ""))
+            self._system_prompt = new_prompt
+            self._adapter = None  # force adapter rebuild with new prompt
+            logger.info(
+                "ClaudeBridge: system prompt refreshed (%d → %d chars)",
+                old_len,
+                new_len,
+            )
 
     def _rebuild_mcp_servers(self) -> None:
         """Rebuild MCP server config with current env vars.

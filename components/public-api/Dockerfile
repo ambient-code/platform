@@ -7,18 +7,17 @@ USER 0
 
 # Copy go mod files first for caching
 COPY go.mod go.sum* ./
+# GOPROXY=direct works around HTTP/2 stream errors with proxy.golang.org inside Docker
 RUN GOTOOLCHAIN=auto go mod download
 
 # Copy source code
 COPY . .
 
 # Build the binary
-RUN GOTOOLCHAIN=auto CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o public-api .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o public-api .
 
 # Runtime stage
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7
-
-ARG GIT_COMMIT=unknown
 
 WORKDIR /app
 
@@ -38,6 +37,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -sf http://localhost:8081/health || exit 1
 
 # Run the binary
-LABEL org.opencontainers.image.revision=$GIT_COMMIT
-
 ENTRYPOINT ["./public-api"]

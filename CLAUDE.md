@@ -12,7 +12,7 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 - `components/runners/ambient-runner/` - Python runner executing Claude Code CLI in Job pods
 - `components/ambient-cli/` - Go CLI (`acpctl`), manages agentic sessions from the command line
 - `components/public-api/` - Stateless HTTP gateway, proxies to backend (no direct K8s access)
-- `components/ambient-api-server/` - Go REST API microservice (rh-trex-ai framework), PostgreSQL-backed
+- `components/ambient-api-server/` - Go REST API microservice (rh-trex-ai framework), PostgreSQL-backed. Each domain resource (agents, repo intelligences, etc.) is a self-contained plugin with model, DAO, service, handler, and migration
 - `components/ambient-sdk/` - Go + Python client SDK for the platform's public REST API
 - `components/open-webui-llm/` - Open WebUI LLM integration
 - `components/manifests/` - Kustomize-based deployment manifests and overlays

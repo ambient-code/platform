@@ -961,6 +961,9 @@ func CreateSession(c *gin.Context) {
 	if req.StopOnRunFinished != nil && *req.StopOnRunFinished {
 		spec["stopOnRunFinished"] = true
 	}
+	if req.DisableIntelligence != nil && *req.DisableIntelligence {
+		spec["disableIntelligence"] = true
+	}
 
 	session := map[string]interface{}{
 		"apiVersion": "vteam.ambient-code/v1alpha1",
@@ -2222,6 +2225,7 @@ func RemoveRepo(c *gin.Context) {
 
 	filteredRepos := []interface{}{}
 	foundInSpec := false
+	removedRepoURL := ""
 	for _, r := range repos {
 		rm, _ := r.(map[string]interface{})
 		url, _ := rm["url"].(string)
@@ -2229,6 +2233,7 @@ func RemoveRepo(c *gin.Context) {
 			filteredRepos = append(filteredRepos, r)
 		} else {
 			foundInSpec = true
+			removedRepoURL = url
 		}
 	}
 
@@ -2256,6 +2261,11 @@ func RemoveRepo(c *gin.Context) {
 		name, found, err := unstructured.NestedString(rm, "name")
 		if found && err == nil && name == repoName {
 			foundInReconciled = true
+			if removedRepoURL == "" {
+				if u, f, e := unstructured.NestedString(rm, "url"); f && e == nil {
+					removedRepoURL = u
+				}
+			}
 			break
 		}
 
@@ -2263,6 +2273,9 @@ func RemoveRepo(c *gin.Context) {
 		url, found, err := unstructured.NestedString(rm, "url")
 		if found && err == nil && DeriveRepoFolderFromURL(url) == repoName {
 			foundInReconciled = true
+			if removedRepoURL == "" {
+				removedRepoURL = url
+			}
 			break
 		}
 	}
@@ -2270,24 +2283,39 @@ func RemoveRepo(c *gin.Context) {
 	// Always call runner to remove from filesystem (if session is running)
 	// Do this BEFORE checking if repo exists in CR, because it might only be on filesystem
 	phase, _, _ := unstructured.NestedString(status, "phase")
+	deleteIntelligence := c.Query("delete_intelligence") == "true"
 	runnerRemoved := false
+	runnerDeletedIntelligence := false
 	if phase == "Running" {
 		runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/repos/remove", sessionName, project)
-		runnerReq := map[string]string{"name": repoName}
+		runnerReq := map[string]interface{}{"name": repoName, "delete_intelligence": deleteIntelligence}
 		reqBody, _ := json.Marshal(runnerReq)
 		resp, err := http.Post(runnerURL, "application/json", bytes.NewReader(reqBody))
 		if err != nil {
 			log.Printf("Warning: failed to call runner /repos/remove: %v", err)
 		} else {
 			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
 			if resp.StatusCode == http.StatusOK {
 				runnerRemoved = true
 				log.Printf("Runner successfully removed repo %s from filesystem", repoName)
+				// Check if the runner actually deleted the intelligence record
+				var runnerResp map[string]interface{}
+				if json.Unmarshal(body, &runnerResp) == nil {
+					if deleted, ok := runnerResp["intelligence_deleted"].(bool); ok && deleted {
+						runnerDeletedIntelligence = true
+					}
+				}
 			} else {
-				body, _ := io.ReadAll(resp.Body)
 				log.Printf("Runner failed to remove repo %s (status %d): %s", repoName, resp.StatusCode, string(body))
 			}
 		}
+	}
+
+	// Fallback: delete intelligence directly from API server when the runner
+	// didn't handle it — either unreachable or reported intelligence_deleted=false.
+	if deleteIntelligence && removedRepoURL != "" && !runnerDeletedIntelligence {
+		deleteIntelligenceFromAPIServer(project, removedRepoURL)
 	}
 
 	// Allow delete if repo is in CR OR was successfully removed from runner
@@ -2334,6 +2362,69 @@ func sanitizeK8sName(name string) (string, error) {
 		return "", fmt.Errorf("invalid Kubernetes resource name: %q", name)
 	}
 	return name, nil
+// deleteIntelligenceFromAPIServer calls the API server directly to delete the
+// intelligence record for a repo. Used as fallback when the runner pod is
+// unreachable (session stopped/failed).
+func deleteIntelligenceFromAPIServer(projectID, repoURL string) {
+	apiServerURL := os.Getenv("API_SERVER_URL")
+	if apiServerURL == "" {
+		apiServerURL = "http://ambient-api-server:8000"
+	}
+	apiServerURL = strings.TrimRight(apiServerURL, "/")
+
+	params := url.Values{
+		"project_id": {projectID},
+		"repo_url":   {repoURL},
+	}
+	deleteURL := fmt.Sprintf("%s/api/ambient/v1/repo_intelligences/lookup?%s", apiServerURL, params.Encode())
+
+	req, err := http.NewRequest(http.MethodDelete, deleteURL, nil)
+	if err != nil {
+		log.Printf("Warning: failed to create intelligence delete request: %v", err)
+		return
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Warning: failed to delete intelligence from API server: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNoContent {
+		log.Printf("Deleted intelligence for %s from API server (backend fallback)", repoURL)
+	} else if resp.StatusCode == http.StatusNotFound {
+		log.Printf("No intelligence found to delete for %s on API server", repoURL)
+	} else {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("Warning: API server intelligence delete returned %d: %s", resp.StatusCode, string(body))
+	}
+}
+
+// ReanalyzeRepo triggers re-analysis of a repository's intelligence.
+// POST /api/projects/:projectName/agentic-sessions/:sessionName/repos/reanalyze
+func ReanalyzeRepo(c *gin.Context) {
+	project := c.GetString("project")
+	sessionName := c.Param("sessionName")
+
+	var body map[string]string
+	if err := c.BindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/repos/reanalyze", sessionName, project)
+	reqBody, _ := json.Marshal(body)
+	resp, err := http.Post(runnerURL, "application/json", bytes.NewReader(reqBody))
+	if err != nil {
+		log.Printf("Failed to call runner /repos/reanalyze: %v", err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Runner not available"})
+		return
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	c.Data(resp.StatusCode, "application/json", respBody)
 }
 
 // getRunnerServiceName returns the K8s Service name for a session's runner.

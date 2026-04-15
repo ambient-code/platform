@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import {
   GitBranch,
   X,
@@ -11,56 +11,89 @@ import {
   AlertTriangle,
   Plus,
   Upload,
+  RefreshCw,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { Repository, UploadedFile } from "../../lib/types";
+import { IntelligenceSection } from "./intelligence-section";
 
 export type ContextTabProps = {
+  projectName: string;
   repositories?: Repository[];
   uploadedFiles?: UploadedFile[];
   onAddRepository: () => void;
   onUploadFile: () => void;
-  onRemoveRepository: (repoName: string) => void;
+  onRemoveRepository: (repoName: string, options?: { deleteIntelligence?: boolean }) => void;
+  onReanalyzeRepository?: (repoName: string) => void;
   onRemoveFile?: (fileName: string) => void;
   canModify: boolean;
 };
 
+// Confirmation dialog state machine:
+// null → "confirm-remove" → "confirm-intelligence" → execute → null
+type ConfirmDialog =
+  | null
+  | { type: "remove-repo"; repoName: string }
+  | { type: "remove-intelligence"; repoName: string }
+  | { type: "remove-file"; fileName: string }
+  | { type: "reanalyze-repo"; repoName: string };
+
 export function ContextTab({
+  projectName,
   repositories = [],
   uploadedFiles = [],
   onAddRepository,
   onUploadFile,
   onRemoveRepository,
+  onReanalyzeRepository,
   onRemoveFile,
   canModify,
 }: ContextTabProps) {
   const [removingRepo, setRemovingRepo] = useState<string | null>(null);
   const [removingFile, setRemovingFile] = useState<string | null>(null);
+  const [reanalyzingRepo, setReanalyzingRepo] = useState<string | null>(null);
   const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set());
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog>(null);
 
-  const handleRemoveRepo = async (repoName: string) => {
-    if (confirm(`Remove repository ${repoName}?`)) {
-      setRemovingRepo(repoName);
-      try {
-        await onRemoveRepository(repoName);
-      } finally {
-        setRemovingRepo(null);
-      }
+  const closeDialog = useCallback(() => setConfirmDialog(null), []);
+
+  const handleConfirmRemoveRepo = useCallback(async (repoName: string, deleteIntelligence: boolean) => {
+    setConfirmDialog(null);
+    setRemovingRepo(repoName);
+    try {
+      await onRemoveRepository(repoName, { deleteIntelligence });
+    } finally {
+      setRemovingRepo(null);
     }
-  };
+  }, [onRemoveRepository]);
 
-  const handleRemoveFile = async (fileName: string) => {
+  const handleConfirmRemoveFile = useCallback(async (fileName: string) => {
+    setConfirmDialog(null);
     if (!onRemoveFile) return;
-    if (confirm(`Remove file ${fileName}?`)) {
-      setRemovingFile(fileName);
-      try {
-        await onRemoveFile(fileName);
-      } finally {
-        setRemovingFile(null);
-      }
+    setRemovingFile(fileName);
+    try {
+      await onRemoveFile(fileName);
+    } finally {
+      setRemovingFile(null);
     }
-  };
+  }, [onRemoveFile]);
+
+  const handleConfirmReanalyze = useCallback((repoName: string) => {
+    setConfirmDialog(null);
+    if (!onReanalyzeRepository) return;
+    setReanalyzingRepo(repoName);
+    onReanalyzeRepository(repoName);
+    setTimeout(() => setReanalyzingRepo(null), 30000);
+  }, [onReanalyzeRepository]);
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
@@ -107,7 +140,9 @@ export function ContextTab({
                 const isRemoving = removingRepo === repoName;
                 const isExpanded = expandedRepos.has(repoName);
                 const currentBranch =
-                  repo.currentActiveBranch || repo.branch;
+                  (repo.currentActiveBranch && repo.currentActiveBranch !== "unknown")
+                    ? repo.currentActiveBranch
+                    : repo.defaultBranch || repo.branch || "main";
                 const hasBranches =
                   repo.branches && repo.branches.length > 0;
 
@@ -128,12 +163,15 @@ export function ContextTab({
                     key={repo.url}
                     className="border rounded bg-muted/30"
                   >
-                    <div className="flex items-center gap-2 p-2 hover:bg-muted/50 transition-colors">
+                    <div
+                      className="flex items-center gap-2 p-2 hover:bg-muted/50 transition-colors cursor-pointer"
+                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); toggleExpanded(); }}
+                    >
                       {hasBranches ? (
                         <button
                           type="button"
-                          onClick={toggleExpanded}
-                          className="h-4 w-4 text-muted-foreground flex-shrink-0 hover:text-foreground cursor-pointer"
+                          onClick={(e) => { e.stopPropagation(); e.preventDefault(); toggleExpanded(); }}
+                          className="h-5 w-5 text-muted-foreground flex-shrink-0 hover:text-foreground cursor-pointer flex items-center justify-center"
                         >
                           {isExpanded ? (
                             <ChevronDown className="h-4 w-4" />
@@ -182,27 +220,65 @@ export function ContextTab({
                               {currentBranch}
                             </Badge>
                           ) : null}
+                          {repo.analyzing && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs px-1.5 py-0.5 bg-purple-50 dark:bg-purple-950 border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-400"
+                            >
+                              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                              Analyzing...
+                            </Badge>
+                          )}
                         </div>
                       </div>
                       {canModify && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 flex-shrink-0"
-                          onClick={() => handleRemoveRepo(repoName)}
-                          disabled={
-                            isRemoving ||
-                            repo.status === "Cloning" ||
-                            repo.status === "Removing"
-                          }
-                          aria-label={`Remove ${repoName}`}
-                        >
-                          {isRemoving ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <X className="h-3 w-3" />
+                        <div className="flex items-center gap-0.5 flex-shrink-0">
+                          {onReanalyzeRepository && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmDialog({ type: "reanalyze-repo", repoName });
+                              }}
+                              disabled={
+                                reanalyzingRepo === repoName ||
+                                isRemoving ||
+                                repo.status === "Cloning"
+                              }
+                              aria-label={`Re-analyze ${repoName}`}
+                              title="Re-analyze repository"
+                            >
+                              {reanalyzingRepo === repoName ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-3 w-3" />
+                              )}
+                            </Button>
                           )}
-                        </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmDialog({ type: "remove-repo", repoName });
+                            }}
+                            disabled={
+                              isRemoving ||
+                              repo.status === "Cloning" ||
+                              repo.status === "Removing"
+                            }
+                            aria-label={`Remove ${repoName}`}
+                          >
+                            {isRemoving ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <X className="h-3 w-3" />
+                            )}
+                          </Button>
+                        </div>
                       )}
                     </div>
 
@@ -230,6 +306,11 @@ export function ContextTab({
                         ))}
                       </div>
                     )}
+
+                    <IntelligenceSection
+                      projectName={projectName}
+                      repoUrl={repo.url}
+                    />
                   </div>
                 );
               })}
@@ -300,7 +381,7 @@ export function ContextTab({
                         variant="ghost"
                         size="sm"
                         className="h-7 w-7 p-0 flex-shrink-0"
-                        onClick={() => handleRemoveFile(file.name)}
+                        onClick={() => setConfirmDialog({ type: "remove-file", fileName: file.name })}
                         disabled={isRemoving}
                         aria-label={`Remove ${file.name}`}
                       >
@@ -318,6 +399,132 @@ export function ContextTab({
           )}
         </div>
       </div>
+
+      {/* ── Confirmation dialogs ─────────────────────────────── */}
+
+      {/* Step 1: Confirm repo removal */}
+      <Dialog
+        open={confirmDialog?.type === "remove-repo"}
+        onOpenChange={(open) => { if (!open) closeDialog(); }}
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Remove repository</DialogTitle>
+            <DialogDescription>
+              Remove <span className="font-medium text-foreground">{confirmDialog?.type === "remove-repo" ? confirmDialog.repoName : ""}</span> from this session?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (confirmDialog?.type === "remove-repo") {
+                  setConfirmDialog({ type: "remove-intelligence", repoName: confirmDialog.repoName });
+                }
+              }}
+            >
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Step 2: Ask about intelligence deletion */}
+      <Dialog
+        open={confirmDialog?.type === "remove-intelligence"}
+        onOpenChange={(open) => { if (!open) closeDialog(); }}
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Delete stored analysis?</DialogTitle>
+            <DialogDescription>
+              Also delete the stored project analysis for <span className="font-medium text-foreground">{confirmDialog?.type === "remove-intelligence" ? confirmDialog.repoName : ""}</span>?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground space-y-1">
+            <p><span className="font-medium text-foreground">Keep</span> — future sessions reuse the analysis instantly.</p>
+            <p><span className="font-medium text-foreground">Delete</span> — future sessions will re-analyze from scratch.</p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (confirmDialog?.type === "remove-intelligence") {
+                  handleConfirmRemoveRepo(confirmDialog.repoName, false);
+                }
+              }}
+            >
+              Keep analysis
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (confirmDialog?.type === "remove-intelligence") {
+                  handleConfirmRemoveRepo(confirmDialog.repoName, true);
+                }
+              }}
+            >
+              Delete analysis
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm file removal */}
+      <Dialog
+        open={confirmDialog?.type === "remove-file"}
+        onOpenChange={(open) => { if (!open) closeDialog(); }}
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Remove file</DialogTitle>
+            <DialogDescription>
+              Remove <span className="font-medium text-foreground">{confirmDialog?.type === "remove-file" ? confirmDialog.fileName : ""}</span> from the workspace?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (confirmDialog?.type === "remove-file") {
+                  handleConfirmRemoveFile(confirmDialog.fileName);
+                }
+              }}
+            >
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm re-analysis */}
+      <Dialog
+        open={confirmDialog?.type === "reanalyze-repo"}
+        onOpenChange={(open) => { if (!open) closeDialog(); }}
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Re-analyze repository</DialogTitle>
+            <DialogDescription>
+              Re-analyze <span className="font-medium text-foreground">{confirmDialog?.type === "reanalyze-repo" ? confirmDialog.repoName : ""}</span>? This will refresh the stored project knowledge.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog}>Cancel</Button>
+            <Button
+              onClick={() => {
+                if (confirmDialog?.type === "reanalyze-repo") {
+                  handleConfirmReanalyze(confirmDialog.repoName);
+                }
+              }}
+            >
+              Re-analyze
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

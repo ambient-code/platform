@@ -59,6 +59,7 @@ def build_mcp_servers(
     )
     from ambient_runner.bridges.claude.corrections import create_correction_mcp_tool
     from ambient_runner.bridges.claude.backend_tools import create_backend_mcp_tools
+    from ambient_runner.bridges.claude.memory_tools import create_memory_mcp_tools
 
     mcp_servers = load_mcp_config(context, cwd_path) or {}
 
@@ -117,6 +118,18 @@ def build_mcp_servers(
             "acp_list_sessions, acp_get_session, acp_create_session, "
             "acp_stop_session, acp_send_message, acp_get_session_status, "
             "acp_restart_session, acp_list_workflows, acp_get_api_reference"
+        )
+
+    # Memory tools (project intelligence)
+    memory_tools = create_memory_mcp_tools(sdk_tool_decorator=sdk_tool)
+    if memory_tools:
+        memory_server = create_sdk_mcp_server(
+            name="memory", version="1.0.0", tools=memory_tools
+        )
+        mcp_servers["memory"] = memory_server
+        logger.info(
+            f"Added memory MCP tools ({len(memory_tools)}): "
+            "memory_query, memory_store, memory_warn"
         )
 
     return mcp_servers

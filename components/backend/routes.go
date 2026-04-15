@@ -62,6 +62,7 @@ func registerRoutes(r *gin.Engine) {
 			// NOTE: /repos/status must come BEFORE /repos/:repoName to avoid wildcard matching
 			projectGroup.GET("/agentic-sessions/:sessionName/repos/status", handlers.GetReposStatus)
 			projectGroup.DELETE("/agentic-sessions/:sessionName/repos/:repoName", handlers.RemoveRepo)
+			projectGroup.POST("/agentic-sessions/:sessionName/repos/reanalyze", handlers.ReanalyzeRepo)
 			projectGroup.PUT("/agentic-sessions/:sessionName/displayname", handlers.UpdateSessionDisplayName)
 			projectGroup.POST("/agentic-sessions/:sessionName/model", handlers.SwitchModel)
 

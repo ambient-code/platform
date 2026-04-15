@@ -159,6 +159,16 @@ def create_ambient_app(
             if has_workflow or has_user_prompt:
                 logger.info("Prompts detected but not auto-executing (resumed session)")
 
+        # Trigger auto-analysis for pre-configured repos that have no intelligence.
+        # Repos added at runtime go through /repos/add which triggers analysis
+        # there, but repos cloned by the init container (from REPOS_JSON) skip
+        # that path entirely.
+        if not is_resume:
+            task = asyncio.create_task(
+                _analyze_preconfigured_repos(bridge)
+            )
+            task.add_done_callback(_log_auto_exec_failure)
+
         logger.info(f"AG-UI server ready for session {session_id}")
 
         yield
@@ -315,6 +325,38 @@ def _get_workflow_startup_prompt() -> str:
     if startup:
         logger.info(f"Found startupPrompt in {derived_name}/ambient.json")
     return startup
+
+
+# ------------------------------------------------------------------
+# Platform: auto-analyze pre-configured repos
+# ------------------------------------------------------------------
+
+
+async def _analyze_preconfigured_repos(bridge) -> None:
+    """Check pre-configured repos for missing intelligence and trigger analysis.
+
+    Repos cloned by the init container (from REPOS_JSON) bypass the
+    /repos/add endpoint, so run_auto_analysis is never called for them.
+    This fills that gap at startup.
+    """
+    # Wait for the bridge to settle (credentials, adapter setup)
+    await asyncio.sleep(8)
+
+    try:
+        from ambient_runner.platform.config import get_repos_config
+        from ambient_runner.endpoints.auto_analysis import run_auto_analysis
+
+        repos = get_repos_config()
+        if not repos:
+            return
+
+        for repo in repos:
+            name = repo.get("name", "")
+            url = repo.get("url", "")
+            if name and url:
+                await run_auto_analysis(name, url, bridge)
+    except Exception as e:
+        logger.debug(f"Startup repo analysis check failed (non-critical): {e}")
 
 
 # ------------------------------------------------------------------

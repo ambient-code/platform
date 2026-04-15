@@ -27,6 +27,7 @@ type AgenticSessionSpec struct {
 	Timeout              int                `json:"timeout"`
 	InactivityTimeout    *int               `json:"inactivityTimeout,omitempty"`
 	StopOnRunFinished    bool               `json:"stopOnRunFinished,omitempty"`
+	DisableIntelligence  bool               `json:"disableIntelligence,omitempty"`
 	UserContext          *UserContext       `json:"userContext,omitempty"`
 	BotAccount           *BotAccountRef     `json:"botAccount,omitempty"`
 	ResourceOverrides    *ResourceOverrides `json:"resourceOverrides,omitempty"`
@@ -70,6 +71,7 @@ type CreateAgenticSessionRequest struct {
 	Timeout              *int                   `json:"timeout,omitempty"`
 	InactivityTimeout    *int                   `json:"inactivityTimeout,omitempty"`
 	StopOnRunFinished    *bool                  `json:"stopOnRunFinished,omitempty"`
+	DisableIntelligence  *bool                  `json:"disableIntelligence,omitempty"`
 	ParentSessionID      string                 `json:"parent_session_id,omitempty"`
 	Repos                []SimpleRepo           `json:"repos,omitempty"`
 	ActiveWorkflow       *WorkflowSelection     `json:"activeWorkflow,omitempty"`
