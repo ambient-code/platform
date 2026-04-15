@@ -1296,8 +1296,9 @@ objects:
             value: http://minio.ambient-code.svc:9000
           - name: S3_BUCKET
             value: ambient-sessions
-          - name: OTEL_EXPORTER_OTLP_ENDPOINT
-            value: otel-collector.ambient-code.svc:4317
+          # Disabled: OTel collector not deployed. Uncomment when collector is available.
+          # - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          #   value: otel-collector.ambient-code.svc:4317
           - name: DEPLOYMENT_ENV
             value: production
           - name: VERSION

@@ -136,8 +136,9 @@ spec:
         # - name: DEFAULT_INACTIVITY_TIMEOUT
         #   value: "86400"  # Default inactivity timeout in seconds (24h). Set to 0 to disable.
         # OpenTelemetry configuration
-        - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          value: "otel-collector.ambient-code.svc:4317"  # Deploy OTel collector separately
+        # Disabled: OTel collector not deployed. Uncomment when collector is available.
+        # - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        #   value: "otel-collector.ambient-code.svc:4317"  # Deploy OTel collector separately
         - name: DEPLOYMENT_ENV
           value: "production"
         - name: VERSION
