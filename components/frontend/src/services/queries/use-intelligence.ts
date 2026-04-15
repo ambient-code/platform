@@ -3,14 +3,12 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { getRepoIntelligence, getRepoFindings } from '../api/intelligence';
+import { getRepoIntelligence } from '../api/intelligence';
 
 export const intelligenceKeys = {
   all: ['intelligence'] as const,
   repo: (projectName: string, repoUrl: string) =>
     [...intelligenceKeys.all, 'repo', projectName, repoUrl] as const,
-  findings: (projectName: string, intelligenceId: string) =>
-    [...intelligenceKeys.all, 'findings', projectName, intelligenceId] as const,
 };
 
 /**
@@ -26,23 +24,6 @@ export function useRepoIntelligence(
     queryKey: intelligenceKeys.repo(projectName, repoUrl),
     queryFn: () => getRepoIntelligence(projectName, repoUrl),
     enabled: enabled && !!projectName && !!repoUrl,
-    staleTime: 60_000,
-    retry: false,
-  });
-}
-
-/**
- * Fetch active findings for an intelligence record.
- */
-export function useRepoFindings(
-  projectName: string,
-  intelligenceId: string | undefined,
-  enabled = true
-) {
-  return useQuery({
-    queryKey: intelligenceKeys.findings(projectName, intelligenceId ?? ''),
-    queryFn: () => getRepoFindings(projectName, intelligenceId!),
-    enabled: enabled && !!projectName && !!intelligenceId,
     staleTime: 60_000,
     retry: false,
   });

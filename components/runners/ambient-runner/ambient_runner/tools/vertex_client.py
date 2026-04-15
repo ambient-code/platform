@@ -9,7 +9,7 @@ import json
 import logging
 import os
 import urllib.request
-from typing import Any, Iterator
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -87,42 +87,3 @@ class VertexAnthropicClient:
         with urllib.request.urlopen(req, timeout=120) as resp:
             return json.loads(resp.read())
 
-    def stream_message(
-        self,
-        messages: list[dict[str, Any]],
-        system: str = "",
-        tools: list[dict[str, Any]] | None = None,
-        max_tokens: int = 4096,
-    ) -> Iterator[dict[str, Any]]:
-        """Streaming Messages API call.  Yields SSE event dicts."""
-        token = self._refresh_token()
-        url = f"{self._base_url()}:streamRawPredict"
-
-        payload: dict[str, Any] = {
-            "anthropic_version": "vertex-2023-10-16",
-            "max_tokens": max_tokens,
-            "stream": True,
-            "messages": messages,
-        }
-        if system:
-            payload["system"] = system
-        if tools:
-            payload["tools"] = tools
-
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode(),
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {token}",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            for raw_line in resp:
-                line = raw_line.decode().strip()
-                if line.startswith("data: "):
-                    try:
-                        yield json.loads(line[6:])
-                    except json.JSONDecodeError:
-                        continue

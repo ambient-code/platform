@@ -27,7 +27,6 @@ type RepoIntelligenceAPI struct {
 	TestStrategy *string `json:"test_strategy,omitempty"`
 	Architecture *string `json:"architecture,omitempty"`
 	Conventions  *string `json:"conventions,omitempty"`
-	Dependencies *string `json:"dependencies,omitempty"`
 	Caveats      *string `json:"caveats,omitempty"`
 
 	AnalyzedBySessionID *string    `json:"analyzed_by_session_id,omitempty"`
@@ -45,7 +44,6 @@ type RepoIntelligenceListAPI struct {
 	Items []RepoIntelligenceAPI `json:"items"`
 }
 
-func ptrString(v string) *string   { return &v }
 func ptrTime(v time.Time) *time.Time { return &v }
 
 func ConvertRepoIntelligence(a RepoIntelligenceAPI) *RepoIntelligence {
@@ -63,7 +61,6 @@ func ConvertRepoIntelligence(a RepoIntelligenceAPI) *RepoIntelligence {
 	ri.TestStrategy = a.TestStrategy
 	ri.Architecture = a.Architecture
 	ri.Conventions = a.Conventions
-	ri.Dependencies = a.Dependencies
 	ri.Caveats = a.Caveats
 	ri.AnalyzedBySessionID = a.AnalyzedBySessionID
 	ri.AnalyzedByAgentID = a.AnalyzedByAgentID
@@ -101,7 +98,6 @@ func PresentRepoIntelligence(ri *RepoIntelligence) RepoIntelligenceAPI {
 		TestStrategy: ri.TestStrategy,
 		Architecture: ri.Architecture,
 		Conventions:  ri.Conventions,
-		Dependencies: ri.Dependencies,
 		Caveats:      ri.Caveats,
 
 		AnalyzedBySessionID: ri.AnalyzedBySessionID,

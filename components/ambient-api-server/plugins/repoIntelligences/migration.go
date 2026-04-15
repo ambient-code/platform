@@ -22,7 +22,6 @@ func migration() *gormigrate.Migration {
 		TestStrategy        *string  `gorm:"type:text"`
 		Architecture        *string  `gorm:"type:text"`
 		Conventions         *string  `gorm:"type:text"`
-		Dependencies        *string  `gorm:"type:text"`
 		Caveats             *string  `gorm:"type:text"`
 		AnalyzedBySessionID *string
 		AnalyzedByAgentID   *string

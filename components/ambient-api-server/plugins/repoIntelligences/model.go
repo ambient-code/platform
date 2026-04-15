@@ -23,7 +23,6 @@ type RepoIntelligence struct {
 	TestStrategy *string `json:"test_strategy,omitempty" gorm:"type:text"`
 	Architecture *string `json:"architecture,omitempty"  gorm:"type:text"`
 	Conventions  *string `json:"conventions,omitempty"   gorm:"type:text"`
-	Dependencies *string `json:"dependencies,omitempty"  gorm:"type:text"`
 	Caveats      *string `json:"caveats,omitempty"       gorm:"type:text"`
 
 	// Metadata
@@ -61,7 +60,6 @@ type RepoIntelligencePatchRequest struct {
 	TestStrategy *string  `json:"test_strategy,omitempty"`
 	Architecture *string  `json:"architecture,omitempty"`
 	Conventions  *string  `json:"conventions,omitempty"`
-	Dependencies *string  `json:"dependencies,omitempty"`
 	Caveats      *string  `json:"caveats,omitempty"`
 	Confidence   *float64 `json:"confidence,omitempty"`
 	RepoBranch   *string  `json:"repo_branch,omitempty"`

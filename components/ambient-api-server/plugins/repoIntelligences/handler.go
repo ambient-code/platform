@@ -85,9 +85,6 @@ func (h repoIntelligenceHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			if patch.Conventions != nil {
 				found.Conventions = patch.Conventions
 			}
-			if patch.Dependencies != nil {
-				found.Dependencies = patch.Dependencies
-			}
 			if patch.Caveats != nil {
 				found.Caveats = patch.Caveats
 			}

@@ -292,45 +292,42 @@ def _build_intelligence_context_section(repos_cfg: list) -> str:
         return ""
 
     try:
+        from urllib.parse import urlencode
+
         from ambient_runner.tools.intelligence_api import IntelligenceAPIClient
 
         client = IntelligenceAPIClient()
 
-        # Check which repos have intelligence and which don't
-        analyzed_urls = []
-        unanalyzed_names = []
-        for r in repos_cfg:
-            url = r.get("url", "")
-            if not url:
-                continue
-            if client.intelligence_exists(url):
-                analyzed_urls.append(url)
-            else:
-                unanalyzed_names.append(r.get("name", url.split("/")[-1]))
+        # Single call: the server skips repos without intelligence
+        urls_param = ",".join(repo_urls)
+        params = urlencode(
+            {"project_id": client.project_id, "repo_urls": urls_param, "max_entries": 20}
+        )
+        path = f"/api/ambient/v1/repo_intelligences/context?{params}"
+        data = client._make_request("GET", path)
 
         result = ""
 
-        # Fetch context for repos that have intelligence
-        if analyzed_urls:
-            from urllib.parse import urlencode
+        injected = data.get("injected_context", "")
+        if injected:
+            result += injected
 
-            urls_param = ",".join(analyzed_urls)
-            params = urlencode(
-                {"project_id": client.project_id, "repo_urls": urls_param, "max_entries": 20}
-            )
-            path = f"/api/ambient/v1/repo_intelligences/context?{params}"
-            data = client._make_request("GET", path)
-
-            injected = data.get("injected_context", "")
-            if injected:
-                result += injected
-                logger.info(
-                    "Injected intelligence context for %d repo(s) (%d chars)",
-                    len(analyzed_urls),
-                    len(injected),
-                )
+        # Determine which repos the server returned intelligence for
+        analyzed_repo_urls = {
+            intel.get("repo_url", "") for intel in data.get("intelligences", [])
+        }
+        logger.info(
+            "Injected intelligence context for %d repo(s) (%d chars)",
+            len(analyzed_repo_urls),
+            len(injected),
+        )
 
         # Add hint for unanalyzed repos
+        unanalyzed_names = [
+            r.get("name", r.get("url", "").split("/")[-1])
+            for r in repos_cfg
+            if r.get("url") and r["url"] not in analyzed_repo_urls
+        ]
         if unanalyzed_names:
             names = ", ".join(unanalyzed_names)
             result += (
