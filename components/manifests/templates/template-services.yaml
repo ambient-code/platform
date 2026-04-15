@@ -232,7 +232,8 @@ objects:
           - --api-server-bindaddress=:8000
           - --metrics-server-bindaddress=:4433
           - --health-check-server-bindaddress=:4434
-          - --db-sslmode=disable
+          # SSL required: Using external AWS RDS database
+          - --db-sslmode=require
           - --db-max-open-connections=50
           - --enable-db-debug=false
           - --enable-metrics-https=false
@@ -309,6 +310,7 @@ objects:
           - --db-user-file=/secrets/db/db.user
           - --db-password-file=/secrets/db/db.password
           - --db-name-file=/secrets/db/db.name
+          - --db-sslmode=require
           - --alsologtostderr
           - -v=4
           image: ${IMAGE_AMBIENT_API_SERVER}:${IMAGE_TAG}
