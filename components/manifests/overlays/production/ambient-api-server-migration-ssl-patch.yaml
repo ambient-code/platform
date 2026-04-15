@@ -1,0 +1,21 @@
+# Production: enable SSL for migration init container when using external RDS
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-api-server
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: migration
+          command:
+            - /usr/local/bin/ambient-api-server
+            - migrate
+            - --db-host-file=/secrets/db/db.host
+            - --db-port-file=/secrets/db/db.port
+            - --db-user-file=/secrets/db/db.user
+            - --db-password-file=/secrets/db/db.password
+            - --db-name-file=/secrets/db/db.name
+            - --db-sslmode=require
+            - --alsologtostderr
+            - -v=4
