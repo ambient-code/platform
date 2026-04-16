@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
 
@@ -54,19 +53,6 @@ func runSend(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(cmd.Context(), cfg.GetRequestTimeout())
 	defer cancel()
 
-	streamCtx, streamCancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
-	defer streamCancel()
-
-	var stream io.ReadCloser
-	if sendFollow {
-		s, err := client.Sessions().StreamEvents(streamCtx, sessionID)
-		if err != nil {
-			return fmt.Errorf("stream events: %w", err)
-		}
-		stream = s
-		defer stream.Close()
-	}
-
 	msg, err := client.Sessions().PushMessage(ctx, sessionID, payload)
 	if err != nil {
 		return fmt.Errorf("send message: %w", err)
@@ -77,6 +63,15 @@ func runSend(cmd *cobra.Command, args []string) error {
 	if !sendFollow {
 		return nil
 	}
+
+	streamCtx, streamCancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
+	defer streamCancel()
+
+	stream, err := client.Sessions().StreamEvents(streamCtx, sessionID)
+	if err != nil {
+		return fmt.Errorf("stream events: %w", err)
+	}
+	defer stream.Close()
 
 	return renderSSEStream(stream, cmd.OutOrStdout(), sendFollowJSON, true)
 }
