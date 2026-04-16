@@ -378,6 +378,7 @@ jobs:
           oc apply -f components/manifests/components/image-puller/rbac.yaml
           oc apply -f components/manifests/components/image-puller/configmap.yaml
           oc apply -f components/manifests/components/image-puller/deployment.yaml
+          oc apply -f components/manifests/components/image-puller/prometheusrule.yaml
 
       - name: Ensure registry pull secrets exist
         run: |
