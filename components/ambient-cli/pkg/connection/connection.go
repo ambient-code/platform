@@ -62,7 +62,10 @@ func NewClientFactory() (*ClientFactory, error) {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
 
-	token := cfg.GetToken()
+	token, err := cfg.GetTokenWithRefresh()
+	if err != nil {
+		return nil, fmt.Errorf("token refresh: %w", err)
+	}
 	if token == "" {
 		return nil, fmt.Errorf("not logged in; run 'acpctl login' first")
 	}

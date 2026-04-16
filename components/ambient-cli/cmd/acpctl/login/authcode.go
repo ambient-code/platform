@@ -40,14 +40,19 @@ type authCodeResult struct {
 	err   error
 }
 
-func runAuthCodeFlow(issuerURL, clientID, clientSecret string) (string, error) {
+type tokenResult struct {
+	AccessToken  string
+	RefreshToken string
+}
+
+func runAuthCodeFlow(issuerURL, clientID, clientSecret string) (*tokenResult, error) {
 	issuerURL = strings.TrimRight(issuerURL, "/")
 	authorizeURL := issuerURL + "/protocol/openid-connect/auth"
 	tokenURL := issuerURL + "/protocol/openid-connect/token"
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return "", fmt.Errorf("start local callback listener: %w", err)
+		return nil, fmt.Errorf("start local callback listener: %w", err)
 	}
 	defer listener.Close()
 
@@ -56,12 +61,12 @@ func runAuthCodeFlow(issuerURL, clientID, clientSecret string) (string, error) {
 
 	state, err := generateRandomState()
 	if err != nil {
-		return "", fmt.Errorf("generate state: %w", err)
+		return nil, fmt.Errorf("generate state: %w", err)
 	}
 
 	codeVerifier, codeChallenge, err := generatePKCE()
 	if err != nil {
-		return "", fmt.Errorf("generate PKCE: %w", err)
+		return nil, fmt.Errorf("generate PKCE: %w", err)
 	}
 
 	authURL := buildAuthURL(authorizeURL, clientID, redirectURI, state, codeChallenge)
@@ -91,19 +96,19 @@ func runAuthCodeFlow(issuerURL, clientID, clientSecret string) (string, error) {
 	select {
 	case result = <-resultCh:
 	case <-ctx.Done():
-		return "", fmt.Errorf("timed out waiting for authorization callback (%.0fs)", callbackTimeout.Seconds())
+		return nil, fmt.Errorf("timed out waiting for authorization callback (%.0fs)", callbackTimeout.Seconds())
 	}
 
 	if result.err != nil {
-		return "", fmt.Errorf("authorization failed: %w", result.err)
+		return nil, fmt.Errorf("authorization failed: %w", result.err)
 	}
 
-	token, err := exchangeCodeForToken(tokenURL, clientID, clientSecret, result.code, redirectURI, codeVerifier)
+	tokens, err := exchangeCodeForTokens(tokenURL, clientID, clientSecret, result.code, redirectURI, codeVerifier)
 	if err != nil {
-		return "", fmt.Errorf("exchange authorization code: %w", err)
+		return nil, fmt.Errorf("exchange authorization code: %w", err)
 	}
 
-	return token, nil
+	return tokens, nil
 }
 
 func generateRandomState() (string, error) {
@@ -182,6 +187,14 @@ func callbackHandler(expectedState string, resultCh chan<- authCodeResult) http.
 }
 
 func exchangeCodeForToken(tokenURL, clientID, clientSecret, code, redirectURI, codeVerifier string) (string, error) {
+	tokens, err := exchangeCodeForTokens(tokenURL, clientID, clientSecret, code, redirectURI, codeVerifier)
+	if err != nil {
+		return "", err
+	}
+	return tokens.AccessToken, nil
+}
+
+func exchangeCodeForTokens(tokenURL, clientID, clientSecret, code, redirectURI, codeVerifier string) (*tokenResult, error) {
 	params := url.Values{
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
@@ -193,25 +206,23 @@ func exchangeCodeForToken(tokenURL, clientID, clientSecret, code, redirectURI, c
 		params.Set("client_secret", clientSecret)
 	}
 
-	// Raw net/http is intentional here: this call goes to an external OIDC provider
-	// (RH SSO), not the Ambient API server. The SDK client is for Ambient API calls only.
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 	resp, err := httpClient.PostForm(tokenURL, params)
 	if err != nil {
-		return "", fmt.Errorf("POST to token endpoint: %w", err)
+		return nil, fmt.Errorf("POST to token endpoint: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("read token response: %w", err)
+		return nil, fmt.Errorf("read token response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", tokenEndpointError(resp.StatusCode, body)
+		return nil, tokenEndpointError(resp.StatusCode, body)
 	}
 
-	return parseTokenResponse(body)
+	return parseTokensResponse(body)
 }
 
 func tokenEndpointError(statusCode int, body []byte) error {
@@ -231,16 +242,28 @@ func tokenEndpointError(statusCode int, body []byte) error {
 }
 
 func parseTokenResponse(body []byte) (string, error) {
+	tokens, err := parseTokensResponse(body)
+	if err != nil {
+		return "", err
+	}
+	return tokens.AccessToken, nil
+}
+
+func parseTokensResponse(body []byte) (*tokenResult, error) {
 	var resp struct {
-		AccessToken string `json:"access_token"`
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return "", fmt.Errorf("parse token response: %w", err)
+		return nil, fmt.Errorf("parse token response: %w", err)
 	}
 	if resp.AccessToken == "" {
-		return "", errors.New("no access_token in token response")
+		return nil, errors.New("no access_token in token response")
 	}
-	return resp.AccessToken, nil
+	return &tokenResult{
+		AccessToken:  resp.AccessToken,
+		RefreshToken: resp.RefreshToken,
+	}, nil
 }
 
 func openBrowser(target string) error {
