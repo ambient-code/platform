@@ -253,16 +253,15 @@ class ClaudeBridge(PlatformBridge):
             self._context.session_id if self._context else ""
         )
 
-        await self._initialize_run(
-            thread_id, current_user_id, current_user_name, caller_token
-        )
-
-        from ag_ui_claude_sdk.utils import process_messages
-
-        user_msg, _ = process_messages(input_data)
-
         self._active_run_count += 1
         try:
+            await self._initialize_run(
+                thread_id, current_user_id, current_user_name, caller_token
+            )
+
+            from ag_ui_claude_sdk.utils import process_messages
+
+            user_msg, _ = process_messages(input_data)
             api_key = os.getenv("ANTHROPIC_API_KEY", "")
             if self._skip_resume:
                 saved_session_id = None

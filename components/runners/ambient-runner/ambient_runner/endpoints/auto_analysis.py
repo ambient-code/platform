@@ -293,7 +293,8 @@ def _read_repo_context(repo_name: str) -> str:
             if len(content) > 3000:
                 content = content[:3000] + "\n... (truncated)"
             parts.append(f"## {filename}\n```\n{content}\n```\n")
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to read %s: %s", filename, e)
             continue
 
     return "\n".join(parts)

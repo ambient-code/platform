@@ -2312,12 +2312,6 @@ func RemoveRepo(c *gin.Context) {
 		}
 	}
 
-	// Fallback: delete intelligence directly from API server when the runner
-	// didn't handle it — either unreachable or reported intelligence_deleted=false.
-	if deleteIntelligence && removedRepoURL != "" && !runnerDeletedIntelligence {
-		deleteIntelligenceFromAPIServer(project, removedRepoURL)
-	}
-
 	// Allow delete if repo is in CR OR was successfully removed from runner
 	if !foundInSpec && !foundInReconciled && !runnerRemoved {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Repository not found in session or runner"})
@@ -2332,6 +2326,11 @@ func RemoveRepo(c *gin.Context) {
 		log.Printf("Failed to update session %s in project %s: %v", sessionName, project, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update session"})
 		return
+	}
+
+	// Delete intelligence after successful CR update to avoid partial state
+	if deleteIntelligence && removedRepoURL != "" && !runnerDeletedIntelligence {
+		deleteIntelligenceFromAPIServer(project, removedRepoURL)
 	}
 
 	session := types.AgenticSession{

@@ -537,7 +537,7 @@ async def clone_repo_at_runtime(
         )
         await p.communicate()
         if p.returncode != 0:
-            await asyncio.create_subprocess_exec(
+            fallback = await asyncio.create_subprocess_exec(
                 "git",
                 "-C",
                 str(temp_dir),
@@ -547,6 +547,10 @@ async def clone_repo_at_runtime(
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
+            await fallback.communicate()
+            if fallback.returncode != 0:
+                logger.error(f"Failed to create branch '{branch}' in repo '{name}'")
+                return False, "", False
 
         repo_final.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(temp_dir), str(repo_final))

@@ -27,7 +27,12 @@ class TestBuildIntelligenceContextSection:
         from ambient_runner.platform.prompts import _build_intelligence_context_section
 
         mock_client = MagicMock()
-        mock_client.intelligence_exists.return_value = False
+        mock_client.project_id = "test-project"
+        mock_client._make_request.return_value = {
+            "intelligences": [],
+            "findings": [],
+            "injected_context": "",
+        }
 
         with patch(INTEL_CLIENT_PATH, return_value=mock_client):
             result = _build_intelligence_context_section(
@@ -42,9 +47,8 @@ class TestBuildIntelligenceContextSection:
 
         mock_client = MagicMock()
         mock_client.project_id = "test-project"
-        mock_client.intelligence_exists.return_value = True
         mock_client._make_request.return_value = {
-            "intelligences": [{"id": "intel-1"}],
+            "intelligences": [{"id": "intel-1", "repo_url": "https://github.com/org/repo"}],
             "findings": [],
             "injected_context": "<!-- BEGIN -->\n## Project Intelligence\nSome context\n<!-- END -->\n",
         }
@@ -58,12 +62,11 @@ class TestBuildIntelligenceContextSection:
         assert "Some context" in result
         assert "<!-- BEGIN -->" in result
 
-    def test_empty_injected_context_shows_unanalyzed_hint(self):
+    def test_empty_injected_context_no_intelligences_shows_unanalyzed(self):
         from ambient_runner.platform.prompts import _build_intelligence_context_section
 
         mock_client = MagicMock()
         mock_client.project_id = "test-project"
-        mock_client.intelligence_exists.return_value = True
         mock_client._make_request.return_value = {
             "intelligences": [],
             "findings": [],
@@ -74,8 +77,7 @@ class TestBuildIntelligenceContextSection:
             result = _build_intelligence_context_section(
                 [{"url": "https://github.com/org/repo", "name": "repo"}]
             )
-        # No injected context but no unanalyzed hint either (intelligence_exists=True)
-        assert result == ""
+        assert "Unanalyzed" in result
 
     def test_api_error_returns_empty(self):
         from ambient_runner.platform.prompts import _build_intelligence_context_section
@@ -90,7 +92,8 @@ class TestBuildIntelligenceContextSection:
         from ambient_runner.platform.prompts import _build_intelligence_context_section
 
         mock_client = MagicMock()
-        mock_client.intelligence_exists.side_effect = Exception("connection refused")
+        mock_client.project_id = "test-project"
+        mock_client._make_request.side_effect = Exception("connection refused")
 
         with patch(INTEL_CLIENT_PATH, return_value=mock_client):
             result = _build_intelligence_context_section(
@@ -103,7 +106,6 @@ class TestBuildIntelligenceContextSection:
 
         mock_client = MagicMock()
         mock_client.project_id = "proj"
-        mock_client.intelligence_exists.return_value = True
         mock_client._make_request.return_value = {
             "intelligences": [],
             "findings": [],
@@ -127,10 +129,8 @@ class TestBuildIntelligenceContextSection:
 
         mock_client = MagicMock()
         mock_client.project_id = "proj"
-        # repo1 has intelligence, repo2 does not
-        mock_client.intelligence_exists.side_effect = [True, False]
         mock_client._make_request.return_value = {
-            "intelligences": [{"id": "intel-1"}],
+            "intelligences": [{"id": "intel-1", "repo_url": "https://github.com/org/repo1"}],
             "findings": [],
             "injected_context": "## Intelligence\nrepo1 data\n",
         }
@@ -155,9 +155,8 @@ class TestBuildWorkspaceContextPromptIntegration:
 
         mock_client = MagicMock()
         mock_client.project_id = "proj"
-        mock_client.intelligence_exists.return_value = True
         mock_client._make_request.return_value = {
-            "intelligences": [{"id": "intel-1"}],
+            "intelligences": [{"id": "intel-1", "repo_url": "https://github.com/org/repo"}],
             "findings": [],
             "injected_context": "<!-- BEGIN PROJECT MEMORY -->\n## Known caveats\n- Don't touch main\n<!-- END -->\n",
         }

@@ -342,21 +342,21 @@ async def _analyze_preconfigured_repos(bridge) -> None:
     # Wait for the bridge to settle (credentials, adapter setup)
     await asyncio.sleep(8)
 
-    try:
-        from ambient_runner.platform.config import get_repos_config
-        from ambient_runner.endpoints.auto_analysis import run_auto_analysis
+    from ambient_runner.platform.config import get_repos_config
+    from ambient_runner.endpoints.auto_analysis import run_auto_analysis
 
-        repos = get_repos_config()
-        if not repos:
-            return
+    repos = get_repos_config()
+    if not repos:
+        return
 
-        for repo in repos:
-            name = repo.get("name", "")
-            url = repo.get("url", "")
-            if name and url:
+    for repo in repos:
+        name = repo.get("name", "")
+        url = repo.get("url", "")
+        if name and url:
+            try:
                 await run_auto_analysis(name, url, bridge)
-    except Exception as e:
-        logger.debug(f"Startup repo analysis check failed (non-critical): {e}")
+            except Exception as e:
+                logger.debug(f"Startup repo analysis failed for '{name}' (non-critical): {e}")
 
 
 # ------------------------------------------------------------------
