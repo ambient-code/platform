@@ -355,6 +355,8 @@ jobs:
   pre-pull-images:
     runs-on: ubuntu-latest
     needs: [release, merge-manifests]
+    permissions:
+      contents: read
     steps:
       - name: Checkout code from release tag
         uses: actions/checkout@v6
