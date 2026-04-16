@@ -28,9 +28,9 @@
     },
     {
       "id": "api-keys",
-      "page": "/projects/{workspace}/settings",
-      "waitFor": "Settings",
-      "setupSteps": ["navigateToApiKeys"]
+      "page": "/projects/{workspace}/keys",
+      "waitFor": "Access Keys",
+      "setupSteps": []
     },
     {
       "id": "new-session-dialog",
