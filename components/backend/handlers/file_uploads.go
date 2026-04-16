@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -13,8 +14,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	authzv1 "k8s.io/api/authorization/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// maxPreUploadSize is the maximum file size for pre-uploads (10MB).
+const maxPreUploadSize = 10 * 1024 * 1024
 
 // S3Storage is the shared S3 client used for pre-upload file operations.
 // Initialized at startup in main.go. If nil, pre-upload endpoints return 503.
@@ -55,7 +60,7 @@ func PreUploadFile(c *gin.Context) {
 
 	// Get user-scoped K8s clients for auth
 	reqK8s, reqDyn := GetK8sClientsForRequest(c)
-	if reqK8s == nil {
+	if reqK8s == nil || reqDyn == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing authentication token"})
 		c.Abort()
 		return
@@ -102,7 +107,7 @@ func PreUploadFile(c *gin.Context) {
 	gvr := GetAgenticSessionV1Alpha1Resource()
 	_, err = reqDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{})
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
 			return
 		}
@@ -110,8 +115,9 @@ func PreUploadFile(c *gin.Context) {
 		return
 	}
 
-	// Read request body
-	payload, err := io.ReadAll(c.Request.Body)
+	// Read request body with size limit
+	limitedReader := io.LimitReader(c.Request.Body, maxPreUploadSize+1)
+	payload, err := io.ReadAll(limitedReader)
 	if err != nil {
 		log.Printf("PreUploadFile: failed to read request body: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read file data"})
@@ -119,6 +125,10 @@ func PreUploadFile(c *gin.Context) {
 	}
 	if len(payload) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Empty file"})
+		return
+	}
+	if len(payload) > maxPreUploadSize {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "File exceeds 10MB limit"})
 		return
 	}
 
@@ -129,8 +139,7 @@ func PreUploadFile(c *gin.Context) {
 
 	// Upload to S3
 	key := fileUploadS3Key(project, session, filePath)
-	reader := strings.NewReader(string(payload))
-	if err := S3Storage.PutObject(c.Request.Context(), key, reader, int64(len(payload)), contentType); err != nil {
+	if err := S3Storage.PutObject(c.Request.Context(), key, bytes.NewReader(payload), int64(len(payload)), contentType); err != nil {
 		log.Printf("PreUploadFile: S3 upload failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload file to storage"})
 		return
@@ -164,7 +173,7 @@ func ListPreUploadedFiles(c *gin.Context) {
 
 	// Get user-scoped K8s clients for auth
 	reqK8s, reqDyn := GetK8sClientsForRequest(c)
-	if reqK8s == nil {
+	if reqK8s == nil || reqDyn == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing authentication token"})
 		c.Abort()
 		return
@@ -196,7 +205,7 @@ func ListPreUploadedFiles(c *gin.Context) {
 	gvr := GetAgenticSessionV1Alpha1Resource()
 	_, err = reqDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{})
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
 			return
 		}
@@ -239,7 +248,7 @@ func DeletePreUploadedFile(c *gin.Context) {
 
 	// Get user-scoped K8s clients for auth
 	reqK8s, reqDyn := GetK8sClientsForRequest(c)
-	if reqK8s == nil {
+	if reqK8s == nil || reqDyn == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing authentication token"})
 		c.Abort()
 		return
@@ -286,7 +295,7 @@ func DeletePreUploadedFile(c *gin.Context) {
 	gvr := GetAgenticSessionV1Alpha1Resource()
 	_, err = reqDyn.Resource(gvr).Namespace(project).Get(c.Request.Context(), session, v1.GetOptions{})
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
 			return
 		}
