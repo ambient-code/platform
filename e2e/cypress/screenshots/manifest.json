@@ -47,7 +47,7 @@
     {
       "id": "session-page",
       "page": "/projects/{workspace}/sessions/{session}",
-      "waitFor": "",
+      "waitFor": "Chat",
       "setupSteps": []
     },
     {

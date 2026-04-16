@@ -6,7 +6,7 @@ const isNetlify = !!process.env.NETLIFY;
 
 export default defineConfig({
   site: isNetlify
-    ? (process.env.URL || 'https://cheerful-kitten-f556a0.netlify.app')
+    ? process.env.URL
     : 'https://ambient-code.github.io',
   base: isNetlify ? '/' : '/platform/',
   integrations: [

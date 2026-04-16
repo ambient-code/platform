@@ -111,13 +111,11 @@ describe('Documentation Screenshots', () => {
       }
 
       setTheme('light')
-      cy.document().then((doc) => (doc as any).fonts?.ready)
-      cy.wait(300)
+      waitForFonts()
       cy.screenshot(`${entry.id}-light`, { overwrite: true, capture: 'viewport' })
 
       setTheme('dark')
-      cy.document().then((doc) => (doc as any).fonts?.ready)
-      cy.wait(300)
+      waitForFonts()
       cy.screenshot(`${entry.id}-dark`, { overwrite: true, capture: 'viewport' })
     })
   }
@@ -126,9 +124,17 @@ describe('Documentation Screenshots', () => {
 function setTheme(theme: 'light' | 'dark'): void {
   const label = theme === 'dark' ? 'Switch to dark theme' : 'Switch to light theme'
   cy.get('button[aria-label="Toggle theme"]').first().click({ force: true })
-  cy.wait(500)
-  cy.get(`[aria-label="${label}"]`).first().click({ force: true })
-  cy.wait(300)
+  cy.get(`[aria-label="${label}"]`, { timeout: 5000 }).first().click({ force: true })
+  if (theme === 'dark') {
+    cy.get('html').should('have.class', 'dark')
+  } else {
+    cy.get('html').should('not.have.class', 'dark')
+  }
+}
+
+function waitForFonts(): void {
+  cy.document().then((doc) => cy.wrap((doc as any).fonts?.ready))
+  cy.wait(200)
 }
 
 function runSetupStep(step: string): void {
@@ -141,23 +147,9 @@ function runSetupStep(step: string): void {
       cy.contains('Sharing', { timeout: 5000 }).click()
       cy.wait(500)
       break
-    case 'navigateToApiKeys':
-      cy.contains('API Keys', { timeout: 5000 }).click()
-      cy.wait(500)
-      break
     case 'waitForThemeToggle':
       cy.get('button[aria-label="Toggle theme"]', { timeout: 10000 }).should('be.visible')
       cy.wait(500)
-      break
-    case 'openFileBrowserTab':
-      // Click the Files tab in the explorer panel if visible
-      cy.get('body').then(($body) => {
-        const filesTab = $body.find('button:contains("Files"), [role="tab"]:contains("Files")')
-        if (filesTab.length) {
-          cy.wrap(filesTab.first()).click({ force: true })
-          cy.wait(500)
-        }
-      })
       break
     default:
       throw new Error(`Unknown setup step: ${step}`)
