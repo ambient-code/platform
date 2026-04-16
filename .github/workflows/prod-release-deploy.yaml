@@ -362,9 +362,9 @@ jobs:
           ref: ${{ needs.release.outputs.new_tag }}
 
       - name: Install oc
-        uses: redhat-actions/oc-installer@v1
+        uses: redhat-actions/openshift-tools-installer@v1
         with:
-          oc_version: 'latest'
+          oc: latest
 
       - name: Log in to OpenShift Cluster
         run: |
@@ -484,9 +484,9 @@ jobs:
           ref: ${{ needs.release.outputs.new_tag }}
 
       - name: Install oc
-        uses: redhat-actions/oc-installer@v1
+        uses: redhat-actions/openshift-tools-installer@v1
         with:
-          oc_version: 'latest'
+          oc: latest
 
       - name: Install kustomize
         uses: imranismail/setup-kustomize@v2

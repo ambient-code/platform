@@ -27,7 +27,7 @@ This test plan validates the GitLab integration implemented in Ambient Code Plat
      - `read_api` (read API)
      - `read_user` (read user info)
      - `write_repository` (push to repositories)
-   - Create at: https://gitlab.com/-/profile/personal_access_tokens
+   - Create at: https://gitlab.com/-/user_settings/personal_access_tokens
 
 4. **Ambient Code Platform Environment**
    - Ambient Code Platform backend running with Kubernetes access

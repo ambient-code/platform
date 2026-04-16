@@ -336,8 +336,42 @@ async function compressAndValidate(
   }
 }
 
+// Helper function to upload file directly to S3 via the pre-upload endpoint.
+// Used when the session pod is not running (e.g., before session start).
+// Files uploaded this way are seeded into the workspace by the init container.
+async function preUploadFileToS3(
+  buffer: ArrayBuffer,
+  filename: string,
+  contentType: string,
+  headers: HeadersInit,
+  name: string,
+  sessionName: string,
+  subpath?: string
+): Promise<Response> {
+  // Build the upload path: [subpath/]filename
+  const pathParts: string[] = [];
+  if (subpath) {
+    pathParts.push(...subpath.split('/').map(s => encodeURIComponent(s)));
+  }
+  pathParts.push(encodeURIComponent(filename));
+  const uploadPath = pathParts.join('/');
+
+  return fetch(
+    `${BACKEND_URL}/projects/${encodeURIComponent(name)}/agentic-sessions/${encodeURIComponent(sessionName)}/file-uploads/${uploadPath}`,
+    {
+      method: 'PUT',
+      headers: {
+        ...headers,
+        'Content-Type': contentType,
+      },
+      body: buffer,
+    }
+  );
+}
+
 // Helper function to upload file to workspace with retry logic
-// Handles 202 Accepted responses (content service starting) with retries
+// Handles 202 Accepted responses (content service starting) with retries.
+// Falls back to pre-upload (direct S3) when the session is not running (409).
 async function uploadFileToWorkspace(
   buffer: ArrayBuffer,
   filename: string,
@@ -370,6 +404,12 @@ async function uploadFileToWorkspace(
         body: buffer,
       }
     );
+
+    // If 409 Conflict (session not running), fall back to pre-upload via S3
+    if (resp.status === 409) {
+      console.log('Session not running, falling back to pre-upload via S3');
+      return preUploadFileToS3(buffer, filename, contentType, headers, name, sessionName, subpath);
+    }
 
     // If 202 Accepted (content service starting), wait and retry
     if (resp.status === 202) {

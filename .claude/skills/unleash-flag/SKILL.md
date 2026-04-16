@@ -145,6 +145,74 @@ if !FeatureEnabledForRequest(c, "category.feature.enabled") {
 }
 ```
 
+### Backend Middleware Gating
+
+For endpoints that should be entirely hidden behind a flag, create a middleware in `routes.go` that checks `FeatureEnabledForRequest()` and returns 404 when the flag is off:
+
+```go
+// routes.go — gate an entire route group
+flagged := router.Group("/api/v1/feature")
+flagged.Use(func(c *gin.Context) {
+    if !handlers.FeatureEnabledForRequest(c, "category.feature.enabled") {
+        c.AbortWithStatus(http.StatusNotFound)
+        return
+    }
+    c.Next()
+})
+{
+    flagged.GET("/resource", handlers.ListResource)
+    flagged.POST("/resource", handlers.CreateResource)
+}
+```
+
+This returns 404 (not 403) when the flag is off, so the endpoint appears not to exist. Use this for features that shouldn't even be discoverable until enabled.
+
+### E2E Testing with Feature Flags
+
+When writing E2E tests for flagged features, the Unleash admin token must be set as an environment variable. **Never paste or export the token inline in a shell session** — this risks exposing it in shell history, logs, or terminal recordings.
+
+Obtain the token from Unleash UI > API Access or from deployment secrets, then set it using a non-echoing prompt or a secret manager:
+```bash
+# Non-echoing prompt (token not stored in shell history)
+read -rs CYPRESS_UNLEASH_ADMIN_TOKEN && export CYPRESS_UNLEASH_ADMIN_TOKEN
+```
+
+In CI, inject it via a secret reference (e.g. GitHub Actions secret, Vault, or sealed secret) — never hard-code or `echo` the value.
+
+> **Note**: When logging token-related errors, use `len(token)` to confirm presence without exposing the value. Never include the full token in error messages, API responses, or commit history.
+
+Map it in `e2e/cypress.config.ts`:
+```typescript
+env: { UNLEASH_ADMIN_TOKEN: process.env.CYPRESS_UNLEASH_ADMIN_TOKEN }
+```
+
+```typescript
+// e2e/cypress/e2e/flagged-feature.cy.ts
+describe('Flagged Feature', () => {
+  before(() => {
+    // Enable the flag via Unleash admin API
+    cy.request({
+      method: 'POST',
+      url: 'http://localhost:4242/api/admin/projects/default/features/category.feature.enabled/environments/development/on',
+      headers: { Authorization: Cypress.env('UNLEASH_ADMIN_TOKEN') },
+    }).its('status').should('eq', 200);
+  });
+
+  after(() => {
+    // Disable the flag after tests
+    cy.request({
+      method: 'POST',
+      url: 'http://localhost:4242/api/admin/projects/default/features/category.feature.enabled/environments/development/off',
+      headers: { Authorization: Cypress.env('UNLEASH_ADMIN_TOKEN') },
+    }).its('status').should('eq', 200);
+  });
+
+  it('renders when flag is enabled', () => {
+    // ... test the feature
+  });
+});
+```
+
 ## 3. Update Tests
 
 Any component that now calls `useWorkspaceFlag` or `useFlag` needs its tests updated.
@@ -197,10 +265,17 @@ This means a workspace admin can override the global Unleash state in either dir
 |-------|--------|
 | **Create** | Add to `flags.json`, gate frontend, assign ownership |
 | **Rollout** | Workspace admins enable per-workspace via settings UI |
-| **GA** | Remove flag checks from code, remove from `flags.json` |
+| **GA** | Remove flag checks from code, remove from `flags.json`, create Jira for cleanup tracking |
 | **Cleanup** | Archive flag in Unleash, remove stale ConfigMap overrides |
 
 Treat flags as technical debt. When a feature is fully rolled out, remove the flag — don't leave it permanently enabled.
+
+**When a feature reaches GA**, create a Jira issue (use `/jira-log`) to track cleanup in this order:
+1. Verify feature is fully rolled out (all workspaces enabled or no longer need it)
+2. Remove `useWorkspaceFlag` / `useFlag` calls from code and deploy
+3. Remove the flag from `flags.json` and deploy (SyncFlags stops recreating it)
+4. Remove any ConfigMap overrides in workspace namespaces
+5. Archive and purge the flag in Unleash
 
 **Exceptions for long-lived flags:** kill switches for graceful degradation, and debug flags for expensive tracing.
 

@@ -1,0 +1,14 @@
+extends: existence
+message: "Consider explaining '%s' on first use or linking to a glossary."
+level: suggestion
+ignorecase: false
+nonword: true
+tokens:
+  - '\bCRDs?\b'
+  - '\bRBAC\b'
+  - '\bPATs?\b'
+  - '\bMCP\b'
+  - '\bAG-UI\b'
+  - '\bCR\b'
+  - '\bPVC\b'
+  - '\bHPA\b'

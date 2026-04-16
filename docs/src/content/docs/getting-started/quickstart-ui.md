@@ -10,6 +10,11 @@ ACP uses SSO for authentication -- there is no separate account to create. Navig
 
 After signing in, you land on the **Workspaces** page.
 
+<figure class="screenshot-pair">
+  <img class="screenshot-light" src="/platform/images/screenshots/workspaces-page-light.png" alt="Workspaces page" />
+  <img class="screenshot-dark" src="/platform/images/screenshots/workspaces-page-dark.png" alt="Workspaces page" />
+</figure>
+
 ## Create a workspace
 
 Workspaces are project containers that hold your sessions, integrations, and team permissions.
@@ -34,6 +39,11 @@ To connect a service:
    - **Google Drive** -- Authenticate via OAuth to access Drive files.
 3. Follow the OAuth or token flow to authorize ACP.
 
+<figure class="screenshot-pair">
+  <img class="screenshot-light" src="/platform/images/screenshots/integrations-page-light.png" alt="Integrations settings" />
+  <img class="screenshot-dark" src="/platform/images/screenshots/integrations-page-dark.png" alt="Integrations settings" />
+</figure>
+
 Once connected, agents in this workspace can read from and write to the linked service.
 
 ## Create your first session
@@ -45,11 +55,23 @@ Once connected, agents in this workspace can read from and write to the linked s
    - **Integrations** -- Review the read-only status indicators showing which integrations are connected.
 3. Click **Create Session**.
 
+<figure class="screenshot-pair">
+  <img class="screenshot-light" src="/platform/images/screenshots/new-session-dialog-light.png" alt="New session creation" />
+  <img class="screenshot-dark" src="/platform/images/screenshots/new-session-dialog-dark.png" alt="New session creation" />
+</figure>
+
 The session enters the **Pending** state and begins provisioning.
 
 ## Work with the session
 
-Once the session reaches the **Running** state, the session chat page opens. From here you can:
+Once the session reaches the **Running** state, the session chat page opens.
+
+<figure class="screenshot-pair">
+  <img class="screenshot-light" src="/platform/images/screenshots/session-page-light.png" alt="Session chat interface" />
+  <img class="screenshot-dark" src="/platform/images/screenshots/session-page-dark.png" alt="Session chat interface" />
+</figure>
+
+From here you can:
 
 - **Type your prompt** in the chat input -- describe what you want the agent to do. Be specific: _"Fix the null pointer exception in the login handler and open a PR"_ works better than _"Fix bugs."_
 - **Add repositories** from the sidebar to give the agent access to your code.
