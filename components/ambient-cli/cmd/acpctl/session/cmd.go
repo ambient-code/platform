@@ -12,7 +12,8 @@ var Cmd = &cobra.Command{
 
 Examples:
   acpctl session messages <id>               # list messages (snapshot)
-  acpctl session messages <id> -f            # live SSE stream (reconnectable)
+  acpctl session messages <id> -f            # live SSE stream (ends at turn end)
+  acpctl session messages <id> -F            # continuous follow (Ctrl+C to stop)
   acpctl session send <id> "Hello!"          # send a message
   acpctl session send <id> "Hello!" -f       # send and stream until done
   acpctl session events <id>                 # raw AG-UI event stream`,

@@ -20,10 +20,11 @@ import (
 )
 
 var msgArgs struct {
-	follow       bool
-	followJSON   bool
-	outputFormat string
-	afterSeq     int
+	follow           bool
+	followContinuous bool
+	followJSON       bool
+	outputFormat     string
+	afterSeq         int
 }
 
 var messagesCmd = &cobra.Command{
@@ -33,13 +34,16 @@ var messagesCmd = &cobra.Command{
 
 Without -f, fetches a snapshot of messages from the message store.
 With -f, connects to the live SSE event stream and renders events
-as readable text. The stream stays open until Ctrl+C.
-With -f --json, emits raw AG-UI JSON events instead of text.
+as readable text. The stream ends when the current turn finishes.
+With -F, continuously follows the stream, reconnecting after each
+turn ends. The stream stays open until Ctrl+C.
+With -f --json or -F --json, emits raw AG-UI JSON events instead of text.
 
 Examples:
   acpctl session messages <id>              # snapshot
-  acpctl session messages <id> -f           # live SSE stream (Ctrl+C to stop)
-  acpctl session messages <id> -f --json    # raw AG-UI JSON events
+  acpctl session messages <id> -f           # live stream (ends at turn end)
+  acpctl session messages <id> -F           # continuous follow (Ctrl+C to stop)
+  acpctl session messages <id> -F --json    # continuous raw AG-UI JSON events
   acpctl session messages <id> -o json      # JSON snapshot
   acpctl session messages <id> --after 5    # messages after seq 5`,
 	Args: cobra.ExactArgs(1),
@@ -47,8 +51,9 @@ Examples:
 }
 
 func init() {
-	messagesCmd.Flags().BoolVarP(&msgArgs.follow, "follow", "f", false, "Stream live SSE events (same stream as send -f)")
-	messagesCmd.Flags().BoolVar(&msgArgs.followJSON, "json", false, "with -f: emit raw AG-UI JSON events instead of text")
+	messagesCmd.Flags().BoolVarP(&msgArgs.follow, "follow", "f", false, "Stream live SSE events until the current turn ends")
+	messagesCmd.Flags().BoolVarP(&msgArgs.followContinuous, "follow-continuous", "F", false, "Continuously follow SSE events, reconnecting between turns (Ctrl+C to stop)")
+	messagesCmd.Flags().BoolVar(&msgArgs.followJSON, "json", false, "with -f/-F: emit raw AG-UI JSON events instead of text")
 	messagesCmd.Flags().StringVarP(&msgArgs.outputFormat, "output", "o", "", "Output format: json")
 	messagesCmd.Flags().IntVar(&msgArgs.afterSeq, "after", 0, "Only show messages after this sequence number")
 }
@@ -61,6 +66,9 @@ func runMessages(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if msgArgs.followContinuous {
+		return streamMessagesContinuous(cmd, client, sessionID)
+	}
 	if msgArgs.follow {
 		return streamMessages(cmd, client, sessionID)
 	}
@@ -414,6 +422,51 @@ func streamMessages(cmd *cobra.Command, client *sdkclient.Client, sessionID stri
 	fmt.Fprintf(cmd.OutOrStdout(), "Streaming events for session %s (Ctrl+C to stop)...\n\n", sessionID)
 
 	return renderSSEStream(stream, cmd.OutOrStdout(), msgArgs.followJSON, false)
+}
+
+func streamMessagesContinuous(cmd *cobra.Command, client *sdkclient.Client, sessionID string) error {
+	ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
+	defer cancel()
+
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "Continuously following session %s (Ctrl+C to stop)...\n\n", sessionID)
+
+	const reconnectDelay = 3 * time.Second
+
+	for {
+		stream, err := client.Sessions().StreamEvents(ctx, sessionID)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			fmt.Fprintf(out, "[reconnect] stream not available: %v — retrying in %s\n", err, reconnectDelay)
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(reconnectDelay):
+				continue
+			}
+		}
+
+		streamErr := renderSSEStream(stream, out, msgArgs.followJSON, false)
+		stream.Close()
+
+		if ctx.Err() != nil {
+			return nil
+		}
+
+		if streamErr != nil {
+			fmt.Fprintf(out, "\n[reconnect] stream ended: %v — reconnecting in %s\n", streamErr, reconnectDelay)
+		} else {
+			fmt.Fprintf(out, "\n[reconnect] stream ended — reconnecting in %s\n", reconnectDelay)
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(reconnectDelay):
+		}
+	}
 }
 
 func renderSSEStream(stream io.Reader, out io.Writer, jsonMode, exitOnRunFinished bool) error {
