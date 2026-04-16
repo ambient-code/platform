@@ -33,6 +33,44 @@ from ambient_runner.platform.context import RunnerContext
 logger = logging.getLogger(__name__)
 
 
+def write_corrections_context_file(
+    cwd_path: str,
+    ledger: object | None,
+) -> None:
+    """Write the correction ledger's rendered output to .gemini/corrections.md.
+
+    Called before each Gemini CLI turn. The Gemini CLI reads context files
+    from the ``.gemini/`` directory, so this makes corrections visible to
+    the agent without modifying the system prompt.
+
+    No-op if the ledger is empty or the feature flag is disabled.
+    """
+    from ambient_runner.platform.correction_ledger import (
+        CorrectionLedger,
+        is_correction_injection_enabled,
+    )
+
+    if not isinstance(ledger, CorrectionLedger):
+        return
+    if not is_correction_injection_enabled():
+        return
+
+    block = ledger.render()
+    if not block:
+        return
+
+    from pathlib import Path
+
+    gemini_dir = Path(cwd_path) / ".gemini"
+    gemini_dir.mkdir(parents=True, exist_ok=True)
+    corrections_file = gemini_dir / "corrections.md"
+    try:
+        corrections_file.write_text(block, encoding="utf-8")
+        logger.debug("Wrote corrections context file to %s", corrections_file)
+    except OSError as exc:
+        logger.warning("Could not write .gemini/corrections.md: %s", exc)
+
+
 class GeminiCLIBridge(PlatformBridge):
     """Bridge between the Ambient platform and the Gemini CLI.
 
@@ -56,6 +94,11 @@ class GeminiCLIBridge(PlatformBridge):
         self._mcp_settings_path: str | None = None
         self._mcp_status_cache: dict | None = None
 
+        # Per-session correction ledger for context injection (spec 004).
+        from ambient_runner.platform.correction_ledger import CorrectionLedger
+
+        self._correction_ledger = CorrectionLedger()
+
     # ------------------------------------------------------------------
     # PlatformBridge interface
     # ------------------------------------------------------------------
@@ -74,7 +117,9 @@ class GeminiCLIBridge(PlatformBridge):
             tracing="langfuse" if has_tracing else None,
         )
 
-    async def run(self, input_data: RunAgentInput, **kwargs) -> AsyncIterator[BaseEvent]:
+    async def run(
+        self, input_data: RunAgentInput, **kwargs
+    ) -> AsyncIterator[BaseEvent]:
         """Full run lifecycle: lazy setup -> session worker -> tracing."""
         # 1. Lazy platform setup
         await self._ensure_ready()
@@ -82,6 +127,9 @@ class GeminiCLIBridge(PlatformBridge):
 
         # 2. Extract user message
         user_msg = extract_user_message(input_data)
+
+        # 2b. Write corrections context file before the CLI reads it (spec 004)
+        write_corrections_context_file(self._cwd_path, self._correction_ledger)
 
         # 3. Get session worker for this thread
         thread_id = input_data.thread_id or self._context.session_id
@@ -127,7 +175,9 @@ class GeminiCLIBridge(PlatformBridge):
 
             wrapped_stream = tracing_middleware(
                 secret_redaction_middleware(
-                    self._adapter.run(input_data, line_stream=_line_stream_with_capture()),
+                    self._adapter.run(
+                        input_data, line_stream=_line_stream_with_capture()
+                    ),
                 ),
                 obs=self._obs,
                 model=self._configured_model,

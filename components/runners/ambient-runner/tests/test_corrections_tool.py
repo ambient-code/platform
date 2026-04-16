@@ -10,12 +10,15 @@ Validates:
 5. Auto-capture of session context from environment
 6. Error handling for missing Langfuse / credentials
 7. Input validation and truncation
-8. Source field (human vs rubric)
+8. Source field (human vs rubric vs ui)
+9. Fire-and-forget backend POST
 """
 
+import asyncio
 import json
 import os
 import sys
+import urllib.error
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -31,6 +34,7 @@ from ambient_runner.bridges.claude.corrections import (
     _discover_repos_from_workspace,
     _get_session_context,
     _log_correction_to_langfuse,
+    _post_correction_to_backend,
     _repo_name,
     _resolve_target,
     build_correction_schema,
@@ -57,6 +61,12 @@ def test_base_schema_source_values():
     assert source_enum == CORRECTION_SOURCES
     assert "human" in source_enum
     assert "rubric" in source_enum
+
+
+def test_base_schema_source_includes_ui():
+    """Source enum includes ui for frontend-originated corrections."""
+    source_enum = BASE_CORRECTION_PROPERTIES["source"]["enum"]
+    assert "ui" in source_enum
 
 
 def test_base_required_fields():
@@ -812,6 +822,178 @@ def test_tool_description_lists_available_targets():
     description = mock_decorator.call_args[0][1]
     assert "Available Targets" in description
     assert "`joker` (workflow)" in description
+
+
+# ------------------------------------------------------------------
+# Backend POST (fire-and-forget)
+# ------------------------------------------------------------------
+
+
+@patch.dict(
+    os.environ,
+    {
+        "BACKEND_API_URL": "http://backend:8080/api",
+        "AGENTIC_SESSION_NAMESPACE": "test-project",
+        "AGENTIC_SESSION_NAME": "session-1",
+    },
+)
+@patch("ambient_runner.bridges.claude.corrections.urllib.request.urlopen")
+@patch(
+    "ambient_runner.bridges.claude.corrections.get_bot_token", return_value="fake-token"
+)
+def test_backend_post_fires_after_langfuse(mock_token, mock_urlopen):
+    """_post_correction_to_backend sends POST to backend."""
+    mock_urlopen.return_value = MagicMock()
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(
+            _post_correction_to_backend(
+                session_name="session-1",
+                correction_type="incorrect",
+                agent_action="Did wrong thing",
+                user_correction="Do right thing",
+                target_label="my-workflow",
+                source="human",
+            )
+        )
+    finally:
+        loop.close()
+
+    mock_urlopen.assert_called_once()
+    call_args = mock_urlopen.call_args
+    req = call_args[0][0]
+    assert "/projects/test-project/corrections" in req.full_url
+    assert req.method == "POST"
+
+
+@patch.dict(os.environ, {}, clear=True)
+def test_backend_post_skips_when_no_backend_url():
+    """_post_correction_to_backend skips silently when BACKEND_API_URL not set."""
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(
+            _post_correction_to_backend(
+                session_name="session-1",
+                correction_type="incorrect",
+                agent_action="test",
+                user_correction="test",
+                target_label="",
+                source="human",
+            )
+        )
+    finally:
+        loop.close()
+    # Should not raise -- just silently skip
+
+
+@patch.dict(
+    os.environ,
+    {
+        "BACKEND_API_URL": "http://backend:8080/api",
+        "AGENTIC_SESSION_NAMESPACE": "test-project",
+    },
+)
+@patch("ambient_runner.bridges.claude.corrections.urllib.request.urlopen")
+@patch(
+    "ambient_runner.bridges.claude.corrections.get_bot_token", return_value="fake-token"
+)
+def test_backend_post_handles_network_error(mock_token, mock_urlopen):
+    """_post_correction_to_backend logs warning on network error, does not raise."""
+    mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(
+            _post_correction_to_backend(
+                session_name="session-1",
+                correction_type="incorrect",
+                agent_action="test",
+                user_correction="test",
+                target_label="",
+                source="human",
+            )
+        )
+    finally:
+        loop.close()
+    # Should not raise
+
+
+@patch.dict(
+    os.environ,
+    {
+        "BACKEND_API_URL": "http://backend:8080/api",
+        "AGENTIC_SESSION_NAMESPACE": "test-project",
+    },
+)
+@patch("ambient_runner.bridges.claude.corrections.urllib.request.urlopen")
+@patch(
+    "ambient_runner.bridges.claude.corrections.get_bot_token", return_value="fake-token"
+)
+def test_backend_post_truncates_long_fields(mock_token, mock_urlopen):
+    """_post_correction_to_backend truncates agent_action and user_correction to 500 chars."""
+    mock_urlopen.return_value = MagicMock()
+
+    long_action = "x" * 1000
+    long_correction = "y" * 1000
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(
+            _post_correction_to_backend(
+                session_name="session-1",
+                correction_type="style",
+                agent_action=long_action,
+                user_correction=long_correction,
+                target_label="",
+                source="human",
+            )
+        )
+    finally:
+        loop.close()
+
+    mock_urlopen.assert_called_once()
+    call_args = mock_urlopen.call_args
+    req = call_args[0][0]
+    payload = json.loads(req.data.decode("utf-8"))
+    assert len(payload["agentAction"]) == 500
+    assert len(payload["userCorrection"]) == 500
+
+
+@patch.dict(
+    os.environ,
+    {
+        "BACKEND_API_URL": "http://backend:8080/api",
+        "AGENTIC_SESSION_NAMESPACE": "test-project",
+    },
+)
+@patch("ambient_runner.bridges.claude.corrections.urllib.request.urlopen")
+@patch(
+    "ambient_runner.bridges.claude.corrections.get_bot_token",
+    return_value="my-bot-token",
+)
+def test_backend_post_sends_auth_header(mock_token, mock_urlopen):
+    """_post_correction_to_backend sends Authorization header with bot token."""
+    mock_urlopen.return_value = MagicMock()
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(
+            _post_correction_to_backend(
+                session_name="s1",
+                correction_type="incorrect",
+                agent_action="test",
+                user_correction="test",
+                target_label="",
+                source="human",
+            )
+        )
+    finally:
+        loop.close()
+
+    req = mock_urlopen.call_args[0][0]
+    assert req.get_header("Authorization") == "Bearer my-bot-token"
+    assert req.get_header("Content-type") == "application/json"
 
 
 # ------------------------------------------------------------------

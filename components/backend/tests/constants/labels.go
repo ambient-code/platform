@@ -26,6 +26,7 @@ const (
 	LabelFeatureFlags = "feature-flags"
 	LabelDisplayName  = "display-name"
 	LabelHealth       = "health"
+	LabelCorrections  = "corrections"
 
 	// Specific component labels for other areas
 	LabelOperations = "operations" // for git operations

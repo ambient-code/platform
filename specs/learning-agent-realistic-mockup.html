@@ -1,0 +1,1745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280, initial-scale=1">
+<title>Ambient Code Platform - Learning Agent Mockup</title>
+
+<!-- ================================================================
+     FONT
+     ================================================================ -->
+<style>
+@font-face {
+  font-family: 'Geist';
+  src: url('https://cdn.jsdelivr.net/npm/geist@1.3.0/dist/fonts/geist-sans/Geist-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+</style>
+
+<!-- ================================================================
+     CSS CUSTOM PROPERTIES + GLOBAL STYLES
+     ================================================================ -->
+<style>
+/* ---------- Design tokens (dark mode only) ---------- */
+:root {
+  --radius: 0.625rem;
+  --background: oklch(0.13 0.008 250);
+  --card: oklch(0.17 0.01 250);
+  --popover: oklch(0.17 0.01 250);
+  --foreground: oklch(0.985 0.002 250);
+  --card-foreground: oklch(0.985 0.002 250);
+  --primary: oklch(0.6 0.2 264);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.25 0.008 250);
+  --secondary-foreground: oklch(0.985 0.002 250);
+  --muted: oklch(0.25 0.008 250);
+  --muted-foreground: oklch(0.708 0.005 250);
+  --accent: oklch(0.25 0.008 250);
+  --accent-foreground: oklch(0.985 0.002 250);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0.005 250 / 12%);
+  --input: oklch(1 0.005 250 / 15%);
+  --ring: oklch(0.6 0.2 264);
+  --status-success: oklch(0.35 0.15 145);
+  --status-success-fg: oklch(0.985 0 0);
+  --status-error: oklch(0.45 0.2 27);
+  --status-error-fg: oklch(0.985 0 0);
+  --status-warning: oklch(0.5 0.15 85);
+  --status-warning-fg: oklch(0.985 0 0);
+  --status-info: oklch(0.5 0.15 240);
+  --status-info-fg: oklch(0.985 0 0);
+  --very-muted: oklch(0.556 0.005 250);
+  --link: oklch(0.65 0.15 240);
+  --cat-environment: oklch(0.5 0.15 240);
+  --cat-procedure: oklch(0.5 0.15 290);
+  --cat-preference: oklch(0.45 0.15 180);
+  --cat-pattern: oklch(0.5 0.15 85);
+}
+
+/* ---------- Reset & Base ---------- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  font-family: 'Geist', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  color: var(--foreground);
+  background: var(--background);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body { min-height: 100vh; overflow: hidden; }
+
+code, pre, .mono {
+  font-family: 'Geist Mono', 'SF Mono', 'Cascadia Code', monospace;
+}
+
+a { color: var(--link); text-decoration: none; }
+
+/* ---------- Utility classes ---------- */
+.text-xs   { font-size: 0.75rem; line-height: 1rem; }
+.text-sm   { font-size: 0.8125rem; line-height: 1.25rem; }
+.text-base { font-size: 0.875rem; line-height: 1.375rem; }
+.text-muted { color: var(--muted-foreground); }
+.text-very-muted { color: var(--very-muted); }
+.font-medium { font-weight: 500; }
+.font-semibold { font-weight: 600; }
+.font-bold { font-weight: 700; }
+
+/* ---------- Layout shell ---------- */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  background: var(--background);
+}
+
+/* -- Screen selector bar (mockup-only) -- */
+.screen-selector {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 12px;
+  background: oklch(0.10 0.008 250);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.screen-tab {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.screen-tab:hover { background: var(--accent); color: var(--foreground); }
+
+.screen-tab.active {
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+/* -- Top nav bar -- */
+.top-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+  background: oklch(0.17 0.01 250 / 95%);
+  backdrop-filter: blur(12px);
+  flex-shrink: 0;
+}
+
+.top-nav-brand { display: flex; align-items: baseline; gap: 8px; }
+.top-nav-brand-name { font-size: 1rem; font-weight: 700; color: var(--foreground); }
+.top-nav-version { font-size: 0.65rem; color: oklch(0.708 0.005 250 / 60%); }
+.top-nav-actions { display: flex; align-items: center; gap: 12px; }
+
+/* -- Main layout -- */
+.main-layout { display: flex; flex: 1; overflow: hidden; }
+
+/* -- Sidebar -- */
+.sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: var(--card);
+}
+
+.sidebar-new-session { padding: 12px; border-bottom: 1px solid var(--border); }
+
+.sidebar-workspace-back {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.sidebar-workspace-back:hover { background: var(--accent); color: var(--foreground); }
+
+.sidebar-workspace-name {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--foreground);
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-nav { padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+}
+
+.sidebar-nav-item:hover { background: var(--accent); color: var(--foreground); }
+.sidebar-nav-item.active { background: var(--accent); color: var(--accent-foreground); font-weight: 500; }
+.sidebar-nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+.sidebar-separator { height: 1px; background: var(--border); margin: 4px 8px; }
+
+.sidebar-recents-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 12px 4px;
+}
+
+.sidebar-recents-label {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.sidebar-recents-list {
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.sidebar-session {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  color: var(--foreground);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: background 0.12s;
+}
+
+.sidebar-session:hover { background: var(--accent); }
+.sidebar-session.running  { border-left-color: oklch(0.6 0.2 264); }
+.sidebar-session.completed { border-left-color: oklch(0.5 0.15 145); }
+.sidebar-session.failed   { border-left-color: oklch(0.704 0.191 22.216); }
+
+.session-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dot-running   { background: oklch(0.6 0.2 264); }
+.dot-completed { background: oklch(0.5 0.15 145); }
+.dot-failed    { background: oklch(0.704 0.191 22.216); }
+
+.session-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-time { font-size: 0.75rem; color: var(--muted-foreground); flex-shrink: 0; }
+
+/* -- Content area -- */
+.content-area { flex: 1; overflow-y: auto; overflow-x: hidden; min-width: 0; }
+.content-padded { padding: 24px 32px; max-width: 1000px; }
+.content-full { display: flex; flex-direction: column; height: 100%; }
+
+/* -- Content header -- */
+.content-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.content-header-left h1 { font-size: 1.25rem; font-weight: 600; color: var(--foreground); margin-bottom: 4px; }
+.content-header-left p { font-size: 0.875rem; color: var(--muted-foreground); }
+
+/* -- Buttons -- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  height: 36px;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
+  border: 1px solid transparent;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.btn-primary { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+.btn-primary:hover { opacity: 0.9; }
+.btn-outline { background: transparent; color: var(--foreground); border-color: var(--border); }
+.btn-outline:hover { background: var(--accent); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--muted-foreground);
+  border-color: transparent;
+  padding: 0 8px;
+  height: 28px;
+  font-size: 0.75rem;
+}
+
+.btn-ghost:hover { background: var(--accent); color: var(--foreground); }
+.btn-sm { height: 28px; padding: 0 10px; font-size: 0.75rem; }
+.btn-icon { width: 36px; padding: 0; justify-content: center; }
+.btn-icon.btn-sm { width: 28px; height: 28px; }
+
+/* -- Cards -- */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.card-flush { padding: 0; }
+
+/* -- Badges -- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.badge-candidate { background: var(--status-warning); color: var(--status-warning-fg); }
+.badge-approved  { background: var(--status-success); color: var(--status-success-fg); }
+.badge-archived  { background: var(--muted); color: var(--muted-foreground); }
+.badge-environment { background: var(--cat-environment); color: white; }
+.badge-procedure   { background: var(--cat-procedure); color: white; }
+.badge-preference  { background: var(--cat-preference); color: white; }
+.badge-pattern     { background: var(--cat-pattern); color: white; }
+.badge-outline { background: transparent; border: 1px solid var(--border); color: var(--muted-foreground); }
+
+/* -- Filter tabs -- */
+.filter-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--muted);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.filter-tab {
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.filter-tab:hover { color: var(--foreground); }
+
+.filter-tab.active {
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+/* -- Inputs -- */
+.search-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--input);
+  color: var(--foreground);
+  font-size: 0.8125rem;
+  width: 100%;
+  max-width: 320px;
+  margin-bottom: 16px;
+  font-family: inherit;
+}
+
+.search-input:focus { outline: 2px solid var(--ring); outline-offset: -1px; }
+.search-input::placeholder { color: var(--very-muted); }
+
+.num-input {
+  width: 80px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--input);
+  color: var(--foreground);
+  font-size: 0.8125rem;
+  font-family: inherit;
+  text-align: center;
+}
+
+.num-input:focus { outline: 2px solid var(--ring); outline-offset: -1px; }
+
+/* -- Toggle switch -- */
+.toggle-track {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--muted);
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+  border: none;
+}
+
+.toggle-track.on { background: var(--primary); }
+
+.toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 0.2s;
+  pointer-events: none;
+}
+
+.toggle-track.on .toggle-thumb { transform: translateX(20px); }
+
+/* -- Stat cards -- */
+.stat-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+
+.stat-card-value { font-size: 1.75rem; font-weight: 700; color: var(--foreground); line-height: 1; margin-bottom: 4px; }
+.stat-card-label { font-size: 0.8125rem; color: var(--muted-foreground); margin-bottom: 8px; }
+.stat-card-delta { font-size: 0.75rem; font-weight: 500; }
+.delta-up { color: oklch(0.6 0.15 145); }
+
+/* -- Two-col layout -- */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+/* -- Bar chart -- */
+.bar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.bar-label { width: 100px; font-size: 0.8125rem; color: var(--muted-foreground); text-align: right; flex-shrink: 0; }
+.bar-track { flex: 1; height: 24px; background: var(--muted); border-radius: 4px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+.bar-value { font-size: 0.75rem; font-weight: 600; color: var(--foreground); width: 28px; text-align: right; flex-shrink: 0; }
+
+/* -- Timeline -- */
+.timeline-item { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.timeline-item:last-child { border-bottom: none; }
+.timeline-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+.timeline-dot.correction  { background: var(--status-warning); }
+.timeline-dot.improvement { background: var(--status-success); }
+.timeline-dot.memory      { background: var(--cat-preference); }
+.timeline-text { font-size: 0.8125rem; color: var(--foreground); line-height: 1.4; }
+.timeline-time { font-size: 0.6875rem; color: var(--very-muted); margin-top: 2px; }
+
+/* -- Chat messages -- */
+.chat-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.chat-content-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 12px;
+  height: 40px;
+  border-bottom: 1px solid var(--border);
+  background: oklch(0.25 0.008 250 / 30%);
+  flex-shrink: 0;
+}
+
+.chat-content-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s, color 0.12s;
+}
+
+.chat-content-tab:hover { color: var(--foreground); background: var(--accent); }
+
+.chat-content-tab.active {
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+.msg { max-width: 85%; line-height: 1.5; font-size: 0.875rem; }
+
+.msg-user {
+  align-self: flex-end;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  padding: 10px 14px;
+  border-radius: 12px 12px 4px 12px;
+}
+
+.msg-agent {
+  align-self: flex-start;
+  background: var(--card);
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+  border-radius: 4px 12px 12px 12px;
+  position: relative;
+}
+
+.citation {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  background: oklch(0.45 0.15 180 / 30%);
+  color: oklch(0.75 0.1 180);
+  margin: 0 2px;
+  vertical-align: middle;
+}
+
+.msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.msg-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  font-family: inherit;
+}
+
+.msg-action-btn:hover { background: var(--accent); color: var(--foreground); }
+.msg-action-btn.correct-btn { border-color: var(--status-warning); color: var(--status-warning); }
+.msg-action-btn.correct-btn:hover { background: oklch(0.5 0.15 85 / 15%); }
+
+/* -- Correction popover -- */
+.correction-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 360px;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  z-index: 100;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+.correction-popover.hidden { display: none; }
+.correction-popover h4 { font-size: 0.875rem; font-weight: 600; margin-bottom: 12px; }
+.correction-field { margin-bottom: 12px; }
+
+.correction-field label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  margin-bottom: 4px;
+}
+
+.correction-field select,
+.correction-field textarea {
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--input);
+  color: var(--foreground);
+  font-size: 0.8125rem;
+  padding: 8px 10px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.correction-field select:focus,
+.correction-field textarea:focus { outline: 2px solid var(--ring); outline-offset: -1px; }
+.correction-field textarea { min-height: 60px; }
+
+.correction-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+  margin-bottom: 12px;
+}
+
+.correction-checkbox input[type="checkbox"] { accent-color: oklch(0.6 0.2 264); width: 16px; height: 16px; }
+
+/* -- Correction ledger -- */
+.correction-ledger {
+  margin: 0 32px 20px;
+  background: oklch(0.14 0.008 250);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 16px;
+  font-family: 'Geist Mono', 'SF Mono', 'Cascadia Code', monospace;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  line-height: 1.6;
+}
+
+.ledger-header { font-weight: 600; color: var(--foreground); margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+.ledger-row { display: flex; gap: 8px; }
+.ledger-key { color: var(--very-muted); min-width: 80px; }
+.ledger-val { color: var(--foreground); }
+
+/* -- Settings rows -- */
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-row:last-child { border-bottom: none; }
+.settings-row-label { font-size: 0.875rem; font-weight: 500; color: var(--foreground); }
+.settings-row-sublabel { font-size: 0.75rem; color: var(--muted-foreground); margin-top: 2px; }
+.settings-row-value { display: flex; align-items: center; gap: 8px; }
+
+/* -- Mini table -- */
+.mini-table { width: 100%; border-collapse: collapse; }
+
+.mini-table th {
+  text-align: left;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mini-table td { padding: 10px 12px; font-size: 0.8125rem; border-bottom: 1px solid var(--border); }
+.mini-table tr:last-child td { border-bottom: none; }
+
+.threshold-bar { width: 100%; height: 6px; background: var(--muted); border-radius: 3px; overflow: hidden; }
+.threshold-fill { height: 100%; border-radius: 3px; }
+
+/* -- Insight extraction -- */
+.insight-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  background: oklch(0.35 0.15 145 / 15%);
+  border: 1px solid oklch(0.35 0.15 145 / 30%);
+  border-radius: var(--radius);
+}
+
+.insight-banner-text {
+  font-size: 0.875rem;
+  color: oklch(0.7 0.12 145);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.insight-banner-link { font-size: 0.8125rem; font-weight: 500; color: var(--link); cursor: pointer; }
+
+.insight-card { padding: 16px; border-bottom: 1px solid var(--border); }
+.insight-card:last-child { border-bottom: none; }
+.insight-card-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.insight-card-content { font-size: 0.8125rem; color: var(--foreground); line-height: 1.5; margin: 8px 0; }
+.confidence-bar { display: flex; align-items: center; gap: 8px; }
+.confidence-track { width: 60px; height: 4px; background: var(--muted); border-radius: 2px; overflow: hidden; }
+.confidence-fill { height: 100%; background: var(--primary); border-radius: 2px; }
+.confidence-label { font-size: 0.6875rem; color: var(--muted-foreground); font-weight: 500; }
+
+.config-summary {
+  padding: 12px 16px;
+  background: oklch(0.14 0.008 250);
+  font-size: 0.75rem;
+  color: var(--very-muted);
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+/* -- Screen containers -- */
+.screen { display: none; flex-direction: column; height: 100%; }
+.screen.active { display: flex; }
+
+/* -- Memory entries -- */
+.memory-entries { display: flex; flex-direction: column; gap: 12px; }
+.memory-card-badges { display: flex; gap: 6px; margin-bottom: 8px; }
+.memory-card-content { font-size: 0.8125rem; color: var(--foreground); line-height: 1.5; margin-bottom: 8px; }
+.memory-card-meta { display: flex; align-items: center; justify-content: space-between; }
+.memory-card-source { font-size: 0.75rem; color: var(--very-muted); }
+.memory-card-actions { display: flex; gap: 4px; }
+
+/* -- Section titles -- */
+.section-title { font-size: 0.875rem; font-weight: 600; color: var(--foreground); margin-bottom: 16px; }
+
+/* -- Chat input bar -- */
+.chat-input-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 32px;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+  flex-shrink: 0;
+}
+
+.chat-input {
+  flex: 1;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--input);
+  color: var(--foreground);
+  font-size: 0.875rem;
+  font-family: inherit;
+}
+
+.chat-input:focus { outline: 2px solid var(--ring); outline-offset: -1px; }
+.chat-input::placeholder { color: var(--very-muted); }
+</style>
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- ============================================================
+       SCREEN SELECTOR (mockup navigation)
+       ============================================================ -->
+  <div class="screen-selector" id="screenSelector"></div>
+
+  <!-- Screen containers are built entirely by JS below -->
+  <div id="screen-memory" class="screen active"></div>
+  <div id="screen-chat" class="screen" style="display:none"></div>
+  <div id="screen-dashboard" class="screen"></div>
+  <div id="screen-config" class="screen"></div>
+  <div id="screen-insights" class="screen"></div>
+
+</div>
+
+<!-- ================================================================
+     JAVASCRIPT (all DOM built via safe methods, no innerHTML)
+     ================================================================ -->
+<script>
+(function() {
+  "use strict";
+
+  var NS = "http://www.w3.org/2000/svg";
+
+  /* ----------------------------------------------------------
+     DOM helpers
+     ---------------------------------------------------------- */
+  function el(tag, attrs, children) {
+    var node = document.createElement(tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function(k) {
+        if (k === "className") node.className = attrs[k];
+        else if (k === "textContent") node.textContent = attrs[k];
+        else if (k.indexOf("data-") === 0) node.setAttribute(k, attrs[k]);
+        else if (k === "style" && typeof attrs[k] === "object") {
+          Object.keys(attrs[k]).forEach(function(sk) { node.style[sk] = attrs[k][sk]; });
+        } else node.setAttribute(k, attrs[k]);
+      });
+    }
+    if (children) {
+      children.forEach(function(c) {
+        if (typeof c === "string") node.appendChild(document.createTextNode(c));
+        else if (c) node.appendChild(c);
+      });
+    }
+    return node;
+  }
+
+  function svgEl(tag, attrs) {
+    var node = document.createElementNS(NS, tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function(k) { node.setAttribute(k, attrs[k]); });
+    }
+    return node;
+  }
+
+  function makeSvg(w, h, pathDatas, extra) {
+    var svg = svgEl("svg", {
+      width: String(w), height: String(h), viewBox: "0 0 " + w + " " + h,
+      fill: "none", stroke: "currentColor", "stroke-width": "1.5",
+      "stroke-linecap": "round", "stroke-linejoin": "round"
+    });
+    if (extra) Object.keys(extra).forEach(function(k) { svg.setAttribute(k, extra[k]); });
+    pathDatas.forEach(function(d) {
+      if (d.type === "circle") {
+        svg.appendChild(svgEl("circle", { cx: d.cx, cy: d.cy, r: d.r }));
+      } else if (d.type === "rect") {
+        svg.appendChild(svgEl("rect", { x: d.x, y: d.y, width: d.w, height: d.h, rx: d.rx || "0" }));
+      } else if (d.type === "ellipse") {
+        svg.appendChild(svgEl("ellipse", { cx: d.cx, cy: d.cy, rx: d.rx, ry: d.ry }));
+      } else if (d.type === "line") {
+        svg.appendChild(svgEl("line", { x1: d.x1, y1: d.y1, x2: d.x2, y2: d.y2 }));
+      } else {
+        svg.appendChild(svgEl("path", { d: d.d || d }));
+      }
+    });
+    return svg;
+  }
+
+  /* Icons */
+  function iconPlus(s) {
+    s = s || 14;
+    return makeSvg(s, s, [
+      { type: "line", x1: String(s/2), y1: "2", x2: String(s/2), y2: String(s-2) },
+      { type: "line", x1: "2", y1: String(s/2), x2: String(s-2), y2: String(s/2) }
+    ], { "stroke-width": "2" });
+  }
+
+  function iconBack() {
+    return makeSvg(16, 16, [{ d: "M10 3L5 8l5 5" }]);
+  }
+
+  function iconList() {
+    return makeSvg(16, 16, [{ d: "M3 4h10M3 8h10M3 12h10" }]);
+  }
+
+  function iconCalendar() {
+    return makeSvg(16, 16, [
+      { d: "M4 2v2M12 2v2" },
+      { type: "rect", x: "2", y: "4", w: "12", h: "10", rx: "1" },
+      { d: "M2 7h12" }
+    ]);
+  }
+
+  function iconShare() {
+    return makeSvg(16, 16, [
+      { type: "circle", cx: "12", cy: "4", r: "2" },
+      { type: "circle", cx: "4", cy: "8", r: "2" },
+      { type: "circle", cx: "12", cy: "12", r: "2" },
+      { d: "M6 9l4 2M6 7l4-2" }
+    ]);
+  }
+
+  function iconKey() {
+    return makeSvg(16, 16, [
+      { d: "M11 2a3 3 0 00-2.83 4L2 12v2h2v-1h1v-1h1l.17-.17A3 3 0 1011 2z" },
+      { type: "circle", cx: "11", cy: "5", r: "0.5" }
+    ]);
+  }
+
+  function iconSettings() {
+    return makeSvg(16, 16, [
+      { type: "circle", cx: "8", cy: "8", r: "2" },
+      { d: "M8 2v2M8 12v2M2 8h2M12 8h2M3.76 3.76l1.41 1.41M10.83 10.83l1.41 1.41M3.76 12.24l1.41-1.41M10.83 5.17l1.41-1.41" }
+    ]);
+  }
+
+  function iconBrain() {
+    return makeSvg(16, 16, [
+      { d: "M8 2C5.8 2 4 3.8 4 6c0 1.5.8 2.8 2 3.5V14h4V9.5c1.2-.7 2-2 2-3.5 0-2.2-1.8-4-4-4z" },
+      { d: "M6 11h4" }
+    ]);
+  }
+
+  function iconDatabase() {
+    return makeSvg(16, 16, [
+      { type: "ellipse", cx: "8", cy: "4", rx: "5", ry: "2" },
+      { d: "M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4" },
+      { d: "M3 8c0 1.1 2.2 2 5 2s5-.9 5-2" }
+    ]);
+  }
+
+  function iconChat() {
+    return makeSvg(16, 16, [
+      { d: "M3 2h10a1 1 0 011 1v8a1 1 0 01-1 1H9l-3 3v-3H3a1 1 0 01-1-1V3a1 1 0 011-1z" }
+    ], { "stroke-width": "2" });
+  }
+
+  function iconFile() {
+    return makeSvg(14, 14, [
+      { d: "M3 1h6l3 3v8a1 1 0 01-1 1H3a1 1 0 01-1-1V2a1 1 0 011-1z" },
+      { d: "M5 8h4M5 11h2" }
+    ]);
+  }
+
+  function iconThumbUp() {
+    return makeSvg(14, 14, [{ d: "M7 2L4 6H2v6h2l3 1h4l2-3V6h-3l1-3-1-1z" }], { "stroke-width": "2" });
+  }
+
+  function iconThumbDown() {
+    return makeSvg(14, 14, [{ d: "M7 12l3-4h2V2H10L7 1H3L1 4v4h3l-1 3 1 1z" }], { "stroke-width": "2" });
+  }
+
+  function iconPencil() {
+    return makeSvg(14, 14, [{ d: "M9.5 2.5l2 2M3 9l6-6 2 2-6 6H3V9z" }], { "stroke-width": "2" });
+  }
+
+  function iconSend() {
+    return makeSvg(16, 16, [{ d: "M14 2L7 9" }, { d: "M14 2l-5 12-2-5-5-2z" }], { "stroke-width": "2" });
+  }
+
+  function iconPlug() {
+    return makeSvg(16, 16, [
+      { d: "M12 2H4a2 2 0 00-2 2v8a2 2 0 002 2h2l2 2 2-2h2a2 2 0 002-2V4a2 2 0 00-2-2z" }
+    ], { "stroke-width": "2" });
+  }
+
+  function iconClock() {
+    return makeSvg(16, 16, [
+      { type: "circle", cx: "8", cy: "8", r: "6" },
+      { d: "M8 5v3l2 1" }
+    ], { "stroke-width": "2" });
+  }
+
+  function iconLedger() {
+    return makeSvg(14, 14, [
+      { type: "rect", x: "2", y: "2", w: "10", h: "10", rx: "1" },
+      { d: "M5 5h4M5 7.5h4M5 10h2" }
+    ], { "stroke-width": "2" });
+  }
+
+  var iconCreators = {
+    list: iconList, calendar: iconCalendar, share: iconShare, key: iconKey,
+    settings: iconSettings, brain: iconBrain, database: iconDatabase
+  };
+
+  /* ----------------------------------------------------------
+     Top nav builder
+     ---------------------------------------------------------- */
+  function buildTopNav() {
+    var brand = el("div", { className: "top-nav-brand" }, [
+      el("span", { className: "top-nav-brand-name", textContent: "Ambient Code Platform" }),
+      el("span", { className: "top-nav-version", textContent: "v0.21.3" })
+    ]);
+    var integrationsBtn = el("button", { className: "btn btn-ghost text-sm text-muted" }, [iconPlug(), " Integrations"]);
+    var avatar = el("div", { style: {
+      width: "32px", height: "32px", borderRadius: "50%", background: "oklch(0.5 0.15 290)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontSize: "0.75rem", fontWeight: "600", color: "white"
+    } }, ["JE"]);
+    var actions = el("div", { className: "top-nav-actions" }, [integrationsBtn, avatar]);
+    return el("div", { className: "top-nav" }, [brand, actions]);
+  }
+
+  /* ----------------------------------------------------------
+     Sidebar builder
+     ---------------------------------------------------------- */
+  var navItemDefs = [
+    { label: "Sessions",           icon: "list",     key: "sessions" },
+    { label: "Schedules",          icon: "calendar",  key: "schedules" },
+    { label: "Sharing",            icon: "share",     key: "sharing" },
+    { label: "Access Keys",        icon: "key",       key: "keys" },
+    { label: "Workspace Settings", icon: "settings",  key: "settings" },
+    { label: "Learning",           icon: "brain",     key: "learning" },
+    { label: "Project Memory",     icon: "database",  key: "memory" }
+  ];
+
+  var recentSessions = [
+    { name: "session-prod-analysis",    status: "completed", time: "14m" },
+    { name: "session-db-migrate",       status: "running",   time: "1h" },
+    { name: "session-operator-refactor",status: "completed", time: "3h" },
+    { name: "session-frontend-forms",   status: "failed",    time: "5h" },
+    { name: "session-onboard-redis",    status: "completed", time: "23m" }
+  ];
+
+  function buildSidebar(activeKey) {
+    var sidebar = el("div", { className: "sidebar" });
+
+    // New Session button
+    var newBtn = el("button", { className: "btn btn-outline", style: { width: "100%" } }, [iconPlus(), " New Session"]);
+    sidebar.appendChild(el("div", { className: "sidebar-new-session" }, [newBtn]));
+
+    // Nav section
+    var nav = el("div", { className: "sidebar-nav" });
+
+    // Workspace back
+    var backLeft = el("span", { style: { display: "flex", alignItems: "center" } }, [iconBack(), " Workspaces"]);
+    var wsName = el("span", { className: "sidebar-workspace-name", textContent: "platform" });
+    nav.appendChild(el("button", { className: "sidebar-workspace-back" }, [backLeft, wsName]));
+
+    // Nav items
+    navItemDefs.forEach(function(item) {
+      var cls = "sidebar-nav-item" + (item.key === activeKey ? " active" : "");
+      var iconFn = iconCreators[item.icon];
+      nav.appendChild(el("button", { className: cls }, [iconFn ? iconFn() : null, " " + item.label]));
+    });
+    sidebar.appendChild(nav);
+
+    // Separator
+    sidebar.appendChild(el("div", { className: "sidebar-separator" }));
+
+    // Recents
+    sidebar.appendChild(el("div", { className: "sidebar-recents-header" }, [
+      el("span", { className: "sidebar-recents-label", textContent: "Recents" })
+    ]));
+
+    var list = el("div", { className: "sidebar-recents-list" });
+    recentSessions.forEach(function(s) {
+      var dot = el("div", { className: "session-dot dot-" + s.status });
+      var name = el("span", { className: "session-name", textContent: s.name });
+      var time = el("span", { className: "session-time", textContent: s.time });
+      list.appendChild(el("div", { className: "sidebar-session " + s.status }, [dot, name, time]));
+    });
+    sidebar.appendChild(list);
+
+    return sidebar;
+  }
+
+  /* ----------------------------------------------------------
+     Screen selector tabs
+     ---------------------------------------------------------- */
+  var screenDefs = [
+    { id: "screen-memory",    label: "Project Memory" },
+    { id: "screen-dashboard", label: "Learning Dashboard" },
+    { id: "screen-config",    label: "Feedback Loop Config" },
+    { id: "screen-insights",  label: "Insight Extraction" }
+  ];
+
+  var selectorBar = document.getElementById("screenSelector");
+  var screenTabs = [];
+
+  screenDefs.forEach(function(def, idx) {
+    var btn = el("button", { className: "screen-tab" + (idx === 0 ? " active" : ""), "data-screen": def.id, textContent: def.label });
+    selectorBar.appendChild(btn);
+    screenTabs.push(btn);
+  });
+
+  function switchScreen(targetId) {
+    document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+    screenTabs.forEach(function(t) { t.classList.remove("active"); });
+    var target = document.getElementById(targetId);
+    if (target) target.classList.add("active");
+  }
+
+  screenTabs.forEach(function(tab) {
+    tab.addEventListener("click", function() {
+      switchScreen(this.getAttribute("data-screen"));
+      screenTabs.forEach(function(t) { t.classList.remove("active"); });
+      this.classList.add("active");
+    });
+  });
+
+  /* ===========================================================
+     SCREEN 1: PROJECT MEMORY
+     =========================================================== */
+  (function buildMemoryScreen() {
+    var screen = document.getElementById("screen-memory");
+    screen.appendChild(buildTopNav());
+
+    var main = el("div", { className: "main-layout" });
+    main.appendChild(buildSidebar("memory"));
+
+    var content = el("div", { className: "content-area" });
+    var padded = el("div", { className: "content-padded" });
+
+    // Header
+    var addBtn = el("button", { className: "btn btn-primary" }, [iconPlus(), " Add Memory"]);
+    var headerLeft = el("div", { className: "content-header-left" }, [
+      el("h1", { textContent: "Project Memory" }),
+      el("p", { textContent: "Knowledge accumulated from corrections, insights, and manual entries" })
+    ]);
+    padded.appendChild(el("div", { className: "content-header" }, [headerLeft, addBtn]));
+
+    // Filter tabs
+    var filterDefs = [
+      { label: "All (8)", filter: "all" },
+      { label: "Candidates (3)", filter: "candidates" },
+      { label: "Approved (4)", filter: "approved" },
+      { label: "Archived (1)", filter: "archived" }
+    ];
+    var filterBar = el("div", { className: "filter-tabs" });
+    var filterBtns = [];
+    filterDefs.forEach(function(fd, idx) {
+      var btn = el("button", { className: "filter-tab" + (idx === 0 ? " active" : ""), "data-filter": fd.filter, textContent: fd.label });
+      filterBar.appendChild(btn);
+      filterBtns.push(btn);
+    });
+    padded.appendChild(filterBar);
+
+    // Search
+    padded.appendChild(el("input", { type: "text", className: "search-input", placeholder: "Search memories..." }));
+
+    // Memory data
+    var memories = [
+      {
+        status: "approved", statusLabel: "Approved", category: "environment", categoryLabel: "Environment",
+        text: "The int-* prefixed instances (int-staging-01 through int-staging-04) are internal test environments and must be excluded from all production metrics, error rate calculations, and capacity planning reports.",
+        source: "Correction in session-prod-analysis", date: "Apr 12, 2026", hasApprove: false
+      },
+      {
+        status: "candidate", statusLabel: "Candidate", category: "procedure", categoryLabel: "Procedure",
+        text: "When generating database migration scripts, always include a rollback section and wrap the migration in a transaction. Use IF NOT EXISTS guards on all CREATE statements.",
+        source: "Correction in session-db-migrate", date: "Apr 14, 2026", hasApprove: true
+      },
+      {
+        status: "approved", statusLabel: "Approved", category: "preference", categoryLabel: "Preference",
+        text: "Use uv instead of pip for all Python package management. Docker instead of podman. Prefer Make targets over raw commands for build operations.",
+        source: "Manual entry", date: "Apr 8, 2026", hasApprove: false
+      },
+      {
+        status: "candidate", statusLabel: "Candidate", category: "pattern", categoryLabel: "Pattern",
+        text: "Go handler functions in this codebase use GetK8sClientsForRequest(c) for user-scoped operations, never the backend service account. All child K8s resources must set OwnerReferences with controller=true.",
+        source: "Insight from session-operator-refactor", date: "Apr 15, 2026", hasApprove: true
+      }
+    ];
+
+    var entriesContainer = el("div", { className: "memory-entries" });
+    var memoryCards = [];
+
+    memories.forEach(function(m) {
+      var card = el("div", { className: "card", "data-status": m.status, style: { padding: "16px" } });
+
+      var badges = el("div", { className: "memory-card-badges" }, [
+        el("span", { className: "badge badge-" + m.status, textContent: m.statusLabel }),
+        el("span", { className: "badge badge-" + m.category, textContent: m.categoryLabel })
+      ]);
+      card.appendChild(badges);
+      card.appendChild(el("div", { className: "memory-card-content", textContent: m.text }));
+
+      var actions = el("div", { className: "memory-card-actions" });
+      if (m.hasApprove) {
+        var approveBtn = el("button", { className: "btn btn-ghost btn-sm", textContent: "Approve" });
+        approveBtn.addEventListener("click", function() {
+          card.setAttribute("data-status", "approved");
+          var sBadge = card.querySelector(".badge-candidate");
+          if (sBadge) {
+            sBadge.classList.remove("badge-candidate");
+            sBadge.classList.add("badge-approved");
+            sBadge.textContent = "Approved";
+          }
+          this.textContent = "Edit";
+        });
+        actions.appendChild(approveBtn);
+      } else {
+        actions.appendChild(el("button", { className: "btn btn-ghost btn-sm", textContent: "Edit" }));
+      }
+      actions.appendChild(el("button", { className: "btn btn-ghost btn-sm", textContent: "Archive" }));
+
+      var meta = el("div", { className: "memory-card-meta" }, [
+        el("span", { className: "memory-card-source", textContent: m.source + " \u00B7 " + m.date }),
+        actions
+      ]);
+      card.appendChild(meta);
+
+      entriesContainer.appendChild(card);
+      memoryCards.push(card);
+    });
+
+    padded.appendChild(entriesContainer);
+    content.appendChild(padded);
+    main.appendChild(content);
+    screen.appendChild(main);
+
+    // Filter tab click handlers
+    filterBtns.forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        filterBtns.forEach(function(b) { b.classList.remove("active"); });
+        this.classList.add("active");
+        var filter = this.getAttribute("data-filter");
+        memoryCards.forEach(function(card) {
+          var st = card.getAttribute("data-status");
+          if (filter === "all") card.style.display = "";
+          else if (filter === "candidates" && st === "candidate") card.style.display = "";
+          else if (filter === "approved" && st === "approved") card.style.display = "";
+          else if (filter === "archived" && st === "archived") card.style.display = "";
+          else card.style.display = "none";
+        });
+      });
+    });
+  })();
+
+  /* ===========================================================
+     SCREEN 2: CHAT WITH CORRECT THIS
+     =========================================================== */
+  (function buildChatScreen() {
+    var screen = document.getElementById("screen-chat");
+    screen.appendChild(buildTopNav());
+
+    var main = el("div", { className: "main-layout" });
+    main.appendChild(buildSidebar("sessions"));
+
+    var contentFull = el("div", { className: "content-full" });
+
+    // Content tabs (Chat / Explorer)
+    var chatTabBtn = el("button", { className: "chat-content-tab active" }, [iconPencil(), " Chat"]);
+    var explorerTabBtn = el("button", { className: "chat-content-tab" }, [iconFile(), " Explorer"]);
+    contentFull.appendChild(el("div", { className: "chat-content-tabs" }, [chatTabBtn, explorerTabBtn]));
+
+    // Chat messages
+    var chatArea = el("div", { className: "chat-area" });
+
+    // User message 1
+    chatArea.appendChild(el("div", { className: "msg msg-user", textContent: "Analyze the error rates across production instances" }));
+
+    // Agent message 2 (the mistake)
+    var agentMsg2 = el("div", { className: "msg msg-agent", style: { position: "relative" } });
+    var agentText2 = el("div");
+
+    var lines2 = [
+      "I've analyzed the error rates across all production instances. Here's the breakdown:",
+      "",
+      "Error Rate Summary (last 24h):",
+      "\u2022 prod-api-01: 0.23% (healthy)",
+      "\u2022 prod-api-02: 0.19% (healthy)",
+      "\u2022 prod-api-03: 0.31% (healthy)",
+      "\u2022 int-staging-01: 14.7% (critical)",
+      "\u2022 int-staging-02: 8.3% (elevated)",
+      "\u2022 prod-worker-01: 0.12% (healthy)",
+      "",
+      "The average error rate across all instances is 3.97%, which exceeds the 1% SLO threshold. The int-staging instances are showing significantly elevated error rates that are pulling up the aggregate metrics."
+    ];
+
+    lines2.forEach(function(line) {
+      if (line === "") {
+        agentText2.appendChild(el("br"));
+      } else {
+        // Bold specific parts
+        if (line.indexOf("Error Rate Summary") === 0 || line.indexOf("3.97%") > -1) {
+          var strong = el("strong", { textContent: line });
+          agentText2.appendChild(strong);
+          agentText2.appendChild(el("br"));
+        } else {
+          agentText2.appendChild(document.createTextNode(line));
+          agentText2.appendChild(el("br"));
+        }
+      }
+    });
+    agentMsg2.appendChild(agentText2);
+
+    // Action buttons
+    var msgActions = el("div", { className: "msg-actions" });
+    var thumbUpBtn = el("button", { className: "msg-action-btn", title: "Helpful" }, [iconThumbUp()]);
+    var thumbDownBtn = el("button", { className: "msg-action-btn", title: "Not helpful" }, [iconThumbDown()]);
+    var correctBtn = el("button", { className: "msg-action-btn correct-btn", title: "Correct this" }, [iconPencil()]);
+    msgActions.appendChild(thumbUpBtn);
+    msgActions.appendChild(thumbDownBtn);
+    msgActions.appendChild(correctBtn);
+    agentMsg2.appendChild(msgActions);
+
+    // Correction popover
+    var popover = el("div", { className: "correction-popover hidden" });
+    popover.appendChild(el("h4", { textContent: "Log a Correction" }));
+
+    // Type field
+    var typeField = el("div", { className: "correction-field" });
+    typeField.appendChild(el("label", { textContent: "Correction Type" }));
+    var typeSelect = el("select");
+    ["out_of_scope", "incomplete", "incorrect", "style"].forEach(function(opt) {
+      var option = el("option", { value: opt, textContent: opt });
+      if (opt === "out_of_scope") option.selected = true;
+      typeSelect.appendChild(option);
+    });
+    typeField.appendChild(typeSelect);
+    popover.appendChild(typeField);
+
+    // Textarea
+    var textField = el("div", { className: "correction-field" });
+    textField.appendChild(el("label", { textContent: "What should have happened?" }));
+    var textarea = el("textarea", { placeholder: "Describe the expected behavior..." });
+    textarea.value = "Exclude int-* test instances from production analysis. They are internal testing environments and should never be included in production metrics.";
+    textField.appendChild(textarea);
+    popover.appendChild(textField);
+
+    // Checkbox
+    var checkboxLabel = el("label", { textContent: "Save as project memory candidate" });
+    var checkbox = el("input", { type: "checkbox", checked: "checked" });
+    popover.appendChild(el("div", { className: "correction-checkbox" }, [checkbox, checkboxLabel]));
+
+    // Submit
+    var submitBtn = el("button", { className: "btn btn-primary btn-sm", textContent: "Submit Correction" });
+    submitBtn.addEventListener("click", function() {
+      popover.classList.add("hidden");
+      submitBtn.textContent = "Submitted";
+      setTimeout(function() { submitBtn.textContent = "Submit Correction"; }, 2000);
+    });
+    popover.appendChild(submitBtn);
+    agentMsg2.appendChild(popover);
+
+    // Toggle popover on correct button click
+    correctBtn.addEventListener("click", function(e) {
+      e.stopPropagation();
+      popover.classList.toggle("hidden");
+    });
+
+    document.addEventListener("click", function(e) {
+      if (!popover.contains(e.target) && e.target !== correctBtn && !correctBtn.contains(e.target)) {
+        popover.classList.add("hidden");
+      }
+    });
+
+    chatArea.appendChild(agentMsg2);
+
+    // User message 3
+    chatArea.appendChild(el("div", { className: "msg msg-user", textContent: "No \u2014 exclude the int-* test instances, they skew the data" }));
+
+    // Agent message 4 (corrected with citations)
+    var agentMsg4 = el("div", { className: "msg msg-agent" });
+    var agentText4 = el("div");
+
+    agentText4.appendChild(document.createTextNode("You're right, I apologize for including the test instances. Here's the corrected analysis with only production instances "));
+    agentText4.appendChild(el("span", { className: "citation", textContent: "PM-042" }));
+    agentText4.appendChild(document.createTextNode(":"));
+    agentText4.appendChild(el("br"));
+    agentText4.appendChild(el("br"));
+    agentText4.appendChild(el("strong", { textContent: "Error Rate Summary (last 24h) \u2014 Production Only:" }));
+    agentText4.appendChild(el("br"));
+
+    ["\u2022 prod-api-01: 0.23% (healthy)", "\u2022 prod-api-02: 0.19% (healthy)",
+     "\u2022 prod-api-03: 0.31% (healthy)", "\u2022 prod-worker-01: 0.12% (healthy)"].forEach(function(line) {
+      agentText4.appendChild(document.createTextNode(line));
+      agentText4.appendChild(el("br"));
+    });
+
+    agentText4.appendChild(el("br"));
+    agentText4.appendChild(document.createTextNode("The average error rate across production instances is "));
+    agentText4.appendChild(el("strong", { textContent: "0.21%" }));
+    agentText4.appendChild(document.createTextNode(", well within the 1% SLO threshold. All production instances are operating normally. "));
+    agentText4.appendChild(el("span", { className: "citation", textContent: "PM-042" }));
+    agentText4.appendChild(el("br"));
+    agentText4.appendChild(el("br"));
+    agentText4.appendChild(document.createTextNode("I've noted that int-* prefixed instances should be excluded from production metrics going forward."));
+
+    agentMsg4.appendChild(agentText4);
+    chatArea.appendChild(agentMsg4);
+
+    contentFull.appendChild(chatArea);
+
+    // Correction ledger
+    var ledger = el("div", { className: "correction-ledger" });
+    ledger.appendChild(el("div", { className: "ledger-header" }, [iconLedger(), " Correction Ledger"]));
+
+    var ledgerData = [
+      ["type:", "out_of_scope"],
+      ["session:", "session-prod-analysis"],
+      ["message:", "msg_02 (agent response #1)"],
+      ["correction:", "Exclude int-* test instances from production analysis"],
+      ["memory:", "PM-042 (candidate)"],
+      ["logged:", "2026-04-15T14:23:07Z"]
+    ];
+    ledgerData.forEach(function(row) {
+      ledger.appendChild(el("div", { className: "ledger-row" }, [
+        el("span", { className: "ledger-key", textContent: row[0] }),
+        el("span", { className: "ledger-val", textContent: row[1] })
+      ]));
+    });
+    contentFull.appendChild(ledger);
+
+    // Chat input
+    var chatInput = el("input", { type: "text", className: "chat-input", placeholder: "Message the agent..." });
+    var sendBtn = el("button", { className: "btn btn-primary btn-icon" }, [iconSend()]);
+    contentFull.appendChild(el("div", { className: "chat-input-bar" }, [chatInput, sendBtn]));
+
+    main.appendChild(contentFull);
+    screen.appendChild(main);
+  })();
+
+  /* ===========================================================
+     SCREEN 3: LEARNING DASHBOARD
+     =========================================================== */
+  (function buildDashboardScreen() {
+    var screen = document.getElementById("screen-dashboard");
+    screen.appendChild(buildTopNav());
+
+    var main = el("div", { className: "main-layout" });
+    main.appendChild(buildSidebar("learning"));
+
+    var content = el("div", { className: "content-area" });
+    var padded = el("div", { className: "content-padded" });
+
+    // Header
+    padded.appendChild(el("div", { className: "content-header" }, [
+      el("div", { className: "content-header-left" }, [
+        el("h1", { textContent: "Learning" }),
+        el("p", { textContent: "Track how your team's corrections improve agent performance" })
+      ])
+    ]));
+
+    // Stat cards
+    var stats = [
+      { value: "47", label: "Corrections", delta: "+12 this week" },
+      { value: "18", label: "Improvement Sessions", delta: "+3 this week" },
+      { value: "23", label: "Memories Created", delta: "+5 this week" },
+      { value: "89", label: "Memory Citations", delta: "+31 this week" }
+    ];
+
+    var statsGrid = el("div", { className: "stat-cards" });
+    stats.forEach(function(s) {
+      statsGrid.appendChild(el("div", { className: "card", style: { padding: "20px" } }, [
+        el("div", { className: "stat-card-value", textContent: s.value }),
+        el("div", { className: "stat-card-label", textContent: s.label }),
+        el("div", { className: "stat-card-delta delta-up", textContent: s.delta })
+      ]));
+    });
+    padded.appendChild(statsGrid);
+
+    // Two columns
+    var twoCols = el("div", { className: "two-col" });
+
+    // Left: Correction Types
+    var leftCard = el("div", { className: "card" });
+    leftCard.appendChild(el("div", { className: "section-title", textContent: "Correction Types" }));
+
+    var barData = [
+      { label: "incomplete", pct: "54%", val: "12", color: "var(--status-info)" },
+      { label: "incorrect", pct: "82%", val: "18", color: "var(--destructive)" },
+      { label: "out_of_scope", pct: "32%", val: "7", color: "var(--status-warning)" },
+      { label: "style", pct: "45%", val: "10", color: "var(--cat-procedure)" }
+    ];
+
+    barData.forEach(function(b) {
+      var fill = el("div", { className: "bar-fill", style: { width: b.pct, background: b.color } });
+      leftCard.appendChild(el("div", { className: "bar-row" }, [
+        el("div", { className: "bar-label", textContent: b.label }),
+        el("div", { className: "bar-track" }, [fill]),
+        el("div", { className: "bar-value", textContent: b.val })
+      ]));
+    });
+    twoCols.appendChild(leftCard);
+
+    // Right: Recent Activity
+    var rightCard = el("div", { className: "card" });
+    rightCard.appendChild(el("div", { className: "section-title", textContent: "Recent Activity" }));
+
+    var timeline = [
+      { type: "correction", text: "Correction logged: exclude int-* instances from prod metrics", time: "14 minutes ago" },
+      { type: "improvement", text: "Improvement session completed: 3 corrections consolidated into 2 memories", time: "2 hours ago" },
+      { type: "memory", text: 'Memory PM-041 approved: "Always use transaction blocks in migration scripts"', time: "5 hours ago" },
+      { type: "correction", text: "Correction logged: use GetK8sClientsForRequest instead of service account", time: "Yesterday" },
+      { type: "improvement", text: "Improvement session triggered: 4 corrections in Go handler patterns", time: "Yesterday" }
+    ];
+
+    timeline.forEach(function(t) {
+      rightCard.appendChild(el("div", { className: "timeline-item" }, [
+        el("div", { className: "timeline-dot " + t.type }),
+        el("div", {}, [
+          el("div", { className: "timeline-text", textContent: t.text }),
+          el("div", { className: "timeline-time", textContent: t.time })
+        ])
+      ]));
+    });
+    twoCols.appendChild(rightCard);
+
+    padded.appendChild(twoCols);
+    content.appendChild(padded);
+    main.appendChild(content);
+    screen.appendChild(main);
+  })();
+
+  /* ===========================================================
+     SCREEN 4: FEEDBACK LOOP CONFIG
+     =========================================================== */
+  (function buildConfigScreen() {
+    var screen = document.getElementById("screen-config");
+    screen.appendChild(buildTopNav());
+
+    var main = el("div", { className: "main-layout" });
+    main.appendChild(buildSidebar("settings"));
+
+    var content = el("div", { className: "content-area" });
+    var padded = el("div", { className: "content-padded" });
+
+    // Header
+    padded.appendChild(el("div", { className: "content-header" }, [
+      el("div", { className: "content-header-left" }, [
+        el("h1", { textContent: "Workspace Settings" }),
+        el("p", { textContent: "Configure workspace-level preferences and automation" })
+      ])
+    ]));
+
+    // Feedback Loop card
+    var fbCard = el("div", { className: "card", style: { marginBottom: "20px" } });
+    fbCard.appendChild(el("div", { className: "section-title", style: { marginBottom: "4px" }, textContent: "Feedback Loop" }));
+    fbCard.appendChild(el("p", { className: "text-sm text-muted", style: { marginBottom: "16px" }, textContent: "Configure how corrections trigger automated improvement sessions" }));
+
+    // Toggle row
+    var toggleThumb = el("div", { className: "toggle-thumb" });
+    var toggleTrack = el("button", { className: "toggle-track on" }, [toggleThumb]);
+    toggleTrack.addEventListener("click", function() { this.classList.toggle("on"); });
+
+    fbCard.appendChild(el("div", { className: "settings-row" }, [
+      el("div", {}, [
+        el("div", { className: "settings-row-label", textContent: "Auto-trigger improvement sessions" }),
+        el("div", { className: "settings-row-sublabel", textContent: "Automatically run improvement when correction threshold is reached" })
+      ]),
+      el("div", { className: "settings-row-value" }, [toggleTrack])
+    ]));
+
+    // Min corrections
+    fbCard.appendChild(el("div", { className: "settings-row" }, [
+      el("div", {}, [
+        el("div", { className: "settings-row-label", textContent: "Minimum corrections" }),
+        el("div", { className: "settings-row-sublabel", textContent: "Number of corrections needed before triggering improvement" })
+      ]),
+      el("div", { className: "settings-row-value" }, [el("input", { type: "number", className: "num-input", value: "2", min: "1", max: "50" })])
+    ]));
+
+    // Time window
+    fbCard.appendChild(el("div", { className: "settings-row" }, [
+      el("div", {}, [
+        el("div", { className: "settings-row-label", textContent: "Time window (hours)" }),
+        el("div", { className: "settings-row-sublabel", textContent: "Corrections within this window count toward the threshold" })
+      ]),
+      el("div", { className: "settings-row-value" }, [el("input", { type: "number", className: "num-input", value: "24", min: "1", max: "168" })])
+    ]));
+
+    // Weekly sweep
+    fbCard.appendChild(el("div", { className: "settings-row" }, [
+      el("div", {}, [
+        el("div", { className: "settings-row-label", textContent: "Weekly sweep" }),
+        el("div", { className: "settings-row-sublabel", textContent: "Scheduled consolidation of all pending corrections" })
+      ]),
+      el("div", { className: "settings-row-value" }, [
+        el("span", { className: "badge badge-approved", textContent: "Active" }),
+        el("span", { className: "text-sm", style: { color: "oklch(0.6 0.12 145)" }, textContent: "Mondays 9am UTC" })
+      ])
+    ]));
+
+    padded.appendChild(fbCard);
+
+    // Active Targets card
+    var targetsCard = el("div", { className: "card" });
+    targetsCard.appendChild(el("div", { className: "section-title", textContent: "Active Targets" }));
+
+    var table = el("table", { className: "mini-table" });
+    var thead = el("thead");
+    var headerRow = el("tr");
+    ["Target", "Corrections", "Threshold", "Status"].forEach(function(h) {
+      headerRow.appendChild(el("th", { textContent: h }));
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    var targetsData = [
+      { name: "Go handler patterns", count: "4", ratio: "4/2", pct: "100%", color: "var(--status-success)", status: "Triggered", statusClass: "badge-approved" },
+      { name: "Migration scripts", count: "2", ratio: "2/2", pct: "100%", color: "var(--status-success)", status: "Triggered", statusClass: "badge-approved" },
+      { name: "Frontend state management", count: "1", ratio: "1/2", pct: "50%", color: "var(--status-warning)", status: "Pending", statusClass: "badge-outline" },
+      { name: "Test instance filtering", count: "1", ratio: "1/2", pct: "50%", color: "var(--status-warning)", status: "Pending", statusClass: "badge-outline" }
+    ];
+
+    var tbody = el("tbody");
+    targetsData.forEach(function(t) {
+      var fill = el("div", { className: "threshold-fill", style: { width: t.pct, background: t.color } });
+      var thresholdCell = el("td");
+      var thresholdWrap = el("div", { style: { display: "flex", alignItems: "center", gap: "8px" } }, [
+        el("div", { className: "threshold-bar", style: { width: "80px" } }, [fill]),
+        el("span", { className: "text-xs text-muted", textContent: t.ratio })
+      ]);
+      thresholdCell.appendChild(thresholdWrap);
+
+      var row = el("tr", {}, [
+        el("td", { className: "font-medium", textContent: t.name }),
+        el("td", { textContent: t.count }),
+        thresholdCell,
+        el("td", {}, [el("span", { className: "badge " + t.statusClass, textContent: t.status })])
+      ]);
+      tbody.appendChild(row);
+    });
+    table.appendChild(tbody);
+    targetsCard.appendChild(table);
+    padded.appendChild(targetsCard);
+
+    content.appendChild(padded);
+    main.appendChild(content);
+    screen.appendChild(main);
+  })();
+
+  /* ===========================================================
+     SCREEN 5: INSIGHT EXTRACTION
+     =========================================================== */
+  (function buildInsightsScreen() {
+    var screen = document.getElementById("screen-insights");
+    screen.appendChild(buildTopNav());
+
+    var main = el("div", { className: "main-layout" });
+    main.appendChild(buildSidebar("sessions"));
+
+    var content = el("div", { className: "content-area" });
+    var padded = el("div", { className: "content-padded" });
+
+    // Header
+    padded.appendChild(el("div", { className: "content-header" }, [
+      el("div", { className: "content-header-left" }, [
+        el("h1", { textContent: "session-onboard-redis" }),
+        el("p", { textContent: "Completed 23 minutes ago" })
+      ])
+    ]));
+
+    // Banner
+    padded.appendChild(el("div", { className: "insight-banner" }, [
+      el("div", { className: "insight-banner-text" }, [
+        iconClock(),
+        " Insight extraction completed \u2014 3 candidate memories extracted"
+      ]),
+      el("span", { className: "insight-banner-link", textContent: "Review in Project Memory" })
+    ]));
+
+    // Extraction results card
+    var resultsCard = el("div", { className: "card card-flush" });
+
+    // Card header
+    resultsCard.appendChild(el("div", { style: {
+      padding: "16px 20px", borderBottom: "1px solid var(--border)",
+      display: "flex", alignItems: "center", justifyContent: "space-between"
+    } }, [
+      el("div", {}, [
+        el("div", { className: "section-title", style: { marginBottom: "2px" }, textContent: "Extracted Insights" }),
+        el("div", { className: "text-xs text-muted", textContent: "from session-onboard-redis" })
+      ])
+    ]));
+
+    // Insight entries
+    var insights = [
+      {
+        category: "environment", categoryLabel: "Environment", confidence: "92%", confPct: "92%",
+        text: "Redis cluster connections in production require TLS with mutual authentication. The connection string must include the CA cert path at /etc/redis/certs/ca.pem and client cert at /etc/redis/certs/client.pem.",
+        turns: "Extracted from turns 7-12"
+      },
+      {
+        category: "procedure", categoryLabel: "Procedure", confidence: "87%", confPct: "87%",
+        text: "When onboarding a new Redis-backed service, always run CLUSTER INFO and verify cluster_state:ok before proceeding with data migration. Fail fast if any node reports cluster_state:fail.",
+        turns: "Extracted from turns 15-19"
+      },
+      {
+        category: "pattern", categoryLabel: "Pattern", confidence: "74%", confPct: "74%",
+        text: "Redis Sentinel failover events should be handled by wrapping the connection pool with a retry decorator (max 3 retries, 500ms backoff). Never let a single Sentinel timeout propagate as a 500 to the end user.",
+        turns: "Extracted from turns 22-26"
+      }
+    ];
+
+    insights.forEach(function(ins) {
+      var insightCard = el("div", { className: "insight-card" });
+
+      // Top row
+      var confFill = el("div", { className: "confidence-fill", style: { width: ins.confPct } });
+      insightCard.appendChild(el("div", { className: "insight-card-row" }, [
+        el("div", { style: { display: "flex", alignItems: "center", gap: "8px" } }, [
+          el("span", { className: "badge badge-candidate", textContent: "Candidate" }),
+          el("span", { className: "badge badge-" + ins.category, textContent: ins.categoryLabel })
+        ]),
+        el("div", { className: "confidence-bar" }, [
+          el("div", { className: "confidence-track" }, [confFill]),
+          el("span", { className: "confidence-label", textContent: ins.confidence })
+        ])
+      ]));
+
+      // Content
+      insightCard.appendChild(el("div", { className: "insight-card-content", textContent: ins.text }));
+
+      // Bottom row with buttons
+      var approveBtn = el("button", { className: "btn btn-outline btn-sm", textContent: "Approve" });
+      var dismissBtn = el("button", { className: "btn btn-ghost btn-sm", textContent: "Dismiss" });
+
+      approveBtn.addEventListener("click", function() {
+        var badge = insightCard.querySelector(".badge-candidate");
+        if (badge) {
+          badge.classList.remove("badge-candidate");
+          badge.classList.add("badge-approved");
+          badge.textContent = "Approved";
+        }
+        var btns = insightCard.querySelectorAll(".btn");
+        for (var i = 0; i < btns.length; i++) {
+          btns[i].disabled = true;
+          btns[i].style.opacity = "0.5";
+          btns[i].style.pointerEvents = "none";
+        }
+      });
+
+      dismissBtn.addEventListener("click", function() {
+        var badge = insightCard.querySelector(".badge-candidate");
+        if (badge) {
+          badge.classList.remove("badge-candidate");
+          badge.classList.add("badge-archived");
+          badge.textContent = "Dismissed";
+        }
+        insightCard.style.opacity = "0.4";
+        var btns = insightCard.querySelectorAll(".btn");
+        for (var i = 0; i < btns.length; i++) {
+          btns[i].disabled = true;
+          btns[i].style.opacity = "0.5";
+          btns[i].style.pointerEvents = "none";
+        }
+      });
+
+      insightCard.appendChild(el("div", { className: "insight-card-row" }, [
+        el("span", { className: "text-xs text-very-muted", textContent: ins.turns }),
+        el("div", { style: { display: "flex", gap: "6px" } }, [approveBtn, dismissBtn])
+      ]));
+
+      resultsCard.appendChild(insightCard);
+    });
+
+    // Config summary
+    resultsCard.appendChild(el("div", { className: "config-summary", textContent: "Model: claude-haiku-4 \u00B7 Max per session: 5 \u00B7 Min turns: 5" }));
+
+    padded.appendChild(resultsCard);
+    content.appendChild(padded);
+    main.appendChild(content);
+    screen.appendChild(main);
+  })();
+
+})();
+</script>
+</body>
+</html>

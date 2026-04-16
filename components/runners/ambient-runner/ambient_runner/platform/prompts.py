@@ -117,6 +117,80 @@ CORRECTION_DETECTION_INSTRUCTIONS = (
 
 
 # ---------------------------------------------------------------------------
+# Memory citation prompt
+# ---------------------------------------------------------------------------
+
+MEMORY_CITATION_HEADER = "## Project Memories\n\n"
+
+MEMORY_CITATION_INSTRUCTIONS = (
+    "## Memory Citation Instructions\n\n"
+    "The project memories listed above capture lessons learned from previous "
+    "corrections and improvements. When your response draws on knowledge from "
+    "a specific memory, cite it inline using the format `[memory:PM-XXX]` "
+    "where PM-XXX is the memory ID.\n\n"
+    "Rules:\n"
+    "- Only cite a memory when you actually use its knowledge in your response.\n"
+    "- Place the citation inline at the point where that knowledge is applied.\n"
+    "- You may cite multiple memories in a single response.\n"
+    "- Do not cite memories you did not use.\n\n"
+)
+
+
+def format_memory_entry(entry: dict) -> str:
+    """Format a single memory entry with its ID and metadata.
+
+    Args:
+        entry: Dict with 'id', 'content', and optional 'author',
+               'created_at', 'correction_id'.
+
+    Returns:
+        Formatted string for inclusion in the system prompt.
+    """
+    memory_id = entry.get("id", "PM-???")
+    content = entry.get("content", "")
+    author = entry.get("author", "")
+    created_at = entry.get("created_at", "")
+    correction_id = entry.get("correction_id", "")
+
+    line = f"- **[{memory_id}]** {content}"
+    metadata_parts = []
+    if author:
+        metadata_parts.append(f"author: {author}")
+    if created_at:
+        metadata_parts.append(f"created: {created_at}")
+    if correction_id:
+        metadata_parts.append(f"from correction: {correction_id}")
+    if metadata_parts:
+        line += f"\n  _({', '.join(metadata_parts)})_"
+    return line
+
+
+def build_memory_citation_prompt(memories: list | None) -> str:
+    """Build the memory citation section for the system prompt.
+
+    When memories are present, returns a formatted block containing all
+    memory entries and citation instructions. When memories are empty
+    or None, returns an empty string (FR-003).
+
+    Args:
+        memories: List of memory entry dicts, or None.
+
+    Returns:
+        Formatted prompt string, or empty string if no memories.
+    """
+    if not memories:
+        return ""
+
+    section = MEMORY_CITATION_HEADER
+    for entry in memories:
+        section += format_memory_entry(entry) + "\n"
+    section += "\n"
+    section += MEMORY_CITATION_INSTRUCTIONS
+
+    return section
+
+
+# ---------------------------------------------------------------------------
 # Prompt builder
 # ---------------------------------------------------------------------------
 

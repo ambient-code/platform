@@ -5,11 +5,14 @@ bridge (Claude, Gemini, future) can log rubric evaluations and
 corrections without depending on Claude-bridge internals.
 """
 
+import asyncio
+
 from ambient_runner.bridges.claude.corrections import (
     CORRECTION_SOURCES,
     CORRECTION_TYPES,
     _get_session_context,
     _log_correction_to_langfuse,
+    _post_correction_to_backend,
     build_target_map,
 )
 from ambient_runner.bridges.claude.tools import _log_to_langfuse
@@ -77,6 +80,7 @@ def log_correction(
     target_label: str = "",
     obs=None,
     source: str = "human",
+    ledger=None,
 ) -> tuple[bool, str | None]:
     """Log a correction to Langfuse for the improvement feedback loop.
 
@@ -88,12 +92,24 @@ def log_correction(
         target_label: Optional target label resolved against the target map.
         obs: Optional ObservabilityManager for trace correlation.
         source: One of CORRECTION_SOURCES ('human' or 'rubric').
+        ledger: Optional CorrectionLedger to append to (independent of
+            Langfuse availability).
 
     Returns:
         (success, error_message) tuple.
     """
+    # Append to ledger first -- independent of Langfuse availability (FR-011).
+    if ledger is not None:
+        ledger.append(
+            {
+                "correction_type": correction_type,
+                "agent_action": agent_action,
+                "user_correction": user_correction,
+            }
+        )
+
     target_map = build_target_map(get_session_context())
-    return _log_correction_to_langfuse(
+    success, error = _log_correction_to_langfuse(
         correction_type=correction_type,
         agent_action=agent_action,
         user_correction=user_correction,
@@ -103,3 +119,23 @@ def log_correction(
         session_id=session_id,
         source=source,
     )
+    if success:
+        # Fire-and-forget POST to backend corrections endpoint
+        context = get_session_context()
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(
+                    _post_correction_to_backend(
+                        session_name=context.get("session_name", session_id),
+                        correction_type=correction_type,
+                        agent_action=agent_action,
+                        user_correction=user_correction,
+                        target_label=target_label,
+                        source=source,
+                    )
+                )
+        except RuntimeError:
+            # No event loop available; skip backend POST silently
+            pass
+    return success, error

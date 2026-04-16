@@ -69,6 +69,12 @@ class ClaudeBridge(PlatformBridge):
         # Per-thread halt tracking to avoid race conditions on shared adapter
         self._halted_by_thread: dict[str, bool] = {}
 
+        # Per-session correction ledger for context injection (spec 004).
+        # Session-local, not persisted -- pod restart clears it.
+        from ambient_runner.platform.correction_ledger import CorrectionLedger
+
+        self._correction_ledger = CorrectionLedger()
+
     # ------------------------------------------------------------------
     # PlatformBridge interface
     # ------------------------------------------------------------------
@@ -146,6 +152,31 @@ class ClaudeBridge(PlatformBridge):
             self._adapter = None
 
         self._ensure_adapter()
+
+        # Rebuild the system prompt before each turn so newly logged
+        # corrections appear in the agent's context (spec 004).
+        self._refresh_system_prompt()
+
+    def _refresh_system_prompt(self) -> None:
+        """Rebuild the system prompt on the cached adapter.
+
+        Re-renders the correction ledger into the prompt so corrections
+        logged since the last turn are visible to the agent.  No-op if
+        the adapter has not been built yet.
+        """
+        if self._adapter is None:
+            return
+        from ambient_runner.bridges.claude.prompts import build_sdk_system_prompt
+
+        system_prompt = build_sdk_system_prompt(
+            self._context.workspace_path,
+            self._cwd_path,
+            correction_ledger=self._correction_ledger,
+        )
+        # Update the adapter's stored options dict in-place so
+        # build_options() picks up the latest prompt on the next run.
+        if isinstance(self._adapter._options, dict):
+            self._adapter._options["system_prompt"] = system_prompt
 
     async def run(
         self,
@@ -569,14 +600,23 @@ class ClaudeBridge(PlatformBridge):
             log_auth_status,
         )
 
-        mcp_servers = build_mcp_servers(self._context, cwd_path, self._obs)
+        mcp_servers = build_mcp_servers(
+            self._context,
+            cwd_path,
+            self._obs,
+            correction_ledger=self._correction_ledger,
+        )
         log_auth_status(mcp_servers)
         allowed_tools = build_allowed_tools(mcp_servers)
 
         # System prompt
         from ambient_runner.bridges.claude.prompts import build_sdk_system_prompt
 
-        system_prompt = build_sdk_system_prompt(self._context.workspace_path, cwd_path)
+        system_prompt = build_sdk_system_prompt(
+            self._context.workspace_path,
+            cwd_path,
+            correction_ledger=self._correction_ledger,
+        )
 
         # Store results
         self._configured_model = configured_model

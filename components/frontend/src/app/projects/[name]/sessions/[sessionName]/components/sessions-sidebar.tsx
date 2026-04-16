@@ -28,6 +28,8 @@ import {
   Share2,
   Key,
   Settings,
+  BookOpen,
+  Brain,
   MoreHorizontal,
   MoreVertical,
   Cpu,
@@ -51,6 +53,7 @@ import { useProjectAccess } from "@/services/queries/use-project-access";
 import { useVersion } from "@/services/queries/use-version";
 import { cn } from "@/lib/utils";
 import type { AgenticSession } from "@/types/api";
+import { useWorkspaceFlag } from "@/services/queries/use-feature-flags-admin";
 
 type SessionsSidebarProps = {
   projectName: string;
@@ -117,6 +120,8 @@ export function SessionsSidebar({
 
   const hasMore = sessions.length > INITIAL_RECENTS_COUNT && !showAll;
 
+  const { enabled: learningEnabled } = useWorkspaceFlag(projectName, "learning-agent-loop");
+
   const navItems: NavItem[] = useMemo(
     () => [
       {
@@ -139,13 +144,25 @@ export function SessionsSidebar({
         icon: Key,
         href: `/projects/${projectName}/keys`,
       },
+      ...(learningEnabled ? [
+        {
+          label: "Project Memory",
+          icon: Brain,
+          href: `/projects/${projectName}/memory`,
+        },
+        {
+          label: "Learning",
+          icon: BookOpen,
+          href: `/projects/${projectName}/learning`,
+        },
+      ] : []),
       {
         label: "Workspace Settings",
         icon: Settings,
         href: `/projects/${projectName}/settings`,
       },
     ],
-    [projectName]
+    [projectName, learningEnabled]
   );
 
   if (collapsed) return null;

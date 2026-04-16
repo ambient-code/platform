@@ -202,6 +202,8 @@ func main() {
 	// Initialize websocket package
 	websocket.StateBaseDir = server.StateBaseDir
 	handlers.DeriveAgentStatusFromEvents = websocket.DeriveAgentStatus
+	handlers.LoadEventsForExtraction = websocket.LoadEventsForSession
+	websocket.OnSessionRunComplete = handlers.TriggerExtractionAsync
 
 	// Normal server mode
 	if err := server.Run(registerRoutes); err != nil {

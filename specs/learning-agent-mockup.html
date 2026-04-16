@@ -1,0 +1,1621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACP Learning Agent Loop — Interactive Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-deep: #060A12;
+  --bg-surface: #0D1117;
+  --bg-panel: #161B22;
+  --bg-raised: #1C2333;
+  --bg-hover: #242D3D;
+  --border: #21262D;
+  --border-focus: #388BFD;
+  --text-primary: #E6EDF3;
+  --text-secondary: #8B949E;
+  --text-muted: #484F58;
+  --amber: #D29922;
+  --amber-bright: #E3B341;
+  --amber-bg: rgba(210, 153, 34, 0.12);
+  --cyan: #39D2C0;
+  --cyan-dim: #2EA59A;
+  --cyan-bg: rgba(57, 210, 192, 0.10);
+  --green: #3FB950;
+  --green-bg: rgba(63, 185, 80, 0.12);
+  --rose: #F85149;
+  --rose-bg: rgba(248, 81, 73, 0.12);
+  --purple: #A371F7;
+  --purple-bg: rgba(163, 113, 247, 0.10);
+  --blue: #58A6FF;
+  --blue-bg: rgba(88, 166, 255, 0.10);
+  --font-body: 'Outfit', sans-serif;
+  --font-mono: 'Space Mono', monospace;
+  --radius: 8px;
+  --radius-lg: 12px;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(6, 10, 18, 0.85);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 32px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-logo {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--cyan);
+  text-transform: uppercase;
+}
+
+.header-divider { width: 1px; height: 20px; background: var(--border); }
+
+.header-title { font-size: 14px; font-weight: 400; color: var(--text-secondary); }
+
+.header-nav { margin-left: auto; display: flex; gap: 4px; }
+
+.header-nav button {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.header-nav button:hover { background: var(--bg-hover); color: var(--text-primary); }
+.header-nav button.active { background: var(--bg-raised); color: var(--text-primary); }
+
+.hero {
+  padding: 64px 32px 48px;
+  text-align: center;
+  position: relative;
+}
+
+.hero h1 {
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 12px;
+  background: linear-gradient(135deg, var(--text-primary) 0%, var(--cyan) 50%, var(--amber-bright) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero p {
+  font-size: 16px;
+  color: var(--text-secondary);
+  max-width: 620px;
+  margin: 0 auto 40px;
+  line-height: 1.6;
+}
+
+.loop-container {
+  position: relative;
+  width: 400px;
+  height: 400px;
+  margin: 0 auto 48px;
+}
+
+.loop-ring {
+  position: absolute;
+  inset: 40px;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+}
+
+.loop-ring::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: var(--cyan);
+  animation: loopSpin 4s linear infinite;
+}
+
+@keyframes loopSpin { to { transform: rotate(360deg); } }
+
+.loop-node {
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all 0.2s;
+  z-index: 2;
+}
+
+.loop-node:hover {
+  border-color: var(--cyan-dim);
+  transform: scale(1.05);
+  box-shadow: 0 0 24px rgba(57, 210, 192, 0.15);
+}
+
+.loop-node.active {
+  border-color: var(--cyan);
+  box-shadow: 0 0 32px rgba(57, 210, 192, 0.2);
+}
+
+.loop-node-icon { font-size: 28px; }
+.loop-node-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+}
+
+.loop-node:nth-child(1) { top: -10px; left: 50%; transform: translateX(-50%); }
+.loop-node:nth-child(2) { right: -10px; top: 50%; transform: translateY(-50%); }
+.loop-node:nth-child(3) { bottom: -10px; left: 50%; transform: translateX(-50%); }
+.loop-node:nth-child(4) { left: -10px; top: 50%; transform: translateY(-50%); }
+
+.loop-node:nth-child(1):hover, .loop-node:nth-child(1).active { transform: translateX(-50%) scale(1.05); }
+.loop-node:nth-child(2):hover, .loop-node:nth-child(2).active { transform: translateY(-50%) scale(1.05); }
+.loop-node:nth-child(3):hover, .loop-node:nth-child(3).active { transform: translateX(-50%) scale(1.05); }
+.loop-node:nth-child(4):hover, .loop-node:nth-child(4).active { transform: translateY(-50%) scale(1.05); }
+
+.loop-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  z-index: 3;
+}
+
+.loop-center-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.phase-indicator { display: flex; gap: 12px; margin-bottom: 32px; justify-content: center; }
+
+.phase-box {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+}
+
+.phase-box.phase-1 { border-color: rgba(57,210,192,0.3); color: var(--cyan); background: var(--cyan-bg); }
+.phase-box.phase-2 { border-color: rgba(88,166,255,0.3); color: var(--blue); background: var(--blue-bg); }
+.phase-box.phase-3 { border-color: rgba(163,113,247,0.3); color: var(--purple); background: var(--purple-bg); }
+
+.phase-arrow { color: var(--text-muted); line-height: 34px; }
+
+.spec-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  max-width: 800px;
+  margin: 0 auto 48px;
+  padding: 0 32px;
+}
+
+.spec-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+}
+
+.spec-badge:hover { border-color: var(--border-focus); background: var(--bg-raised); }
+.spec-badge.active { border-color: var(--cyan-dim); background: var(--cyan-bg); }
+
+.spec-num {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  min-width: 28px;
+}
+
+.spec-name { font-size: 12px; font-weight: 500; color: var(--text-secondary); line-height: 1.3; }
+.spec-badge.active .spec-name { color: var(--text-primary); }
+.spec-badge.active .spec-num { color: var(--cyan); }
+
+.demo-area { max-width: 1200px; margin: 0 auto; padding: 0 32px 80px; }
+
+.demo-panel { display: none; animation: fadeIn 0.3s ease; }
+.demo-panel.active { display: block; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.demo-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.demo-header-num {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cyan);
+  background: var(--cyan-bg);
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+
+.demo-header h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+.demo-header p { font-size: 13px; color: var(--text-secondary); margin-left: auto; }
+
+.demo-deps { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-bottom: 20px; }
+.demo-deps span { color: var(--purple); cursor: pointer; }
+.demo-deps span:hover { text-decoration: underline; }
+
+.chat-container {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.chat-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  gap: 8px;
+}
+
+.chat-dot { width: 10px; height: 10px; border-radius: 50%; }
+.chat-dot.red { background: #F85149; }
+.chat-dot.yellow { background: #D29922; }
+.chat-dot.green { background: #3FB950; }
+
+.chat-toolbar-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-left: 8px;
+  font-family: var(--font-mono);
+}
+
+.chat-messages {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.chat-msg { display: flex; gap: 12px; max-width: 85%; }
+.chat-msg.user { align-self: flex-end; flex-direction: row-reverse; }
+
+.chat-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.chat-msg.agent .chat-avatar { background: var(--cyan-bg); border: 1px solid var(--cyan-dim); }
+.chat-msg.user .chat-avatar { background: var(--purple-bg); border: 1px solid var(--purple); }
+
+.chat-bubble {
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1.6;
+  position: relative;
+}
+
+.chat-msg.agent .chat-bubble { background: var(--bg-panel); border: 1px solid var(--border); }
+.chat-msg.user .chat-bubble { background: var(--bg-raised); border: 1px solid var(--border); }
+
+.chat-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.chat-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.chat-action-btn:hover { color: var(--text-secondary); background: var(--bg-hover); border-color: var(--border); }
+
+.chat-action-btn.correct:hover {
+  color: var(--amber-bright);
+  background: var(--amber-bg);
+  border-color: var(--amber);
+}
+
+.chat-action-btn.correct.active {
+  color: var(--amber-bright);
+  background: var(--amber-bg);
+  border-color: var(--amber);
+}
+
+.citation {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--cyan-bg);
+  border: 1px solid var(--cyan-dim);
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--cyan);
+  cursor: pointer;
+  transition: all 0.15s;
+  vertical-align: middle;
+}
+
+.citation:hover {
+  background: rgba(57, 210, 192, 0.2);
+  box-shadow: 0 0 8px rgba(57, 210, 192, 0.2);
+}
+
+.citation .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--cyan); }
+
+.correction-popover {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  width: 340px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+  z-index: 50;
+  overflow: hidden;
+  animation: popIn 0.2s ease;
+}
+
+.correction-popover.show { display: block; }
+
+@keyframes popIn {
+  from { opacity: 0; transform: translateY(4px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.correction-popover-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.correction-popover-header h4 { font-size: 13px; font-weight: 600; color: var(--amber-bright); }
+
+.correction-popover-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.correction-popover-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+.field-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.field-select, .field-textarea {
+  width: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 8px 12px;
+  transition: border-color 0.15s;
+}
+
+.field-select:focus, .field-textarea:focus { outline: none; border-color: var(--amber); }
+.field-textarea { resize: vertical; min-height: 72px; }
+
+.field-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.field-checkbox input { accent-color: var(--amber); }
+
+.correction-popover-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.btn {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-ghost { background: transparent; color: var(--text-secondary); }
+.btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
+.btn-amber { background: var(--amber); color: #000; border-color: var(--amber); }
+.btn-amber:hover { background: var(--amber-bright); }
+.btn-cyan { background: var(--cyan-dim); color: #000; border-color: var(--cyan-dim); }
+.btn-cyan:hover { background: var(--cyan); }
+.btn-green { background: var(--green); color: #000; border-color: var(--green); }
+.btn-green:hover { filter: brightness(1.1); }
+.btn-sm { font-size: 11px; padding: 4px 10px; }
+
+.memory-panel {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  min-height: 440px;
+}
+
+.memory-sidebar { border-right: 1px solid var(--border); padding: 16px; }
+
+.memory-sidebar h4 {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.memory-filter { display: flex; flex-direction: column; gap: 4px; margin-bottom: 20px; }
+
+.memory-filter-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+}
+
+.memory-filter-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.memory-filter-btn.active { background: var(--cyan-bg); color: var(--cyan); }
+.memory-filter-count { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+
+.memory-search {
+  width: 100%;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 12px;
+  margin-bottom: 16px;
+}
+
+.memory-search::placeholder { color: var(--text-muted); }
+.memory-search:focus { outline: none; border-color: var(--cyan-dim); }
+
+.memory-main { padding: 16px; }
+
+.memory-main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.memory-main-header h3 { font-size: 15px; font-weight: 600; }
+
+.memory-entry {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  transition: all 0.15s;
+  cursor: default;
+}
+
+.memory-entry:hover { border-color: var(--border-focus); background: var(--bg-panel); }
+
+.memory-entry-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+
+.memory-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-candidate { background: var(--amber-bg); color: var(--amber-bright); border: 1px solid rgba(210,153,34,0.3); }
+.badge-approved { background: var(--green-bg); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+.badge-environment { background: var(--blue-bg); color: var(--blue); border: 1px solid rgba(88,166,255,0.3); }
+.badge-procedure { background: var(--purple-bg); color: var(--purple); border: 1px solid rgba(163,113,247,0.3); }
+.badge-preference { background: var(--cyan-bg); color: var(--cyan); border: 1px solid rgba(57,210,192,0.3); }
+.badge-pattern { background: var(--amber-bg); color: var(--amber-bright); border: 1px solid rgba(210,153,34,0.3); }
+
+.memory-entry-content { font-size: 13px; color: var(--text-primary); line-height: 1.5; margin-bottom: 10px; }
+
+.memory-entry-meta { display: flex; align-items: center; gap: 12px; font-size: 11px; color: var(--text-muted); }
+.memory-entry-actions { margin-left: auto; display: flex; gap: 4px; }
+
+.ledger {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-top: 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.ledger-title { font-weight: 700; color: var(--amber-bright); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+
+.ledger-entry {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 8px;
+}
+
+.ledger-entry:last-child { border-bottom: none; }
+.ledger-label { color: var(--text-muted); text-transform: uppercase; font-size: 10px; letter-spacing: 0.08em; }
+.ledger-value { color: var(--text-secondary); }
+.ledger-value.correction { color: var(--amber); }
+
+.dashboard-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+
+.stat-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+}
+
+.stat-card-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.stat-card-value { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+.stat-card-delta { font-size: 11px; font-weight: 500; margin-top: 4px; }
+.stat-card-delta.up { color: var(--green); }
+
+.threshold-container {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+}
+
+.threshold-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.threshold-header h4 { font-size: 14px; font-weight: 600; }
+.threshold-bar-container { display: flex; flex-direction: column; gap: 16px; }
+
+.threshold-row { display: grid; grid-template-columns: 140px 1fr 80px; gap: 16px; align-items: center; }
+
+.threshold-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.threshold-bar { height: 24px; background: var(--bg-surface); border-radius: 4px; position: relative; overflow: hidden; }
+
+.threshold-fill { height: 100%; border-radius: 4px; transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1); position: relative; }
+.threshold-fill.below { background: var(--blue); opacity: 0.7; }
+.threshold-fill.at { background: var(--amber); }
+.threshold-fill.above { background: var(--green); }
+
+.threshold-line { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text-muted); z-index: 1; }
+.threshold-line::after {
+  content: attr(data-label);
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.threshold-count { font-family: var(--font-mono); font-size: 13px; font-weight: 700; text-align: right; }
+
+.extraction-flow {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 2px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.extraction-step {
+  padding: 24px 16px;
+  text-align: center;
+  background: var(--bg-panel);
+  position: relative;
+  transition: all 0.3s;
+}
+
+.extraction-step.active-step { background: var(--bg-raised); }
+.extraction-step-num { font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px; }
+.extraction-step-icon { font-size: 28px; margin-bottom: 8px; }
+.extraction-step-title { font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.extraction-step-desc { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+
+.extraction-step::after {
+  content: '';
+  position: absolute;
+  right: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border: 8px solid transparent;
+  border-left-color: var(--border);
+  z-index: 1;
+}
+
+.extraction-step:last-child::after { display: none; }
+
+.config-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  margin-top: 16px;
+}
+
+.config-row {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 16px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.config-row:last-child { border-bottom: none; }
+.config-label { font-size: 13px; font-weight: 500; }
+.config-label small { display: block; font-size: 11px; color: var(--text-muted); font-weight: 400; margin-top: 2px; }
+
+.config-input {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  width: 200px;
+}
+
+.config-input:focus { outline: none; border-color: var(--cyan-dim); }
+
+.config-toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background: var(--bg-raised);
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.config-toggle.on { background: var(--cyan-dim); border-color: var(--cyan); }
+
+.config-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  transition: transform 0.2s;
+}
+
+.config-toggle.on::after { transform: translateX(18px); }
+
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.two-col > * { min-width: 0; }
+
+.timeline { padding-left: 20px; border-left: 2px solid var(--border); }
+
+.timeline-entry { padding: 12px 0 12px 20px; position: relative; }
+
+.timeline-entry::before {
+  content: '';
+  position: absolute;
+  left: -7px;
+  top: 16px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--bg-panel);
+  border: 2px solid var(--border);
+}
+
+.timeline-entry.correction::before { border-color: var(--amber); background: var(--amber-bg); }
+.timeline-entry.session::before { border-color: var(--green); background: var(--green-bg); }
+.timeline-entry.memory::before { border-color: var(--cyan); background: var(--cyan-bg); }
+.timeline-time { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); margin-bottom: 4px; }
+.timeline-text { font-size: 13px; color: var(--text-secondary); line-height: 1.4; }
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  padding: 12px 20px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 200;
+  transform: translateY(80px);
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.success { background: var(--green-bg); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+.toast.warning { background: var(--amber-bg); color: var(--amber-bright); border: 1px solid rgba(210,153,34,0.3); }
+
+.api-list { display: flex; flex-direction: column; gap: 6px; margin-top: 16px; }
+
+.api-endpoint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.api-method {
+  font-weight: 700;
+  min-width: 44px;
+  text-align: center;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+}
+
+.api-method.get { color: var(--green); background: var(--green-bg); }
+.api-method.post { color: var(--blue); background: var(--blue-bg); }
+.api-method.put { color: var(--amber); background: var(--amber-bg); }
+.api-method.delete { color: var(--rose); background: var(--rose-bg); }
+.api-path { color: var(--text-secondary); }
+.api-desc { color: var(--text-muted); margin-left: auto; font-family: var(--font-body); font-size: 11px; }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-logo">ACP</div>
+  <div class="header-divider"></div>
+  <div class="header-title">Learning Agent Loop</div>
+  <nav class="header-nav">
+    <button class="active" id="nav-overview">Overview</button>
+    <button id="nav-demo">Interactive Demo</button>
+  </nav>
+</header>
+
+<section class="hero" id="view-overview">
+  <h1>The Self-Improving Platform</h1>
+  <p>Eight features that close the learning loop. Agents that correct, remember, compound knowledge, and visibly improve.</p>
+
+  <div class="loop-container">
+    <div class="loop-ring"></div>
+    <div class="loop-node" data-target="005">
+      <div class="loop-node-icon">&#9998;</div>
+      <div class="loop-node-label">Correct</div>
+    </div>
+    <div class="loop-node" data-target="002">
+      <div class="loop-node-icon">&#128451;</div>
+      <div class="loop-node-label">Remember</div>
+    </div>
+    <div class="loop-node" data-target="007">
+      <div class="loop-node-icon">&#9889;</div>
+      <div class="loop-node-label">Improve</div>
+    </div>
+    <div class="loop-node" data-target="006">
+      <div class="loop-node-icon">&#128065;</div>
+      <div class="loop-node-label">Show</div>
+    </div>
+    <div class="loop-center">
+      <div class="loop-center-label">Learning<br>Loop</div>
+    </div>
+  </div>
+
+  <div class="phase-indicator">
+    <div class="phase-box phase-1">Phase 1: Foundation</div>
+    <div class="phase-arrow">&#8594;</div>
+    <div class="phase-box phase-2">Phase 2: Features</div>
+    <div class="phase-arrow">&#8594;</div>
+    <div class="phase-box phase-3">Phase 3: Intelligence</div>
+  </div>
+
+  <div class="spec-grid">
+    <div class="spec-badge" data-spec="002"><span class="spec-num">002</span><span class="spec-name">Project Memory Store</span></div>
+    <div class="spec-badge" data-spec="003"><span class="spec-num">003</span><span class="spec-name">Corrections Pipeline</span></div>
+    <div class="spec-badge" data-spec="004"><span class="spec-num">004</span><span class="spec-name">Session Correction Injection</span></div>
+    <div class="spec-badge" data-spec="005"><span class="spec-num">005</span><span class="spec-name">Correct This UX</span></div>
+    <div class="spec-badge" data-spec="006"><span class="spec-num">006</span><span class="spec-name">Visible Attribution</span></div>
+    <div class="spec-badge" data-spec="007"><span class="spec-num">007</span><span class="spec-name">Event-Driven Feedback</span></div>
+    <div class="spec-badge" data-spec="008"><span class="spec-num">008</span><span class="spec-name">Cross-Session Memory</span></div>
+    <div class="spec-badge" data-spec="009"><span class="spec-num">009</span><span class="spec-name">Post-Session Insights</span></div>
+  </div>
+</section>
+
+<section class="demo-area" id="view-demo">
+
+  <!-- 002: PROJECT MEMORY STORE -->
+  <div class="demo-panel" id="panel-002">
+    <div class="demo-header">
+      <span class="demo-header-num">002</span>
+      <h2>Project Memory Store</h2>
+      <p>Shared Infrastructure</p>
+    </div>
+    <div class="demo-deps">Dependencies: none (foundation)</div>
+    <div class="memory-panel">
+      <div class="memory-sidebar">
+        <input type="text" class="memory-search" placeholder="Search memories...">
+        <h4>Status</h4>
+        <div class="memory-filter">
+          <button class="memory-filter-btn active">All <span class="memory-filter-count">8</span></button>
+          <button class="memory-filter-btn">Candidates <span class="memory-filter-count">3</span></button>
+          <button class="memory-filter-btn">Approved <span class="memory-filter-count">4</span></button>
+          <button class="memory-filter-btn">Archived <span class="memory-filter-count">1</span></button>
+        </div>
+        <h4>Category</h4>
+        <div class="memory-filter">
+          <button class="memory-filter-btn">Environment <span class="memory-filter-count">2</span></button>
+          <button class="memory-filter-btn">Procedure <span class="memory-filter-count">3</span></button>
+          <button class="memory-filter-btn">Preference <span class="memory-filter-count">2</span></button>
+          <button class="memory-filter-btn">Pattern <span class="memory-filter-count">1</span></button>
+        </div>
+      </div>
+      <div class="memory-main">
+        <div class="memory-main-header">
+          <h3>Project Memories</h3>
+          <button class="btn btn-cyan btn-sm" id="add-memory-btn">+ Add Memory</button>
+        </div>
+        <div class="memory-entry">
+          <div class="memory-entry-header">
+            <span class="memory-badge badge-candidate">Candidate</span>
+            <span class="memory-badge badge-environment">Environment</span>
+          </div>
+          <div class="memory-entry-content">The staging cluster uses a shared Redis instance at redis-staging.internal:6379. Production uses per-tenant Redis with TLS.</div>
+          <div class="memory-entry-meta">
+            <span>Source: session-abc-def</span><span>2h ago</span>
+            <div class="memory-entry-actions">
+              <button class="btn btn-green btn-sm approve-btn">Approve</button>
+              <button class="btn btn-ghost btn-sm">Archive</button>
+            </div>
+          </div>
+        </div>
+        <div class="memory-entry">
+          <div class="memory-entry-header">
+            <span class="memory-badge badge-approved">Approved</span>
+            <span class="memory-badge badge-procedure">Procedure</span>
+          </div>
+          <div class="memory-entry-content">Always run <code>make lint</code> before committing Go changes. The CI will reject PRs with gofmt violations.</div>
+          <div class="memory-entry-meta">
+            <span>Source: manual</span><span>3 days ago</span>
+            <div class="memory-entry-actions">
+              <button class="btn btn-ghost btn-sm">Edit</button>
+              <button class="btn btn-ghost btn-sm">Archive</button>
+            </div>
+          </div>
+        </div>
+        <div class="memory-entry">
+          <div class="memory-entry-header">
+            <span class="memory-badge badge-approved">Approved</span>
+            <span class="memory-badge badge-preference">Preference</span>
+          </div>
+          <div class="memory-entry-content">Exclude internal test instances (prefix: <code>int-</code>) from production error rate analysis. They generate synthetic load.</div>
+          <div class="memory-entry-meta">
+            <span>Source: session-xyz-123</span><span>1 week ago</span>
+            <div class="memory-entry-actions">
+              <button class="btn btn-ghost btn-sm">Edit</button>
+              <button class="btn btn-ghost btn-sm">Archive</button>
+            </div>
+          </div>
+        </div>
+        <div class="memory-entry">
+          <div class="memory-entry-header">
+            <span class="memory-badge badge-candidate">Candidate</span>
+            <span class="memory-badge badge-pattern">Pattern</span>
+          </div>
+          <div class="memory-entry-content">The team prefers table-driven tests in Go backend code. Each test case should include a name, input, expected output, and optional setup func.</div>
+          <div class="memory-entry-meta">
+            <span>Source: insight-extraction</span><span>5h ago</span>
+            <div class="memory-entry-actions">
+              <button class="btn btn-green btn-sm approve-btn">Approve</button>
+              <button class="btn btn-ghost btn-sm">Archive</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="api-list">
+      <div class="api-endpoint"><span class="api-method get">GET</span><span class="api-path">/api/projects/:name/memories</span><span class="api-desc">List with filters</span></div>
+      <div class="api-endpoint"><span class="api-method post">POST</span><span class="api-path">/api/projects/:name/memories</span><span class="api-desc">Create entry</span></div>
+      <div class="api-endpoint"><span class="api-method put">PUT</span><span class="api-path">/api/projects/:name/memories/:id</span><span class="api-desc">Update</span></div>
+      <div class="api-endpoint"><span class="api-method delete">DELETE</span><span class="api-path">/api/projects/:name/memories/:id</span><span class="api-desc">Delete</span></div>
+      <div class="api-endpoint"><span class="api-method post">POST</span><span class="api-path">/api/projects/:name/memories/:id/approve</span><span class="api-desc">Approve candidate</span></div>
+    </div>
+  </div>
+
+  <!-- 003: CORRECTIONS PIPELINE -->
+  <div class="demo-panel" id="panel-003">
+    <div class="demo-header">
+      <span class="demo-header-num">003</span>
+      <h2>Corrections Realtime Pipeline</h2>
+      <p>Shared Infrastructure</p>
+    </div>
+    <div class="demo-deps">Dependencies: none (foundation)</div>
+    <div class="two-col">
+      <div>
+        <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Dual-Write Architecture</h4>
+        <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;">
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <div style="width:90px;padding:8px;background:var(--purple-bg);border:1px solid rgba(163,113,247,0.3);border-radius:6px;text-align:center;font-size:12px;font-weight:600;color:var(--purple);">Runner</div>
+              <div style="color:var(--text-muted);font-family:var(--font-mono);font-size:11px;">log_correction()</div>
+            </div>
+            <div style="display:flex;gap:24px;padding-left:40px;">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+                <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);">&#8595; sync</div>
+                <div style="padding:8px 14px;background:var(--amber-bg);border:1px solid rgba(210,153,34,0.3);border-radius:6px;font-size:11px;font-weight:600;color:var(--amber-bright);">Langfuse</div>
+                <div style="font-size:10px;color:var(--text-muted);">Source of truth</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+                <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);">&#8595; async</div>
+                <div style="padding:8px 14px;background:var(--cyan-bg);border:1px solid rgba(57,210,192,0.3);border-radius:6px;font-size:11px;font-weight:600;color:var(--cyan);">Backend</div>
+                <div style="font-size:10px;color:var(--text-muted);">Fire-and-forget</div>
+              </div>
+            </div>
+            <div style="margin-top:8px;padding:10px;background:var(--bg-surface);border-radius:6px;font-family:var(--font-mono);font-size:10px;color:var(--green);">
+              &#10003; Backend down? Session continues.<br>&#10003; Langfuse down? Backend still gets it.
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Correction Summary (live)</h4>
+        <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;">
+          <div class="threshold-row" style="margin-bottom:12px;">
+            <span class="threshold-label">review-workflow</span>
+            <div class="threshold-bar"><div class="threshold-fill above" style="width:80%"></div><div class="threshold-line" style="left:40%" data-label="threshold=2"></div></div>
+            <span class="threshold-count" style="color:var(--green)">4</span>
+          </div>
+          <div class="threshold-row" style="margin-bottom:12px;">
+            <span class="threshold-label">platform/backend</span>
+            <div class="threshold-bar"><div class="threshold-fill at" style="width:40%"></div><div class="threshold-line" style="left:40%" data-label="threshold=2"></div></div>
+            <span class="threshold-count" style="color:var(--amber)">2</span>
+          </div>
+          <div class="threshold-row">
+            <span class="threshold-label">deploy-workflow</span>
+            <div class="threshold-bar"><div class="threshold-fill below" style="width:20%"></div><div class="threshold-line" style="left:40%" data-label="threshold=2"></div></div>
+            <span class="threshold-count" style="color:var(--text-muted)">1</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="api-list">
+      <div class="api-endpoint"><span class="api-method post">POST</span><span class="api-path">/api/projects/:name/corrections</span><span class="api-desc">Submit correction</span></div>
+      <div class="api-endpoint"><span class="api-method get">GET</span><span class="api-path">/api/projects/:name/corrections</span><span class="api-desc">List recent (24h)</span></div>
+      <div class="api-endpoint"><span class="api-method get">GET</span><span class="api-path">/api/projects/:name/corrections/summary</span><span class="api-desc">Aggregated counts</span></div>
+    </div>
+  </div>
+
+  <!-- 004: SESSION-SCOPED INJECTION -->
+  <div class="demo-panel" id="panel-004">
+    <div class="demo-header">
+      <span class="demo-header-num">004</span>
+      <h2>Session-Scoped Correction Injection</h2>
+      <p>Phase 1</p>
+    </div>
+    <div class="chat-container">
+      <div class="chat-toolbar">
+        <div class="chat-dot red"></div><div class="chat-dot yellow"></div><div class="chat-dot green"></div>
+        <span class="chat-toolbar-title">session-fix-auth-middleware</span>
+      </div>
+      <div class="chat-messages">
+        <div class="chat-msg agent"><div class="chat-avatar">A</div><div class="chat-bubble">I've refactored the authentication middleware using <code>camelCase</code> for the new handler variables.</div></div>
+        <div class="chat-msg user"><div class="chat-avatar">J</div><div class="chat-bubble">No, use snake_case. This is a Go project.</div></div>
+        <div class="chat-msg agent"><div class="chat-avatar">A</div><div class="chat-bubble"><div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;font-style:italic;">&#128221; Correction logged: style</div>You're right. Renaming to <code>auth_handler</code>, <code>token_validator</code>, <code>session_manager</code>.</div></div>
+      </div>
+    </div>
+    <div class="ledger">
+      <div class="ledger-title">&#9888;&#65039; ## Corrections from this session</div>
+      <div class="ledger-entry"><span class="ledger-label">Type</span><span class="ledger-value">style</span></div>
+      <div class="ledger-entry"><span class="ledger-label">Agent did</span><span class="ledger-value">Used camelCase for Go handler variables</span></div>
+      <div class="ledger-entry"><span class="ledger-label">Expected</span><span class="ledger-value correction">Use snake_case for Go conventions</span></div>
+      <div style="margin-top:10px;font-size:10px;color:var(--text-muted);">Injected into system prompt at turn boundaries. Capped at 20 entries. Session-local only.</div>
+    </div>
+  </div>
+
+  <!-- 005: CORRECT THIS UX -->
+  <div class="demo-panel" id="panel-005">
+    <div class="demo-header">
+      <span class="demo-header-num">005</span>
+      <h2>"Correct This" UX</h2>
+      <p>Phase 2</p>
+    </div>
+    <div class="demo-deps">Dependencies: <span data-nav="003">003</span>, <span data-nav="004">004</span></div>
+    <div class="chat-container">
+      <div class="chat-toolbar">
+        <div class="chat-dot red"></div><div class="chat-dot yellow"></div><div class="chat-dot green"></div>
+        <span class="chat-toolbar-title">session-analyze-errors &mdash; Running</span>
+      </div>
+      <div class="chat-messages">
+        <div class="chat-msg agent">
+          <div class="chat-avatar">A</div>
+          <div class="chat-bubble" style="position:relative" id="correctable-msg">
+            I've analyzed the error rates across all instances. The overall p99 latency is 340ms with a 2.1% error rate across 847 instances including internal test traffic.
+            <div class="chat-actions">
+              <button class="chat-action-btn">&#128077;</button>
+              <button class="chat-action-btn">&#128078;</button>
+              <button class="chat-action-btn correct" id="correct-btn">&#9998; Correct this</button>
+            </div>
+            <div class="correction-popover" id="correction-popover">
+              <div class="correction-popover-header">
+                <h4>&#9998; Correct this response</h4>
+                <button class="correction-popover-close" id="popover-close">&times;</button>
+              </div>
+              <div class="correction-popover-body">
+                <div>
+                  <div class="field-label">Correction Type</div>
+                  <select class="field-select">
+                    <option value="">Select type...</option>
+                    <option value="incomplete">Incomplete</option>
+                    <option value="incorrect" selected>Incorrect</option>
+                    <option value="out_of_scope">Out of scope</option>
+                    <option value="style">Style</option>
+                  </select>
+                </div>
+                <div>
+                  <div class="field-label">What should have happened?</div>
+                  <textarea class="field-textarea">Exclude internal test instances (prefix: int-) from the analysis. They generate synthetic load and skew the error rate.</textarea>
+                </div>
+                <label class="field-checkbox"><input type="checkbox" checked> Include message content as context</label>
+              </div>
+              <div class="correction-popover-footer">
+                <button class="btn btn-ghost" id="popover-cancel">Cancel</button>
+                <button class="btn btn-amber" id="popover-submit">Submit Correction</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:12px;font-size:12px;color:var(--text-muted);text-align:center;">Click <strong style="color:var(--amber-bright)">&#9998; Correct this</strong> to try the interactive popover</div>
+  </div>
+
+  <!-- 006: VISIBLE ATTRIBUTION -->
+  <div class="demo-panel" id="panel-006">
+    <div class="demo-header">
+      <span class="demo-header-num">006</span>
+      <h2>Visible Attribution</h2>
+      <p>Phase 3</p>
+    </div>
+    <div class="demo-deps">Dependencies: <span data-nav="002">002</span>, <span data-nav="003">003</span>, <span data-nav="005">005</span></div>
+    <div class="two-col">
+      <div>
+        <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Agent cites memories inline</h4>
+        <div class="chat-container">
+          <div class="chat-toolbar">
+            <div class="chat-dot red"></div><div class="chat-dot yellow"></div><div class="chat-dot green"></div>
+            <span class="chat-toolbar-title">session-debug-latency</span>
+          </div>
+          <div class="chat-messages">
+            <div class="chat-msg agent">
+              <div class="chat-avatar">A</div>
+              <div class="chat-bubble">I've analyzed the production error rates. Per the project's established practice <span class="citation" data-memory="PM-042: Exclude internal test instances from production analysis"><span class="dot"></span>PM-042</span>, I excluded all <code>int-*</code> instances.<br><br>The filtered p99 latency is 280ms with a 0.8% error rate across 712 production instances. Running analysis using table-driven tests <span class="citation" data-memory="PM-071: Team prefers table-driven tests in Go backend code"><span class="dot"></span>PM-071</span> as the project prefers.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Corrections Impact Dashboard</h4>
+        <div class="dashboard-grid" style="grid-template-columns:repeat(2,1fr);">
+          <div class="stat-card"><div class="stat-card-label">Corrections</div><div class="stat-card-value" style="color:var(--amber-bright)">47</div><div class="stat-card-delta up">&#8593; 12 this week</div></div>
+          <div class="stat-card"><div class="stat-card-label">Improvement Sessions</div><div class="stat-card-value" style="color:var(--green)">18</div><div class="stat-card-delta up">&#8593; 4 this week</div></div>
+          <div class="stat-card"><div class="stat-card-label">Memories Created</div><div class="stat-card-value" style="color:var(--cyan)">23</div><div class="stat-card-delta up">&#8593; 6 this week</div></div>
+          <div class="stat-card"><div class="stat-card-label">Citations</div><div class="stat-card-value" style="color:var(--purple)">89</div><div class="stat-card-delta up">&#8593; 31 this week</div></div>
+        </div>
+        <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px;">
+          <h4 style="font-size:12px;color:var(--text-muted);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.08em;">Recent Activity</h4>
+          <div class="timeline">
+            <div class="timeline-entry memory"><div class="timeline-time">2h ago</div><div class="timeline-text">Memory <span style="color:var(--cyan)">PM-089</span> created from insight extraction</div></div>
+            <div class="timeline-entry session"><div class="timeline-time">5h ago</div><div class="timeline-text">Improvement session triggered for <span style="color:var(--green)">review-workflow</span></div></div>
+            <div class="timeline-entry correction"><div class="timeline-time">6h ago</div><div class="timeline-text">Correction: <span style="color:var(--amber)">incorrect</span> &mdash; included internal instances</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="api-list">
+      <div class="api-endpoint"><span class="api-method get">GET</span><span class="api-path">/api/projects/:name/learning/summary</span><span class="api-desc">Dashboard metrics</span></div>
+      <div class="api-endpoint"><span class="api-method get">GET</span><span class="api-path">/api/projects/:name/learning/timeline</span><span class="api-desc">Activity feed</span></div>
+    </div>
+  </div>
+
+  <!-- 007: EVENT-DRIVEN FEEDBACK LOOP -->
+  <div class="demo-panel" id="panel-007">
+    <div class="demo-header">
+      <span class="demo-header-num">007</span>
+      <h2>Event-Driven Feedback Loop</h2>
+      <p>Phase 2</p>
+    </div>
+    <div class="demo-deps">Dependencies: <span data-nav="003">003</span></div>
+    <div class="two-col">
+      <div>
+        <div class="threshold-container">
+          <div class="threshold-header">
+            <h4>Correction Threshold Monitor</h4>
+            <button class="btn btn-sm btn-ghost" id="simulate-btn">&#9654; Simulate correction</button>
+          </div>
+          <div class="threshold-bar-container">
+            <div class="threshold-row">
+              <span class="threshold-label">review-workflow</span>
+              <div class="threshold-bar"><div class="threshold-fill above" style="width:80%"></div><div class="threshold-line" style="left:40%" data-label="min=2"></div></div>
+              <span class="threshold-count" style="color:var(--green)">4 &#10003;</span>
+            </div>
+            <div class="threshold-row">
+              <span class="threshold-label">platform/backend</span>
+              <div class="threshold-bar"><div class="threshold-fill below" id="bar-platform" style="width:20%"></div><div class="threshold-line" style="left:40%" data-label="min=2"></div></div>
+              <span class="threshold-count" id="count-platform" style="color:var(--text-muted)">1</span>
+            </div>
+            <div class="threshold-row">
+              <span class="threshold-label">deploy-workflow</span>
+              <div class="threshold-bar"><div class="threshold-fill below" style="width:0%"></div><div class="threshold-line" style="left:40%" data-label="min=2"></div></div>
+              <span class="threshold-count" style="color:var(--text-muted)">0</span>
+            </div>
+          </div>
+          <div style="margin-top:16px;padding:10px;background:var(--green-bg);border:1px solid rgba(63,185,80,0.3);border-radius:6px;font-size:12px;color:var(--green);display:flex;align-items:center;gap:8px;">
+            <span style="font-size:16px;">&#9889;</span> Improvement session auto-triggered for <strong>review-workflow</strong> (4 corrections in 3h)
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="config-panel" style="margin-top:0;">
+          <h4 style="font-size:13px;margin-bottom:16px;">Feedback Loop Configuration</h4>
+          <div class="config-row">
+            <div class="config-label">Auto-trigger<small>Create sessions on threshold</small></div>
+            <div class="config-toggle on" id="toggle-auto"></div>
+          </div>
+          <div class="config-row">
+            <div class="config-label">Min Corrections<small>Per target to trigger</small></div>
+            <input type="number" class="config-input" value="2" min="1" max="20">
+          </div>
+          <div class="config-row">
+            <div class="config-label">Time Window<small>Rolling window in hours</small></div>
+            <input type="number" class="config-input" value="24" min="1" max="168">
+          </div>
+          <div class="config-row">
+            <div class="config-label">Weekly Sweep<small>GHA batch still runs</small></div>
+            <div style="font-family:var(--font-mono);font-size:11px;color:var(--green);">&#10003; Active &mdash; Mon 9am UTC</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="api-list">
+      <div class="api-endpoint"><span class="api-method get">GET</span><span class="api-path">/api/projects/:name/feedback-loop/config</span><span class="api-desc">Get config</span></div>
+      <div class="api-endpoint"><span class="api-method put">PUT</span><span class="api-path">/api/projects/:name/feedback-loop/config</span><span class="api-desc">Update config</span></div>
+      <div class="api-endpoint"><span class="api-method get">GET</span><span class="api-path">/api/projects/:name/feedback-loop/history</span><span class="api-desc">Triggered sessions</span></div>
+    </div>
+  </div>
+
+  <!-- 008: CROSS-SESSION MEMORY -->
+  <div class="demo-panel" id="panel-008">
+    <div class="demo-header">
+      <span class="demo-header-num">008</span>
+      <h2>Cross-Session Memory</h2>
+      <p>Phase 2</p>
+    </div>
+    <div class="demo-deps">Dependencies: <span data-nav="002">002</span></div>
+    <div class="two-col">
+      <div>
+        <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Agent suggests a memory via MCP tool</h4>
+        <div class="chat-container">
+          <div class="chat-toolbar"><div class="chat-dot red"></div><div class="chat-dot yellow"></div><div class="chat-dot green"></div><span class="chat-toolbar-title">session-onboard-redis</span></div>
+          <div class="chat-messages">
+            <div class="chat-msg agent">
+              <div class="chat-avatar">A</div>
+              <div class="chat-bubble">
+                <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;font-family:var(--font-mono);">&#128295; Tool call: <span style="color:var(--cyan)">suggest_memory</span></div>
+                <div style="background:var(--cyan-bg);border:1px solid rgba(57,210,192,0.3);border-radius:6px;padding:10px;font-size:12px;margin-bottom:8px;">
+                  <div style="font-weight:600;color:var(--cyan);margin-bottom:4px;">&#128161; New Memory Suggested</div>
+                  <div style="color:var(--text-primary);">"The staging cluster uses a shared Redis at redis-staging.internal:6379. Production uses per-tenant Redis with TLS."</div>
+                  <div style="margin-top:6px;display:flex;gap:6px;">
+                    <span class="memory-badge badge-environment" style="font-size:9px;">Environment</span>
+                    <span class="memory-badge badge-candidate" style="font-size:9px;">Pending Review</span>
+                  </div>
+                </div>
+                I've noted this for the team. This discovery will be available for review in the Project Memory panel.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Injected into system prompt</h4>
+        <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;font-family:var(--font-mono);font-size:11px;line-height:1.7;">
+          <div style="color:var(--cyan);font-weight:700;">## Project Memory</div><br>
+          <div style="color:var(--blue);">### Environment</div>
+          <div style="color:var(--text-secondary);padding-left:12px;">- <span style="color:var(--text-muted)">[PM-042]</span> Staging uses shared Redis at redis-staging.internal:6379</div>
+          <div style="color:var(--text-secondary);padding-left:12px;">- <span style="color:var(--text-muted)">[PM-055]</span> CI runners use Ubuntu 22.04 with Go 1.22 and Node 20</div><br>
+          <div style="color:var(--purple);">### Procedure</div>
+          <div style="color:var(--text-secondary);padding-left:12px;">- <span style="color:var(--text-muted)">[PM-018]</span> Always run make lint before committing Go changes</div>
+          <div style="color:var(--text-secondary);padding-left:12px;">- <span style="color:var(--text-muted)">[PM-033]</span> Use table-driven tests for Go backend test cases</div><br>
+          <div style="color:var(--cyan-dim);">### Preference</div>
+          <div style="color:var(--text-secondary);padding-left:12px;">- <span style="color:var(--text-muted)">[PM-071]</span> Exclude int-* instances from production error analysis</div><br>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:8px;">5 memories loaded &middot; 1,240 tokens &middot; Budget: 4,000</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 009: POST-SESSION INSIGHT EXTRACTION -->
+  <div class="demo-panel" id="panel-009">
+    <div class="demo-header">
+      <span class="demo-header-num">009</span>
+      <h2>Post-Session Insight Extraction</h2>
+      <p>Phase 3</p>
+    </div>
+    <div class="demo-deps">Dependencies: <span data-nav="002">002</span>, <span data-nav="008">008</span></div>
+    <div class="extraction-flow" id="extraction-flow">
+      <div class="extraction-step active-step" id="ext-1"><div class="extraction-step-num">01</div><div class="extraction-step-icon">&#10004;</div><div class="extraction-step-title">Session Completes</div><div class="extraction-step-desc">Status changed<br>12 turns detected</div></div>
+      <div class="extraction-step" id="ext-2"><div class="extraction-step-num">02</div><div class="extraction-step-icon">&#128220;</div><div class="extraction-step-title">Fetch Transcript</div><div class="extraction-step-desc">AG-UI event store<br>Compact and format</div></div>
+      <div class="extraction-step" id="ext-3"><div class="extraction-step-num">03</div><div class="extraction-step-icon">&#129302;</div><div class="extraction-step-title">LLM Extraction</div><div class="extraction-step-desc">Haiku-class model<br>Structured JSON output</div></div>
+      <div class="extraction-step" id="ext-4"><div class="extraction-step-num">04</div><div class="extraction-step-icon">&#128451;</div><div class="extraction-step-title">Write Candidates</div><div class="extraction-step-desc">Project Memory Store<br>status = candidate</div></div>
+      <div class="extraction-step" id="ext-5"><div class="extraction-step-num">05</div><div class="extraction-step-icon">&#128100;</div><div class="extraction-step-title">Human Review</div><div class="extraction-step-desc">Approve / Edit<br>Dismiss irrelevant</div></div>
+    </div>
+    <div style="text-align:center;margin-top:12px;">
+      <button class="btn btn-cyan btn-sm" id="animate-btn">&#9654; Animate extraction flow</button>
+    </div>
+    <div class="two-col" style="margin-top:24px;">
+      <div>
+        <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Extracted Candidates</h4>
+        <div class="memory-entry">
+          <div class="memory-entry-header">
+            <span class="memory-badge badge-candidate">Candidate</span>
+            <span class="memory-badge badge-environment">Environment</span>
+            <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-left:auto;">confidence: 0.92</span>
+          </div>
+          <div class="memory-entry-content">The staging cluster uses a shared Redis instance at redis-staging.internal:6379. Production uses per-tenant Redis with TLS.</div>
+          <div class="memory-entry-meta"><span>Source: session-onboard-redis</span><span>Just now</span>
+            <div class="memory-entry-actions"><button class="btn btn-green btn-sm approve-btn">Approve</button><button class="btn btn-ghost btn-sm">Dismiss</button></div>
+          </div>
+        </div>
+        <div class="memory-entry">
+          <div class="memory-entry-header">
+            <span class="memory-badge badge-candidate">Candidate</span>
+            <span class="memory-badge badge-procedure">Procedure</span>
+            <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-left:auto;">confidence: 0.78</span>
+          </div>
+          <div class="memory-entry-content">When debugging Redis connectivity, check the ConfigMap <code>redis-config</code> first for connection strings and TLS settings.</div>
+          <div class="memory-entry-meta"><span>Source: session-onboard-redis</span><span>Just now</span>
+            <div class="memory-entry-actions"><button class="btn btn-green btn-sm approve-btn">Approve</button><button class="btn btn-ghost btn-sm">Dismiss</button></div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Extraction Configuration</h4>
+        <div class="config-panel" style="margin-top:0;">
+          <div class="config-row"><div class="config-label">Enabled<small>Auto-extract after sessions</small></div><div class="config-toggle on" id="toggle-extract"></div></div>
+          <div class="config-row"><div class="config-label">Model<small>For extraction calls</small></div><select class="config-input" style="width:200px;"><option>claude-haiku-4</option><option>claude-sonnet-4</option><option>gemini-flash</option></select></div>
+          <div class="config-row"><div class="config-label">Max per session<small>Candidate limit</small></div><input type="number" class="config-input" value="5" min="1" max="20"></div>
+          <div class="config-row"><div class="config-label">Min turns<small>Skip short sessions</small></div><input type="number" class="config-input" value="5" min="1" max="50"></div>
+        </div>
+        <div class="api-list" style="margin-top:16px;">
+          <div class="api-endpoint"><span class="api-method get">GET</span><span class="api-path">/api/projects/:name/insight-extraction/config</span><span class="api-desc">Get config</span></div>
+          <div class="api-endpoint"><span class="api-method put">PUT</span><span class="api-path">/api/projects/:name/insight-extraction/config</span><span class="api-desc">Update config</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<div class="toast success" id="toast"></div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ── NAV ──
+  var navOverview = document.getElementById('nav-overview');
+  var navDemo = document.getElementById('nav-demo');
+
+  navOverview.addEventListener('click', function() {
+    navOverview.classList.add('active');
+    navDemo.classList.remove('active');
+    document.querySelectorAll('.demo-panel').forEach(function(p) { p.classList.remove('active'); });
+    clearBadges();
+  });
+
+  navDemo.addEventListener('click', function() { selectSpec('002'); });
+
+  // ── SPEC SELECTION ──
+  function selectSpec(num) {
+    navOverview.classList.remove('active');
+    navDemo.classList.add('active');
+    clearBadges();
+    var badge = document.querySelector('[data-spec="' + num + '"]');
+    if (badge) badge.classList.add('active');
+    document.querySelectorAll('.demo-panel').forEach(function(p) { p.classList.remove('active'); });
+    var panel = document.getElementById('panel-' + num);
+    if (panel) {
+      panel.classList.add('active');
+      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  function clearBadges() {
+    document.querySelectorAll('.spec-badge').forEach(function(b) { b.classList.remove('active'); });
+  }
+
+  // Spec badge clicks
+  document.querySelectorAll('.spec-badge').forEach(function(badge) {
+    badge.addEventListener('click', function() { selectSpec(this.getAttribute('data-spec')); });
+  });
+
+  // Loop node clicks
+  document.querySelectorAll('.loop-node').forEach(function(node) {
+    node.addEventListener('click', function() { selectSpec(this.getAttribute('data-target')); });
+  });
+
+  // Dependency links
+  document.querySelectorAll('[data-nav]').forEach(function(link) {
+    link.addEventListener('click', function() { selectSpec(this.getAttribute('data-nav')); });
+  });
+
+  // ── MEMORY FILTER ──
+  document.querySelectorAll('.memory-filter-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      this.closest('.memory-filter').querySelectorAll('.memory-filter-btn').forEach(function(b) { b.classList.remove('active'); });
+      this.classList.add('active');
+    });
+  });
+
+  // ── APPROVE ──
+  document.querySelectorAll('.approve-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var entry = this.closest('.memory-entry');
+      var badge = entry.querySelector('.badge-candidate');
+      if (badge) {
+        badge.textContent = 'Approved';
+        badge.className = 'memory-badge badge-approved';
+        this.textContent = 'Edit';
+        this.className = 'btn btn-ghost btn-sm';
+      }
+      showToast('Memory approved');
+    });
+  });
+
+  // ── ADD MEMORY ──
+  var addMemBtn = document.getElementById('add-memory-btn');
+  if (addMemBtn) addMemBtn.addEventListener('click', function() { showToast('Memory created as approved'); });
+
+  // ── CORRECTION POPOVER ──
+  var correctBtn = document.getElementById('correct-btn');
+  var popover = document.getElementById('correction-popover');
+  var popoverClose = document.getElementById('popover-close');
+  var popoverCancel = document.getElementById('popover-cancel');
+  var popoverSubmit = document.getElementById('popover-submit');
+
+  function togglePopover() {
+    var showing = popover.classList.contains('show');
+    if (showing) {
+      popover.classList.remove('show');
+      correctBtn.classList.remove('active');
+    } else {
+      popover.classList.add('show');
+      correctBtn.classList.add('active');
+    }
+  }
+
+  if (correctBtn) correctBtn.addEventListener('click', togglePopover);
+  if (popoverClose) popoverClose.addEventListener('click', togglePopover);
+  if (popoverCancel) popoverCancel.addEventListener('click', togglePopover);
+  if (popoverSubmit) popoverSubmit.addEventListener('click', function() {
+    togglePopover();
+    showToast('Correction submitted and forwarded to active session');
+  });
+
+  // ── CITATION CLICKS ──
+  document.querySelectorAll('.citation').forEach(function(c) {
+    c.addEventListener('click', function() {
+      showToast(this.getAttribute('data-memory'));
+    });
+  });
+
+  // ── THRESHOLD SIMULATION ──
+  var platformCount = 1;
+  var simBtn = document.getElementById('simulate-btn');
+  if (simBtn) simBtn.addEventListener('click', function() {
+    platformCount++;
+    var bar = document.getElementById('bar-platform');
+    var count = document.getElementById('count-platform');
+    var pct = Math.min(platformCount * 20, 100);
+    bar.style.width = pct + '%';
+    count.textContent = String(platformCount);
+    if (platformCount >= 2) {
+      bar.className = 'threshold-fill at';
+      count.style.color = 'var(--amber)';
+      setTimeout(function() {
+        bar.className = 'threshold-fill above';
+        count.textContent = platformCount + ' \u2713';
+        count.style.color = 'var(--green)';
+        showToast('Threshold crossed \u2014 improvement session triggered for platform/backend');
+      }, 800);
+    }
+  });
+
+  // ── CONFIG TOGGLES ──
+  document.querySelectorAll('.config-toggle').forEach(function(toggle) {
+    toggle.addEventListener('click', function() { this.classList.toggle('on'); });
+  });
+
+  // ── EXTRACTION ANIMATION ──
+  var animBtn = document.getElementById('animate-btn');
+  if (animBtn) animBtn.addEventListener('click', function() {
+    var steps = document.querySelectorAll('.extraction-step');
+    steps.forEach(function(s) { s.classList.remove('active-step'); });
+    var i = 0;
+    var interval = setInterval(function() {
+      if (i > 0) steps[i - 1].classList.remove('active-step');
+      if (i < steps.length) {
+        steps[i].classList.add('active-step');
+        i++;
+      } else {
+        clearInterval(interval);
+        showToast('2 candidate memories extracted and ready for review');
+      }
+    }, 700);
+  });
+
+  // ── TOAST ──
+  function showToast(msg) {
+    var toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.className = 'toast success show';
+    setTimeout(function() { toast.classList.remove('show'); }, 3000);
+  }
+})();
+</script>
+</body>
+</html>

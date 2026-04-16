@@ -218,6 +218,16 @@ spec:
               sdkRestartCount:
                 type: integer
                 description: "Number of times the SDK has been restarted during this session."
+              extractionStatus:
+                type: string
+                description: "Status of post-session insight extraction."
+                enum:
+                - "pending"
+                - "running"
+                - "completed"
+                - "skipped"
+                - "failed"
+                - "partial-failure"
               conditions:
                 type: array
                 description: "Detailed condition set describing reconciliation progress."

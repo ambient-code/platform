@@ -4,7 +4,9 @@ import React, { useState, useMemo } from "react";
 import { ThumbsUp, ThumbsDown, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FeedbackModal, FeedbackType } from "./FeedbackModal";
+import { CorrectionPopover } from "./CorrectionPopover";
 import { useFeedbackContextOptional } from "@/contexts/FeedbackContext";
+import { useWorkspaceFlag } from "@/services/queries/use-feature-flags-admin";
 import {
   Tooltip,
   TooltipContent,
@@ -30,6 +32,11 @@ export function FeedbackButtons({
   const [localSubmittedFeedback, setLocalSubmittedFeedback] = useState<FeedbackType | null>(null);
 
   const feedbackContext = useFeedbackContextOptional();
+
+  const { enabled: correctionsEnabled } = useWorkspaceFlag(
+    feedbackContext?.projectName ?? "",
+    "learning-agent-loop"
+  );
 
   // Check if this message already has feedback from context (e.g., from replayed META events)
   const existingFeedback = useMemo(() => {
@@ -129,6 +136,14 @@ export function FeedbackButtons({
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
+
+        {/* Correct This Button (behind feature flag) */}
+        {correctionsEnabled && (
+          <CorrectionPopover
+            messageId={messageId}
+            messageContent={messageContent}
+          />
+        )}
       </div>
 
       {/* Feedback Modal */}

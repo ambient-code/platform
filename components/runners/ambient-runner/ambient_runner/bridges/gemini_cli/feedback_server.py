@@ -15,10 +15,15 @@ import logging
 import os
 import sys
 
+from ambient_runner.platform.correction_ledger import CorrectionLedger
 from ambient_runner.platform.feedback import CORRECTION_SOURCES, CORRECTION_TYPES
 
 # Keep this server quiet — all output goes to stdout which is the MCP channel.
 logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
+
+# Module-level ledger — lives for the lifetime of the MCP server subprocess.
+# The feedback server is one subprocess per Gemini CLI session.
+_ledger = CorrectionLedger()
 
 # ---------------------------------------------------------------------------
 # Tool definitions (MCP schema format)
@@ -138,7 +143,15 @@ def _handle_log_correction(args: dict) -> dict:
         target_label=args.get("target", ""),
         session_id=session_id,
         source=args.get("source", "human"),
+        ledger=_ledger,
     )
+
+    # Write corrections context file so the next Gemini CLI turn sees it.
+    from ambient_runner.bridges.gemini_cli.bridge import write_corrections_context_file
+
+    workspace = os.getenv("WORKSPACE_PATH", "/workspace")
+    write_corrections_context_file(workspace, _ledger)
+
     if success:
         return {
             "content": [{"type": "text", "text": "Correction logged successfully."}]

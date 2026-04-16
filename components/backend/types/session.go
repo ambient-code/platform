@@ -59,6 +59,7 @@ type AgenticSessionStatus struct {
 	ReconciledWorkflow *ReconciledWorkflow `json:"reconciledWorkflow,omitempty"`
 	SDKSessionID       string              `json:"sdkSessionId,omitempty"`
 	SDKRestartCount    int                 `json:"sdkRestartCount,omitempty"`
+	ExtractionStatus   string              `json:"extractionStatus,omitempty"`
 	Conditions         []Condition         `json:"conditions,omitempty"`
 }
 

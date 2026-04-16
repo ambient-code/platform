@@ -309,6 +309,10 @@ func parseStatus(status map[string]interface{}) *types.AgenticSessionStatus {
 		}
 	}
 
+	if extractionStatus, ok := status["extractionStatus"].(string); ok {
+		result.ExtractionStatus = extractionStatus
+	}
+
 	if repos, ok := status["reconciledRepos"].([]interface{}); ok && len(repos) > 0 {
 		result.ReconciledRepos = make([]types.ReconciledRepo, 0, len(repos))
 		for _, entry := range repos {

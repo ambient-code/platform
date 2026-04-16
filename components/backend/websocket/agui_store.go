@@ -24,6 +24,12 @@ import (
 	"time"
 )
 
+// OnSessionRunComplete is called when a RUN_FINISHED or RUN_ERROR event
+// is persisted. Set by the handlers package at init to trigger post-session
+// processing (e.g., insight extraction) without circular imports.
+// Signature: func(projectName, sessionName string)
+var OnSessionRunComplete func(projectName, sessionName string)
+
 // ─── Write mutex eviction ────────────────────────────────────────────
 // writeMutexes entries are evicted after writeMutexEvictAge of inactivity
 // to prevent unbounded sync.Map growth on long-running backends.
@@ -208,6 +214,16 @@ func persistEvent(sessionID string, event map[string]interface{}) {
 			}()
 		default:
 			log.Printf("AGUI Store: compaction skipped for %s (too many in-flight)", sessionID)
+		}
+
+		// Notify session completion callback (e.g., insight extraction)
+		if OnSessionRunComplete != nil {
+			if projectName, ok := sessionProjectMap.Load(sessionID); ok {
+				if pn, ok := projectName.(string); ok && pn != "" {
+					// Fire-and-forget — the callback is responsible for its own goroutine management
+					OnSessionRunComplete(pn, sessionID)
+				}
+			}
 		}
 	}
 }
@@ -470,6 +486,13 @@ func loadEventsForReplay(sessionID string) []map[string]interface{} {
 		}
 	}
 	return events
+}
+
+// LoadEventsForSession loads all AG-UI events for a session.
+// Exported for cross-package access (e.g., post-session insight extraction).
+// Returns nil if the session has no events or the session ID is invalid.
+func LoadEventsForSession(sessionID string) []map[string]interface{} {
+	return loadEvents(sessionID)
 }
 
 // compactFinishedRun replaces the raw event log with snapshot-only events.

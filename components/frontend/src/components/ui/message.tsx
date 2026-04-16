@@ -8,6 +8,14 @@ import type { Components } from "react-markdown";
 import { formatTimestamp } from "@/lib/format-timestamp";
 import { useLoadingTips } from "@/services/queries/use-loading-tips";
 import { DEFAULT_LOADING_TIPS } from "@/lib/loading-tips";
+import {
+  parseMemoryCitations,
+  extractCitationIds,
+} from "@/lib/parse-memory-citations";
+import {
+  MemoryCitationBadge,
+  MemoryCitationSummary,
+} from "@/components/memory-citation-badge";
 
 export type MessageRole = "bot" | "user";
 
@@ -255,6 +263,68 @@ export const LoadingDots = () => {
   );
 };
 
+/**
+ * Renders message content with memory citation badges.
+ * Citations inside code blocks are preserved as plain text (FR-005).
+ * When >10 citations exist, shows a summary chip (FR-016).
+ */
+function MessageContentWithCitations({
+  content,
+  components: mdComponents,
+  isStreaming,
+}: {
+  content: string;
+  components: Components;
+  isStreaming?: boolean;
+}) {
+  const segments = parseMemoryCitations(content);
+  const citationIds = extractCitationIds(content);
+  const hasCitations = citationIds.length > 0;
+
+  if (!hasCitations) {
+    return (
+      <>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+          {content}
+        </ReactMarkdown>
+        {isStreaming && (
+          <span className="inline-block w-0.5 h-4 bg-primary animate-[cursor-blink_1s_ease-in-out_infinite] rounded-full ml-0.5 align-middle" />
+        )}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {citationIds.length > 10 && (
+        <MemoryCitationSummary count={citationIds.length} />
+      )}
+      {segments.map((segment, idx) => {
+        if (segment.type === "citation") {
+          return (
+            <MemoryCitationBadge
+              key={`citation-${segment.value}-${idx}`}
+              memoryId={segment.value}
+            />
+          );
+        }
+        return (
+          <ReactMarkdown
+            key={`text-${idx}`}
+            remarkPlugins={[remarkGfm]}
+            components={mdComponents}
+          >
+            {segment.value}
+          </ReactMarkdown>
+        );
+      })}
+      {isStreaming && (
+        <span className="inline-block w-0.5 h-4 bg-primary animate-[cursor-blink_1s_ease-in-out_infinite] rounded-full ml-0.5 align-middle" />
+      )}
+    </>
+  );
+}
+
 export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
   (
     { role, content, isLoading, className, components, borderless, actions, timestamp, streaming, feedbackButtons, senderAttribution, senderId, senderDisplayName, currentUserId, ...props },
@@ -319,15 +389,11 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
                   </div>
                 ) : (
                   <div className="inline">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
+                    <MessageContentWithCitations
+                      content={content}
                       components={components || defaultComponents}
-                    >
-                      {content}
-                    </ReactMarkdown>
-                    {isActivelyStreaming && (
-                      <span className="inline-block w-0.5 h-4 bg-primary animate-[cursor-blink_1s_ease-in-out_infinite] rounded-full ml-0.5 align-middle" />
-                    )}
+                      isStreaming={isActivelyStreaming}
+                    />
                   </div>
                 )}
               </div>
