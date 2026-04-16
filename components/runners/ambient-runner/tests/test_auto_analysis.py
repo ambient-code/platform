@@ -3,10 +3,10 @@
 import asyncio
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 INTEL_CLIENT_PATH = "ambient_runner.tools.intelligence_api.IntelligenceAPIClient"
 VERTEX_CLIENT_PATH = "ambient_runner.tools.vertex_client.VertexAnthropicClient"
+DIRECT_CLIENT_PATH = "ambient_runner.tools.vertex_client.AnthropicDirectClient"
 
 
 class TestRunAutoAnalysis:
@@ -41,11 +41,34 @@ class TestRunAutoAnalysis:
         mock_intel = MagicMock()
         mock_intel.intelligence_exists.return_value = False
 
-        with patch(INTEL_CLIENT_PATH, return_value=mock_intel), \
-             patch(VERTEX_CLIENT_PATH, side_effect=ValueError("no project")):
+        with (
+            patch(INTEL_CLIENT_PATH, return_value=mock_intel),
+            patch(VERTEX_CLIENT_PATH, side_effect=ValueError("no project")),
+        ):
             self._run(run_auto_analysis("my-repo", "https://github.com/org/repo"))
 
         # Should not crash
+
+    def test_falls_back_to_anthropic_api_key(self):
+        from ambient_runner.endpoints.auto_analysis import run_auto_analysis
+
+        mock_intel = MagicMock()
+        mock_intel.intelligence_exists.return_value = False
+
+        mock_direct = MagicMock()
+        mock_direct.create_message.return_value = {
+            "content": [{"type": "text", "text": "Analysis complete."}],
+            "stop_reason": "end_turn",
+        }
+
+        with (
+            patch(INTEL_CLIENT_PATH, return_value=mock_intel),
+            patch(VERTEX_CLIENT_PATH, side_effect=ValueError("no project")),
+            patch(DIRECT_CLIENT_PATH, return_value=mock_direct),
+        ):
+            self._run(run_auto_analysis("my-repo", "https://github.com/org/repo"))
+
+        mock_direct.create_message.assert_called_once()
 
     def test_calls_vertex_and_marks_dirty(self):
         from ambient_runner.endpoints.auto_analysis import run_auto_analysis
@@ -61,9 +84,13 @@ class TestRunAutoAnalysis:
 
         mock_bridge = MagicMock()
 
-        with patch(INTEL_CLIENT_PATH, return_value=mock_intel), \
-             patch(VERTEX_CLIENT_PATH, return_value=mock_vertex):
-            self._run(run_auto_analysis("my-repo", "https://github.com/org/repo", mock_bridge))
+        with (
+            patch(INTEL_CLIENT_PATH, return_value=mock_intel),
+            patch(VERTEX_CLIENT_PATH, return_value=mock_vertex),
+        ):
+            self._run(
+                run_auto_analysis("my-repo", "https://github.com/org/repo", mock_bridge)
+            )
 
         mock_vertex.create_message.assert_called_once()
         mock_bridge.mark_dirty.assert_called_once()

@@ -2393,11 +2393,12 @@ func deleteIntelligenceFromAPIServer(projectID, repoURL string) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNoContent {
+	switch resp.StatusCode {
+	case http.StatusNoContent:
 		log.Printf("Deleted intelligence for %s from API server (backend fallback)", repoURL)
-	} else if resp.StatusCode == http.StatusNotFound {
+	case http.StatusNotFound:
 		log.Printf("No intelligence found to delete for %s on API server", repoURL)
-	} else {
+	default:
 		body, _ := io.ReadAll(resp.Body)
 		log.Printf("Warning: API server intelligence delete returned %d: %s", resp.StatusCode, string(body))
 	}

@@ -1,8 +1,11 @@
-"""Vertex AI Anthropic Messages API client with streaming and tool use.
+"""Anthropic Messages API clients for auto-analysis.
 
-Calls the Vertex AI rawPredict / streamRawPredict endpoint directly
-using Google Application Default Credentials.  No Anthropic SDK or
-Claude CLI required.
+Two implementations with the same ``create_message`` interface:
+
+* ``VertexAnthropicClient`` — calls Vertex AI rawPredict using Google
+  Application Default Credentials (requires ``ANTHROPIC_VERTEX_PROJECT_ID``).
+* ``AnthropicDirectClient`` — calls the Anthropic Messages API using
+  ``ANTHROPIC_API_KEY`` (works in CI and local dev without GCP).
 """
 
 import json
@@ -23,9 +26,7 @@ class VertexAnthropicClient:
         region: str | None = None,
         model: str | None = None,
     ):
-        self.project = project or os.getenv(
-            "ANTHROPIC_VERTEX_PROJECT_ID", ""
-        )
+        self.project = project or os.getenv("ANTHROPIC_VERTEX_PROJECT_ID", "")
         self.region = region or os.getenv("CLOUD_ML_REGION", "us-east5")
         self.model = model or os.getenv(
             "LLM_MODEL_VERTEX_ID", "claude-sonnet-4-5@20250929"
@@ -87,3 +88,44 @@ class VertexAnthropicClient:
         with urllib.request.urlopen(req, timeout=120) as resp:
             return json.loads(resp.read())
 
+
+class AnthropicDirectClient:
+    """Thin client for the Anthropic Messages API using ANTHROPIC_API_KEY."""
+
+    def __init__(self, api_key: str | None = None, model: str | None = None):
+        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
+        self.model = model or os.getenv("LLM_MODEL", "claude-sonnet-4-5-20250514")
+        if not self.api_key:
+            raise ValueError("ANTHROPIC_API_KEY is required")
+
+    def create_message(
+        self,
+        messages: list[dict[str, Any]],
+        system: str = "",
+        tools: list[dict[str, Any]] | None = None,
+        max_tokens: int = 4096,
+    ) -> dict[str, Any]:
+        """Non-streaming Messages API call. Returns the full response dict."""
+        url = "https://api.anthropic.com/v1/messages"
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "messages": messages,
+        }
+        if system:
+            payload["system"] = system
+        if tools:
+            payload["tools"] = tools
+
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": self.api_key,
+                "anthropic-version": "2023-06-01",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            return json.loads(resp.read())

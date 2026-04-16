@@ -44,7 +44,9 @@ async def run_auto_analysis(repo_name: str, repo_url: str, bridge=None):
     Disabled when ``AMBIENT_DISABLE_INTELLIGENCE=true``.
     """
     if is_intelligence_disabled():
-        logger.info("Intelligence disabled (AMBIENT_DISABLE_INTELLIGENCE), skipping auto-analysis")
+        logger.info(
+            "Intelligence disabled (AMBIENT_DISABLE_INTELLIGENCE), skipping auto-analysis"
+        )
         return
 
     # Wait for the repo notification to settle
@@ -57,21 +59,42 @@ async def run_auto_analysis(repo_name: str, repo_url: str, bridge=None):
         try:
             intel_client = IntelligenceAPIClient()
         except ValueError:
-            logger.debug("Intelligence API client not available, skipping auto-analysis")
+            logger.debug(
+                "Intelligence API client not available, skipping auto-analysis"
+            )
             return
 
         if intel_client.intelligence_exists(repo_url):
-            logger.info(f"Intelligence already exists for '{repo_name}', skipping auto-analysis")
+            logger.info(
+                f"Intelligence already exists for '{repo_name}', skipping auto-analysis"
+            )
             return
 
         logger.info(f"No intelligence found for '{repo_name}', running auto-analysis")
 
-        from ambient_runner.tools.vertex_client import VertexAnthropicClient
+        from ambient_runner.tools.vertex_client import (
+            VertexAnthropicClient,
+            AnthropicDirectClient,
+        )
 
+        llm_client = None
         try:
-            vertex = VertexAnthropicClient()
+            llm_client = VertexAnthropicClient()
+            logger.info("Auto-analysis using Vertex AI")
         except ValueError:
-            logger.debug("Vertex AI client not available, skipping auto-analysis")
+            pass
+
+        if llm_client is None:
+            try:
+                llm_client = AnthropicDirectClient()
+                logger.info("Auto-analysis using Anthropic API key")
+            except ValueError:
+                pass
+
+        if llm_client is None:
+            logger.debug(
+                "No LLM client available (need ANTHROPIC_VERTEX_PROJECT_ID or ANTHROPIC_API_KEY), skipping auto-analysis"
+            )
             return
 
         repo_context = _read_repo_context(repo_name)
@@ -100,7 +123,7 @@ async def run_auto_analysis(repo_name: str, repo_url: str, bridge=None):
 
         for _round in range(max_rounds):
             response = await asyncio.to_thread(
-                vertex.create_message,
+                llm_client.create_message,
                 messages=history,
                 system="You are a code analysis assistant. Analyze repositories and store findings using the provided tools.",
                 tools=tools,
@@ -122,12 +145,16 @@ async def run_auto_analysis(repo_name: str, repo_url: str, bridge=None):
                         result = handler(block.get("input", {}))
                     else:
                         result = json.dumps({"error": f"Unknown tool: {block['name']}"})
-                    logger.info("Auto-analysis tool: %s → %s", block["name"], result[:80])
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block["id"],
-                        "content": result,
-                    })
+                    logger.info(
+                        "Auto-analysis tool: %s → %s", block["name"], result[:80]
+                    )
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": block["id"],
+                            "content": result,
+                        }
+                    )
 
             history.append({"role": "user", "content": tool_results})
 
@@ -137,7 +164,9 @@ async def run_auto_analysis(repo_name: str, repo_url: str, bridge=None):
         # stored intelligence is included on the next user turn.
         if bridge is not None:
             bridge.mark_dirty()
-            logger.info("Marked bridge dirty — system prompt will rebuild with fresh intelligence")
+            logger.info(
+                "Marked bridge dirty — system prompt will rebuild with fresh intelligence"
+            )
 
     except Exception as e:
         logger.warning(f"Auto-analysis failed for '{repo_name}' (non-critical): {e}")
@@ -156,7 +185,12 @@ def _build_analysis_tools(intel_client, repo_name: str):
             "description": "Read a file from the repository by relative path.",
             "input_schema": {
                 "type": "object",
-                "properties": {"path": {"type": "string", "description": "File path relative to repo root"}},
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "File path relative to repo root",
+                    }
+                },
                 "required": ["path"],
             },
         },
@@ -166,10 +200,14 @@ def _build_analysis_tools(intel_client, repo_name: str):
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "repo_url": {"type": "string"}, "summary": {"type": "string"},
-                    "language": {"type": "string"}, "framework": {"type": "string"},
-                    "build_system": {"type": "string"}, "test_strategy": {"type": "string"},
-                    "architecture": {"type": "string"}, "conventions": {"type": "string"},
+                    "repo_url": {"type": "string"},
+                    "summary": {"type": "string"},
+                    "language": {"type": "string"},
+                    "framework": {"type": "string"},
+                    "build_system": {"type": "string"},
+                    "test_strategy": {"type": "string"},
+                    "architecture": {"type": "string"},
+                    "conventions": {"type": "string"},
                     "caveats": {"type": "string"},
                 },
                 "required": ["repo_url", "summary", "language"],
@@ -181,10 +219,18 @@ def _build_analysis_tools(intel_client, repo_name: str):
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "repo_url": {"type": "string"}, "file_path": {"type": "string"},
-                    "category": {"type": "string", "enum": ["investigation", "caveat", "review", "convention"]},
-                    "title": {"type": "string"}, "body": {"type": "string"},
-                    "severity": {"type": "string", "enum": ["info", "warning", "critical"]},
+                    "repo_url": {"type": "string"},
+                    "file_path": {"type": "string"},
+                    "category": {
+                        "type": "string",
+                        "enum": ["investigation", "caveat", "review", "convention"],
+                    },
+                    "title": {"type": "string"},
+                    "body": {"type": "string"},
+                    "severity": {
+                        "type": "string",
+                        "enum": ["info", "warning", "critical"],
+                    },
                     "confidence": {"type": "number"},
                 },
                 "required": ["repo_url", "file_path", "category", "title", "body"],
@@ -198,26 +244,37 @@ def _build_analysis_tools(intel_client, repo_name: str):
         if not os.path.isdir(repos_root):
             return json.dumps({"error": f"File not found: {path}"})
         for repo_dir in os.listdir(repos_root):
-            candidate = os.path.realpath(
-                os.path.join(repos_root, repo_dir, path)
-            )
+            candidate = os.path.realpath(os.path.join(repos_root, repo_dir, path))
             if not candidate.startswith(repos_root + os.sep):
                 return json.dumps({"error": "Invalid file path"})
             if os.path.isfile(candidate):
                 with open(candidate, errors="replace") as f:
                     content = f.read()
-                return content[:4000] + "\n... (truncated)" if len(content) > 4000 else content
+                return (
+                    content[:4000] + "\n... (truncated)"
+                    if len(content) > 4000
+                    else content
+                )
         return json.dumps({"error": f"File not found: {path}"})
 
     def _create_intelligence(args):
-        data = {k: v for k, v in {
-            "repo_url": args["repo_url"], "summary": args["summary"],
-            "language": args["language"], "framework": args.get("framework"),
-            "build_system": args.get("build_system"), "test_strategy": args.get("test_strategy"),
-            "architecture": args.get("architecture"), "conventions": args.get("conventions"),
-            "caveats": args.get("caveats"), "analyzed_by_session_id": session_id or None,
-            "confidence": 0.9,
-        }.items() if v is not None}
+        data = {
+            k: v
+            for k, v in {
+                "repo_url": args["repo_url"],
+                "summary": args["summary"],
+                "language": args["language"],
+                "framework": args.get("framework"),
+                "build_system": args.get("build_system"),
+                "test_strategy": args.get("test_strategy"),
+                "architecture": args.get("architecture"),
+                "conventions": args.get("conventions"),
+                "caveats": args.get("caveats"),
+                "analyzed_by_session_id": session_id or None,
+                "confidence": 0.9,
+            }.items()
+            if v is not None
+        }
         try:
             result = intel_client.create_intelligence(data)
             return json.dumps({"created": True, "id": result.get("id")})
@@ -227,11 +284,20 @@ def _build_analysis_tools(intel_client, repo_name: str):
     def _memory_store(args):
         intel = intel_client.lookup_intelligence(args["repo_url"])
         if not intel:
-            return json.dumps({"stored": False, "message": "No intelligence record — call create_intelligence first"})
+            return json.dumps(
+                {
+                    "stored": False,
+                    "message": "No intelligence record — call create_intelligence first",
+                }
+            )
         data = {
-            "intelligence_id": intel["id"], "file_path": args["file_path"],
-            "category": args["category"], "title": args["title"], "body": args["body"],
-            "severity": args.get("severity", "info"), "source_type": "agent_analysis",
+            "intelligence_id": intel["id"],
+            "file_path": args["file_path"],
+            "category": args["category"],
+            "title": args["title"],
+            "body": args["body"],
+            "severity": args.get("severity", "info"),
+            "source_type": "agent_analysis",
             "confidence": args.get("confidence"),
         }
         if session_id:
@@ -239,7 +305,11 @@ def _build_analysis_tools(intel_client, repo_name: str):
         finding = intel_client.create_finding(data)
         return json.dumps({"stored": True, "finding_id": finding.get("id")})
 
-    handlers = {"read_file": _read_file, "create_intelligence": _create_intelligence, "memory_store": _memory_store}
+    handlers = {
+        "read_file": _read_file,
+        "create_intelligence": _create_intelligence,
+        "memory_store": _memory_store,
+    }
     return tools, handlers
 
 
@@ -254,15 +324,28 @@ def _read_repo_context(repo_name: str) -> str:
         return f"(Repository {repo_name} not found at {repo_path})"
 
     parts = []
-    skip_dirs = {".git", "node_modules", "__pycache__", "venv", ".venv",
-                 ".tox", "dist", "build", ".eggs", ".mypy_cache", ".pytest_cache"}
+    skip_dirs = {
+        ".git",
+        "node_modules",
+        "__pycache__",
+        "venv",
+        ".venv",
+        ".tox",
+        "dist",
+        "build",
+        ".eggs",
+        ".mypy_cache",
+        ".pytest_cache",
+    }
 
     # 1. Full directory tree (depth 3, first 100 files)
     try:
         tree_lines = []
         file_count = 0
         for root, dirs, files in os.walk(repo_path):
-            dirs[:] = sorted(d for d in dirs if d not in skip_dirs and not d.startswith("."))
+            dirs[:] = sorted(
+                d for d in dirs if d not in skip_dirs and not d.startswith(".")
+            )
             depth = str(root).replace(str(repo_path), "").count(os.sep)
             if depth > 3:
                 dirs.clear()
@@ -275,14 +358,24 @@ def _read_repo_context(repo_name: str) -> str:
                     break
                 tree_lines.append(f"{indent}  {f}")
                 file_count += 1
-        parts.append("## Directory Structure\n```\n" + "\n".join(tree_lines) + "\n```\n")
+        parts.append(
+            "## Directory Structure\n```\n" + "\n".join(tree_lines) + "\n```\n"
+        )
     except Exception as e:
         parts.append(f"(Could not read directory: {e})\n")
 
     # 2. Always include README and build config (if they exist)
-    always_read = ["README.md", "README.rst", "README",
-                   "pyproject.toml", "setup.py", "setup.cfg",
-                   "package.json", "go.mod", "Cargo.toml"]
+    always_read = [
+        "README.md",
+        "README.rst",
+        "README",
+        "pyproject.toml",
+        "setup.py",
+        "setup.cfg",
+        "package.json",
+        "go.mod",
+        "Cargo.toml",
+    ]
 
     for filename in always_read:
         filepath = repo_path / filename
