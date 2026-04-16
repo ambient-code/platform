@@ -1,0 +1,68 @@
+name: Image Puller Health Check
+
+on:
+  schedule:
+    # Every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  check-health:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Install oc
+        uses: redhat-actions/openshift-tools-installer@v1
+        with:
+          oc: latest
+
+      - name: Log in to OpenShift Cluster
+        run: |
+          oc login ${{ secrets.PROD_OPENSHIFT_SERVER }} --token=${{ secrets.PROD_OPENSHIFT_TOKEN }}
+
+      - name: Check image puller deployment
+        run: |
+          echo "=== Deployment ==="
+          oc get deployment acp-image-puller -n acp-image-puller -o wide
+          AVAILABLE=$(oc get deployment acp-image-puller -n acp-image-puller \
+            -o jsonpath='{.status.availableReplicas}')
+          if [ "${AVAILABLE:-0}" -lt 1 ]; then
+            echo "::error::Image puller deployment has no available replicas"
+            exit 1
+          fi
+
+      - name: Check DaemonSet coverage
+        run: |
+          echo "=== DaemonSet ==="
+          oc get daemonset -n acp-image-puller -o wide
+
+          DESIRED=$(oc get daemonset acp-image-puller-ds -n acp-image-puller \
+            -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null || echo "0")
+          READY=$(oc get daemonset acp-image-puller-ds -n acp-image-puller \
+            -o jsonpath='{.status.numberReady}' 2>/dev/null || echo "0")
+          UNAVAILABLE=$(oc get daemonset acp-image-puller-ds -n acp-image-puller \
+            -o jsonpath='{.status.numberUnavailable}' 2>/dev/null || echo "0")
+
+          echo "Desired: $DESIRED | Ready: $READY | Unavailable: ${UNAVAILABLE:-0}"
+
+          if [ "$DESIRED" -eq 0 ]; then
+            echo "::error::DaemonSet has 0 desired pods — no images are configured or the puller is broken"
+            exit 1
+          fi
+
+          if [ "${UNAVAILABLE:-0}" -gt 0 ]; then
+            echo "::warning::DaemonSet has $UNAVAILABLE unavailable pod(s) — some nodes may not have cached images"
+          fi
+
+          NODE_COUNT=$(oc get nodes --no-headers | wc -l)
+          echo "Cluster nodes: $NODE_COUNT"
+          if [ "$DESIRED" -lt "$NODE_COUNT" ]; then
+            echo "::warning::DaemonSet covers $DESIRED/$NODE_COUNT nodes — check NODE_SELECTOR or tolerations"
+          fi
+
+      - name: Show configured images
+        run: |
+          echo "=== Configured images ==="
+          oc get configmap acp-image-puller-config -n acp-image-puller \
+            -o jsonpath='{.data.IMAGES}' | tr ';' '\n'
