@@ -90,9 +90,9 @@ jobs:
       id: changes
       run: |
         if git diff --quiet docs/public/images/screenshots/ 2>/dev/null; then
-          echo "changed=false" >> $GITHUB_OUTPUT
+          echo "changed=false" >> "$GITHUB_OUTPUT"
         else
-          echo "changed=true" >> $GITHUB_OUTPUT
+          echo "changed=true" >> "$GITHUB_OUTPUT"
           git diff --stat docs/public/images/screenshots/
         fi
 
