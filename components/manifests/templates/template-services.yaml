@@ -96,24 +96,6 @@ objects:
   kind: Service
   metadata:
     labels:
-      app: ambient-api-server
-      component: database
-    name: ambient-api-server-db
-    namespace: ambient-code
-  spec:
-    ports:
-    - name: postgresql
-      port: 5432
-      protocol: TCP
-      targetPort: 5432
-    selector:
-      app: ambient-api-server
-      component: database
-    type: ClusterIP
-- apiVersion: v1
-  kind: Service
-  metadata:
-    labels:
       app: backend-api
     name: backend-service
     namespace: ambient-code
@@ -152,42 +134,6 @@ objects:
   kind: Service
   metadata:
     labels:
-      app: minio
-    name: minio
-    namespace: ambient-code
-  spec:
-    ports:
-    - name: api
-      port: 9000
-      protocol: TCP
-      targetPort: 9000
-    - name: console
-      port: 9001
-      protocol: TCP
-      targetPort: 9001
-    selector:
-      app: minio
-    type: ClusterIP
-- apiVersion: v1
-  kind: Service
-  metadata:
-    labels:
-      app: postgresql
-      app.kubernetes.io/name: postgresql
-    name: postgresql
-    namespace: ambient-code
-  spec:
-    ports:
-    - name: postgresql
-      port: 5432
-      targetPort: postgresql
-    selector:
-      app: postgresql
-    type: ClusterIP
-- apiVersion: v1
-  kind: Service
-  metadata:
-    labels:
       app: public-api
     name: public-api-service
     namespace: ambient-code
@@ -199,22 +145,6 @@ objects:
       targetPort: http
     selector:
       app: public-api
-    type: ClusterIP
-- apiVersion: v1
-  kind: Service
-  metadata:
-    labels:
-      app: unleash
-      app.kubernetes.io/name: unleash
-    name: unleash
-    namespace: ambient-code
-  spec:
-    ports:
-    - name: http
-      port: 4242
-      targetPort: 4242
-    selector:
-      app: unleash
     type: ClusterIP
 - apiVersion: v1
   kind: LimitRange
@@ -261,19 +191,6 @@ objects:
     resources:
       requests:
         storage: 5Gi
-- apiVersion: v1
-  kind: PersistentVolumeClaim
-  metadata:
-    labels:
-      app: minio
-    name: minio-data
-    namespace: ambient-code
-  spec:
-    accessModes:
-    - ReadWriteOnce
-    resources:
-      requests:
-        storage: 500Gi
 - apiVersion: v1
   kind: PersistentVolumeClaim
   metadata:
@@ -433,77 +350,6 @@ objects:
         - configMap:
             name: ambient-api-server-auth
           name: auth-config
-- apiVersion: apps/v1
-  kind: Deployment
-  metadata:
-    labels:
-      app: ambient-api-server
-      component: database
-    name: ambient-api-server-db
-    namespace: ambient-code
-  spec:
-    replicas: 0
-    selector:
-      matchLabels:
-        app: ambient-api-server
-        component: database
-    strategy:
-      type: Recreate
-    template:
-      metadata:
-        labels:
-          app: ambient-api-server
-          component: database
-      spec:
-        containers:
-        - env:
-          - name: POSTGRES_USER
-            valueFrom:
-              secretKeyRef:
-                key: db.user
-                name: ambient-code-rds
-          - name: POSTGRES_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                key: db.password
-                name: ambient-code-rds
-          - name: POSTGRES_DB
-            valueFrom:
-              secretKeyRef:
-                key: db.name
-                name: ambient-code-rds
-          - name: PGDATA
-            value: /var/lib/postgresql/data/pgdata
-          image: postgres:16
-          livenessProbe:
-            exec:
-              command:
-              - /bin/sh
-              - -c
-              - pg_isready -U "$POSTGRES_USER"
-            initialDelaySeconds: 30
-            periodSeconds: 30
-            timeoutSeconds: 5
-          name: postgresql
-          ports:
-          - containerPort: 5432
-            name: postgresql
-          readinessProbe:
-            exec:
-              command:
-              - /bin/sh
-              - -c
-              - pg_isready -U "$POSTGRES_USER"
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            timeoutSeconds: 5
-          volumeMounts:
-          - mountPath: /var/lib/postgresql/data
-            name: ambient-api-server-db-data
-        volumes:
-        - name: ambient-api-server-db-data
-          persistentVolumeClaim:
-            claimName: ambient-api-server-db-data
 - apiVersion: apps/v1
   kind: Deployment
   metadata:
@@ -905,157 +751,6 @@ objects:
   kind: Deployment
   metadata:
     labels:
-      app: minio
-    name: minio
-    namespace: ambient-code
-  spec:
-    replicas: 0
-    selector:
-      matchLabels:
-        app: minio
-    template:
-      metadata:
-        labels:
-          app: minio
-      spec:
-        containers:
-        - args:
-          - server
-          - /data
-          - --console-address
-          - :9001
-          env:
-          - name: MINIO_ROOT_USER
-            valueFrom:
-              secretKeyRef:
-                key: root-user
-                name: minio-credentials
-          - name: MINIO_ROOT_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                key: root-password
-                name: minio-credentials
-          image: quay.io/minio/minio:latest
-          livenessProbe:
-            failureThreshold: 5
-            httpGet:
-              path: /minio/health/live
-              port: 9000
-            initialDelaySeconds: 60
-            periodSeconds: 15
-            timeoutSeconds: 5
-          name: minio
-          ports:
-          - containerPort: 9000
-            name: api
-            protocol: TCP
-          - containerPort: 9001
-            name: console
-            protocol: TCP
-          readinessProbe:
-            failureThreshold: 5
-            httpGet:
-              path: /minio/health/ready
-              port: 9000
-            initialDelaySeconds: 20
-            periodSeconds: 10
-            timeoutSeconds: 5
-          resources:
-            limits:
-              cpu: 6000m
-              memory: 12Gi
-            requests:
-              cpu: 3000m
-              memory: 6Gi
-          volumeMounts:
-          - mountPath: /data
-            name: data
-        volumes:
-        - name: data
-          persistentVolumeClaim:
-            claimName: minio-data
-- apiVersion: apps/v1
-  kind: Deployment
-  metadata:
-    labels:
-      app: postgresql
-      app.kubernetes.io/component: database
-      app.kubernetes.io/name: postgresql
-    name: postgresql
-    namespace: ambient-code
-  spec:
-    replicas: 0
-    selector:
-      matchLabels:
-        app: postgresql
-    strategy:
-      type: Recreate
-    template:
-      metadata:
-        labels:
-          app: postgresql
-          app.kubernetes.io/name: postgresql
-      spec:
-        containers:
-        - env:
-          - name: POSTGRES_USER
-            valueFrom:
-              secretKeyRef:
-                key: db.user
-                name: postgresql-credentials
-          - name: POSTGRES_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                key: db.password
-                name: postgresql-credentials
-          - name: POSTGRES_DB
-            valueFrom:
-              secretKeyRef:
-                key: db.name
-                name: postgresql-credentials
-          - name: PGDATA
-            value: /var/lib/postgresql/data/pgdata
-          image: postgres:16
-          livenessProbe:
-            exec:
-              command:
-              - /bin/sh
-              - -c
-              - pg_isready -U "$POSTGRES_USER"
-            initialDelaySeconds: 30
-            periodSeconds: 30
-            timeoutSeconds: 5
-          name: postgresql
-          ports:
-          - containerPort: 5432
-            name: postgresql
-          readinessProbe:
-            exec:
-              command:
-              - /bin/sh
-              - -c
-              - pg_isready -U "$POSTGRES_USER"
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            timeoutSeconds: 5
-          resources:
-            limits:
-              cpu: 500m
-              memory: 512Mi
-            requests:
-              cpu: 100m
-              memory: 256Mi
-          volumeMounts:
-          - mountPath: /var/lib/postgresql/data
-            name: data
-        volumes:
-        - name: data
-          persistentVolumeClaim:
-            claimName: postgresql-data
-- apiVersion: apps/v1
-  kind: Deployment
-  metadata:
-    labels:
       app: public-api
     name: public-api
     namespace: ambient-code
@@ -1117,86 +812,6 @@ objects:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
         serviceAccountName: public-api
-- apiVersion: apps/v1
-  kind: Deployment
-  metadata:
-    labels:
-      app: unleash
-      app.kubernetes.io/component: server
-      app.kubernetes.io/name: unleash
-    name: unleash
-    namespace: ambient-code
-  spec:
-    replicas: 0
-    selector:
-      matchLabels:
-        app: unleash
-    template:
-      metadata:
-        labels:
-          app: unleash
-          app.kubernetes.io/name: unleash
-      spec:
-        containers:
-        - env:
-          - name: DATABASE_URL
-            valueFrom:
-              secretKeyRef:
-                key: database-url
-                name: unleash-credentials
-          - name: DATABASE_SSL
-            valueFrom:
-              secretKeyRef:
-                key: database-ssl
-                name: unleash-credentials
-          - name: LOG_LEVEL
-            value: info
-          - name: INIT_ADMIN_API_TOKENS
-            valueFrom:
-              secretKeyRef:
-                key: admin-api-token
-                name: unleash-credentials
-          - name: INIT_CLIENT_API_TOKENS
-            valueFrom:
-              secretKeyRef:
-                key: client-api-token
-                name: unleash-credentials
-          - name: INIT_FRONTEND_API_TOKENS
-            valueFrom:
-              secretKeyRef:
-                key: frontend-api-token
-                name: unleash-credentials
-          - name: UNLEASH_DEFAULT_ADMIN_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                key: default-admin-password
-                name: unleash-credentials
-          image: unleashorg/unleash-server:5.11.3
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 4242
-            initialDelaySeconds: 60
-            periodSeconds: 30
-            timeoutSeconds: 5
-          name: unleash
-          ports:
-          - containerPort: 4242
-            name: http
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 4242
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 5
-          resources:
-            limits:
-              cpu: 500m
-              memory: 512Mi
-            requests:
-              cpu: 100m
-              memory: 256Mi
 - apiVersion: policy/v1
   kind: PodDisruptionBudget
   metadata:
