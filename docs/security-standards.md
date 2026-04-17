@@ -50,6 +50,10 @@ func customRedactingFormatter(param gin.LogFormatterParams) string {
 }
 ```
 
+### Token Lifetime (K8s TokenRequest)
+
+K8s `TokenRequest` API does NOT support non-expiring tokens. If `ExpirationSeconds` is omitted, K8s silently applies a default (~1h). Maximum enforced lifetime: **1 year** (31536000 seconds), validated in backend `CreateProjectKey`. Frontend default: 90 days.
+
 ### RBAC Enforcement
 
 **1. Always Check Permissions Before Operations**

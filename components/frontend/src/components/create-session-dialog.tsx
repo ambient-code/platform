@@ -230,7 +230,7 @@ export function CreateSessionDialog({
     }
 
     if (advancedAgentOptions) {
-      request.agentOptions = agentOptionsForm.getValues();
+      request.sdkOptions = agentOptionsForm.getValues();
     }
 
     createSessionMutation.mutate(
