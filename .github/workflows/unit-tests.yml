@@ -57,10 +57,10 @@ jobs:
       scripts: ${{ steps.filter.outputs.scripts }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Detect changed components
-        uses: dorny/paths-filter@v4
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
         id: filter
         with:
           filters: |
@@ -91,10 +91,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: 'components/backend/go.mod'
           cache-dependency-path: 'components/backend/go.sum'
@@ -128,12 +128,11 @@ jobs:
           go run github.com/onsi/ginkgo/v2/ginkgo -r -v --cover --keep-going --github-output=true --tags=test --label-filter=${{ steps.configure.outputs.TEST_LABEL }} --junit-report=${{ env.JUNIT_FILENAME }} --output-dir=reports -- -testNamespace=${{ steps.configure.outputs.DEFAULT_NAMESPACE }}
         continue-on-error: true
 
-      - name: Install Junit2Html plugin and generate report
+      - name: Generate HTML test report
         if: (!cancelled())
         shell: bash
         run: |
-          pip install junit2html
-          junit2html ${{ env.TESTS_DIR }}/reports/${{ env.JUNIT_FILENAME }} ${{ env.TESTS_DIR }}/reports/test-report.html
+          pipx run junit2html ${{ env.TESTS_DIR }}/reports/${{ env.JUNIT_FILENAME }} ${{ env.TESTS_DIR }}/reports/test-report.html
         continue-on-error: true
 
       - name: Configure report name
@@ -146,7 +145,7 @@ jobs:
 
       - name: Upload HTML Report
         id: upload
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: (!cancelled())
         with:
           name: ${{ steps.name_gen.outputs.REPORT_NAME }}
@@ -156,7 +155,7 @@ jobs:
 
       - name: Publish Test Summary With HTML Report
         id: publish
-        uses: kubeflow/pipelines/.github/actions/junit-summary@master
+        uses: kubeflow/pipelines/.github/actions/junit-summary@ab1231a5c32c688bcb62314e467011b586aee796 # master
         if: (!cancelled()) && steps.upload.outcome != 'failure'
         with:
           xml_files: '${{ env.TESTS_DIR }}/reports'
@@ -165,7 +164,7 @@ jobs:
 
       - name: Publish Test Summary
         id: summary
-        uses: kubeflow/pipelines/.github/actions/junit-summary@master
+        uses: kubeflow/pipelines/.github/actions/junit-summary@ab1231a5c32c688bcb62314e467011b586aee796 # master
         if: (!cancelled()) && steps.upload.outcome == 'failure'
         with:
           xml_files: '${{ env.TESTS_DIR }}/reports'
@@ -192,10 +191,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: 'components/ambient-api-server/go.mod'
           cache-dependency-path: 'components/ambient-api-server/go.sum'
@@ -223,10 +222,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -250,10 +249,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: 'components/ambient-cli/go.mod'
           cache-dependency-path: 'components/ambient-cli/go.sum'
@@ -275,7 +274,7 @@ jobs:
           go test -v -race -coverprofile=coverage.out ./...
 
       - name: Upload coverage
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
           name: cli-coverage-${{ github.run_id }}
@@ -293,10 +292,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version-file: 'components/frontend/package.json'
           cache: 'npm'
@@ -315,10 +314,10 @@ jobs:
     name: Script Tests (model-discovery)
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: '3.11'
 
