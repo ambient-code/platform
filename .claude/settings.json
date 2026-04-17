@@ -63,6 +63,42 @@
             "prompt": "Refuse edits to generated or sensitive files: .env, .env.*, package-lock.json, go.sum, vendor/. Reply: 'This is a generated or sensitive file. Use the appropriate package manager or tool instead.'"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "If the file being edited matches 'components/manifests/**/*.yaml' or '.github/workflows/**/*.yml' or '.github/workflows/**/*.yaml' and the new content references a container image (quay.io/, registry.redhat.io/, or *_IMAGE), remind: 'Image references must match across the full stack. Grep all overlays, workflows, ConfigMaps, and Makefile targets to verify the image name and tag are consistent. Mismatches cause silent deployment failures.'"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "If the file being edited matches 'components/operator/**/*.go' or 'components/backend/**/*.go' and the new content handles a K8s Create operation with 'AlreadyExists' in an error check (errors.IsAlreadyExists or apierrors.IsAlreadyExists), remind: 'Use reconcile (update-or-create) patterns, not create-and-ignore-AlreadyExists. Skipping AlreadyExists misses spec drift and ownership updates.'"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "If the file being edited matches 'components/operator/**/*.go' or 'components/backend/**/*.go' and the new content discards an error with '_ =' or has an 'if err != nil' block that does not return/propagate the error, remind: 'Never silently swallow errors. Every error must be propagated, logged, or collected. Partial failures in reconciliation loops must be returned, not ignored.'"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "If the file being edited matches 'components/manifests/**/*.yaml' and the new content contains 'initContainers' or 'containers' but does not include 'runAsNonRoot: true' or 'drop' with 'ALL', remind: 'All containers must run under restricted SecurityContext: runAsNonRoot: true, drop ALL capabilities, readOnlyRootFilesystem: true unless a specific write path is needed.'"
+          }
+        ]
       }
     ],
     "PostToolUse": [

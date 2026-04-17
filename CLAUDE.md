@@ -116,6 +116,11 @@ component DEVELOPMENT.md files (see [BOOKMARKS.md](BOOKMARKS.md) > Component Dev
 - **Separate configuration from code**: Config changes must not require code changes. Externalize
   via env vars, ConfigMaps, manifests, or feature flags. If a value varies across environments
   or changes over time, it's config, not code.
+- **Image references must match across the stack**: After changing an image name or tag, grep all overlays, workflows, and ConfigMaps
+- **Reconcile, don't create-or-skip**: Use update-or-create patterns, not create-and-ignore-`AlreadyExists`
+- **Never silently swallow partial failures**: Every error path must propagate or be collected, not discarded
+- **Namespace-scope shared state keys**: Cache keys and status entries must include namespace/project prefix
+- **Restricted SecurityContext on all containers**: `runAsNonRoot`, drop `ALL` capabilities, `readOnlyRootFilesystem`
 
 Component-specific conventions:
 - Backend: [DEVELOPMENT.md](components/backend/DEVELOPMENT.md), [ERROR_PATTERNS.md](components/backend/ERROR_PATTERNS.md), [K8S_CLIENT_PATTERNS.md](components/backend/K8S_CLIENT_PATTERNS.md)
