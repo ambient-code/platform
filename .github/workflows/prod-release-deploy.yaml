@@ -352,6 +352,104 @@ jobs:
             ${{ matrix.component.image }}:${{ needs.release.outputs.new_tag }}-amd64 \
             ${{ matrix.component.image }}:${{ needs.release.outputs.new_tag }}-arm64
 
+  pre-pull-images:
+    runs-on: ubuntu-latest
+    needs: [release, merge-manifests]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code from release tag
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.release.outputs.new_tag }}
+
+      - name: Install oc
+        uses: redhat-actions/openshift-tools-installer@144527c7d98999f2652264c048c7a9bd103f8a82 # v1
+        with:
+          oc: latest
+
+      - name: Log in to OpenShift Cluster
+        run: |
+          oc login ${{ secrets.PROD_OPENSHIFT_SERVER }} --token=${{ secrets.PROD_OPENSHIFT_TOKEN }}
+
+      - name: Deploy image puller infrastructure
+        run: |
+          oc apply -f components/manifests/components/image-puller/namespace.yaml
+          oc apply -f components/manifests/components/image-puller/rbac.yaml
+          oc apply -f components/manifests/components/image-puller/configmap.yaml
+          oc apply -f components/manifests/components/image-puller/deployment.yaml
+          oc apply -f components/manifests/components/image-puller/prometheusrule.yaml
+
+      - name: Ensure registry pull secrets exist
+        run: |
+          # Secret for pulling the image puller itself from registry.redhat.io
+          oc create secret docker-registry redhat-registry-pull-secret \
+            --docker-server=registry.redhat.io \
+            --docker-username="${{ secrets.REDHAT_USERNAME }}" \
+            --docker-password="${{ secrets.REDHAT_PASSWORD }}" \
+            -n acp-image-puller --dry-run=client -o yaml | oc apply -f -
+
+          # Secret for pulling ACP component images from quay.io
+          oc create secret docker-registry quay-pull-secret \
+            --docker-server=quay.io \
+            --docker-username="${{ secrets.QUAY_USERNAME }}" \
+            --docker-password="${{ secrets.QUAY_PASSWORD }}" \
+            -n acp-image-puller --dry-run=client -o yaml | oc apply -f -
+
+      - name: Build image list from release components
+        id: image-list
+        run: |
+          RELEASE_TAG="${{ needs.release.outputs.new_tag }}"
+          MERGE_MATRIX='${{ needs.release.outputs.merge-matrix }}'
+
+          # Build semicolon-separated name=image:tag list from the merge matrix
+          IMAGES=$(echo "$MERGE_MATRIX" | jq -r \
+            --arg tag "$RELEASE_TAG" \
+            '[.[] | "\(.name)=\(.image):\($tag)"] | join(";")')
+
+          echo "images=${IMAGES}" >> $GITHUB_OUTPUT
+          echo "Image list for pre-pull:"
+          echo "$IMAGES" | tr ';' '\n'
+
+      - name: Update image puller ConfigMap with new images
+        run: |
+          oc patch configmap acp-image-puller-config \
+            -n acp-image-puller \
+            --type merge \
+            -p "{\"data\":{\"IMAGES\":\"${{ steps.image-list.outputs.images }}\"}}"
+
+      - name: Restart image puller to pick up new image list
+        run: |
+          oc rollout restart deployment/acp-image-puller -n acp-image-puller
+          oc rollout status deployment/acp-image-puller -n acp-image-puller --timeout=120s
+
+      - name: Wait for DaemonSet to pull images on all nodes
+        run: |
+          echo "Waiting for image puller DaemonSet to schedule on all nodes..."
+          for i in $(seq 1 60); do
+            # The puller needs a moment to create the DaemonSet
+            DS_STATUS=$(oc get daemonset acp-image-puller-ds -n acp-image-puller \
+              -o jsonpath='{.status.desiredNumberScheduled},{.status.numberReady}' 2>/dev/null || echo "0,0")
+            DESIRED=$(echo "$DS_STATUS" | cut -d, -f1)
+            READY=$(echo "$DS_STATUS" | cut -d, -f2)
+
+            if [ "$DESIRED" -gt 0 ] && [ "$DESIRED" -eq "$READY" ]; then
+              echo "All $READY/$DESIRED nodes have images pre-pulled."
+              break
+            fi
+
+            if [ "$i" -eq 60 ]; then
+              echo "::warning::Image pre-pull did not complete on all nodes within timeout ($READY/$DESIRED ready). Proceeding with deploy."
+              break
+            fi
+
+            echo "Attempt $i/60 - DaemonSet $READY/$DESIRED ready, waiting 10s..."
+            sleep 10
+          done
+
+          echo "DaemonSet status:"
+          oc get daemonset -n acp-image-puller || true
+
   deploy-rhoai-mlflow:
     runs-on: ubuntu-latest
     needs: [release]
@@ -476,7 +574,7 @@ jobs:
 
   deploy-to-openshift:
     runs-on: ubuntu-latest
-    needs: [release, merge-manifests]
+    needs: [release, merge-manifests, pre-pull-images]
     steps:
       - name: Checkout code from release tag
         uses: actions/checkout@v6
