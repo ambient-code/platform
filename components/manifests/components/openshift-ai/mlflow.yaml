@@ -1,0 +1,33 @@
+apiVersion: mlflow.opendatahub.io/v1
+kind: MLflow
+metadata:
+  name: mlflow
+spec:
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2"
+      memory: "2Gi"
+
+  # PostgreSQL connection URI is read from a Secret to keep credentials out of the CR.
+  # The Secret must exist in the operator's application namespace (redhat-ods-applications).
+  backendStoreUriFrom:
+    name: mlflow-db-credentials
+    key: uri
+
+  # Artifact storage via the MLflow server (file-backed PVC).
+  # To use S3/MinIO instead, replace with: artifactsDestination: "s3://bucket/mlflow/artifacts"
+  # and inject credentials via envFrom.
+  storage:
+    accessModes:
+    - ReadWriteOnce
+    resources:
+      requests:
+        storage: 10Gi
+
+  artifactsDestination: "file:///mlflow/artifacts"
+  serveArtifacts: true

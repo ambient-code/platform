@@ -348,7 +348,7 @@ jobs:
     if: github.event.label.name == 'auto-fix'
     runs-on: ubuntu-latest
     steps:
-      - uses: ambient-code/ambient-action@v0.0.2
+      - uses: ambient-code/ambient-action@v0.0.5
         with:
           api-url: ${{ secrets.ACP_URL }}
           api-token: ${{ secrets.ACP_TOKEN }}
@@ -360,7 +360,7 @@ jobs:
           workflow: |
             {"gitUrl": "https://github.com/ambient-code/workflows", "branch": "main", "path": "workflows/bugfix"}
           wait: true
-          timeout: 30
+          poll-timeout: 30
 ```
 
 When `wait` is `true`, the action outputs `session-name`, `session-uid`,

@@ -12,12 +12,21 @@ type AgenticSession struct {
 	AutoBranch string `json:"autoBranch,omitempty"`
 }
 
+// MCPServersConfig holds custom MCP server configuration for a session or project.
+type MCPServersConfig struct {
+	// Custom MCP servers to add (map of server name -> config)
+	Custom map[string]map[string]interface{} `json:"custom,omitempty"`
+	// Default MCP server names to disable
+	Disabled []string `json:"disabled,omitempty"`
+}
+
 type AgenticSessionSpec struct {
 	InitialPrompt        string             `json:"initialPrompt,omitempty"`
 	DisplayName          string             `json:"displayName"`
 	LLMSettings          LLMSettings        `json:"llmSettings"`
 	Timeout              int                `json:"timeout"`
 	InactivityTimeout    *int               `json:"inactivityTimeout,omitempty"`
+	StopOnRunFinished    bool               `json:"stopOnRunFinished,omitempty"`
 	UserContext          *UserContext       `json:"userContext,omitempty"`
 	BotAccount           *BotAccountRef     `json:"botAccount,omitempty"`
 	ResourceOverrides    *ResourceOverrides `json:"resourceOverrides,omitempty"`
@@ -27,6 +36,8 @@ type AgenticSessionSpec struct {
 	Repos []SimpleRepo `json:"repos,omitempty"`
 	// Active workflow for dynamic workflow switching
 	ActiveWorkflow *WorkflowSelection `json:"activeWorkflow,omitempty"`
+	// Custom MCP server configuration
+	MCPServers *MCPServersConfig `json:"mcpServers,omitempty"`
 }
 
 // SimpleRepo represents a simplified repository configuration
@@ -52,19 +63,22 @@ type AgenticSessionStatus struct {
 }
 
 type CreateAgenticSessionRequest struct {
-	InitialPrompt        string             `json:"initialPrompt,omitempty"`
-	DisplayName          string             `json:"displayName,omitempty"`
-	RunnerType           string             `json:"runnerType,omitempty"`
-	LLMSettings          *LLMSettings       `json:"llmSettings,omitempty"`
-	Timeout              *int               `json:"timeout,omitempty"`
-	InactivityTimeout    *int               `json:"inactivityTimeout,omitempty"`
-	ParentSessionID      string             `json:"parent_session_id,omitempty"`
-	Repos                []SimpleRepo       `json:"repos,omitempty"`
-	ActiveWorkflow       *WorkflowSelection `json:"activeWorkflow,omitempty"`
-	UserContext          *UserContext       `json:"userContext,omitempty"`
-	EnvironmentVariables map[string]string  `json:"environmentVariables,omitempty"`
-	Labels               map[string]string  `json:"labels,omitempty"`
-	Annotations          map[string]string  `json:"annotations,omitempty"`
+	InitialPrompt        string                 `json:"initialPrompt,omitempty"`
+	DisplayName          string                 `json:"displayName,omitempty"`
+	RunnerType           string                 `json:"runnerType,omitempty"`
+	LLMSettings          *LLMSettings           `json:"llmSettings,omitempty"`
+	Timeout              *int                   `json:"timeout,omitempty"`
+	InactivityTimeout    *int                   `json:"inactivityTimeout,omitempty"`
+	StopOnRunFinished    *bool                  `json:"stopOnRunFinished,omitempty"`
+	ParentSessionID      string                 `json:"parent_session_id,omitempty"`
+	Repos                []SimpleRepo           `json:"repos,omitempty"`
+	ActiveWorkflow       *WorkflowSelection     `json:"activeWorkflow,omitempty"`
+	UserContext          *UserContext           `json:"userContext,omitempty"`
+	EnvironmentVariables map[string]string      `json:"environmentVariables,omitempty"`
+	Labels               map[string]string      `json:"labels,omitempty"`
+	Annotations          map[string]string      `json:"annotations,omitempty"`
+	MCPServers           *MCPServersConfig      `json:"mcpServers,omitempty"`
+	SdkOptions           map[string]interface{} `json:"sdkOptions,omitempty"`
 }
 
 type CloneSessionRequest struct {
@@ -73,10 +87,11 @@ type CloneSessionRequest struct {
 }
 
 type UpdateAgenticSessionRequest struct {
-	InitialPrompt *string      `json:"initialPrompt,omitempty"`
-	DisplayName   *string      `json:"displayName,omitempty"`
-	Timeout       *int         `json:"timeout,omitempty"`
-	LLMSettings   *LLMSettings `json:"llmSettings,omitempty"`
+	InitialPrompt *string           `json:"initialPrompt,omitempty"`
+	DisplayName   *string           `json:"displayName,omitempty"`
+	Timeout       *int              `json:"timeout,omitempty"`
+	LLMSettings   *LLMSettings      `json:"llmSettings,omitempty"`
+	MCPServers    *MCPServersConfig `json:"mcpServers,omitempty"`
 }
 
 type CloneAgenticSessionRequest struct {

@@ -389,6 +389,21 @@ func CreateProjectKey(c *gin.Context) {
 		return
 	}
 
+	// Validate and apply token expiration (required, max 1 year).
+	// Kubernetes TokenRequest does not support non-expiring tokens — the API
+	// server silently caps ExpirationSeconds and the token will expire even if
+	// you omit the field (default ~1h). We enforce an explicit maximum of 1
+	// year so users get predictable behaviour instead of a silent K8s default.
+	const maxExpirationSeconds int64 = 31536000 // 1 year
+	if req.ExpirationSeconds == nil || *req.ExpirationSeconds <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "expirationSeconds is required and must be greater than 0"})
+		return
+	}
+	if *req.ExpirationSeconds > maxExpirationSeconds {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("expirationSeconds must not exceed %d (1 year)", maxExpirationSeconds)})
+		return
+	}
+
 	// Create a dedicated ServiceAccount per key
 	uid := uuid.New().String()[:8]
 	saName := fmt.Sprintf("ambient-key-%s-%s", sanitizeName(req.Name), uid)
@@ -434,10 +449,9 @@ func CreateProjectKey(c *gin.Context) {
 		return
 	}
 
-	// Issue a one-time JWT token for this ServiceAccount (no audience; used as API key)
-	tokenSpec := authnv1.TokenRequestSpec{}
-	if req.ExpirationSeconds != nil && *req.ExpirationSeconds > 0 {
-		tokenSpec.ExpirationSeconds = req.ExpirationSeconds
+	// Generate token with validated expiration
+	tokenSpec := authnv1.TokenRequestSpec{
+		ExpirationSeconds: req.ExpirationSeconds,
 	}
 	tr := &authnv1.TokenRequest{Spec: tokenSpec}
 	tok, err := k8sClient.CoreV1().ServiceAccounts(projectName).CreateToken(context.TODO(), saName, tr, v1.CreateOptions{})

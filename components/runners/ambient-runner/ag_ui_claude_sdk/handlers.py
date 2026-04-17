@@ -7,7 +7,7 @@ Breaks down stream processing into focused handler functions.
 import json
 import logging
 import uuid
-from typing import AsyncIterator, Any, Optional
+from typing import Any, AsyncIterator
 
 from ag_ui.core import (
     EventType,
@@ -41,8 +41,8 @@ async def handle_tool_use_block(
     message: Any,
     thread_id: str,
     run_id: str,
-    current_state: Optional[Any],
-) -> tuple[Optional[Any], AsyncIterator[BaseEvent]]:
+    current_state: Any | None,
+) -> tuple[Any | None, AsyncIterator[BaseEvent]]:
     """
     Handle ToolUseBlock from Claude SDK.
 
@@ -134,26 +134,23 @@ async def handle_tool_result_block(
     block: Any,
     thread_id: str,
     run_id: str,
-    parent_tool_use_id: Optional[str] = None,
 ) -> AsyncIterator[BaseEvent]:
     """
     Handle ToolResultBlock from Claude SDK.
 
     Emits TOOL_CALL_END and TOOL_CALL_RESULT events.
-    Nested tool results (with parent_tool_use_id) are also emitted - they represent
-    sub-agent calls (e.g., Task calling WebSearch).
 
     Args:
         block: ToolResultBlock from Claude SDK
         thread_id: Thread identifier
         run_id: Run identifier
-        parent_tool_use_id: Parent tool ID if this is a nested result
 
     Yields:
         AG-UI tool result events
     """
     tool_use_id = getattr(block, "tool_use_id", None)
     content = getattr(block, "content", None)
+    is_error = getattr(block, "is_error", None)
 
     # Parse tool result content for frontend rendering
     # Claude SDK tools return: [{"type": "text", "text": "{json_data}"}]
@@ -191,6 +188,8 @@ async def handle_tool_result_block(
             thread_id=thread_id,
             run_id=run_id,
             tool_call_id=tool_use_id,
+            result=result_str if not is_error else None,
+            error=result_str if is_error else None,
             timestamp=now_ms(),
         )
 

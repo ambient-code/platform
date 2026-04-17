@@ -7,6 +7,7 @@ import {
   Loader2,
   MoreVertical,
   Pause,
+  Pencil,
   Play,
   PlayCircle,
   Trash2,
@@ -139,7 +140,7 @@ export default function ScheduledSessionDetailPage() {
             <div className="flex items-center gap-2 mt-1">
               <Calendar className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">
-                {getCronDescription(scheduledSession.schedule)}
+                {getCronDescription(scheduledSession.schedule)} (UTC)
               </span>
               {scheduledSession.suspend ? (
                 <Badge variant="secondary">Suspended</Badge>
@@ -162,6 +163,10 @@ export default function ScheduledSessionDetailPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => router.push(`/projects/${encodeURIComponent(projectName)}/scheduled-sessions/${encodeURIComponent(scheduledSessionName)}/edit`)}>
+                <Pencil className="h-4 w-4 mr-2" />
+                Edit
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={handleSuspendResume}>
                 {scheduledSession.suspend ? (
                   <>

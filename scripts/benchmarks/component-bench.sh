@@ -434,13 +434,15 @@ bench_scenarios_for_mode() {
 
 bench_has_scenario() {
   local wanted=$1
+  local scenarios
+  scenarios=$(bench_scenarios_for_mode)
   local scenario
 
   while IFS= read -r scenario; do
     if [[ "$scenario" == "$wanted" ]]; then
       return 0
     fi
-  done < <(bench_scenarios_for_mode)
+  done <<< "$scenarios"
 
   return 1
 }

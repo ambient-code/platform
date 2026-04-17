@@ -17,6 +17,11 @@ export const metadata: Metadata = {
     "ACP is an AI-native agentic-powered enterprise software development platform",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 // Force rebuild timestamp: 2025-11-20T16:38:00
 
 export default function RootLayout({

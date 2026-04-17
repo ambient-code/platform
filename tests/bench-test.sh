@@ -63,30 +63,30 @@ make_mock_raw_file() {
   local raw_file=$1
 
   cat >"$raw_file" <<'EOF'
-frontend	baseline	cold	1	success	42.1	
-frontend	baseline	cold	2	success	42.0	
-frontend	baseline	cold	3	success	42.2	
-frontend	candidate	cold	1	success	41.8	
-frontend	candidate	cold	2	success	41.9	
-frontend	candidate	cold	3	success	41.7	
-frontend	baseline	warm	1	success	8.2	
-frontend	baseline	warm	2	success	8.1	
-frontend	baseline	warm	3	success	8.3	
-frontend	candidate	warm	1	success	8.1	
-frontend	candidate	warm	2	success	8.0	
-frontend	candidate	warm	3	success	8.2	
-backend	baseline	cold	1	success	6.2	
-backend	baseline	cold	2	success	6.1	
-backend	baseline	cold	3	success	6.3	
-backend	candidate	cold	1	success	6.1	
-backend	candidate	cold	2	success	6.0	
-backend	candidate	cold	3	success	6.2	
-backend	baseline	warm	1	success	1.1	
-backend	baseline	warm	2	success	1.0	
-backend	baseline	warm	3	success	1.2	
-backend	candidate	warm	1	success	1.1	
-backend	candidate	warm	2	success	1.1	
-backend	candidate	warm	3	success	1.0	
+frontend	baseline	cold	1	success	42.1
+frontend	baseline	cold	2	success	42.0
+frontend	baseline	cold	3	success	42.2
+frontend	candidate	cold	1	success	41.8
+frontend	candidate	cold	2	success	41.9
+frontend	candidate	cold	3	success	41.7
+frontend	baseline	warm	1	success	8.2
+frontend	baseline	warm	2	success	8.1
+frontend	baseline	warm	3	success	8.3
+frontend	candidate	warm	1	success	8.1
+frontend	candidate	warm	2	success	8.0
+frontend	candidate	warm	3	success	8.2
+backend	baseline	cold	1	success	6.2
+backend	baseline	cold	2	success	6.1
+backend	baseline	cold	3	success	6.3
+backend	candidate	cold	1	success	6.1
+backend	candidate	cold	2	success	6.0
+backend	candidate	cold	3	success	6.2
+backend	baseline	warm	1	success	1.1
+backend	baseline	warm	2	success	1.0
+backend	baseline	warm	3	success	1.2
+backend	candidate	warm	1	success	1.1
+backend	candidate	warm	2	success	1.1
+backend	candidate	warm	3	success	1.0
 EOF
 }
 

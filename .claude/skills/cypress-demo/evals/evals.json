@@ -1,0 +1,20 @@
+[
+  {
+    "input": "/cypress-demo",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "cypress-demo" },
+    "description": "Direct slash command invocation"
+  },
+  {
+    "input": "record a demo video of the new session creation flow",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "cypress-demo", "args": "session creation flow" },
+    "description": "Natural language demo recording request"
+  },
+  {
+    "input": "create a PR video showcasing the integrations page",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "cypress-demo", "args": "integrations page" },
+    "description": "PR video request for specific feature"
+  }
+]

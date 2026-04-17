@@ -222,6 +222,10 @@ def add_ambient_endpoints(
     app.include_router(interrupt_router)
     app.include_router(health_router)
 
+    from ambient_runner.endpoints.model import router as model_router
+
+    app.include_router(model_router)
+
     # Optional platform endpoints
     if enable_capabilities:
         from ambient_runner.endpoints.capabilities import router as cap_router
@@ -368,13 +372,14 @@ async def _auto_execute_initial_prompt(prompt: str, session_id: str) -> None:
         ],
     }
 
-    bot_token = get_bot_token()
-    headers = {"Content-Type": "application/json"}
-    if bot_token:
-        headers["Authorization"] = f"Bearer {bot_token}"
-
     backoff = _AUTO_PROMPT_INITIAL_DELAY
     for attempt in range(1, _AUTO_PROMPT_MAX_RETRIES + 1):
+        # Re-read token each attempt — volume mount may not be ready at first try
+        bot_token = get_bot_token()
+        headers = {"Content-Type": "application/json"}
+        if bot_token:
+            headers["Authorization"] = f"Bearer {bot_token}"
+
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -388,7 +393,11 @@ async def _auto_execute_initial_prompt(prompt: str, session_id: str) -> None:
                         logger.info("INITIAL_PROMPT auto-execution started")
                         return
 
-                    if "not available" in body.lower() or resp.status >= 500:
+                    if (
+                        "not available" in body.lower()
+                        or resp.status >= 500
+                        or resp.status == 401
+                    ):
                         logger.warning(
                             f"INITIAL_PROMPT attempt {attempt}/{_AUTO_PROMPT_MAX_RETRIES} "
                             f"failed (status {resp.status}), retrying in {backoff:.0f}s"

@@ -25,6 +25,8 @@ components:
 - ../../components/oauth-proxy
 - ../../components/postgresql-rhel
 - ../../components/ambient-api-server-db
+# openshift-ai is deployed separately via the deploy-rhoai-mlflow workflow job
+# (requires multi-stage apply due to CRD ordering and cross-namespace resources)
 
 # Patches for production environment
 patches:
@@ -48,6 +50,11 @@ patches:
   target:
     kind: Service
     name: ambient-api-server
+    version: v1
+- path: minio-pvc-patch.yaml
+  target:
+    kind: PersistentVolumeClaim
+    name: minio-data
     version: v1
 
 # Production images
@@ -87,4 +94,10 @@ images:
   newTag: latest
 - name: quay.io/ambient_code/vteam_state_sync:latest
   newName: quay.io/ambient_code/vteam_state_sync
+  newTag: latest
+- name: ghcr.io/ambient-code/observability
+  newName: ghcr.io/ambient-code/observability
+  newTag: latest
+- name: ghcr.io/ambient-code/observability:latest
+  newName: ghcr.io/ambient-code/observability
   newTag: latest
