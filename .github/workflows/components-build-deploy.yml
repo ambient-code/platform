@@ -204,9 +204,9 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install oc
-        uses: redhat-actions/oc-installer@v1
+        uses: redhat-actions/openshift-tools-installer@v1
         with:
-          oc_version: 'latest'
+          oc: latest
 
       - name: Log in to OpenShift Cluster
         run: |
@@ -325,9 +325,9 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install oc
-        uses: redhat-actions/oc-installer@v1
+        uses: redhat-actions/openshift-tools-installer@v1
         with:
-          oc_version: 'latest'
+          oc: latest
 
       - name: Log in to OpenShift Cluster
         run: |
@@ -352,9 +352,9 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install oc
-        uses: redhat-actions/oc-installer@v1
+        uses: redhat-actions/openshift-tools-installer@v1
         with:
-          oc_version: 'latest'
+          oc: latest
 
       - name: Install kustomize
         run: |
@@ -427,9 +427,9 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install oc
-        uses: redhat-actions/oc-installer@v1
+        uses: redhat-actions/openshift-tools-installer@v1
         with:
-          oc_version: 'latest'
+          oc: latest
 
       - name: Install kustomize
         run: |

@@ -44,24 +44,69 @@ jobs:
 
       - name: Check for changes
         id: diff
-        run: git diff --quiet -- components/manifests/base/models.json && echo "changed=false" >> "$GITHUB_OUTPUT" || echo "changed=true" >> "$GITHUB_OUTPUT"
+        run: git diff --quiet -- components/manifests/base/core/models.json && echo "changed=false" >> "$GITHUB_OUTPUT" || echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Validate manifest
+        if: steps.diff.outputs.changed == 'true'
+        run: python .github/scripts/validate-model-manifest.py
+
+      - name: Generate PR body
+        if: steps.diff.outputs.changed == 'true'
+        id: body
+        run: |
+          DIFF=$(git diff -- components/manifests/base/core/models.json)
+          BODY=$(cat <<'HEADER'
+          Automated model discovery run.
+
+          This PR updates `components/manifests/base/core/models.json` based on
+          probing Vertex AI endpoints. Validation passed — safe to auto-merge.
+
+          Unleash flags are synced automatically on deploy by the
+          `sync-model-flags` Job.
+
+          HEADER
+          )
+          BODY="${BODY}
+          <details><summary>Diff</summary>
+
+          \`\`\`diff
+          ${DIFF}
+          \`\`\`
+          </details>"
+          # Write to file to avoid shell escaping issues
+          echo "$BODY" > /tmp/pr-body.md
 
       - name: Create or update PR
         if: steps.diff.outputs.changed == 'true'
+        id: create-pr
         uses: peter-evans/create-pull-request@v8
         with:
-          add-paths: components/manifests/base/models.json
+          add-paths: components/manifests/base/core/models.json
           branch: automated/model-discovery
           commit-message: "chore: update model manifest from Vertex AI discovery"
           title: "chore: update model manifest"
-          body: |
-            Automated model discovery run.
-
-            This PR updates `components/manifests/base/models.json` based on
-            probing Vertex AI endpoints. New models are added with `available: true`.
-
-            Unleash flags are synced automatically on deploy by the
-            `sync-model-flags` Job. After merge, enable new models via the
-            Feature Flags admin UI.
+          body-path: /tmp/pr-body.md
           labels: automated,models
           delete-branch: true
+
+      - name: Generate app token
+        if: steps.create-pr.outputs.pull-request-number
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ secrets.AMBIENT_APP_ID }}
+          private-key: ${{ secrets.AMBIENT_APP_PRIVATE_KEY }}
+
+      - name: Approve PR
+        if: steps.create-pr.outputs.pull-request-number
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ steps.create-pr.outputs.pull-request-number }}
+        run: gh pr review "$PR_NUMBER" --approve --body "Manifest validation passed — auto-approved by model discovery workflow"
+
+      - name: Enable auto-merge
+        if: steps.create-pr.outputs.pull-request-number
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.create-pr.outputs.pull-request-number }}
+        run: gh pr merge "$PR_NUMBER" --auto --squash

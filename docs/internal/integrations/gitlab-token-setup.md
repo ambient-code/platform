@@ -37,7 +37,7 @@ Ambient Code Platform uses your PAT to:
 3. In the left sidebar, click **"Access Tokens"**
 
 **Option B - Direct Link**:
-1. Navigate directly to: https://gitlab.com/-/profile/personal_access_tokens
+1. Navigate directly to: https://gitlab.com/-/user_settings/personal_access_tokens
 
 ---
 
@@ -126,7 +126,7 @@ The location depends on your GitLab version:
 - Click profile icon → Settings → Access Tokens
 
 **Direct URL**:
-- `https://gitlab.company.com/-/profile/personal_access_tokens`
+- `https://gitlab.company.com/-/user_settings/personal_access_tokens`
 - (Replace `gitlab.company.com` with your instance)
 
 #### Step 3: Create Token (Same as GitLab.com)
@@ -319,7 +319,7 @@ curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
 ### Viewing Your Tokens
 
 **In GitLab**:
-1. Navigate to: https://gitlab.com/-/profile/personal_access_tokens
+1. Navigate to: https://gitlab.com/-/user_settings/personal_access_tokens
 2. Scroll down to **"Active Personal Access Tokens"**
 3. You'll see a table with all your tokens:
    - Token name
@@ -340,7 +340,7 @@ curl -X POST http://vteam-backend:8080/api/auth/gitlab/connect \
 - Replacing with new token (after rotating)
 
 **How to Revoke**:
-1. Navigate to: https://gitlab.com/-/profile/personal_access_tokens
+1. Navigate to: https://gitlab.com/-/user_settings/personal_access_tokens
 2. Find the token in the **"Active Personal Access Tokens"** table
 3. Click the **"Revoke"** button next to the token
 4. Confirm revocation

@@ -23,6 +23,11 @@ After creation you land on the workspace dashboard, where you can start sessions
 
 Each workspace carries its own configuration. Open **Settings** from the workspace sidebar to adjust the following.
 
+<figure class="screenshot-pair">
+  <img class="screenshot-light" src="/platform/images/screenshots/workspace-settings-light.png" alt="Workspace settings" />
+  <img class="screenshot-dark" src="/platform/images/screenshots/workspace-settings-dark.png" alt="Workspace settings" />
+</figure>
+
 ### General
 
 - **Display name and description** -- Update at any time.
@@ -45,6 +50,11 @@ Workspaces manage two categories of secrets:
 Secrets are stored securely and are only injected into session pods at runtime.
 
 ## Sharing and permissions
+
+<figure class="screenshot-pair">
+  <img class="screenshot-light" src="/platform/images/screenshots/workspace-sharing-light.png" alt="Workspace sharing" />
+  <img class="screenshot-dark" src="/platform/images/screenshots/workspace-sharing-dark.png" alt="Workspace sharing" />
+</figure>
 
 You can share a workspace with individual **users** or **groups**.
 When you grant a permission, the platform creates a Kubernetes `RoleBinding` in the workspace namespace that maps the subject to one of three ClusterRoles.
@@ -77,6 +87,11 @@ To remove access, click the delete icon next to any entry in the sharing table.
 The user or group immediately loses access to the workspace.
 
 ## API keys
+
+<figure class="screenshot-pair">
+  <img class="screenshot-light" src="/platform/images/screenshots/api-keys-light.png" alt="API keys management" />
+  <img class="screenshot-dark" src="/platform/images/screenshots/api-keys-dark.png" alt="API keys management" />
+</figure>
 
 For programmatic access -- CI/CD pipelines, scripts, or external tooling -- you can create **workspace-scoped API keys**. Each key is backed by a dedicated Kubernetes ServiceAccount and bound to a role, so it has the same permission model as a human user.
 
@@ -112,7 +127,7 @@ Choose a token lifetime based on your use case:
 | 1 year | 31,536,000 | Long-running integrations |
 | No expiration | -- | Persistent service keys that you rotate manually |
 
-4. Click **Create Key**.
+1. Click **Create Key**.
 
 ### Copying the key
 

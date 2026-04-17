@@ -46,6 +46,10 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.GET("/agentic-sessions/:sessionName/workspace/*path", handlers.GetSessionWorkspaceFile)
 			projectGroup.PUT("/agentic-sessions/:sessionName/workspace/*path", handlers.PutSessionWorkspaceFile)
 			projectGroup.DELETE("/agentic-sessions/:sessionName/workspace/*path", handlers.DeleteSessionWorkspaceFile)
+			// Pre-upload: write files to S3 before session pod starts (hydrate.sh seeds them)
+			projectGroup.GET("/agentic-sessions/:sessionName/file-uploads", handlers.ListPreUploadedFiles)
+			projectGroup.PUT("/agentic-sessions/:sessionName/file-uploads/*path", handlers.PreUploadFile)
+			projectGroup.DELETE("/agentic-sessions/:sessionName/file-uploads/*path", handlers.DeletePreUploadedFile)
 			// Removed: github/push, github/abandon, github/diff - agent handles all git operations
 			projectGroup.GET("/agentic-sessions/:sessionName/git/status", handlers.GetGitStatus)
 			projectGroup.POST("/agentic-sessions/:sessionName/git/configure-remote", handlers.ConfigureGitRemote)

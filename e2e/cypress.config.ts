@@ -21,6 +21,7 @@ export default defineConfig({
     browser: 'chrome' as any,
     video: true,  // Enable video recording
     screenshotOnRunFailure: true,
+    screenshotsFolder: 'cypress/screenshots/output',
     defaultCommandTimeout: 10000,
     requestTimeout: 10000,
     responseTimeout: 10000,
@@ -34,6 +35,16 @@ export default defineConfig({
       // CYPRESS_* env vars are automatically exposed, but we explicitly set these too
       config.env.ANTHROPIC_API_KEY = process.env.CYPRESS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || ''
       config.env.TEST_TOKEN = process.env.CYPRESS_TEST_TOKEN || process.env.TEST_TOKEN || config.env.TEST_TOKEN || ''
+
+      // Force 1x DPI for screenshot consistency across platforms
+      if (process.env.CYPRESS_SCREENSHOT_MODE) {
+        on('before:browser:launch', (browser, launchOptions) => {
+          if (browser.name === 'chrome') {
+            launchOptions.args.push('--force-device-scale-factor=1')
+          }
+          return launchOptions
+        })
+      }
 
       return config
     },

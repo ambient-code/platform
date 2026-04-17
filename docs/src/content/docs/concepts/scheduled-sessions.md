@@ -8,6 +8,11 @@ A **scheduled session** is a recurring AI agent execution that runs automaticall
 
 Open a workspace and navigate to the **Scheduled Sessions** tab. Click **New Scheduled Session** to open the creation dialog.
 
+<figure class="screenshot-pair">
+  <img class="screenshot-light" src="/platform/images/screenshots/scheduled-sessions-light.png" alt="Scheduled sessions" />
+  <img class="screenshot-dark" src="/platform/images/screenshots/scheduled-sessions-dark.png" alt="Scheduled sessions" />
+</figure>
+
 | Setting | Description | Default |
 |---------|------------|---------|
 | **Name** | A display name for the schedule (up to 50 characters). | Auto-generated |

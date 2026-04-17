@@ -17,3 +17,26 @@
   --sl-color-accent: #cc0000;
   --sl-color-accent-high: #330a0a;
 }
+
+/* === Screenshot theme switching === */
+:root[data-theme='light'] .screenshot-dark,
+:root[data-theme='dark'] .screenshot-light {
+  display: none !important;
+}
+
+.screenshot-pair {
+  margin: 1.5rem 0;
+  text-align: center;
+}
+
+.screenshot-pair img {
+  max-width: 100%;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme='dark'] .screenshot-pair img {
+  border-color: var(--sl-color-gray-3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
