@@ -56,7 +56,12 @@ func (h *startHandler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if existing, _ := h.session.ActiveByAgentID(ctx, agentID); existing != nil {
+	existing, activeErr := h.session.ActiveByAgentID(ctx, agentID)
+	if activeErr != nil {
+		handlers.HandleError(ctx, w, activeErr)
+		return
+	}
+	if existing != nil {
 		resp := &StartResponse{
 			Session: sessions.PresentSession(existing),
 		}

@@ -35,8 +35,12 @@ if [[ -z "${TMUX:-}" ]]; then
 
     tmux send-keys -t "${TMUX_SESSION}:0.1" "printf '\\033[2m[watch panel — waiting for session]\\033[0m\\n'" Enter
 
+    ESCAPED_ARGS=""
+    for arg in "${DEMO_ARGS[@]}"; do
+        ESCAPED_ARGS+="$(printf ' %q' "$arg")"
+    done
     tmux send-keys -t "${TMUX_SESSION}:0.0" \
-        "TMUX_SESSION=${TMUX_SESSION} INSIDE_DEMO_TMUX=1 bash ${DEMO_SCRIPT} ${DEMO_ARGS[*]:-}" Enter
+        "TMUX_SESSION=$(printf '%q' "$TMUX_SESSION") INSIDE_DEMO_TMUX=1 bash $(printf '%q' "$DEMO_SCRIPT")${ESCAPED_ARGS}" Enter
 
     tmux select-pane -t "${TMUX_SESSION}:0.0"
     tmux attach-session -t "$TMUX_SESSION"
@@ -48,7 +52,7 @@ WATCH_PANE="1"
 attach_watch() {
     local session_id="$1"
     tmux send-keys -t "${TMUX_SESSION}:0.${WATCH_PANE}" \
-        "${ACPCTL:-acpctl} session messages ${session_id} -F" Enter
+        "$(printf '%q' "${ACPCTL:-acpctl}") session messages $(printf '%q' "$session_id") -F" Enter
 }
 
 # ── config ────────────────────────────────────────────────────────────────────
@@ -228,7 +232,8 @@ send_and_capture() {
     if timeout "${MESSAGE_WAIT_TIMEOUT}" "$ACPCTL" session send "${session_id}" "$msg" -f 2>&1; then
         green "   ✓ ${label} responded"
     else
-        yellow "   ✗ ${label}: send -f exited with error or timeout"
+        red "   ✗ ${label}: send -f failed or timed out — aborting demo"
+        exit 1
     fi
     echo
 

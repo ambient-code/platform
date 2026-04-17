@@ -140,7 +140,9 @@ func (c *Config) GetTokenWithRefresh() (string, error) {
 		c.RefreshToken = newRefresh
 	}
 
-	_ = Save(c)
+	if saveErr := Save(c); saveErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to persist refreshed token: %v\n", saveErr)
+	}
 
 	return c.AccessToken, nil
 }

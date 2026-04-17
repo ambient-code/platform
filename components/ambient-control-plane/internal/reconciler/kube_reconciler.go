@@ -408,7 +408,10 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 	}
 
 	labels := sessionLabels(session.ID, session.ProjectID)
-	useMCPSidecar := r.cfg.MCPImage != ""
+	useMCPSidecar := r.cfg.MCPImage != "" && r.cfg.CPTokenURL != "" && r.cfg.CPTokenPublicKey != ""
+	if r.cfg.MCPImage != "" && !useMCPSidecar {
+		r.logger.Warn().Str("session_id", session.ID).Msg("MCP sidecar disabled: CP_TOKEN_URL or CPTokenPublicKey not configured")
+	}
 
 	containers := []interface{}{
 		map[string]interface{}{
@@ -444,12 +447,8 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 	}
 
 	if useMCPSidecar {
-		if r.cfg.CPTokenURL == "" || r.cfg.CPTokenPublicKey == "" {
-			r.logger.Warn().Str("session_id", session.ID).Msg("MCP sidecar skipped: CP_TOKEN_URL or CPTokenPublicKey not configured")
-		} else {
-			containers = append(containers, r.buildMCPSidecar(session.ID))
-			r.logger.Info().Str("session_id", session.ID).Msg("MCP sidecar enabled for session")
-		}
+		containers = append(containers, r.buildMCPSidecar(session.ID))
+		r.logger.Info().Str("session_id", session.ID).Msg("MCP sidecar enabled for session")
 	}
 
 	pod := &unstructured.Unstructured{

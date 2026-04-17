@@ -457,14 +457,13 @@ func streamMessagesContinuous(cmd *cobra.Command, client *sdkclient.Client, sess
 
 		if streamErr != nil {
 			fmt.Fprintf(out, "\n[reconnect] stream ended: %v — reconnecting in %s\n", streamErr, reconnectDelay)
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(reconnectDelay):
+			}
 		} else {
-			fmt.Fprintf(out, "\n[reconnect] stream ended — reconnecting in %s\n", reconnectDelay)
-		}
-
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-time.After(reconnectDelay):
+			fmt.Fprintf(out, "\n[reconnect] stream ended cleanly — reconnecting immediately\n")
 		}
 	}
 }

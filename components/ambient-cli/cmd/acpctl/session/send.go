@@ -64,6 +64,11 @@ func runSend(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// NOTE: We intentionally open the SSE stream AFTER sending the message.
+	// The api-server SSE proxy does not return HTTP 200 until the runner has
+	// an active run, so subscribing first would deadlock. The event gap is
+	// negligible in practice because the runner takes time to start producing
+	// events after receiving the message.
 	streamCtx, streamCancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
 	defer streamCancel()
 
