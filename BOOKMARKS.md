@@ -37,6 +37,12 @@ Progressive disclosure for task-specific documentation and references.
 | [ADR-0006](docs/internal/adr/0006-ambient-runner-sdk-architecture.md) | Runner SDK design and architecture |
 | [ADR-0007](docs/internal/adr/0007-unleash-feature-flags.md) | Unleash with workspace-scoped overrides |
 
+## Cross-Cutting Conventions
+
+| Document | Purpose |
+|----------|---------|
+| [CodeRabbit-Derived Conventions](docs/coderabbit-derived-conventions.md) | Image consistency, reconciliation patterns, error propagation, namespace-scoped keys, SecurityContext — derived from 971 CodeRabbit review comments |
+
 ## Component Development Guides
 
 Convention documentation for each component. Loaded by review agents on demand.

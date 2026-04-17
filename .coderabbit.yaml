@@ -66,9 +66,12 @@ reviews:
   path_instructions:
     - path: "**/*"
       instructions: |
-        - Flag only errors, security risks, or functionality-breaking problems.
+        - Prioritize Critical and Major severity issues. Minimize Minor and Trivial findings.
+        - Flag bugs, security vulnerabilities, logic errors, data loss risks, and meaningful refactoring opportunities.
+        - Documentation and refactoring suggestions are welcome when substantive.
+        - No pure style or formatting suggestions.
         - Limit to 3-5 comments max; group similar issues; mention repeated patterns once.
-        - No style, formatting, or refactoring suggestions. If nothing is broken, approve briefly.
+        - If nothing is broken, approve briefly.
 
     - path: "components/{backend,operator}/**/*.go"
       instructions: |

@@ -725,3 +725,74 @@ jobs:
           fi
           oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
             -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"
+
+  coderabbit-triage:
+    needs: [release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: read
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: '3.12'
+
+      - name: Run CodeRabbit triage pipeline
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_TAG: ${{ needs.release.outputs.new_tag }}
+          REPO: ${{ github.repository }}
+        working-directory: scripts/coderabbit-triage
+        run: |
+          PREV_TAG=$(git tag --list 'v*.*.*' --sort=-version:refname | grep -v "^${NEW_TAG}$" | head -1)
+
+          echo "Analyzing CodeRabbit reviews for ${NEW_TAG} (since ${PREV_TAG})..."
+          bash fetch.sh --repo "${REPO}" --release "${NEW_TAG}" --since "${PREV_TAG}"
+          python3 parse.py "data/${NEW_TAG}"
+          python3 analyze.py "data/${NEW_TAG}" metrics/
+          python3 report.py metrics/ --release "${NEW_TAG}" > ../../triage-summary.md
+
+          echo "### Summary"
+          cat ../../triage-summary.md
+
+      - name: Commit metrics and open PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_TAG: ${{ needs.release.outputs.new_tag }}
+        run: |
+          BRANCH="chore/coderabbit-triage-${NEW_TAG}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${BRANCH}"
+          git add "scripts/coderabbit-triage/metrics/${NEW_TAG}.json"
+          git commit -m "chore: add CodeRabbit triage metrics for ${NEW_TAG}"
+          git push -u origin "${BRANCH}"
+
+          gh pr create \
+            --title "chore: CodeRabbit triage for ${NEW_TAG}" \
+            --body-file triage-summary.md \
+            --base main
+
+      - name: Append triage summary to release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_TAG: ${{ needs.release.outputs.new_tag }}
+        run: |
+          EXISTING_BODY=$(gh release view "${NEW_TAG}" --json body -q .body)
+          TRIAGE=$(cat triage-summary.md)
+
+          gh release edit "${NEW_TAG}" \
+            --notes "${EXISTING_BODY}
+
+          ---
+          ## CodeRabbit Triage Summary
+          ${TRIAGE}"
