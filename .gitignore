@@ -93,6 +93,9 @@ dmypy.json
 # Git worktrees
 .worktrees/
 
+# CodeRabbit triage raw data (metrics/ is committed, data/ is transient)
+scripts/coderabbit-triage/data/
+
 # mkdocs
 /site
 docs/_build/
