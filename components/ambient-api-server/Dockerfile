@@ -18,6 +18,8 @@ RUN go build -ldflags="-s -w" -o ambient-api-server ./cmd/ambient-api-server
 # Runtime stage
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 
+ARG GIT_COMMIT=unknown
+
 RUN \
     microdnf install -y \
     util-linux \
@@ -33,4 +35,5 @@ ENTRYPOINT ["/usr/local/bin/ambient-api-server", "serve"]
 LABEL name="ambient-api-server" \
       version="0.0.1" \
       summary="Ambient API Server" \
-      description="REST API server for the Ambient Code Platform"
+      description="REST API server for the Ambient Code Platform" \
+      org.opencontainers.image.revision=$GIT_COMMIT

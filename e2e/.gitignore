@@ -6,3 +6,4 @@ coverage/
 coverage-merged/
 coverage-unit/
 .env.test
+cypress/screenshots/output/

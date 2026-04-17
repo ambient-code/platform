@@ -1,0 +1,20 @@
+[
+  {
+    "input": "/scaffold integration slack",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "scaffold", "args": "integration slack" },
+    "description": "Scaffold a new integration"
+  },
+  {
+    "input": "add a new integration for PagerDuty",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "scaffold", "args": "integration PagerDuty" },
+    "description": "Natural language integration scaffolding request — must extract integration name"
+  },
+  {
+    "input": "/scaffold endpoint audit-logs",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "scaffold", "args": "endpoint audit-logs" },
+    "description": "Scaffold a new API endpoint"
+  }
+]

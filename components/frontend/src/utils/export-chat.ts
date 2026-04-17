@@ -261,12 +261,29 @@ export function convertEventsToMarkdown(
 
   const blocks = assembleBlocks(exportData.aguiEvents ?? []);
 
-  // Prepend the session's initial prompt as the first user message.
-  // It is auto-executed by the runner with hidden=true, so it never appears
-  // in the TEXT_MESSAGE event stream — but it should be visible in exports.
+  // Ensure the session's initial prompt appears exactly once as the first
+  // user message. The runner auto-executes it with hidden=true, so it may
+  // be absent from streaming events but present (sometimes twice) in
+  // MESSAGES_SNAPSHOT data. Deduplicate rather than blindly prepending.
   const initialPrompt = session.spec.initialPrompt?.trim();
   if (initialPrompt) {
-    blocks.unshift({ kind: 'message', role: 'user', content: initialPrompt });
+    const matchingIndices: number[] = [];
+    for (let i = 0; i < blocks.length; i++) {
+      const b = blocks[i];
+      if (b.kind === 'message' && b.role === 'user' && b.content === initialPrompt) {
+        matchingIndices.push(i);
+      }
+    }
+
+    if (matchingIndices.length === 0) {
+      // Not present (e.g. streaming path where hidden messages are filtered)
+      blocks.unshift({ kind: 'message', role: 'user', content: initialPrompt });
+    } else if (matchingIndices.length > 1) {
+      // Remove duplicates, keeping only the first occurrence
+      for (let i = matchingIndices.length - 1; i >= 1; i--) {
+        blocks.splice(matchingIndices[i], 1);
+      }
+    }
   }
 
   if (blocks.length === 0) {

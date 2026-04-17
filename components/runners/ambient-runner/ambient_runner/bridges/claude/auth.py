@@ -72,8 +72,8 @@ async def setup_sdk_authentication(context: RunnerContext) -> tuple[str, bool, s
     model = context.get_env("LLM_MODEL")
 
     # Default model differs: Vertex AI uses @date suffixes, Anthropic API does not
-    DEFAULT_MODEL = "claude-sonnet-4-5"
-    DEFAULT_VERTEX_MODEL = "claude-sonnet-4-5@20250929"
+    DEFAULT_MODEL = "claude-sonnet-4-6"
+    DEFAULT_VERTEX_MODEL = "claude-sonnet-4-6@default"
 
     if api_key and not use_vertex:
         os.environ["ANTHROPIC_API_KEY"] = api_key

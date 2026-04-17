@@ -2,9 +2,13 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import rehypeMermaid from 'rehype-mermaid';
 
+const isNetlify = !!process.env.NETLIFY;
+
 export default defineConfig({
-  site: 'https://ambient-code.github.io',
-  base: '/platform/',
+  site: isNetlify
+    ? process.env.URL
+    : 'https://ambient-code.github.io',
+  base: isNetlify ? '/' : '/platform/',
   integrations: [
     starlight({
       title: 'Ambient Code Platform',

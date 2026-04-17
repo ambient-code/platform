@@ -1,0 +1,26 @@
+extends: existence
+message: "Prefer active voice. '%s' is passive."
+level: suggestion
+ignorecase: true
+tokens:
+  - 'is created by'
+  - 'is managed by'
+  - 'is handled by'
+  - 'is configured by'
+  - 'is controlled by'
+  - 'is provided by'
+  - 'is defined by'
+  - 'is required by'
+  - 'is supported by'
+  - 'is determined by'
+  - 'was created'
+  - 'was configured'
+  - 'was deleted'
+  - 'was removed'
+  - 'was updated'
+  - 'were created'
+  - 'were configured'
+  - 'were deleted'
+  - 'can be accessed by'
+  - 'should be configured by'
+  - 'must be set by'

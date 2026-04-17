@@ -1,0 +1,6 @@
+extends: readability
+message: "Reading level is grade %s. Aim for grade 12 or lower."
+level: suggestion
+metrics:
+  - Flesch-Kincaid
+grade: 12

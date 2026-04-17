@@ -351,18 +351,19 @@ export function SessionsSidebar({
                   const agentStatus = session.status?.agentStatus ?? deriveAgentStatusFromPhase(phase);
 
                   return (
-                    <HoverCard key={session.metadata.uid} openDelay={300} closeDelay={100}>
-                      <HoverCardTrigger asChild>
-                        <div
-                          className={cn(
-                            "group relative w-full flex items-center gap-2 rounded-md text-left text-sm transition-colors",
-                            "border-l-2",
-                            borderColor,
-                            "hover:bg-accent hover:text-accent-foreground",
-                            isActive &&
-                              "bg-accent text-accent-foreground font-medium"
-                          )}
-                        >
+                    <div
+                      key={session.metadata.uid}
+                      className={cn(
+                        "group relative w-full flex items-center gap-2 rounded-md text-left text-sm transition-colors",
+                        "border-l-2",
+                        borderColor,
+                        "hover:bg-accent hover:text-accent-foreground",
+                        isActive &&
+                          "bg-accent text-accent-foreground font-medium"
+                      )}
+                    >
+                      <HoverCard openDelay={300} closeDelay={100}>
+                        <HoverCardTrigger asChild>
                           <Link
                             href={sessionHref(session.metadata.name)}
                             onClick={() => onSessionSelect?.()}
@@ -383,59 +384,59 @@ export function SessionsSidebar({
                                 : ""}
                             </span>
                           </Link>
-                          <SidebarSessionActions
-                            sessionName={session.metadata.name}
-                            displayName={name}
-                            phase={phase}
-                            onStop={handleStop}
-                            onContinue={handleContinue}
-                            onDelete={handleDelete}
-                            onEditName={handleEditName}
-                            canDelete={canDelete}
-                            canModify={canModify}
-                          />
-                        </div>
-                      </HoverCardTrigger>
-                      <HoverCardContent side="right" align="start" className="w-80">
-                        <div className="space-y-2">
-                          <p className="text-sm font-semibold truncate">
-                            {name}
-                          </p>
-                          {session.spec.displayName && (
-                            <p className="text-xs text-muted-foreground">{session.metadata.name}</p>
-                          )}
-                          <div className="flex flex-col gap-1.5 pt-1">
-                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                              <SessionStatusDot phase={phase} />
-                              <span>Session: {sessionPhaseLabel(phase)}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                              <AgentStatusIndicator
-                                status={agentStatus}
-                                compact
-                              />
-                              <span>Agent: {agentStatusLabel(agentStatus)}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                              <Cpu className="h-3 w-3" />
-                              <span>{session.spec.llmSettings.model}</span>
-                            </div>
-                            {activityTime && (
+                        </HoverCardTrigger>
+                        <HoverCardContent side="right" align="start" className="w-80">
+                          <div className="space-y-2">
+                            <p className="text-sm font-semibold truncate">
+                              {name}
+                            </p>
+                            {session.spec.displayName && (
+                              <p className="text-xs text-muted-foreground">{session.metadata.name}</p>
+                            )}
+                            <div className="flex flex-col gap-1.5 pt-1">
                               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <Clock className="h-3 w-3" />
-                                <span>{formatDistanceToNow(new Date(activityTime), { addSuffix: true })}</span>
+                                <SessionStatusDot phase={phase} />
+                                <span>Session: {sessionPhaseLabel(phase)}</span>
                               </div>
-                            )}
-                            {session.spec.initialPrompt && (
-                              <div className="flex items-start gap-1.5 text-xs text-muted-foreground pt-1">
-                                <MessageSquare className="h-3 w-3 mt-0.5 shrink-0" />
-                                <span className="line-clamp-3">{session.spec.initialPrompt}</span>
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <AgentStatusIndicator
+                                  status={agentStatus}
+                                  compact
+                                />
+                                <span>Agent: {agentStatusLabel(agentStatus)}</span>
                               </div>
-                            )}
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <Cpu className="h-3 w-3" />
+                                <span>{session.spec.llmSettings.model}</span>
+                              </div>
+                              {activityTime && (
+                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                  <Clock className="h-3 w-3" />
+                                  <span>{formatDistanceToNow(new Date(activityTime), { addSuffix: true })}</span>
+                                </div>
+                              )}
+                              {session.spec.initialPrompt && (
+                                <div className="flex items-start gap-1.5 text-xs text-muted-foreground pt-1">
+                                  <MessageSquare className="h-3 w-3 mt-0.5 shrink-0" />
+                                  <span className="line-clamp-3">{session.spec.initialPrompt}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </HoverCardContent>
-                    </HoverCard>
+                        </HoverCardContent>
+                      </HoverCard>
+                      <SidebarSessionActions
+                        sessionName={session.metadata.name}
+                        displayName={name}
+                        phase={phase}
+                        onStop={handleStop}
+                        onContinue={handleContinue}
+                        onDelete={handleDelete}
+                        onEditName={handleEditName}
+                        canDelete={canDelete}
+                        canModify={canModify}
+                      />
+                    </div>
                   );
                 })}
 

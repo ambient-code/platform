@@ -203,6 +203,21 @@ export async function updateSessionDisplayName(
 }
 
 /**
+ * Update MCP servers configuration for a session.
+ * Can be called on running sessions (changes take effect on next restart).
+ */
+export async function updateSessionMcpServers(
+  projectName: string,
+  sessionName: string,
+  mcpServers: import("@/types/agentic-session").MCPServersConfig
+): Promise<AgenticSession> {
+  return apiClient.put<AgenticSession, { mcpServers: import("@/types/agentic-session").MCPServersConfig }>(
+    `/projects/${projectName}/agentic-sessions/${sessionName}`,
+    { mcpServers }
+  );
+}
+
+/**
  * Export session chat data
  */
 export type SessionExportResponse = {
@@ -284,6 +299,20 @@ export async function saveToGoogleDrive(
       tool: 'create_drive_file',
       args: { user_google_email: userEmail, file_name: filename, content, mime_type: 'text/markdown' },
     },
+  );
+}
+
+/**
+ * Switch the LLM model for a running session
+ */
+export async function switchSessionModel(
+  projectName: string,
+  sessionName: string,
+  model: string
+): Promise<AgenticSession> {
+  return apiClient.post<AgenticSession, { model: string }>(
+    `/projects/${projectName}/agentic-sessions/${sessionName}/model`,
+    { model }
   );
 }
 

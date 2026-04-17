@@ -20,6 +20,20 @@ queue_rules:
       - check-success=test-local-dev-simulation
 
 pull_request_rules:
+  - name: automatic approval for Dependabot pull requests
+    conditions:
+      - author = dependabot[bot]
+    actions:
+      review:
+        type: APPROVE
+
+  - name: keep PRs up to date with main
+    conditions:
+      - -conflict
+      - -draft
+    actions:
+      update: {}
+
   - name: queue large PRs
     conditions:
       - or:

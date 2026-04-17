@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -64,6 +65,144 @@ var (
 	ootbCache    = &ootbWorkflowsCache{}
 	ootbCacheTTL = 5 * time.Minute // Cache OOTB workflows for 5 minutes
 )
+
+// allowedSdkOptionKeys defines the SDK options that users are allowed to configure.
+// Keys NOT in this map are silently dropped by filterSdkOptions.
+// Platform-internal keys (cwd, resume, mcp_servers, api_key, etc.) are excluded
+// because they are set by the runner, not users.
+var allowedSdkOptionKeys = map[string]bool{
+	// String keys
+	"system_prompt":   true,
+	"permission_mode": true,
+	"effort":          true,
+	"user":            true,
+	// Numeric keys
+	"max_turns":       true,
+	"max_budget_usd":  true,
+	"max_buffer_size": true,
+	// Bool keys
+	"include_partial_messages":  true,
+	"enable_file_checkpointing": true,
+	// Slice keys
+	"allowed_tools":    true,
+	"disallowed_tools": true,
+	"betas":            true,
+	"plugins":          true,
+	// Complex object keys (maps, nested structures)
+	"thinking":      true,
+	"tools":         true,
+	"sandbox":       true,
+	"output_format": true,
+	"hooks":         true,
+	"agents":        true,
+	"env":           true,
+	"extra_args":    true,
+}
+
+// sdkOptionStringKeys are SDK options that must be string values.
+var sdkOptionStringKeys = map[string]bool{
+	"permission_mode": true,
+	"effort":          true,
+	"user":            true,
+}
+
+// sdkOptionNumericKeys are SDK options that must be numeric (float64 or int).
+var sdkOptionNumericKeys = map[string]bool{
+	"max_turns":       true,
+	"max_budget_usd":  true,
+	"max_buffer_size": true,
+}
+
+// sdkOptionBoolKeys are SDK options that must be boolean.
+var sdkOptionBoolKeys = map[string]bool{
+	"include_partial_messages":  true,
+	"enable_file_checkpointing": true,
+}
+
+// sdkOptionSliceKeys are SDK options that must be slices ([]interface{}).
+var sdkOptionSliceKeys = map[string]bool{
+	"allowed_tools":    true,
+	"disallowed_tools": true,
+	"betas":            true,
+	"plugins":          true,
+}
+
+// validateSdkOptionValue performs basic type checking on a single SDK option value.
+// nil values always pass. Complex object keys (thinking, sandbox, etc.) accept any value.
+func validateSdkOptionValue(key string, value interface{}) error {
+	if value == nil {
+		return nil
+	}
+
+	// system_prompt can be string or map (preset format)
+	if key == "system_prompt" {
+		switch value.(type) {
+		case string, map[string]interface{}:
+			return nil
+		default:
+			return fmt.Errorf("sdkOptions.%s must be a string or object, got %T", key, value)
+		}
+	}
+
+	if sdkOptionStringKeys[key] {
+		if _, ok := value.(string); !ok {
+			return fmt.Errorf("sdkOptions.%s must be a string, got %T", key, value)
+		}
+		return nil
+	}
+
+	if sdkOptionNumericKeys[key] {
+		switch value.(type) {
+		case float64, int:
+			return nil
+		default:
+			return fmt.Errorf("sdkOptions.%s must be a number, got %T", key, value)
+		}
+	}
+
+	if sdkOptionBoolKeys[key] {
+		if _, ok := value.(bool); !ok {
+			return fmt.Errorf("sdkOptions.%s must be a boolean, got %T", key, value)
+		}
+		return nil
+	}
+
+	if sdkOptionSliceKeys[key] {
+		if _, ok := value.([]interface{}); !ok {
+			return fmt.Errorf("sdkOptions.%s must be an array, got %T", key, value)
+		}
+		return nil
+	}
+
+	// Complex object keys (thinking, sandbox, output_format, hooks, agents, env, extra_args, tools)
+	// accept any value — JSON serialization handles them.
+	return nil
+}
+
+// filterSdkOptions filters an SDK options map, keeping only allowed keys and
+// validating primitive types. Unknown keys are silently dropped. Returns nil
+// if the input is nil/empty or all keys were filtered out.
+func filterSdkOptions(opts map[string]interface{}) (map[string]interface{}, error) {
+	if len(opts) == 0 {
+		return nil, nil
+	}
+
+	filtered := make(map[string]interface{})
+	for key, value := range opts {
+		if !allowedSdkOptionKeys[key] {
+			continue
+		}
+		if err := validateSdkOptionValue(key, value); err != nil {
+			return nil, err
+		}
+		filtered[key] = value
+	}
+
+	if len(filtered) == 0 {
+		return nil, nil
+	}
+	return filtered, nil
+}
 
 // isBinaryContentType checks if a MIME type represents binary content that should be base64 encoded.
 // This includes images, archives, documents, executables, and other non-text formats.
@@ -215,6 +354,29 @@ func parseSpec(spec map[string]interface{}) types.AgenticSessionSpec {
 			ws.Path = path
 		}
 		result.ActiveWorkflow = ws
+	}
+
+	// Parse mcpServers
+	if mcpServers, ok := spec["mcpServers"].(map[string]interface{}); ok {
+		mcp := &types.MCPServersConfig{}
+		if custom, ok := mcpServers["custom"].(map[string]interface{}); ok {
+			mcp.Custom = make(map[string]map[string]interface{}, len(custom))
+			for name, cfg := range custom {
+				if cfgMap, ok := cfg.(map[string]interface{}); ok {
+					mcp.Custom[name] = cfgMap
+				}
+			}
+		}
+		if disabled, ok := mcpServers["disabled"].([]interface{}); ok {
+			for _, d := range disabled {
+				if s, ok := d.(string); ok {
+					mcp.Disabled = append(mcp.Disabled, s)
+				}
+			}
+		}
+		if len(mcp.Custom) > 0 || len(mcp.Disabled) > 0 {
+			result.MCPServers = mcp
+		}
 	}
 
 	return result
@@ -375,9 +537,41 @@ func parseStatus(status map[string]interface{}) *types.AgenticSessionStatus {
 
 // V2 API Handlers - Multi-tenant session management
 
+// agentStatusCache caches DeriveAgentStatus results to avoid scanning the
+// event log file on every list request.  Agent status doesn't change faster
+// than the frontend polling interval (2-15s), so a 5s TTL is safe.
+var agentStatusCache = struct {
+	sync.RWMutex
+	entries map[string]agentStatusCacheEntry
+}{entries: make(map[string]agentStatusCacheEntry)}
+
+type agentStatusCacheEntry struct {
+	status    string
+	expiresAt time.Time
+}
+
+func init() {
+	// Sweep expired entries every 30 seconds to prevent unbounded growth.
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		for range ticker.C {
+			now := time.Now()
+			agentStatusCache.Lock()
+			for k, v := range agentStatusCache.entries {
+				if now.After(v.expiresAt) {
+					delete(agentStatusCache.entries, k)
+				}
+			}
+			agentStatusCache.Unlock()
+		}
+	}()
+}
+
+const agentStatusCacheTTL = 5 * time.Second
+
 // enrichAgentStatus derives agentStatus from the persisted event log for
-// Running sessions.  This is the source of truth — it replaces the stale
-// CR-cached value which was subject to goroutine race conditions.
+// Running sessions.  Uses a short TTL cache to avoid redundant file scans
+// when multiple list requests arrive within the same polling interval.
 func enrichAgentStatus(session *types.AgenticSession) {
 	if session.Status == nil || session.Status.Phase != "Running" {
 		return
@@ -389,7 +583,30 @@ func enrichAgentStatus(session *types.AgenticSession) {
 	if name == "" {
 		return
 	}
-	if derived := DeriveAgentStatusFromEvents(name); derived != "" {
+
+	// Check cache
+	agentStatusCache.RLock()
+	if entry, ok := agentStatusCache.entries[name]; ok && time.Now().Before(entry.expiresAt) {
+		agentStatusCache.RUnlock()
+		if entry.status != "" {
+			session.Status.AgentStatus = types.StringPtr(entry.status)
+		}
+		return
+	}
+	agentStatusCache.RUnlock()
+
+	// Cache miss — derive from event log
+	derived := DeriveAgentStatusFromEvents(name)
+
+	// Store in cache
+	agentStatusCache.Lock()
+	agentStatusCache.entries[name] = agentStatusCacheEntry{
+		status:    derived,
+		expiresAt: time.Now().Add(agentStatusCacheTTL),
+	}
+	agentStatusCache.Unlock()
+
+	if derived != "" {
 		session.Status.AgentStatus = types.StringPtr(derived)
 	}
 }
@@ -659,7 +876,7 @@ func CreateSession(c *gin.Context) {
 
 	// Set defaults for LLM settings if not provided
 	llmSettings := types.LLMSettings{
-		Model:       "claude-sonnet-4-5",
+		Model:       "claude-sonnet-4-6",
 		Temperature: 0.7,
 		MaxTokens:   4000,
 	}
@@ -787,6 +1004,23 @@ func CreateSession(c *gin.Context) {
 		// Note: Operator will delete temp pod when session starts (desired-phase=Running)
 	}
 
+	// Process SDK options: filter to allowed keys, validate types, serialize to JSON.
+	if len(req.SdkOptions) > 0 {
+		filtered, err := filterSdkOptions(req.SdkOptions)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if filtered != nil {
+			sdkJSON, err := json.Marshal(filtered)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("failed to serialize sdkOptions: %v", err)})
+				return
+			}
+			envVars["SDK_OPTIONS"] = string(sdkJSON)
+		}
+	}
+
 	if len(envVars) > 0 {
 		spec := session["spec"].(map[string]interface{})
 		// Convert map[string]string to map[string]interface{} for unstructured
@@ -817,6 +1051,29 @@ func CreateSession(c *gin.Context) {
 				arr = append(arr, m)
 			}
 			spec["repos"] = arr
+		}
+	}
+
+	// Set MCP servers configuration if provided
+	if req.MCPServers != nil {
+		spec := session["spec"].(map[string]interface{})
+		mcpMap := map[string]interface{}{}
+		if len(req.MCPServers.Custom) > 0 {
+			customMap := make(map[string]interface{}, len(req.MCPServers.Custom))
+			for name, cfg := range req.MCPServers.Custom {
+				customMap[name] = cfg
+			}
+			mcpMap["custom"] = customMap
+		}
+		if len(req.MCPServers.Disabled) > 0 {
+			disabledArr := make([]interface{}, len(req.MCPServers.Disabled))
+			for i, d := range req.MCPServers.Disabled {
+				disabledArr[i] = d
+			}
+			mcpMap["disabled"] = disabledArr
+		}
+		if len(mcpMap) > 0 {
+			spec["mcpServers"] = mcpMap
 		}
 	}
 
@@ -1227,15 +1484,19 @@ func UpdateSession(c *gin.Context) {
 		return
 	}
 
-	// Prevent spec changes while session is running or being created
+	// Check session phase
+	isMCPOnlyUpdate := req.MCPServers != nil && req.InitialPrompt == nil && req.DisplayName == nil && req.LLMSettings == nil && req.Timeout == nil
 	if status, ok := item.Object["status"].(map[string]interface{}); ok {
 		if phase, ok := status["phase"].(string); ok {
 			if strings.EqualFold(phase, "Running") || strings.EqualFold(phase, "Creating") {
-				c.JSON(http.StatusConflict, gin.H{
-					"error": "Cannot modify session specification while the session is running",
-					"phase": phase,
-				})
-				return
+				// Allow MCP-only updates on running sessions (persisted for next restart)
+				if !isMCPOnlyUpdate {
+					c.JSON(http.StatusConflict, gin.H{
+						"error": "Cannot modify session specification while the session is running",
+						"phase": phase,
+					})
+					return
+				}
 			}
 		}
 	}
@@ -1265,6 +1526,30 @@ func UpdateSession(c *gin.Context) {
 
 	if req.Timeout != nil {
 		spec["timeout"] = *req.Timeout
+	}
+
+	// Update MCP servers configuration
+	if req.MCPServers != nil {
+		mcpMap := map[string]interface{}{}
+		if len(req.MCPServers.Custom) > 0 {
+			customMap := make(map[string]interface{}, len(req.MCPServers.Custom))
+			for name, cfg := range req.MCPServers.Custom {
+				customMap[name] = cfg
+			}
+			mcpMap["custom"] = customMap
+		}
+		if len(req.MCPServers.Disabled) > 0 {
+			disabledArr := make([]interface{}, len(req.MCPServers.Disabled))
+			for i, d := range req.MCPServers.Disabled {
+				disabledArr[i] = d
+			}
+			mcpMap["disabled"] = disabledArr
+		}
+		if len(mcpMap) > 0 {
+			spec["mcpServers"] = mcpMap
+		} else {
+			delete(spec, "mcpServers")
+		}
 	}
 
 	// Update the resource
@@ -1398,6 +1683,172 @@ func UpdateSessionDisplayName(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, session)
+}
+
+// SwitchModel switches the LLM model for a running session
+// POST /api/projects/:projectName/agentic-sessions/:sessionName/model
+func SwitchModel(c *gin.Context) {
+	project := c.GetString("project")
+	sessionName := c.Param("sessionName")
+	_, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sDyn == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		c.Abort()
+		return
+	}
+
+	var req struct {
+		Model string `json:"model" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body: model is required"})
+		return
+	}
+
+	if req.Model == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "model must not be empty"})
+		return
+	}
+
+	gvr := GetAgenticSessionV1Alpha1Resource()
+
+	// Get current session
+	item, err := k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), sessionName, v1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get session"})
+		return
+	}
+
+	// Ensure session is Running
+	if err := ensureRuntimeMutationAllowed(item); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get current model for comparison
+	spec, ok := item.Object["spec"].(map[string]interface{})
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid session spec"})
+		return
+	}
+	llmSettings, _, _ := unstructured.NestedMap(spec, "llmSettings")
+	previousModel, _ := llmSettings["model"].(string)
+
+	// No-op if same model
+	if previousModel == req.Model {
+		session := types.AgenticSession{
+			APIVersion: item.GetAPIVersion(),
+			Kind:       item.GetKind(),
+		}
+		if meta, ok := item.Object["metadata"].(map[string]interface{}); ok {
+			session.Metadata = meta
+		}
+		session.Spec = parseSpec(spec)
+		if status, ok := item.Object["status"].(map[string]interface{}); ok {
+			session.Status = parseStatus(status)
+		}
+		c.JSON(http.StatusOK, session)
+		return
+	}
+
+	// Update the CR first to validate RBAC (user needs update permission).
+	// This ensures a user with only get access cannot trigger a runner-side
+	// model switch without also being allowed to persist the change.
+	if llmSettings == nil {
+		llmSettings = map[string]interface{}{}
+	}
+	llmSettings["model"] = req.Model
+	spec["llmSettings"] = llmSettings
+
+	updated, err := k8sDyn.Resource(gvr).Namespace(project).Update(context.TODO(), item, v1.UpdateOptions{})
+	if err != nil {
+		log.Printf("Failed to update session CR %s for model switch: %v", sessionName, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update session record"})
+		return
+	}
+
+	// Proxy to runner — if runner rejects (e.g., agent is mid-generation), revert the CR.
+	// Sanitize the CR name against a strict allowlist to prevent SSRF.
+	sanitizedName, err := sanitizeK8sName(item.GetName())
+	if err != nil {
+		log.Printf("Invalid session name %q for model switch: %v", item.GetName(), err)
+		revertModelSwitch(updated, previousModel, k8sDyn, gvr, project)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session name"})
+		return
+	}
+	sanitizedProject, err := sanitizeK8sName(project)
+	if err != nil {
+		log.Printf("Invalid project name %q for model switch: %v", project, err)
+		revertModelSwitch(updated, previousModel, k8sDyn, gvr, project)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project name"})
+		return
+	}
+	serviceName := getRunnerServiceName(sanitizedName)
+	runnerURL := fmt.Sprintf("http://%s.%s.svc.cluster.local:8001/model", serviceName, sanitizedProject)
+	runnerReq := map[string]string{"model": req.Model}
+	reqBody, _ := json.Marshal(runnerReq)
+
+	httpReq, err := http.NewRequestWithContext(c.Request.Context(), "POST", runnerURL, bytes.NewReader(reqBody))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create runner request"})
+		return
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		log.Printf("Failed to proxy model switch to runner for session %s: %v", sessionName, err)
+		// Revert the CR update on the server-returned object
+		revertModelSwitch(updated, previousModel, k8sDyn, gvr, project)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to reach session runner"})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("Runner rejected model switch for session %s: %d %s", sessionName, resp.StatusCode, string(body))
+		// Revert the CR update on the server-returned object
+		revertModelSwitch(updated, previousModel, k8sDyn, gvr, project)
+		// Forward runner's status code and error
+		c.Data(resp.StatusCode, "application/json", body)
+		return
+	}
+
+	session := types.AgenticSession{
+		APIVersion: updated.GetAPIVersion(),
+		Kind:       updated.GetKind(),
+	}
+	if meta, ok := updated.Object["metadata"].(map[string]interface{}); ok {
+		session.Metadata = meta
+	}
+	if s, ok := updated.Object["spec"].(map[string]interface{}); ok {
+		session.Spec = parseSpec(s)
+	}
+	if status, ok := updated.Object["status"].(map[string]interface{}); ok {
+		session.Status = parseStatus(status)
+	}
+
+	c.JSON(http.StatusOK, session)
+}
+
+// revertModelSwitch restores the previous model on the server-returned CR object.
+// Called when the runner rejects a model switch after the CR was already updated.
+func revertModelSwitch(updated *unstructured.Unstructured, previousModel string, k8sDyn dynamic.Interface, gvr schema.GroupVersionResource, namespace string) {
+	if updatedSpec, ok := updated.Object["spec"].(map[string]interface{}); ok {
+		if updatedLLM, ok := updatedSpec["llmSettings"].(map[string]interface{}); ok {
+			updatedLLM["model"] = previousModel
+			_, err := k8sDyn.Resource(gvr).Namespace(namespace).Update(context.TODO(), updated, v1.UpdateOptions{})
+			if err != nil {
+				log.Printf("Failed to revert model switch for session %s: %v", updated.GetName(), err)
+			}
+		}
+	}
 }
 
 // SelectWorkflow sets the active workflow for a session
@@ -1869,6 +2320,20 @@ func RemoveRepo(c *gin.Context) {
 
 	log.Printf("Removed repository %s from session %s in project %s", repoName, sessionName, project)
 	c.JSON(http.StatusOK, gin.H{"message": "Repository removed", "session": session})
+}
+
+// k8sNameRegexp matches valid Kubernetes resource names (RFC 1123 DNS label).
+var k8sNameRegexp = regexp.MustCompile(`^[a-z0-9]([a-z0-9\-]*[a-z0-9])?$`)
+
+// sanitizeK8sName validates that name is a valid Kubernetes resource name
+// and returns it unchanged if valid, or returns an error. This breaks the
+// taint chain for static analysis (CodeQL SSRF) by proving the value matches
+// a strict allowlist before it reaches any network call.
+func sanitizeK8sName(name string) (string, error) {
+	if len(name) == 0 || len(name) > 253 || !k8sNameRegexp.MatchString(name) {
+		return "", fmt.Errorf("invalid Kubernetes resource name: %q", name)
+	}
+	return name, nil
 }
 
 // getRunnerServiceName returns the K8s Service name for a session's runner.

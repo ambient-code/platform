@@ -14,6 +14,7 @@ const mockUseMcpStatus = vi.fn((): { data: McpData; isPending: boolean } => ({
 
 vi.mock('@/services/queries/use-mcp', () => ({
   useMcpStatus: () => mockUseMcpStatus(),
+  useUpdateSessionMcpServers: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }));
 
 describe('McpServersPanel', () => {
