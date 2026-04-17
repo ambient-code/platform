@@ -27,6 +27,13 @@ pull_request_rules:
       review:
         type: APPROVE
 
+  - name: keep PRs up to date with main
+    conditions:
+      - -conflict
+      - -draft
+    actions:
+      update: {}
+
   - name: queue large PRs
     conditions:
       - or:
