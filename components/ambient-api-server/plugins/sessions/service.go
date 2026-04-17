@@ -2,12 +2,14 @@ package sessions
 
 import (
 	"context"
+	stderrors "errors"
 
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/db"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/logger"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
+	"gorm.io/gorm"
 )
 
 const sessionsLockType db.LockType = "sessions"
@@ -269,7 +271,10 @@ func (s *sqlSessionService) Start(ctx context.Context, id string) (*Session, *er
 func (s *sqlSessionService) ActiveByAgentID(ctx context.Context, agentID string) (*Session, *errors.ServiceError) {
 	session, err := s.sessionDao.ActiveByAgentID(ctx, agentID)
 	if err != nil {
-		return nil, nil
+		if stderrors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, errors.GeneralError("unable to look up active session for agent %s: %s", agentID, err)
 	}
 	return session, nil
 }

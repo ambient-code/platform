@@ -84,13 +84,19 @@ func run(cmd *cobra.Command, positional []string) error {
 	var accessToken string
 
 	if args.useAuthCode {
-		token, err := runAuthCodeFlow(args.issuerURL, args.clientID, args.clientSecret)
+		tokens, err := runAuthCodeFlow(args.issuerURL, args.clientID, args.clientSecret)
 		if err != nil {
 			return fmt.Errorf("auth-code login: %w", err)
 		}
-		accessToken = token
+		accessToken = tokens.AccessToken
+		cfg.RefreshToken = tokens.RefreshToken
+		cfg.IssuerURL = args.issuerURL
+		cfg.ClientID = args.clientID
 	} else {
 		accessToken = args.token
+		cfg.RefreshToken = ""
+		cfg.IssuerURL = ""
+		cfg.ClientID = ""
 	}
 
 	cfg.AccessToken = accessToken

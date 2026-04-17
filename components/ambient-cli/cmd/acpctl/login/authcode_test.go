@@ -308,6 +308,71 @@ func TestExchangeCodeForToken_ErrorResponse(t *testing.T) {
 	}
 }
 
+func TestParseTokensResponse_WithRefreshToken(t *testing.T) {
+	body, _ := json.Marshal(map[string]string{
+		"access_token":  "my-access-token",
+		"refresh_token": "my-refresh-token",
+		"token_type":    "Bearer",
+	})
+
+	result, err := parseTokensResponse(body)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.AccessToken != "my-access-token" {
+		t.Errorf("expected %q, got %q", "my-access-token", result.AccessToken)
+	}
+	if result.RefreshToken != "my-refresh-token" {
+		t.Errorf("expected %q, got %q", "my-refresh-token", result.RefreshToken)
+	}
+}
+
+func TestParseTokensResponse_NoRefreshToken(t *testing.T) {
+	body, _ := json.Marshal(map[string]string{
+		"access_token": "my-access-token",
+		"token_type":   "Bearer",
+	})
+
+	result, err := parseTokensResponse(body)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.AccessToken != "my-access-token" {
+		t.Errorf("expected %q, got %q", "my-access-token", result.AccessToken)
+	}
+	if result.RefreshToken != "" {
+		t.Errorf("expected empty refresh token, got %q", result.RefreshToken)
+	}
+}
+
+func TestParseTokensResponse_MissingAccessToken(t *testing.T) {
+	body, _ := json.Marshal(map[string]string{"refresh_token": "refresh-only"})
+
+	_, err := parseTokensResponse(body)
+	if err == nil {
+		t.Fatal("expected error for missing access_token")
+	}
+}
+
+func TestExchangeCodeForTokens_ReturnsRefresh(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"access_token":"access-123","refresh_token":"refresh-456","token_type":"Bearer"}`)
+	}))
+	defer srv.Close()
+
+	result, err := exchangeCodeForTokens(srv.URL, "client-id", "", "mycode", "http://127.0.0.1:9/callback", "myverifier")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.AccessToken != "access-123" {
+		t.Errorf("expected %q, got %q", "access-123", result.AccessToken)
+	}
+	if result.RefreshToken != "refresh-456" {
+		t.Errorf("expected %q, got %q", "refresh-456", result.RefreshToken)
+	}
+}
+
 func TestCallbackHandler_OAuthErrorFallsBackToErrorCode(t *testing.T) {
 	resultCh := make(chan authCodeResult, 1)
 	handler := callbackHandler("state", resultCh)
