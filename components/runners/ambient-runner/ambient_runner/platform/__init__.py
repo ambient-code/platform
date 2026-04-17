@@ -24,6 +24,7 @@ from ambient_runner.platform.auth import (
     fetch_github_token,
     fetch_google_credentials,
     fetch_jira_credentials,
+    fetch_gerrit_credentials,
     fetch_gitlab_token,
     fetch_token_for_url,
 )
@@ -43,6 +44,7 @@ __all__ = [
     "fetch_github_token",
     "fetch_google_credentials",
     "fetch_jira_credentials",
+    "fetch_gerrit_credentials",
     "fetch_gitlab_token",
     "fetch_token_for_url",
 ]
