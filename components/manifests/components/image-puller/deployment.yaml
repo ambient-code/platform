@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: acp-image-puller
+  namespace: acp-image-puller
+  labels:
+    app: acp-image-puller
+    app.kubernetes.io/part-of: acp-image-puller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: acp-image-puller
+  template:
+    metadata:
+      labels:
+        app: acp-image-puller
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: acp-image-puller
+      containers:
+        - name: image-puller
+          image: registry.redhat.io/devspaces/imagepuller-rhel9@sha256:e4a0286fbb7e6dc3fba3db03c8ccc8d9ff9fd8603274cc14d29d4fae5132e312
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          envFrom:
+            - configMapRef:
+                name: acp-image-puller-config
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "64Mi"
+              cpu: "50m"
+      imagePullSecrets:
+        - name: redhat-registry-pull-secret
