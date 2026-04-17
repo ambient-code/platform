@@ -179,7 +179,7 @@ def test_empty_structures():
 def test_real_world_trace():
     """Test with realistic Langfuse trace structure."""
     trace = {
-        "name": "claude_interaction",
+        "name": "llm_interaction",
         "input": [
             {
                 "role": "user",

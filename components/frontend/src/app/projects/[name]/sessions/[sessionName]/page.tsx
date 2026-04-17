@@ -337,13 +337,15 @@ export default function ProjectSessionDetailPage({
     return () => clearInterval(pollInterval);
   }, [sessionQueue.messages, session?.status?.phase, refetchSession]);
 
-  // Process queued messages when session becomes Running
+  // Process queued messages when session becomes Running or when an active run finishes.
+  // This handles two cases:
+  // 1. Startup: session transitions to "Running" phase and queued messages exist
+  // 2. Mid-task: user queued messages during an active run, and the run just finished
   useEffect(() => {
     const phase = session?.status?.phase;
     const unsentMessages = sessionQueue.messages.filter(m => !m.sentAt);
 
-    if (phase === "Running" && unsentMessages.length > 0) {
-      // Session is now running, send all queued messages
+    if (phase === "Running" && !isRunActive && unsentMessages.length > 0) {
       const processMessages = async () => {
         for (const messageItem of unsentMessages) {
           try {
@@ -360,7 +362,7 @@ export default function ProjectSessionDetailPage({
       processMessages();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.status?.phase, sessionQueue.messages.length]);
+  }, [session?.status?.phase, sessionQueue.messages.length, isRunActive]);
 
   // Repo management mutations
   const addRepoMutation = useMutation({
@@ -1423,6 +1425,12 @@ export default function ProjectSessionDetailPage({
     // If session is not yet running, queue the message for later
     // This includes: undefined (loading), "Pending", "Creating", or any other non-Running state
     if (!phase || phase !== "Running") {
+      sessionQueue.addMessage(finalMessage);
+      return;
+    }
+
+    // If a run is active, queue the message to be sent when the current run finishes
+    if (isRunActive) {
       sessionQueue.addMessage(finalMessage);
       return;
     }

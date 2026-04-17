@@ -42,8 +42,9 @@ async def tracing_middleware(
         prompt: User prompt (used as input for the first turn trace).
 
     Yields:
-        The original events plus an ``ambient:langfuse_trace`` ``CustomEvent``
-        once the Langfuse trace ID becomes available.
+        The original events plus an ``ambient:trace_id`` ``CustomEvent``
+        once the trace ID (from Langfuse or MLflow, depending on active
+        backend) becomes available.
     """
     # Fast path: no observability — just pass through
     if obs is None:
@@ -71,7 +72,7 @@ async def tracing_middleware(
                 if trace_id:
                     yield CustomEvent(
                         type=EventType.CUSTOM,
-                        name="ambient:langfuse_trace",
+                        name="ambient:trace_id",
                         value={"traceId": trace_id},
                     )
                     trace_id_emitted = True

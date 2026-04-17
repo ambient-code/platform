@@ -8,6 +8,11 @@ A **session** is an AI agent execution environment. When you create a session, t
 
 Click **New Session** inside a workspace. The creation dialog lets you configure:
 
+<figure class="screenshot-pair">
+  <img class="screenshot-light" src="/platform/images/screenshots/new-session-dialog-light.png" alt="New session creation dialog" />
+  <img class="screenshot-dark" src="/platform/images/screenshots/new-session-dialog-dark.png" alt="New session creation dialog" />
+</figure>
+
 | Setting | Description | Default |
 |---------|------------|---------|
 | **Display name** | A label for the session. | Auto-generated |
@@ -19,6 +24,11 @@ Click **New Session** inside a workspace. The creation dialog lets you configure
 After the session is created, you can attach repositories and select a workflow from the session sidebar. See [Context & Artifacts](../context-and-artifacts/) and [Workflows](../workflows/) for details.
 
 ## Session lifecycle
+
+<figure class="screenshot-pair">
+  <img class="screenshot-light" src="/platform/images/screenshots/session-list-light.png" alt="Sessions list" />
+  <img class="screenshot-dark" src="/platform/images/screenshots/session-list-dark.png" alt="Sessions list" />
+</figure>
 
 Every session moves through a series of phases:
 

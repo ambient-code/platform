@@ -66,6 +66,144 @@ var (
 	ootbCacheTTL = 5 * time.Minute // Cache OOTB workflows for 5 minutes
 )
 
+// allowedSdkOptionKeys defines the SDK options that users are allowed to configure.
+// Keys NOT in this map are silently dropped by filterSdkOptions.
+// Platform-internal keys (cwd, resume, mcp_servers, api_key, etc.) are excluded
+// because they are set by the runner, not users.
+var allowedSdkOptionKeys = map[string]bool{
+	// String keys
+	"system_prompt":   true,
+	"permission_mode": true,
+	"effort":          true,
+	"user":            true,
+	// Numeric keys
+	"max_turns":       true,
+	"max_budget_usd":  true,
+	"max_buffer_size": true,
+	// Bool keys
+	"include_partial_messages":  true,
+	"enable_file_checkpointing": true,
+	// Slice keys
+	"allowed_tools":    true,
+	"disallowed_tools": true,
+	"betas":            true,
+	"plugins":          true,
+	// Complex object keys (maps, nested structures)
+	"thinking":      true,
+	"tools":         true,
+	"sandbox":       true,
+	"output_format": true,
+	"hooks":         true,
+	"agents":        true,
+	"env":           true,
+	"extra_args":    true,
+}
+
+// sdkOptionStringKeys are SDK options that must be string values.
+var sdkOptionStringKeys = map[string]bool{
+	"permission_mode": true,
+	"effort":          true,
+	"user":            true,
+}
+
+// sdkOptionNumericKeys are SDK options that must be numeric (float64 or int).
+var sdkOptionNumericKeys = map[string]bool{
+	"max_turns":       true,
+	"max_budget_usd":  true,
+	"max_buffer_size": true,
+}
+
+// sdkOptionBoolKeys are SDK options that must be boolean.
+var sdkOptionBoolKeys = map[string]bool{
+	"include_partial_messages":  true,
+	"enable_file_checkpointing": true,
+}
+
+// sdkOptionSliceKeys are SDK options that must be slices ([]interface{}).
+var sdkOptionSliceKeys = map[string]bool{
+	"allowed_tools":    true,
+	"disallowed_tools": true,
+	"betas":            true,
+	"plugins":          true,
+}
+
+// validateSdkOptionValue performs basic type checking on a single SDK option value.
+// nil values always pass. Complex object keys (thinking, sandbox, etc.) accept any value.
+func validateSdkOptionValue(key string, value interface{}) error {
+	if value == nil {
+		return nil
+	}
+
+	// system_prompt can be string or map (preset format)
+	if key == "system_prompt" {
+		switch value.(type) {
+		case string, map[string]interface{}:
+			return nil
+		default:
+			return fmt.Errorf("sdkOptions.%s must be a string or object, got %T", key, value)
+		}
+	}
+
+	if sdkOptionStringKeys[key] {
+		if _, ok := value.(string); !ok {
+			return fmt.Errorf("sdkOptions.%s must be a string, got %T", key, value)
+		}
+		return nil
+	}
+
+	if sdkOptionNumericKeys[key] {
+		switch value.(type) {
+		case float64, int:
+			return nil
+		default:
+			return fmt.Errorf("sdkOptions.%s must be a number, got %T", key, value)
+		}
+	}
+
+	if sdkOptionBoolKeys[key] {
+		if _, ok := value.(bool); !ok {
+			return fmt.Errorf("sdkOptions.%s must be a boolean, got %T", key, value)
+		}
+		return nil
+	}
+
+	if sdkOptionSliceKeys[key] {
+		if _, ok := value.([]interface{}); !ok {
+			return fmt.Errorf("sdkOptions.%s must be an array, got %T", key, value)
+		}
+		return nil
+	}
+
+	// Complex object keys (thinking, sandbox, output_format, hooks, agents, env, extra_args, tools)
+	// accept any value — JSON serialization handles them.
+	return nil
+}
+
+// filterSdkOptions filters an SDK options map, keeping only allowed keys and
+// validating primitive types. Unknown keys are silently dropped. Returns nil
+// if the input is nil/empty or all keys were filtered out.
+func filterSdkOptions(opts map[string]interface{}) (map[string]interface{}, error) {
+	if len(opts) == 0 {
+		return nil, nil
+	}
+
+	filtered := make(map[string]interface{})
+	for key, value := range opts {
+		if !allowedSdkOptionKeys[key] {
+			continue
+		}
+		if err := validateSdkOptionValue(key, value); err != nil {
+			return nil, err
+		}
+		filtered[key] = value
+	}
+
+	if len(filtered) == 0 {
+		return nil, nil
+	}
+	return filtered, nil
+}
+
 // isBinaryContentType checks if a MIME type represents binary content that should be base64 encoded.
 // This includes images, archives, documents, executables, and other non-text formats.
 func isBinaryContentType(contentType string) bool {
@@ -864,6 +1002,23 @@ func CreateSession(c *gin.Context) {
 		annotations["vteam.ambient-code/parent-session-id"] = req.ParentSessionID
 		log.Printf("Creating continuation session from parent %s (operator will handle temp pod cleanup)", req.ParentSessionID)
 		// Note: Operator will delete temp pod when session starts (desired-phase=Running)
+	}
+
+	// Process SDK options: filter to allowed keys, validate types, serialize to JSON.
+	if len(req.SdkOptions) > 0 {
+		filtered, err := filterSdkOptions(req.SdkOptions)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if filtered != nil {
+			sdkJSON, err := json.Marshal(filtered)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("failed to serialize sdkOptions: %v", err)})
+				return
+			}
+			envVars["SDK_OPTIONS"] = string(sdkJSON)
+		}
 	}
 
 	if len(envVars) > 0 {

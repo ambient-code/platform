@@ -8,6 +8,11 @@ from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
+# Align with observability.TURN_TRACE_NAME / SESSION_METRICS_* (avoid import cycle).
+_TURN_SPAN_NAME = "llm_interaction"
+_SESSION_METRICS_SPAN_NAME = "Session Metrics"
+_SESSION_METRICS_SOURCE = "ambient-runner-metrics"
+
 
 class MLflowSessionTracer:
     """Mirrors turn/tool boundaries from ObservabilityManager into MLflow spans."""
@@ -22,6 +27,7 @@ class MLflowSessionTracer:
         self._turn_gen: Any = None
         self._turn_span: Any = None
         self._tool_ctx: dict[str, tuple[Any, Any]] = {}
+        self._runner_type = ""
 
     @property
     def enabled(self) -> bool:
@@ -41,6 +47,7 @@ class MLflowSessionTracer:
         workflow_branch: str,
         workflow_path: str,
         mask_fn: Callable[[Any], Any] | None,
+        runner_type: str | None = None,
     ) -> bool:
         """Configure tracking URI and experiment. Returns True on success."""
         try:
@@ -88,6 +95,9 @@ class MLflowSessionTracer:
 
         self._namespace = namespace
         self._mask_fn = mask_fn
+        self._runner_type = (
+            runner_type or os.getenv("RUNNER_TYPE", "claude-agent-sdk") or ""
+        ).strip().lower() or "unknown"
         self._enabled = True
         logger.info(
             "MLflow: session tracing enabled (session_id=%s, experiment=%s)",
@@ -125,12 +135,13 @@ class MLflowSessionTracer:
             text_in = self._apply_mask(text_in)
 
             gen = mlflow.start_span(
-                name="claude_interaction",
+                name=_TURN_SPAN_NAME,
                 span_type=SpanType.CHAIN,
                 attributes={
                     "ambient.session_id": self.session_id,
                     "ambient.user_id": self.user_id,
                     "ambient.namespace": self._namespace,
+                    "ambient.runner_type": self._runner_type,
                     "llm.model_name": model,
                 },
             )
@@ -249,9 +260,12 @@ class MLflowSessionTracer:
             from mlflow.entities import SpanType
 
             with mlflow.start_span(
-                name="Claude Code - Session Metrics",
+                name=_SESSION_METRICS_SPAN_NAME,
                 span_type=SpanType.CHAIN,
-                attributes={"ambient.source": "claude-code-metrics"},
+                attributes={
+                    "ambient.source": _SESSION_METRICS_SOURCE,
+                    "ambient.runner_type": self._runner_type,
+                },
             ) as span:
                 span.set_inputs(
                     {

@@ -139,6 +139,7 @@ The workspace context prompt is built by `build_sdk_system_prompt()` in `prompts
 **Backend selection**
 
 - `OBSERVABILITY_BACKENDS` - Comma-separated: `langfuse`, `mlflow`, or both (e.g. `langfuse,mlflow`). If unset, defaults to **`langfuse`** only so existing Langfuse behaviour is preserved.
+- Turn traces are named **`llm_interaction`** (vendor-neutral). **`RUNNER_TYPE`** (same values as bridge selection: `claude-agent-sdk`, `gemini-cli`, …) is added to Langfuse tags (`runner:<type>`) and to span metadata for MLflow / Langfuse.
 
 **MLflow GenAI tracing** (optional extra: `pip install 'ambient-runner[mlflow-observability]'` — pins **`mlflow[kubernetes]>=3.11`** for cluster auth)
 
