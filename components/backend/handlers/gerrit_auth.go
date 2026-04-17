@@ -24,7 +24,7 @@ type GerritCredentials struct {
 	UserID            string    `json:"userId"`
 	InstanceName      string    `json:"instanceName"`
 	URL               string    `json:"url"`
-	AuthMethod        string    `json:"authMethod"` // "http_basic" or "git_cookies"
+	AuthMethod        string    `json:"authMethod"`
 	Username          string    `json:"username,omitempty"`
 	HTTPToken         string    `json:"httpToken,omitempty"`
 	GitcookiesContent string    `json:"gitcookiesContent,omitempty"`
@@ -34,8 +34,32 @@ type GerritCredentials struct {
 // instanceNameRegex validates Gerrit instance names: 2-63 chars, lowercase alphanumeric + hyphens
 var instanceNameRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$`)
 
-// validateGerritURL validates and resolves a Gerrit URL, enforcing HTTPS and blocking
-// private/reserved IP addresses to prevent SSRF attacks.
+const (
+	gerritAuthHTTPBasic  = "http_basic"
+	gerritAuthGitCookies = "git_cookies"
+)
+
+// blockedCIDRs are IPv4 ranges blocked for SSRF protection beyond what
+// net.IP.IsPrivate/IsLoopback/etc. already cover.
+var blockedCIDRs = func() []net.IPNet {
+	cidrs := []string{
+		"100.64.0.0/10",   // CGNAT (RFC 6598)
+		"192.0.2.0/24",    // TEST-NET-1 (RFC 5737)
+		"198.51.100.0/24", // TEST-NET-2 (RFC 5737)
+		"203.0.113.0/24",  // TEST-NET-3 (RFC 5737)
+		"198.18.0.0/15",   // Benchmarking (RFC 2544)
+		"240.0.0.0/4",     // Reserved
+	}
+	nets := make([]net.IPNet, len(cidrs))
+	for i, cidr := range cidrs {
+		_, n, _ := net.ParseCIDR(cidr)
+		nets[i] = *n
+	}
+	return nets
+}()
+
+// validateGerritURL validates a Gerrit URL, enforcing HTTPS and a resolvable public hostname.
+// The actual IP-level SSRF check happens in ssrfSafeTransport at dial time.
 func validateGerritURL(rawURL string) error {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
@@ -69,65 +93,20 @@ func validateGerritURL(rawURL string) error {
 	return nil
 }
 
-// isPrivateOrBlocked returns true if the IP is loopback, private (RFC1918),
-// link-local, CGNAT, documentation, benchmarking, multicast, reserved,
-// or the cloud metadata address 169.254.169.254.
 func isPrivateOrBlocked(ip net.IP) bool {
-	// Loopback
-	if ip.IsLoopback() {
-		return true
-	}
-	// Link-local
-	if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
-		return true
-	}
-	// Private (RFC1918 for v4, RFC4193 for v6)
-	if ip.IsPrivate() {
-		return true
-	}
-	// Multicast
-	if ip.IsMulticast() {
-		return true
-	}
-	// Unspecified (0.0.0.0 / ::)
-	if ip.IsUnspecified() {
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsPrivate() || ip.IsMulticast() || ip.IsUnspecified() {
 		return true
 	}
 
-	// Additional blocked ranges for IPv4
 	ip4 := ip.To4()
 	if ip4 != nil {
-		// CGNAT 100.64.0.0/10
-		cgnat := net.IPNet{IP: net.IP{100, 64, 0, 0}, Mask: net.CIDRMask(10, 32)}
-		if cgnat.Contains(ip4) {
-			return true
+		for _, cidr := range blockedCIDRs {
+			if cidr.Contains(ip4) {
+				return true
+			}
 		}
-		// Documentation: 192.0.2.0/24
-		doc1 := net.IPNet{IP: net.IP{192, 0, 2, 0}, Mask: net.CIDRMask(24, 32)}
-		if doc1.Contains(ip4) {
-			return true
-		}
-		// Documentation: 198.51.100.0/24
-		doc2 := net.IPNet{IP: net.IP{198, 51, 100, 0}, Mask: net.CIDRMask(24, 32)}
-		if doc2.Contains(ip4) {
-			return true
-		}
-		// Documentation: 203.0.113.0/24
-		doc3 := net.IPNet{IP: net.IP{203, 0, 113, 0}, Mask: net.CIDRMask(24, 32)}
-		if doc3.Contains(ip4) {
-			return true
-		}
-		// Benchmarking: 198.18.0.0/15
-		bench := net.IPNet{IP: net.IP{198, 18, 0, 0}, Mask: net.CIDRMask(15, 32)}
-		if bench.Contains(ip4) {
-			return true
-		}
-		// Reserved: 240.0.0.0/4
-		reserved := net.IPNet{IP: net.IP{240, 0, 0, 0}, Mask: net.CIDRMask(4, 32)}
-		if reserved.Contains(ip4) {
-			return true
-		}
-		// Cloud metadata: 169.254.169.254/32
+		// Cloud metadata endpoint
 		if ip4.Equal(net.IP{169, 254, 169, 254}) {
 			return true
 		}
@@ -166,10 +145,7 @@ func ssrfSafeTransport() *http.Transport {
 	}
 }
 
-// ConnectGerrit handles POST /api/auth/gerrit/connect
-// Saves user's Gerrit credentials for a named instance
 func ConnectGerrit(c *gin.Context) {
-	// Verify user has valid K8s token (follows RBAC pattern)
 	reqK8s, _ := GetK8sClientsForRequest(c)
 	if reqK8s == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
@@ -213,25 +189,23 @@ func ConnectGerrit(c *gin.Context) {
 	}
 
 	// Validate auth method
-	if req.AuthMethod != "http_basic" && req.AuthMethod != "git_cookies" {
+	if req.AuthMethod != gerritAuthHTTPBasic && req.AuthMethod != gerritAuthGitCookies {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "authMethod must be 'http_basic' or 'git_cookies'"})
 		return
 	}
 
-	// Reject mixed credentials
 	if req.HTTPToken != "" && req.GitcookiesContent != "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot provide both httpToken and gitcookiesContent"})
 		return
 	}
 
-	// Validate required fields per auth method
 	switch req.AuthMethod {
-	case "http_basic":
+	case gerritAuthHTTPBasic:
 		if req.Username == "" || req.HTTPToken == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "username and httpToken are required for http_basic auth"})
 			return
 		}
-	case "git_cookies":
+	case gerritAuthGitCookies:
 		if req.GitcookiesContent == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "gitcookiesContent is required for git_cookies auth"})
 			return
@@ -278,10 +252,7 @@ func ConnectGerrit(c *gin.Context) {
 	})
 }
 
-// GetGerritStatus handles GET /api/auth/gerrit/:instanceName/status
-// Returns connection status for a single Gerrit instance
 func GetGerritStatus(c *gin.Context) {
-	// Verify user has valid K8s token
 	reqK8s, _ := GetK8sClientsForRequest(c)
 	if reqK8s == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
@@ -325,10 +296,7 @@ func GetGerritStatus(c *gin.Context) {
 	})
 }
 
-// DisconnectGerrit handles DELETE /api/auth/gerrit/:instanceName/disconnect
-// Removes a Gerrit instance's credentials for the user
 func DisconnectGerrit(c *gin.Context) {
-	// Verify user has valid K8s token
 	reqK8s, _ := GetK8sClientsForRequest(c)
 	if reqK8s == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
@@ -357,10 +325,7 @@ func DisconnectGerrit(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Gerrit instance disconnected successfully"})
 }
 
-// ListGerritInstances handles GET /api/auth/gerrit/instances
-// Lists all Gerrit instances configured for the authenticated user
 func ListGerritInstances(c *gin.Context) {
-	// Verify user has valid K8s token
 	reqK8s, _ := GetK8sClientsForRequest(c)
 	if reqK8s == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
@@ -429,14 +394,14 @@ func storeGerritCredentials(ctx context.Context, creds *GerritCredentials) error
 					Type: corev1.SecretTypeOpaque,
 					Data: map[string][]byte{},
 				}
-				if _, cerr := K8sClient.CoreV1().Secrets(Namespace).Create(ctx, secret, v1.CreateOptions{}); cerr != nil && !errors.IsAlreadyExists(cerr) {
+				created, cerr := K8sClient.CoreV1().Secrets(Namespace).Create(ctx, secret, v1.CreateOptions{})
+				if cerr != nil {
+					if errors.IsAlreadyExists(cerr) {
+						continue // retry — concurrent create
+					}
 					return fmt.Errorf("failed to create Secret: %w", cerr)
 				}
-				// Fetch again to get resourceVersion
-				secret, err = K8sClient.CoreV1().Secrets(Namespace).Get(ctx, secretName, v1.GetOptions{})
-				if err != nil {
-					return fmt.Errorf("failed to fetch Secret after create: %w", err)
-				}
+				secret = created
 			} else {
 				return fmt.Errorf("failed to get Secret: %w", err)
 			}

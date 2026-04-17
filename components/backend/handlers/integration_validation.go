@@ -221,12 +221,12 @@ func ValidateGerritToken(ctx context.Context, gerritURL, authMethod, username, h
 	}
 
 	switch authMethod {
-	case "http_basic":
+	case gerritAuthHTTPBasic:
 		if username == "" || httpToken == "" {
 			return false, fmt.Errorf("missing username or HTTP token")
 		}
 		req.SetBasicAuth(username, httpToken)
-	case "git_cookies":
+	case gerritAuthGitCookies:
 		if gitcookiesContent == "" {
 			return false, fmt.Errorf("missing gitcookies content")
 		}
