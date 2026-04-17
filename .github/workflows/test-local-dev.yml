@@ -2,6 +2,10 @@ name: Test Local Development Environment
 
 on:
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 env:
   # Pin versions for reliable caching
@@ -9,6 +13,33 @@ env:
   KIND_VERSION: "v0.31.0"
 
 jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      components: ${{ steps.filter.outputs.components }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Check for component changes
+        uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            components:
+              - 'components/*/Dockerfile'
+              - 'components/manifests/**'
+              - 'components/backend/**'
+              - 'components/operator/**'
+              - 'components/frontend/**'
+              - 'components/runners/**'
+              - 'components/ambient-cli/**'
+              - 'components/public-api/**'
+              - 'Makefile'
+              - 'tests/**'
+              - '.github/workflows/test-local-dev.yml'
+
   # Fast job that doesn't need the cluster - runs in parallel
   validate-manifests:
     runs-on: ubuntu-latest
@@ -42,6 +73,8 @@ jobs:
         make validate-makefile
 
   test-local-dev-simulation:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.components == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -241,3 +274,21 @@ jobs:
       run: |
         echo "Cleaning up using Makefile..."
         make kind-down 2>&1 || echo "(Cleanup failed or cluster already removed)"
+
+  ci-gate:
+    name: Local Dev CI Gate
+    runs-on: ubuntu-latest
+    needs: [validate-manifests, test-local-dev-simulation]
+    if: always()
+    timeout-minutes: 1
+    steps:
+      - name: Check results
+        run: |
+          echo "validate-manifests: ${{ needs.validate-manifests.result }}"
+          echo "test-local-dev-simulation: ${{ needs.test-local-dev-simulation.result }}"
+          if [ "${{ needs.validate-manifests.result }}" == "failure" ] || \
+             [ "${{ needs.test-local-dev-simulation.result }}" == "failure" ]; then
+            echo "One or more required checks failed"
+            exit 1
+          fi
+          echo "All checks passed or were appropriately skipped"
