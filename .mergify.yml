@@ -26,7 +26,6 @@ pull_request_rules:
     actions:
       review:
         type: APPROVE
-        message: Automatically approved by Mergify
 
   - name: queue large PRs
     conditions:
