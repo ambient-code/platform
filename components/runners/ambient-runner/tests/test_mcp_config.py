@@ -1,12 +1,8 @@
 """Tests for MCP config loading with custom/project/disabled server merging."""
 
 import json
-import os
-import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
-import pytest
 
 from ambient_runner.platform.config import load_mcp_config
 from ambient_runner.platform.context import RunnerContext
@@ -31,7 +27,10 @@ class TestLoadMcpConfig:
             json.dumps(
                 {
                     "mcpServers": {
-                        "context7": {"type": "http", "url": "https://mcp.context7.com/mcp"},
+                        "context7": {
+                            "type": "http",
+                            "url": "https://mcp.context7.com/mcp",
+                        },
                         "webfetch": {"command": "uvx", "args": ["mcp-server-fetch"]},
                     }
                 }
@@ -51,7 +50,10 @@ class TestLoadMcpConfig:
             json.dumps(
                 {
                     "mcpServers": {
-                        "context7": {"type": "http", "url": "https://mcp.context7.com/mcp"},
+                        "context7": {
+                            "type": "http",
+                            "url": "https://mcp.context7.com/mcp",
+                        },
                     }
                 }
             )
@@ -76,7 +78,15 @@ class TestLoadMcpConfig:
     def test_merges_project_level_servers(self, tmp_path: Path):
         """Project-level custom servers should be merged with defaults."""
         mcp_file = tmp_path / ".mcp.json"
-        mcp_file.write_text(json.dumps({"mcpServers": {"default-server": {"type": "http", "url": "https://default.com"}}}))
+        mcp_file.write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "default-server": {"type": "http", "url": "https://default.com"}
+                    }
+                }
+            )
+        )
 
         project_mcp = {
             "custom": {
@@ -127,8 +137,14 @@ class TestLoadMcpConfig:
             json.dumps(
                 {
                     "mcpServers": {
-                        "context7": {"type": "http", "url": "https://mcp.context7.com/mcp"},
-                        "deepwiki": {"type": "http", "url": "https://mcp.deepwiki.com/mcp"},
+                        "context7": {
+                            "type": "http",
+                            "url": "https://mcp.context7.com/mcp",
+                        },
+                        "deepwiki": {
+                            "type": "http",
+                            "url": "https://mcp.deepwiki.com/mcp",
+                        },
                         "webfetch": {"command": "uvx", "args": ["mcp-server-fetch"]},
                     }
                 }
@@ -180,7 +196,13 @@ class TestLoadMcpConfig:
         """Should return None when all servers are disabled."""
         mcp_file = tmp_path / ".mcp.json"
         mcp_file.write_text(
-            json.dumps({"mcpServers": {"only-server": {"type": "http", "url": "https://only.com"}}})
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "only-server": {"type": "http", "url": "https://only.com"}
+                    }
+                }
+            )
         )
         custom = {"disabled": ["only-server"]}
         ctx = _make_context(
@@ -195,7 +217,11 @@ class TestLoadMcpConfig:
     def test_handles_invalid_custom_json(self, tmp_path: Path):
         """Should handle invalid JSON in CUSTOM_MCP_SERVERS gracefully."""
         mcp_file = tmp_path / ".mcp.json"
-        mcp_file.write_text(json.dumps({"mcpServers": {"s1": {"type": "http", "url": "https://s1.com"}}}))
+        mcp_file.write_text(
+            json.dumps(
+                {"mcpServers": {"s1": {"type": "http", "url": "https://s1.com"}}}
+            )
+        )
         ctx = _make_context(
             {
                 "MCP_CONFIG_FILE": str(mcp_file),

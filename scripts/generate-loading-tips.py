@@ -15,16 +15,16 @@ import re
 
 
 def run_git(args: list[str]) -> str:
-    result = subprocess.run(
-        ["git"] + args, capture_output=True, text=True
-    )
+    result = subprocess.run(["git"] + args, capture_output=True, text=True)
     if result.returncode != 0:
         print(f"Warning: git {' '.join(args)} failed: {result.stderr}", file=sys.stderr)
         return ""
     return result.stdout.strip()
 
 
-def get_first_time_contributors(latest_tag: str, current_authors: set[str]) -> list[str]:
+def get_first_time_contributors(
+    latest_tag: str, current_authors: set[str]
+) -> list[str]:
     if not latest_tag:
         return sorted(current_authors)
 
@@ -41,11 +41,14 @@ def get_first_time_contributors(latest_tag: str, current_authors: set[str]) -> l
 def get_top_commits_by_loc(latest_tag: str, top_n: int = 3) -> list[dict]:
     """Get the top N commits by lines added between latest_tag and HEAD."""
     commit_range = f"{latest_tag}..HEAD" if latest_tag else "HEAD"
-    raw = run_git([
-        "log", commit_range,
-        "--format=%h<DELIM>%s<DELIM>%an",
-        "--numstat",
-    ])
+    raw = run_git(
+        [
+            "log",
+            commit_range,
+            "--format=%h<DELIM>%s<DELIM>%an",
+            "--numstat",
+        ]
+    )
     if not raw:
         return []
 
@@ -174,13 +177,20 @@ def write_loading_tips_ts(tips: list[str], output_path: str):
 
 def main():
     if len(sys.argv) < 4:
-        print(f"Usage: {sys.argv[0]} <new_tag> <latest_tag> <repo> [output_path]", file=sys.stderr)
+        print(
+            f"Usage: {sys.argv[0]} <new_tag> <latest_tag> <repo> [output_path]",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     new_tag = sys.argv[1]
     latest_tag = sys.argv[2]
     # repo arg kept for interface compatibility but not used currently
-    output_path = sys.argv[4] if len(sys.argv) > 4 else "components/frontend/src/lib/loading-tips.ts"
+    output_path = (
+        sys.argv[4]
+        if len(sys.argv) > 4
+        else "components/frontend/src/lib/loading-tips.ts"
+    )
 
     all_tips = generate_tips(new_tag, latest_tag)
     selected = select_tips(all_tips, count=10)

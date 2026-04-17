@@ -63,7 +63,9 @@ async def switch_model(request: Request):
         return await _perform_model_switch(bridge, context, new_model, previous_model)
 
 
-async def _perform_model_switch(bridge, context, new_model: str, previous_model: str) -> dict:
+async def _perform_model_switch(
+    bridge, context, new_model: str, previous_model: str
+) -> dict:
     """Execute the model switch: update env, rebuild adapter, emit event."""
     logger.info(f"Switching model from '{previous_model}' to '{new_model}'")
 

@@ -67,3 +67,45 @@ async def test_initialize_langfuse_only_does_not_construct_mlflow_tracer():
                     assert ok is True
                     MockLangfuse.assert_called_once()
                     MockTracer.assert_not_called()
+
+
+def test_get_current_trace_id_uses_mlflow_when_langfuse_turn_inactive():
+    """MLflow-only: expose active trace id for middleware/corrections (item 4)."""
+    from ambient_runner.observability import ObservabilityManager
+
+    m = ObservabilityManager("s1", "u1", "n1")
+    m._mlflow = MagicMock()
+    m._mlflow.enabled = True
+    m._mlflow.has_active_turn = True
+
+    with patch("mlflow.get_active_trace_id", return_value="mlflow-trace-xyz"):
+        assert m.get_current_trace_id() == "mlflow-trace-xyz"
+
+
+def test_get_current_trace_id_prefers_langfuse_when_both_active():
+    from ambient_runner.observability import ObservabilityManager
+
+    m = ObservabilityManager("s1", "u1", "n1")
+    gen = MagicMock()
+    gen.trace_id = "langfuse-tid"
+    m._current_turn_generation = gen
+    m._mlflow = MagicMock()
+    m._mlflow.enabled = True
+    m._mlflow.has_active_turn = True
+
+    with patch("mlflow.get_active_trace_id", return_value="mlflow-tid"):
+        assert m.get_current_trace_id() == "langfuse-tid"
+
+
+def test_sync_last_trace_id_from_mlflow_sets_last_trace_id():
+    from ambient_runner.observability import ObservabilityManager
+
+    m = ObservabilityManager("s1", "u1", "n1")
+    m._last_trace_id = None
+    m._mlflow = MagicMock()
+    m._mlflow.enabled = True
+    m._mlflow.has_active_turn = True
+
+    with patch("mlflow.get_active_trace_id", return_value="persist-tid"):
+        m._sync_last_trace_id_from_mlflow()
+    assert m.last_trace_id == "persist-tid"

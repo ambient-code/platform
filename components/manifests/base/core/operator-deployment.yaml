@@ -142,6 +142,10 @@ spec:
           value: "production"
         - name: VERSION
           value: "latest"  # Override with actual version in production
+        # Go memory limit — tells GC to be aggressive before hitting container limit.
+        # Set to ~87.5% of memory limit (4Gi) per Go best practices.
+        - name: GOMEMLIMIT
+          value: "3500MiB"
         volumeMounts:
         # Model manifest (mounted ConfigMap — kubelet auto-syncs changes)
         - name: model-manifest
@@ -153,11 +157,11 @@ spec:
           readOnly: true
         resources:
           requests:
-            cpu: 50m
-            memory: 128Mi
-          limits:
-            cpu: 200m
+            cpu: 100m
             memory: 512Mi
+          limits:
+            cpu: "2"
+            memory: 4Gi
         livenessProbe:
           httpGet:
             path: /healthz

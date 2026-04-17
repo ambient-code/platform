@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Link from "next/link";
-import { AlertCircle, AlertTriangle, CheckCircle2, ChevronsUpDown, Loader2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, ChevronsUpDown, FileUp, Loader2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useFlag } from "@/lib/feature-flags";
 
@@ -74,6 +74,9 @@ type CreateSessionDialogProps = {
   onSuccess?: () => void;
 };
 
+// Maximum file size for pre-uploads: 10MB
+const MAX_PRE_UPLOAD_SIZE = 10 * 1024 * 1024;
+
 export function CreateSessionDialog({
   projectName,
   trigger,
@@ -85,6 +88,9 @@ export function CreateSessionDialog({
   const [customGitUrl, setCustomGitUrl] = useState("");
   const [customBranch, setCustomBranch] = useState("main");
   const [customPath, setCustomPath] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const advancedAgentOptions = useFlag("advanced-agent-options") ?? false;
   const createSessionMutation = useCreateSession();
@@ -224,16 +230,40 @@ export function CreateSessionDialog({
     }
 
     if (advancedAgentOptions) {
-      request.agentOptions = agentOptionsForm.getValues();
+      request.sdkOptions = agentOptionsForm.getValues();
     }
 
     createSessionMutation.mutate(
       { projectName, data: request },
       {
-        onSuccess: (session) => {
+        onSuccess: async (session) => {
           const sessionName = session.metadata.name;
+
+          // Upload pending files via pre-upload endpoint (direct to S3)
+          if (pendingFiles.length > 0) {
+            setUploadingFiles(true);
+            try {
+              for (const file of pendingFiles) {
+                const formData = new FormData();
+                formData.append("type", "local");
+                formData.append("file", file);
+                formData.append("filename", file.name);
+
+                await fetch(
+                  `/api/projects/${projectName}/agentic-sessions/${sessionName}/workspace/upload`,
+                  { method: "POST", body: formData }
+                );
+              }
+            } catch {
+              toast.error("Some files failed to upload. You can upload them after the session starts.");
+            } finally {
+              setUploadingFiles(false);
+            }
+          }
+
           setOpen(false);
           form.reset();
+          setPendingFiles([]);
           router.push(`/projects/${encodeURIComponent(projectName)}/sessions/${sessionName}`);
           onSuccess?.();
         },
@@ -242,6 +272,34 @@ export function CreateSessionDialog({
         },
       }
     );
+  };
+
+  const handleFileAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const newFiles: File[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (file.size > MAX_PRE_UPLOAD_SIZE) {
+        toast.error(`File "${file.name}" exceeds 10MB limit`);
+        continue;
+      }
+      // Avoid duplicates by name
+      if (!pendingFiles.some(f => f.name === file.name)) {
+        newFiles.push(file);
+      }
+    }
+    setPendingFiles(prev => [...prev, ...newFiles]);
+
+    // Reset input so the same file can be re-added after removal
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handleFileRemove = (index: number) => {
+    setPendingFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleOpenChange = (newOpen: boolean) => {
@@ -253,6 +311,7 @@ export function CreateSessionDialog({
       setCustomGitUrl("");
       setCustomBranch("main");
       setCustomPath("");
+      setPendingFiles([]);
       agentOptionsForm.reset();
     }
   };
@@ -474,6 +533,56 @@ export function CreateSessionDialog({
                 )}
               />
 
+              {/* File Attachments (pre-upload to S3) */}
+              <div className="space-y-2">
+                <FormLabel>Files (optional)</FormLabel>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  onChange={handleFileAdd}
+                  disabled={createSessionMutation.isPending || uploadingFiles}
+                  className="sr-only"
+                  aria-label="Attach files"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={createSessionMutation.isPending || uploadingFiles}
+                  className="w-full border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 rounded-lg p-4 flex flex-col items-center gap-1 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <FileUp className="h-6 w-6 text-muted-foreground/60" />
+                  <span className="text-sm font-medium">Click to attach files</span>
+                  <span className="text-xs text-muted-foreground">
+                    Files will be available in the session workspace when it starts. Max 10MB per file.
+                  </span>
+                </button>
+                {pendingFiles.length > 0 && (
+                  <div className="space-y-1">
+                    {pendingFiles.map((file, index) => (
+                      <div
+                        key={`${file.name}-${index}`}
+                        className="flex items-center justify-between text-sm p-2 bg-muted/50 rounded"
+                      >
+                        <span className="truncate mr-2">
+                          {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 flex-shrink-0"
+                          onClick={() => handleFileRemove(index)}
+                          disabled={createSessionMutation.isPending || uploadingFiles}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Advanced Agent Options (behind feature flag) */}
               {advancedAgentOptions && (
                 <Collapsible className="w-full space-y-2">
@@ -642,11 +751,11 @@ export function CreateSessionDialog({
                 >
                   Cancel
                 </Button>
-                <Button type="submit" data-testid="create-session-submit" disabled={createSessionMutation.isPending || runnerTypesLoading || runnerTypesError || modelsLoading || (modelsError && models.length === 0)}>
-                  {createSessionMutation.isPending && (
+                <Button type="submit" data-testid="create-session-submit" disabled={createSessionMutation.isPending || uploadingFiles || runnerTypesLoading || runnerTypesError || modelsLoading || (modelsError && models.length === 0)}>
+                  {(createSessionMutation.isPending || uploadingFiles) && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  Create Session
+                  {uploadingFiles ? "Uploading files..." : "Create Session"}
                 </Button>
               </DialogFooter>
             </form>
