@@ -4,6 +4,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   # Pin versions for reliable caching
   KUBECTL_VERSION: "v1.31.4"
