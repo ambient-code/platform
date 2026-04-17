@@ -13,7 +13,7 @@ dependencies = [
   "uvicorn[standard]>=0.41.0",
   "ag-ui-protocol>=0.1.13",
   "pydantic>=2.12.5",
-  "aiohttp>=3.13.3",
+  "aiohttp>=3.13.4",
   "requests>=2.32.5",
   "pyjwt>=2.11.0",
 ]
@@ -26,12 +26,16 @@ claude = [
 observability = [
   "langfuse>=3.14.5",
 ]
+mlflow-observability = [
+  "mlflow[kubernetes]>=3.11.0",
+  "opentelemetry-exporter-otlp>=1.40.0",
+]
 mcp-atlassian = [
   "mcp-atlassian>=0.21.0",
 ]
 # Install everything for the polymorphic runner
 all = [
-  "ambient-runner[claude,observability,mcp-atlassian]",
+  "ambient-runner[claude,observability,mlflow-observability,mcp-atlassian]",
 ]
 
 [dependency-groups]

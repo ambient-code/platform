@@ -1,5 +1,5 @@
 # Build stage
-FROM registry.access.redhat.com/ubi9/go-toolset:1.24 AS builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.25 AS builder
 
 WORKDIR /app
 
@@ -7,16 +7,18 @@ USER 0
 
 # Copy go mod files first for caching
 COPY go.mod go.sum* ./
-RUN go mod download
+RUN GOTOOLCHAIN=auto go mod download
 
 # Copy source code
 COPY . .
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o public-api .
+RUN GOTOOLCHAIN=auto CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o public-api .
 
 # Runtime stage
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7
+
+ARG GIT_COMMIT=unknown
 
 WORKDIR /app
 
@@ -36,4 +38,6 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -sf http://localhost:8081/health || exit 1
 
 # Run the binary
+LABEL org.opencontainers.image.revision=$GIT_COMMIT
+
 ENTRYPOINT ["./public-api"]

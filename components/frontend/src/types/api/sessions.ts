@@ -145,8 +145,8 @@ export type CreateAgenticSessionRequest = {
   // The frontend validates via ClaudeAgentOptionsForm (Zod schema) before sending.
   // TODO: Backend handler in components/backend/ must unmarshal this field and write
   // it into the AgenticSession CR spec. Until then, Go encoding/json silently drops
-  // the field. Safe while the `advanced-agent-options` flag defaults to off.
-  agentOptions?: Record<string, unknown>;
+  // the field. Safe while the `advanced-sdk-options` flag defaults to off.
+  sdkOptions?: Record<string, unknown>;
 };
 
 export type CreateAgenticSessionResponse = {

@@ -29,7 +29,7 @@ Ambient Code Platform now supports GitLab repositories alongside GitHub, enablin
 2. **Navigate to Access Tokens**:
    - Click your profile icon (top right)
    - Select "Preferences" → "Access Tokens"
-   - Or visit: https://gitlab.com/-/profile/personal_access_tokens
+   - Or visit: https://gitlab.com/-/user_settings/personal_access_tokens
 
 3. **Create Token**:
    - **Token name**: `Ambient Code Platform Integration`

@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { ArrowLeft, Loader2, AlertCircle, X, Info } from "lucide-react";
 import { getCronDescription, getNextRuns } from "@/lib/cron";
+import { formatScheduleDateTime } from "@/lib/format-timestamp";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -398,7 +399,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                     <div className="text-xs text-muted-foreground space-y-0.5">
                       <p className="font-medium">Next 3 runs:</p>
                       {nextRuns.map((date, i) => (
-                        <p key={i}>{date.toLocaleString()}</p>
+                        <p key={i}>{formatScheduleDateTime(date)}</p>
                       ))}
                     </div>
                   )}

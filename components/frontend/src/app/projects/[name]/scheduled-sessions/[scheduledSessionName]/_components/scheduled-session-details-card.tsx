@@ -1,11 +1,13 @@
 "use client";
 
+import { useMemo } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { Info } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { getCronDescription } from "@/lib/cron";
+import { getCronDescription, getNextRuns } from "@/lib/cron";
+import { formatScheduleDateTime, formatScheduleTime } from "@/lib/format-timestamp";
 import { INACTIVITY_TIMEOUT_TOOLTIP } from "@/lib/constants";
 import { useRunnerTypes } from "@/services/queries/use-runner-types";
 import { useModels } from "@/services/queries/use-models";
@@ -32,6 +34,11 @@ export function ScheduledSessionDetailsCard({
   const runnerLabel = selectedRunner?.displayName ?? runnerTypeId;
   const modelDisplay = modelLabel ?? modelId;
 
+  const nextRun = useMemo(() => {
+    const runs = getNextRuns(scheduledSession.schedule, 1);
+    return runs.length > 0 ? runs[0] : null;
+  }, [scheduledSession.schedule]);
+
   return (
     <Card>
       <CardHeader>
@@ -44,12 +51,27 @@ export function ScheduledSessionDetailsCard({
             <dd className="font-mono">{scheduledSession.name}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Schedule</dt>
+            <dt className="text-muted-foreground">Schedule (UTC)</dt>
             <dd>
               <span className="font-mono">{scheduledSession.schedule}</span>
               <span className="text-muted-foreground ml-2">
                 ({getCronDescription(scheduledSession.schedule)})
               </span>
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Next Run</dt>
+            <dd>
+              {nextRun ? (
+                <div>
+                  <span>{formatScheduleDateTime(nextRun)}</span>
+                  <span className="text-muted-foreground ml-2">
+                    ({formatDistanceToNow(nextRun, { addSuffix: true })})
+                  </span>
+                </div>
+              ) : (
+                <span className="text-muted-foreground">&mdash;</span>
+              )}
             </dd>
           </div>
           <div>
@@ -64,9 +86,16 @@ export function ScheduledSessionDetailsCard({
             <dt className="text-muted-foreground">Last Run</dt>
             <dd>
               {scheduledSession.lastScheduleTime
-                ? formatDistanceToNow(new Date(scheduledSession.lastScheduleTime), {
-                    addSuffix: true,
-                  })
+                ? (
+                  <div>
+                    <span>{formatScheduleTime(new Date(scheduledSession.lastScheduleTime))}</span>
+                    <span className="text-muted-foreground ml-2">
+                      ({formatDistanceToNow(new Date(scheduledSession.lastScheduleTime), {
+                        addSuffix: true,
+                      })})
+                    </span>
+                  </div>
+                )
                 : "Never"}
             </dd>
           </div>

@@ -620,7 +620,7 @@ describe('MESSAGES_SNAPSHOT support (compacted sessions)', () => {
     expect(md).toContain('command not found');
   });
 
-  it('prepends initial prompt with snapshot messages', () => {
+  it('prepends initial prompt with snapshot messages when not already present', () => {
     const session = makeSession({
       spec: {
         initialPrompt: 'Fix the bug',
@@ -641,6 +641,57 @@ describe('MESSAGES_SNAPSHOT support (compacted sessions)', () => {
     const doneIdx = md.indexOf('Done!');
     expect(promptIdx).toBeGreaterThan(-1);
     expect(doneIdx).toBeGreaterThan(promptIdx);
+  });
+
+  it('does not duplicate initial prompt when snapshot already contains it', () => {
+    const session = makeSession({
+      spec: {
+        initialPrompt: 'Fix the bug',
+        llmSettings: { model: 'claude-sonnet-4-20250514', temperature: 0, maxTokens: 4096 },
+        timeout: 3600,
+      },
+    });
+    const events = [
+      {
+        type: 'MESSAGES_SNAPSHOT',
+        messages: [
+          { id: 'm1', role: 'user', content: 'Fix the bug' },
+          { id: 'm2', role: 'assistant', content: 'Done!' },
+        ],
+      },
+    ];
+    const md = convertEventsToMarkdown(makeExport(events), session);
+    // Should appear exactly once
+    const firstIdx = md.indexOf('Fix the bug');
+    const secondIdx = md.indexOf('Fix the bug', firstIdx + 1);
+    expect(firstIdx).toBeGreaterThan(-1);
+    expect(secondIdx).toBe(-1);
+  });
+
+  it('deduplicates initial prompt when snapshot contains it multiple times', () => {
+    const session = makeSession({
+      spec: {
+        initialPrompt: 'Fix the bug',
+        llmSettings: { model: 'claude-sonnet-4-20250514', temperature: 0, maxTokens: 4096 },
+        timeout: 3600,
+      },
+    });
+    const events = [
+      {
+        type: 'MESSAGES_SNAPSHOT',
+        messages: [
+          { id: 'm1', role: 'user', content: 'Fix the bug' },
+          { id: 'm2', role: 'user', content: 'Fix the bug' },
+          { id: 'm3', role: 'assistant', content: 'Done!' },
+        ],
+      },
+    ];
+    const md = convertEventsToMarkdown(makeExport(events), session);
+    // Should appear exactly once
+    const firstIdx = md.indexOf('Fix the bug');
+    const secondIdx = md.indexOf('Fix the bug', firstIdx + 1);
+    expect(firstIdx).toBeGreaterThan(-1);
+    expect(secondIdx).toBe(-1);
   });
 
   it('prefers snapshot over streaming events when both present', () => {

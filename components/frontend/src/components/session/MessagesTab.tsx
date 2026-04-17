@@ -53,11 +53,12 @@ export type MessagesTabProps = {
   onAddRepository?: () => void;
   onUploadFile?: () => void;
   workflowSlot?: React.ReactNode;
+  modelSlot?: React.ReactNode;
   projectName?: string;
 };
 
 
-const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onSendToolAnswer, onInterrupt, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false, onCancelQueuedMessage, onUpdateQueuedMessage, onPasteImage, onClearQueue, agentName, onAddRepository, onUploadFile, workflowSlot, projectName }) => {
+const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chatInput, setChatInput, onSendChat, onSendToolAnswer, onInterrupt, onGoToResults, onContinue, workflowMetadata, onCommandClick, isRunActive = false, showWelcomeExperience, welcomeExperienceComponent, activeWorkflow, userHasInteracted = false, queuedMessages = [], hasRealMessages = false, onCancelQueuedMessage, onUpdateQueuedMessage, onPasteImage, onClearQueue, agentName, onAddRepository, onUploadFile, workflowSlot, modelSlot, projectName }) => {
   const [sendingChat, setSendingChat] = useState(false);
   const showSystemMessages = false;
   const [waitingDotCount, setWaitingDotCount] = useState(0);
@@ -294,6 +295,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
         onAddRepository={onAddRepository}
         onUploadFile={onUploadFile}
         workflowSlot={workflowSlot}
+        modelSlot={modelSlot}
         projectName={projectName}
       />
     </div>

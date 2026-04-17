@@ -13,6 +13,8 @@ resources:
 - backend-route.yaml
 - frontend-route.yaml
 - operator-config-crc.yaml
+- ldap-config.yaml
+- ldap-credentials.yaml
 - unleash-credentials.yaml
 # mlflow-db-credentials is applied separately (lives in redhat-ods-applications,
 # incompatible with namePrefix and namespace directives in this overlay)

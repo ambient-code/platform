@@ -37,9 +37,9 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 
 	validManifestObj := types.ModelManifest{
 		Version:      2,
-		DefaultModel: "claude-sonnet-4-5",
+		DefaultModel: "claude-sonnet-4-6",
 		ProviderDefaults: map[string]string{
-			"anthropic": "claude-sonnet-4-5",
+			"anthropic": "claude-sonnet-4-6",
 			"google":    "gemini-2.5-flash",
 		},
 		Models: []types.ModelEntry{
@@ -47,6 +47,7 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			{ID: "claude-opus-4-6", Label: "Claude Opus 4.6", VertexID: "claude-opus-4-6@default", Provider: "anthropic", Available: true, FeatureGated: true},
 			{ID: "claude-opus-4-5", Label: "Claude Opus 4.5", VertexID: "claude-opus-4-5@20251101", Provider: "anthropic", Available: true, FeatureGated: false},
 			{ID: "claude-haiku-4-5", Label: "Claude Haiku 4.5", VertexID: "claude-haiku-4-5@20251001", Provider: "anthropic", Available: true, FeatureGated: false},
+			{ID: "claude-sonnet-4-6", Label: "Claude Sonnet 4.6", VertexID: "claude-sonnet-4-6@default", Provider: "anthropic", Available: true, FeatureGated: false},
 			{ID: "gemini-2.5-flash", Label: "Gemini 2.5 Flash", VertexID: "gemini-2.5-flash", Provider: "google", Available: true, FeatureGated: false},
 			{ID: "gemini-2.5-pro", Label: "Gemini 2.5 Pro", VertexID: "gemini-2.5-pro", Provider: "google", Available: true, FeatureGated: true},
 		},
@@ -136,9 +137,9 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			var resp types.ListModelsResponse
 			err := json.Unmarshal(httpTestUtils.GetResponseRecorder().Body.Bytes(), &resp)
 			Expect(err).NotTo(HaveOccurred())
-			// With no Unleash configured, IsModelEnabled returns true, so all 6 models pass
-			Expect(resp.Models).To(HaveLen(6))
-			Expect(resp.DefaultModel).To(Equal("claude-sonnet-4-5"))
+			// With no Unleash configured, IsModelEnabled returns true, so all 7 models pass
+			Expect(resp.Models).To(HaveLen(7))
+			Expect(resp.DefaultModel).To(Equal("claude-sonnet-4-6"))
 		})
 
 		It("should include model when workspace override is true", func() {
@@ -230,9 +231,9 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			err := json.Unmarshal(httpTestUtils.GetResponseRecorder().Body.Bytes(), &resp)
 			Expect(err).NotTo(HaveOccurred())
 
-			// opus-4-6 excluded by override; the other 5 should still be present
-			// (default model + 4 non-default models via Unleash fallback which returns true when not configured)
-			Expect(resp.Models).To(HaveLen(5))
+			// opus-4-6 excluded by override; the other 6 should still be present
+			// (default model + 5 non-default models via Unleash fallback which returns true when not configured)
+			Expect(resp.Models).To(HaveLen(6))
 			ids := make([]string, len(resp.Models))
 			for i, m := range resp.Models {
 				ids[i] = m.ID
@@ -262,7 +263,7 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 
 			var foundDefault bool
 			for _, m := range resp.Models {
-				if m.ID == "claude-sonnet-4-5" && m.IsDefault {
+				if m.ID == "claude-sonnet-4-6" && m.IsDefault {
 					foundDefault = true
 					break
 				}
@@ -292,7 +293,7 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			var resp types.ListModelsResponse
 			err = json.Unmarshal(httpTestUtils.GetResponseRecorder().Body.Bytes(), &resp)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(resp.Models).To(HaveLen(5))
+			Expect(resp.Models).To(HaveLen(6))
 
 			for _, m := range resp.Models {
 				Expect(m.ID).NotTo(Equal("claude-opus-4-6"))
@@ -335,9 +336,9 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			var resp types.ListModelsResponse
 			err := json.Unmarshal(httpTestUtils.GetResponseRecorder().Body.Bytes(), &resp)
 			Expect(err).NotTo(HaveOccurred())
-			// Cached manifest has 6 models and they go through flag filtering
-			Expect(resp.Models).To(HaveLen(6))
-			Expect(resp.DefaultModel).To(Equal("claude-sonnet-4-5"))
+			// Cached manifest has 7 models and they go through flag filtering
+			Expect(resp.Models).To(HaveLen(7))
+			Expect(resp.DefaultModel).To(Equal("claude-sonnet-4-6"))
 		})
 
 		It("should return 503 when JSON is malformed and no cache", func() {
@@ -376,8 +377,8 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			for _, m := range resp.Models {
 				Expect(m.Provider).To(Equal("anthropic"), "All models should be anthropic")
 			}
-			Expect(resp.Models).To(HaveLen(4))
-			Expect(resp.DefaultModel).To(Equal("claude-sonnet-4-5"))
+			Expect(resp.Models).To(HaveLen(5))
+			Expect(resp.DefaultModel).To(Equal("claude-sonnet-4-6"))
 		})
 
 		It("should return only google models when provider=google", func() {
@@ -420,7 +421,7 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			var resp types.ListModelsResponse
 			err := json.Unmarshal(httpTestUtils.GetResponseRecorder().Body.Bytes(), &resp)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(resp.Models).To(HaveLen(6))
+			Expect(resp.Models).To(HaveLen(7))
 		})
 	})
 
@@ -459,10 +460,10 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			manifest, err := LoadManifest(path)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(manifest.Version).To(Equal(2))
-			Expect(manifest.DefaultModel).To(Equal("claude-sonnet-4-5"))
+			Expect(manifest.DefaultModel).To(Equal("claude-sonnet-4-6"))
 			Expect(manifest.ProviderDefaults).To(HaveLen(2))
 			Expect(manifest.ProviderDefaults["google"]).To(Equal("gemini-2.5-flash"))
-			Expect(manifest.Models).To(HaveLen(6))
+			Expect(manifest.Models).To(HaveLen(7))
 		})
 
 		It("should return error when file is missing", func() {
@@ -492,7 +493,7 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 			writeManifestFile(validManifest)
 			setupK8sWithOverrides()
 
-			result := isModelAvailable(context.Background(), K8sClient, "claude-sonnet-4-5", "", "test-ns")
+			result := isModelAvailable(context.Background(), K8sClient, "claude-sonnet-4-6", "", "test-ns")
 			Expect(result).To(BeTrue())
 		})
 

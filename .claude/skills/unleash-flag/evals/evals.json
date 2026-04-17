@@ -1,0 +1,20 @@
+[
+  {
+    "input": "add a feature flag for the new export feature",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "unleash-flag" },
+    "description": "Request to create a new feature flag"
+  },
+  {
+    "input": "put this feature behind a workspace flag",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "unleash-flag" },
+    "description": "Request to gate a feature with workspace-scoped flag"
+  },
+  {
+    "input": "how do I use useWorkspaceFlag?",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "unleash-flag" },
+    "description": "Question about feature flag hook usage"
+  }
+]

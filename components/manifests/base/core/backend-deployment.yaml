@@ -147,6 +147,12 @@ spec:
               key: GOOGLE_APPLICATION_CREDENTIALS
               optional: true
         # LDAP configuration (optional - autocomplete gated by ldap.autocomplete.enabled feature flag)
+        - name: LDAP_SRV_DOMAIN
+          valueFrom:
+            configMapKeyRef:
+              name: ldap-config
+              key: LDAP_SRV_DOMAIN
+              optional: true
         - name: LDAP_URL
           valueFrom:
             configMapKeyRef:
@@ -165,11 +171,23 @@ spec:
               name: ldap-config
               key: LDAP_GROUP_BASE_DN
               optional: true
-        - name: LDAP_SKIP_TLS_VERIFY
+        - name: LDAP_BIND_DN
           valueFrom:
             configMapKeyRef:
               name: ldap-config
-              key: LDAP_SKIP_TLS_VERIFY
+              key: LDAP_BIND_DN
+              optional: true
+        - name: LDAP_BIND_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ldap-credentials
+              key: LDAP_BIND_PASSWORD
+              optional: true
+        - name: LDAP_CA_CERT_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: ldap-config
+              key: LDAP_CA_CERT_PATH
               optional: true
         # Unleash feature flags (optional - all flags disabled when not set)
         - name: UNLEASH_URL
@@ -246,6 +264,10 @@ spec:
         - name: agent-registry
           mountPath: /config/registry
           readOnly: true
+        # Red Hat Root CA cert
+        - name: ldap-ca-cert
+          mountPath: /etc/pki/custom-ca
+          readOnly: true
       volumes:
       - name: backend-state
         persistentVolumeClaim:
@@ -272,6 +294,11 @@ spec:
         configMap:
           name: ambient-agent-registry
           optional: true  # Don't fail if ConfigMap not yet created
+      # Red Hat Root CA cert
+      - name: ldap-ca-cert
+        configMap:
+          name: ldap-ca-cert
+          optional: true
 
 ---
 apiVersion: v1

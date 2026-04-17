@@ -106,7 +106,7 @@ Follow the [GitLab PAT Setup Guide](./gitlab-token-setup.md) with these self-hos
 
 **Access Token Page URL**:
 ```
-https://gitlab.company.com/-/profile/personal_access_tokens
+https://gitlab.company.com/-/user_settings/personal_access_tokens
 ```
 (Replace `gitlab.company.com` with your instance hostname)
 

@@ -3,6 +3,7 @@
 import { formatDistanceToNow } from "date-fns";
 import { Plus, RefreshCw, MoreVertical, Play, Pause, Pencil, PlayCircle, Trash2, Calendar, Loader2, AlertCircle } from "lucide-react";
 import { getCronDescription } from "@/lib/cron";
+import { formatScheduleTime } from "@/lib/format-timestamp";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -123,7 +124,7 @@ export function SchedulesSection({ projectName }: SchedulesSectionProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead className="min-w-[180px]">Name</TableHead>
-                  <TableHead>Schedule</TableHead>
+                  <TableHead>Schedule (UTC)</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="hidden md:table-cell">Last Run</TableHead>
                   <TableHead className="w-[50px]">Actions</TableHead>
@@ -165,7 +166,14 @@ export function SchedulesSection({ projectName }: SchedulesSectionProps) {
                       </TableCell>
                       <TableCell className="hidden md:table-cell">
                         {ss.lastScheduleTime
-                          ? formatDistanceToNow(new Date(ss.lastScheduleTime), { addSuffix: true })
+                          ? (
+                            <div>
+                              <div className="text-sm">{formatScheduleTime(new Date(ss.lastScheduleTime))}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {formatDistanceToNow(new Date(ss.lastScheduleTime), { addSuffix: true })}
+                              </div>
+                            </div>
+                          )
                           : <span className="text-muted-foreground">Never</span>}
                       </TableCell>
                       <TableCell>
