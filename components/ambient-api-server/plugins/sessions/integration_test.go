@@ -612,7 +612,7 @@ func TestSessionLlmDefaults(t *testing.T) {
 	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 
 	Expect(created.LlmModel).NotTo(BeNil(), "llm_model should be defaulted")
-	Expect(*created.LlmModel).To(Equal("sonnet"))
+	Expect(*created.LlmModel).To(Equal("claude-sonnet-4-6"))
 	Expect(created.LlmTemperature).NotTo(BeNil(), "llm_temperature should be defaulted")
 	Expect(*created.LlmTemperature).To(BeNumerically("~", 0.7, 0.001))
 	Expect(created.LlmMaxTokens).NotTo(BeNil(), "llm_max_tokens should be defaulted")
@@ -621,7 +621,7 @@ func TestSessionLlmDefaults(t *testing.T) {
 	fetched, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdGet(ctx, *created.Id).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
-	Expect(*fetched.LlmModel).To(Equal("sonnet"))
+	Expect(*fetched.LlmModel).To(Equal("claude-sonnet-4-6"))
 	Expect(*fetched.LlmTemperature).To(BeNumerically("~", 0.7, 0.001))
 	Expect(*fetched.LlmMaxTokens).To(Equal(int32(4000)))
 }

@@ -1,0 +1,70 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "If the file being edited matches 'components/frontend/**/*.tsx' and the new content contains raw HTML elements like '<button', '<input', '<select', '<dialog', or '<textarea' (not as part of a Shadcn component import), remind: 'Use Shadcn UI components from @/components/ui/ instead of raw HTML elements.'"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "If the file being edited matches 'components/frontend/src/app/**/*.tsx' or 'components/frontend/src/components/**/*.tsx' and the new content contains a 'fetch(' call that is not inside a services/api/ file, remind: 'Use React Query hooks from @/services/queries/ instead of manual fetch() calls in components.'"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "If the file being edited matches 'components/backend/handlers/**/*.go' and the new content uses 'DynamicClient.Resource' or 'K8sClient' directly for List or Get operations (not after a GetK8sClientsForRequest call), remind: 'User operations MUST use GetK8sClientsForRequest(c), not the backend service account.'"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "If the file being edited matches 'components/backend/**/*.go' or 'components/operator/**/*.go' (excluding *_test.go files) and the new content contains 'panic(', remind: 'Do not use panic() in production code. Return fmt.Errorf with context instead.'"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "If the file being edited is under '.claude/skills/', remind: 'Follow the Anthropic skill-creator standard. Required: pushy description, under 500 lines, explanation over rigidity, evals in evals/evals.json.'"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "If the file being written matches 'components/frontend/src/app/**/page.tsx' or 'components/backend/handlers/**/*.go' and it is a NEW file (not editing an existing one), remind: 'New feature code detected. Consider gating behind a feature flag. Use /unleash-flag to set one up.'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/claude-hooks/stop-review.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

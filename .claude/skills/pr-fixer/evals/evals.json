@@ -1,0 +1,38 @@
+[
+  {
+    "input": "/pr-fixer 1234",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "pr-fixer", "args": "1234" },
+    "description": "Direct slash command invocation"
+  },
+  {
+    "input": "fix PR 1234",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "pr-fixer", "args": "1234" },
+    "description": "Natural language trigger to fix a PR"
+  },
+  {
+    "input": "run the pr fixer on PR #987",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "pr-fixer", "args": "987" },
+    "description": "Natural language with hash prefix on PR number"
+  },
+  {
+    "input": "fix https://github.com/org/repo/pull/1234",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "pr-fixer", "args": "1234" },
+    "description": "URL-form PR reference — extracts PR number from full GitHub URL"
+  },
+  {
+    "input": "please fix PR 1234.",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "pr-fixer", "args": "1234" },
+    "description": "Punctuation-trailing PR number — trailing period must not be captured"
+  },
+  {
+    "input": "/pr-fixer",
+    "expected_tool_call": "None",
+    "expected_args": {},
+    "description": "Missing required PR number should not invoke skill"
+  }
+]

@@ -95,3 +95,9 @@ images:
 - name: quay.io/ambient_code/vteam_state_sync:latest
   newName: quay.io/ambient_code/vteam_state_sync
   newTag: latest
+- name: ghcr.io/ambient-code/observability
+  newName: ghcr.io/ambient-code/observability
+  newTag: latest
+- name: ghcr.io/ambient-code/observability:latest
+  newName: ghcr.io/ambient-code/observability
+  newTag: latest

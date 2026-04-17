@@ -17,6 +17,7 @@ When multiple users collaborate in a shared session, **each message uses the sen
 | Shared session | User A | User B | User B |
 
 **Example:**
+
 - User A creates a session and adds User B as an editor
 - Both User A and User B have configured their GitHub integrations
 - User A sends "Create a PR" -- the PR is created using User A's GitHub token
@@ -25,10 +26,12 @@ When multiple users collaborate in a shared session, **each message uses the sen
 ### Automated Sessions
 
 **API Keys:** Always use the **creator's credentials** (the user who created the API key).
+
 - GitHub commits show the creator's username
 - The creator is responsible for all actions performed via their API key
 
 **Scheduled Sessions:** Always use the **creator's credentials** (the user who scheduled the session).
+
 - The session runs as the creating user even when they are offline
 - The creator is accountable for all scheduled session behavior
 

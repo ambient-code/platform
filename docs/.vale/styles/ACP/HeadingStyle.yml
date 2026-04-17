@@ -1,0 +1,7 @@
+extends: existence
+message: "Don't end headings with punctuation: '%s'."
+level: error
+scope: heading
+nonword: true
+tokens:
+  - '[.!?;:]$'

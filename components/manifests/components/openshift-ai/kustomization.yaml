@@ -5,6 +5,9 @@ resources:
 - namespace.yaml
 - operatorgroup.yaml
 - subscription.yaml
+- service-mesh-namespace.yaml
+- service-mesh-operatorgroup.yaml
+- service-mesh-subscription.yaml
 - dsci.yaml
 - datasciencecluster.yaml
 - mlflow.yaml

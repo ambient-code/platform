@@ -4,8 +4,6 @@ metadata:
   name: default-dsci
 spec:
   applicationsNamespace: redhat-ods-applications
-  serviceMesh:
-    managementState: Removed
   trustedCABundle:
     customCABundle: ""
     managementState: Managed

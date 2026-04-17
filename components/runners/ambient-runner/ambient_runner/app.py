@@ -222,6 +222,10 @@ def add_ambient_endpoints(
     app.include_router(interrupt_router)
     app.include_router(health_router)
 
+    from ambient_runner.endpoints.model import router as model_router
+
+    app.include_router(model_router)
+
     # Optional platform endpoints
     if enable_capabilities:
         from ambient_runner.endpoints.capabilities import router as cap_router

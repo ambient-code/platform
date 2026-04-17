@@ -13,6 +13,7 @@ resources:
 - unleash-deployment.yaml
 - agent-registry-configmap.yaml
 - limitrange.yaml
+- observability-dashboard-deployment.yaml
 
 configMapGenerator:
 - name: ambient-models

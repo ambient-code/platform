@@ -182,7 +182,7 @@ class TestLangfuseInitialization:
         call_kwargs = mock_propagate.call_args[1]
         assert call_kwargs["user_id"] == manager.user_id
         assert call_kwargs["session_id"] == manager.session_id
-        assert "claude-code" in call_kwargs["tags"]
+        assert "runner:claude-agent-sdk" in call_kwargs["tags"]
 
         assert "Session tracking enabled" in caplog.text
 
@@ -291,7 +291,7 @@ class TestStartTurn:
         mock_client.start_as_current_observation.assert_called_once()
         call_kwargs = mock_client.start_as_current_observation.call_args[1]
         assert call_kwargs["as_type"] == "generation"
-        assert call_kwargs["name"] == "claude_interaction"
+        assert call_kwargs["name"] == "llm_interaction"
         assert call_kwargs["model"] == "claude-3-5-sonnet"
 
         assert manager._current_turn_generation is not None

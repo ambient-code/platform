@@ -7,6 +7,10 @@ const (
 	// AmbientVertexSecretName is the name of the secret containing Vertex AI credentials
 	AmbientVertexSecretName = "ambient-vertex"
 
+	// TrustedCABundleConfigMapName is the CA bundle ConfigMap injected by OpenShift or provisioned
+	// manually on private-CA clusters. See issue #1247.
+	TrustedCABundleConfigMapName = "trusted-ca-bundle"
+
 	// CopiedFromAnnotation is the annotation key used to track secrets copied by the operator
 	CopiedFromAnnotation = "vteam.ambient-code/copied-from"
 )

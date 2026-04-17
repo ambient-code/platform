@@ -51,7 +51,7 @@ jobs:
             {"name":"frontend","context":"./components/frontend","image":"quay.io/ambient_code/vteam_frontend","dockerfile":"./components/frontend/Dockerfile"},
             {"name":"backend","context":"./components/backend","image":"quay.io/ambient_code/vteam_backend","dockerfile":"./components/backend/Dockerfile"},
             {"name":"operator","context":"./components/operator","image":"quay.io/ambient_code/vteam_operator","dockerfile":"./components/operator/Dockerfile"},
-            {"name":"ambient-runner","context":"./components/runners","image":"quay.io/ambient_code/vteam_claude_runner","dockerfile":"./components/runners/ambient-runner/Dockerfile"},
+            {"name":"ambient-runner","context":"./components/runners/ambient-runner","image":"quay.io/ambient_code/vteam_claude_runner","dockerfile":"./components/runners/ambient-runner/Dockerfile"},
             {"name":"state-sync","context":"./components/runners/state-sync","image":"quay.io/ambient_code/vteam_state_sync","dockerfile":"./components/runners/state-sync/Dockerfile"},
             {"name":"public-api","context":"./components/public-api","image":"quay.io/ambient_code/vteam_public_api","dockerfile":"./components/public-api/Dockerfile"},
             {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/vteam_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"}
@@ -124,7 +124,9 @@ jobs:
           platforms: ${{ matrix.arch.platform }}
           push: true
           tags: ${{ matrix.component.image }}:${{ github.sha }}-${{ matrix.arch.suffix }}
-          build-args: AMBIENT_VERSION=${{ github.sha }}
+          build-args: |
+            AMBIENT_VERSION=${{ github.sha }}
+            GIT_COMMIT=${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
 
@@ -137,7 +139,9 @@ jobs:
           platforms: ${{ matrix.arch.platform }}
           push: true
           tags: ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}-${{ matrix.arch.suffix }}
-          build-args: AMBIENT_VERSION=${{ github.sha }}
+          build-args: |
+            AMBIENT_VERSION=${{ github.sha }}
+            GIT_COMMIT=${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
 
@@ -200,13 +204,19 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install oc
-        uses: redhat-actions/oc-installer@v1
+        uses: redhat-actions/openshift-tools-installer@v1
         with:
-          oc_version: 'latest'
+          oc: latest
 
       - name: Log in to OpenShift Cluster
         run: |
-          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
+          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }}
+
+      - name: Deploy Service Mesh operator via OLM
+        run: |
+          oc apply -f components/manifests/components/openshift-ai/service-mesh-namespace.yaml
+          oc apply -f components/manifests/components/openshift-ai/service-mesh-operatorgroup.yaml
+          oc apply -f components/manifests/components/openshift-ai/service-mesh-subscription.yaml
 
       - name: Deploy RHOAI operator via OLM
         run: |
@@ -280,14 +290,27 @@ jobs:
           || oc exec -n ambient-code deploy/postgresql -- \
             psql -U postgres -c "CREATE DATABASE mlflow"
 
-      - name: Verify mlflow-db-credentials secret exists
+      - name: Ensure mlflow-db-credentials secret exists
         run: |
-          if ! oc get secret mlflow-db-credentials -n redhat-ods-applications &>/dev/null; then
-            echo "::error::Secret mlflow-db-credentials not found in redhat-ods-applications."
-            echo "::error::Create it before applying the MLflow resource."
-            echo "::error::See components/manifests/base/mlflow-db-credentials-secret.yaml.example"
-            exit 1
-          fi
+          echo "Reconciling mlflow-db-credentials from postgresql-credentials..."
+          DB_USER=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.user}' | base64 -d)
+          DB_PASS=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.password}' | base64 -d)
+          DB_HOST=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.host}' | base64 -d)
+          DB_PORT=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.port}' | base64 -d)
+          ENC_USER=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$DB_USER")
+          ENC_PASS=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$DB_PASS")
+          ENCODED_URI="postgresql://${ENC_USER}:${ENC_PASS}@${DB_HOST}.ambient-code.svc.cluster.local:${DB_PORT}/mlflow?sslmode=disable"
+          oc create namespace redhat-ods-applications --dry-run=client -o yaml | oc apply -f -
+          oc apply -f - <<EOF
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: mlflow-db-credentials
+            namespace: redhat-ods-applications
+          type: Opaque
+          stringData:
+            uri: "${ENCODED_URI}"
+          EOF
 
       - name: Deploy MLflow instance
         run: |
@@ -302,13 +325,13 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install oc
-        uses: redhat-actions/oc-installer@v1
+        uses: redhat-actions/openshift-tools-installer@v1
         with:
-          oc_version: 'latest'
+          oc: latest
 
       - name: Log in to OpenShift Cluster
         run: |
-          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
+          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }}
 
       - name: Apply RBAC and CRD manifests
         run: |
@@ -329,9 +352,9 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install oc
-        uses: redhat-actions/oc-installer@v1
+        uses: redhat-actions/openshift-tools-installer@v1
         with:
-          oc_version: 'latest'
+          oc: latest
 
       - name: Install kustomize
         run: |
@@ -341,7 +364,7 @@ jobs:
 
       - name: Log in to OpenShift Cluster
         run: |
-          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
+          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }}
 
       - name: Update kustomization with SHA image tags
         working-directory: components/manifests/overlays/production
@@ -404,9 +427,9 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install oc
-        uses: redhat-actions/oc-installer@v1
+        uses: redhat-actions/openshift-tools-installer@v1
         with:
-          oc_version: 'latest'
+          oc: latest
 
       - name: Install kustomize
         run: |
@@ -416,7 +439,7 @@ jobs:
 
       - name: Log in to OpenShift Cluster
         run: |
-          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
+          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }}
 
       - name: Update kustomization with SHA image tags
         working-directory: components/manifests/overlays/production

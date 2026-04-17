@@ -8,6 +8,11 @@ Integrations connect external services to the Ambient Code Platform, giving the 
 
 Each integration appears on the **Integrations** page with a connection status indicator:
 
+<figure class="screenshot-pair">
+  <img class="screenshot-light" src="/platform/images/screenshots/integrations-page-light.png" alt="Integrations page" />
+  <img class="screenshot-dark" src="/platform/images/screenshots/integrations-page-dark.png" alt="Integrations page" />
+</figure>
+
 - **Connected** -- credentials are valid and the service is reachable.
 - **Disconnected** -- no credentials configured, or the existing ones have expired.
 
