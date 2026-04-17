@@ -13,6 +13,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var activePhases = map[string]bool{"Pending": true, "Creating": true, "Running": true}
+
 var Cmd = &cobra.Command{
 	Use:   "agent",
 	Short: "Manage project-scoped agents",
@@ -24,7 +26,8 @@ Subcommands:
   create      Create an agent in a project
   update      Update an agent's name, prompt, labels, or annotations
   delete      Delete an agent
-  start       Start a new session for an agent
+  start       Start a session for an agent (idempotent)
+  stop        Stop the running session for an agent (idempotent)
   start-preview  Preview start context (dry run)`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cmd.Help()
@@ -59,6 +62,29 @@ func resolveAgent(ctx context.Context, client *sdkclient.Client, projectID, agen
 		return pa2.ID, nil
 	}
 	return pa.ID, nil
+}
+
+func resolveAgentFull(ctx context.Context, client *sdkclient.Client, projectID, agentArg string) (*sdktypes.Agent, error) {
+	if agentArg == "" {
+		return nil, fmt.Errorf("agent name or ID is required")
+	}
+	pa, err := client.Agents().GetInProject(ctx, projectID, agentArg)
+	if err != nil {
+		pa, err = client.Agents().GetByProject(ctx, projectID, agentArg)
+		if err != nil {
+			return nil, fmt.Errorf("agent %q not found in project %q", agentArg, projectID)
+		}
+	}
+	return pa, nil
+}
+
+func allAgentsInProject(ctx context.Context, client *sdkclient.Client, projectID string) ([]sdktypes.Agent, error) {
+	opts := sdktypes.NewListOptions().Size(500).Build()
+	list, err := client.Agents().ListByProject(ctx, projectID, opts)
+	if err != nil {
+		return nil, fmt.Errorf("list agents: %w", err)
+	}
+	return list.Items, nil
 }
 
 var listArgs struct {
@@ -352,15 +378,22 @@ var agentStartArgs struct {
 	projectID    string
 	prompt       string
 	outputFormat string
+	all          bool
 }
 
 var agentStartCmd = &cobra.Command{
-	Use:   "start <name-or-id>",
-	Short: "Start a new session for an agent",
-	Args:  cobra.ExactArgs(1),
+	Use:   "start [name-or-id]",
+	Short: "Start a session for an agent (idempotent)",
+	Long: `Start a session for an agent. If the agent already has an active
+session (Pending, Creating, or Running), returns it without creating a
+new one. Use --all / -A to start all agents in the project.
+
+This operation is idempotent — calling it multiple times is safe.`,
+	Args: cobra.MaximumNArgs(1),
 	Example: `  acpctl agent start api
   acpctl agent start api --prompt "fix the bug"
-  acpctl agent start <id> --project-id <id>`,
+  acpctl agent start --all
+  acpctl agent start -A --prompt "run tests"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectID, err := resolveProject(agentStartArgs.projectID)
 		if err != nil {
@@ -380,30 +413,67 @@ var agentStartCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 		defer cancel()
 
+		if agentStartArgs.all {
+			if len(args) > 0 {
+				return fmt.Errorf("cannot specify agent name with --all")
+			}
+			return startAllAgents(ctx, cmd, client, projectID)
+		}
+
+		if len(args) == 0 {
+			return fmt.Errorf("agent name or ID is required (or use --all)")
+		}
+
 		agentID, err := resolveAgent(ctx, client, projectID, args[0])
 		if err != nil {
 			return err
 		}
 
-		resp, err := client.Agents().Start(ctx, projectID, agentID, agentStartArgs.prompt)
-		if err != nil {
-			return fmt.Errorf("start agent: %w", err)
-		}
-
-		if agentStartArgs.outputFormat == "json" {
-			printer := output.NewPrinter(output.FormatJSON, cmd.OutOrStdout())
-			if resp.Session != nil {
-				return printer.PrintJSON(resp.Session)
-			}
-			return printer.PrintJSON(resp)
-		}
-		if resp.Session != nil {
-			fmt.Fprintf(cmd.OutOrStdout(), "session/%s started (phase: %s)\n", resp.Session.ID, resp.Session.Phase)
-		} else {
-			fmt.Fprintf(cmd.OutOrStdout(), "agent/%s started\n", args[0])
-		}
-		return nil
+		return startSingleAgent(ctx, cmd, client, projectID, agentID, args[0])
 	},
+}
+
+func startSingleAgent(ctx context.Context, cmd *cobra.Command, client *sdkclient.Client, projectID, agentID, displayName string) error {
+	resp, err := client.Agents().Start(ctx, projectID, agentID, agentStartArgs.prompt)
+	if err != nil {
+		return fmt.Errorf("start agent: %w", err)
+	}
+
+	if agentStartArgs.outputFormat == "json" {
+		printer := output.NewPrinter(output.FormatJSON, cmd.OutOrStdout())
+		if resp.Session != nil {
+			return printer.PrintJSON(resp.Session)
+		}
+		return printer.PrintJSON(resp)
+	}
+	if resp.Session != nil {
+		fmt.Fprintf(cmd.OutOrStdout(), "session/%s started (phase: %s)\n", resp.Session.ID, resp.Session.Phase)
+	} else {
+		fmt.Fprintf(cmd.OutOrStdout(), "agent/%s started\n", displayName)
+	}
+	return nil
+}
+
+func startAllAgents(ctx context.Context, cmd *cobra.Command, client *sdkclient.Client, projectID string) error {
+	agents, err := allAgentsInProject(ctx, client, projectID)
+	if err != nil {
+		return err
+	}
+	if len(agents) == 0 {
+		fmt.Fprintln(cmd.OutOrStdout(), "no agents in project")
+		return nil
+	}
+	var failed int
+	for _, a := range agents {
+		if err := startSingleAgent(ctx, cmd, client, projectID, a.ID, a.Name); err != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "agent/%s: %v\n", a.Name, err)
+			failed++
+		}
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d of %d agents failed to start", failed, len(agents))
+	}
+	return nil
 }
 
 var startPreviewArgs struct {
@@ -506,6 +576,110 @@ var sessionsCmd = &cobra.Command{
 	},
 }
 
+var agentStopArgs struct {
+	projectID string
+	all       bool
+}
+
+var agentStopCmd = &cobra.Command{
+	Use:   "stop [name-or-id]",
+	Short: "Stop the running session for an agent (idempotent)",
+	Long: `Stop the active session for an agent. If the agent has no active
+session, prints a message and succeeds. Use --all / -A to stop all
+agents in the project.
+
+This operation is idempotent — calling it multiple times is safe.`,
+	Args: cobra.MaximumNArgs(1),
+	Example: `  acpctl agent stop api
+  acpctl agent stop --all
+  acpctl agent stop -A`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		projectID, err := resolveProject(agentStopArgs.projectID)
+		if err != nil {
+			return err
+		}
+
+		client, err := connection.NewClientFromConfig()
+		if err != nil {
+			return err
+		}
+
+		cfg, err := config.Load()
+		if err != nil {
+			return err
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
+		defer cancel()
+
+		if agentStopArgs.all {
+			if len(args) > 0 {
+				return fmt.Errorf("cannot specify agent name with --all")
+			}
+			return stopAllAgents(ctx, cmd, client, projectID)
+		}
+
+		if len(args) == 0 {
+			return fmt.Errorf("agent name or ID is required (or use --all)")
+		}
+
+		agent, err := resolveAgentFull(ctx, client, projectID, args[0])
+		if err != nil {
+			return err
+		}
+
+		return stopSingleAgent(ctx, cmd, client, agent)
+	},
+}
+
+func stopSingleAgent(ctx context.Context, cmd *cobra.Command, client *sdkclient.Client, agent *sdktypes.Agent) error {
+	if agent.CurrentSessionID == "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "agent/%s has no active session\n", agent.Name)
+		return nil
+	}
+
+	sess, err := client.Sessions().Get(ctx, agent.CurrentSessionID)
+	if err != nil {
+		fmt.Fprintf(cmd.OutOrStdout(), "agent/%s session/%s not found — already cleaned up\n", agent.Name, agent.CurrentSessionID)
+		return nil
+	}
+
+	if !activePhases[sess.Phase] {
+		fmt.Fprintf(cmd.OutOrStdout(), "agent/%s session/%s already %s\n", agent.Name, sess.ID, sess.Phase)
+		return nil
+	}
+
+	stopped, err := client.Sessions().Stop(ctx, sess.ID)
+	if err != nil {
+		return fmt.Errorf("stop agent/%s session/%s: %w", agent.Name, sess.ID, err)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "agent/%s session/%s stopped (phase: %s)\n", agent.Name, stopped.ID, stopped.Phase)
+	return nil
+}
+
+func stopAllAgents(ctx context.Context, cmd *cobra.Command, client *sdkclient.Client, projectID string) error {
+	agents, err := allAgentsInProject(ctx, client, projectID)
+	if err != nil {
+		return err
+	}
+	if len(agents) == 0 {
+		fmt.Fprintln(cmd.OutOrStdout(), "no agents in project")
+		return nil
+	}
+	var failed int
+	for i := range agents {
+		if err := stopSingleAgent(ctx, cmd, client, &agents[i]); err != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "agent/%s: %v\n", agents[i].Name, err)
+			failed++
+		}
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d of %d agents failed to stop", failed, len(agents))
+	}
+	return nil
+}
+
 func init() {
 	Cmd.AddCommand(listCmd)
 	Cmd.AddCommand(getCmd)
@@ -513,6 +687,7 @@ func init() {
 	Cmd.AddCommand(updateCmd)
 	Cmd.AddCommand(deleteCmd)
 	Cmd.AddCommand(agentStartCmd)
+	Cmd.AddCommand(agentStopCmd)
 	Cmd.AddCommand(startPreviewCmd)
 	Cmd.AddCommand(sessionsCmd)
 
@@ -542,6 +717,10 @@ func init() {
 	agentStartCmd.Flags().StringVar(&agentStartArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
 	agentStartCmd.Flags().StringVar(&agentStartArgs.prompt, "prompt", "", "Task prompt for this run")
 	agentStartCmd.Flags().StringVarP(&agentStartArgs.outputFormat, "output", "o", "", "Output format: json")
+	agentStartCmd.Flags().BoolVarP(&agentStartArgs.all, "all", "A", false, "Start all agents in the project")
+
+	agentStopCmd.Flags().StringVar(&agentStopArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	agentStopCmd.Flags().BoolVarP(&agentStopArgs.all, "all", "A", false, "Stop all agents in the project")
 
 	startPreviewCmd.Flags().StringVar(&startPreviewArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
 
