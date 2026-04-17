@@ -2361,6 +2361,8 @@ func sanitizeK8sName(name string) (string, error) {
 		return "", fmt.Errorf("invalid Kubernetes resource name: %q", name)
 	}
 	return name, nil
+}
+
 // deleteIntelligenceFromAPIServer calls the API server directly to delete the
 // intelligence record for a repo. Used as fallback when the runner pod is
 // unreachable (session stopped/failed).
