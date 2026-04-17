@@ -12,6 +12,7 @@ description: How to update existing shared sessions for per-message credential b
 ## Impact
 
 If you have shared sessions created before this update:
+
 - Messages sent by editors will now use **their own credentials** instead of the session owner's
 - If an editor has not configured the required integrations, operations that need those credentials will fail
 

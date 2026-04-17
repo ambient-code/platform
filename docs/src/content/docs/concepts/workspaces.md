@@ -127,7 +127,7 @@ Choose a token lifetime based on your use case:
 | 1 year | 31,536,000 | Long-running integrations |
 | No expiration | -- | Persistent service keys that you rotate manually |
 
-4. Click **Create Key**.
+1. Click **Create Key**.
 
 ### Copying the key
 

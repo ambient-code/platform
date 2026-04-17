@@ -1,0 +1,164 @@
+{
+  "description": "Canonical list of Claude Agent SDK ClaudeAgentOptions fields",
+  "generatedFrom": "claude-agent-sdk (PyPI)",
+  "generatedAt": "2026-04-16T04:32:37.832878+00:00",
+  "sdkVersion": "0.1.59",
+  "options": {
+    "tools": {
+      "type": "list[str] | claude_agent_sdk.types.ToolsPreset | None",
+      "required": false
+    },
+    "allowed_tools": {
+      "type": "list[str]",
+      "required": false
+    },
+    "system_prompt": {
+      "type": "str | claude_agent_sdk.types.SystemPromptPreset | claude_agent_sdk.types.SystemPromptFile | None",
+      "required": false
+    },
+    "mcp_servers": {
+      "type": "dict[str, claude_agent_sdk.types.McpStdioServerConfig | claude_agent_sdk.types.McpSSEServerConfig | claude_agent_sdk.types.McpHttpServerConfig | claude_agent_sdk.types.McpSdkServerConfig] | str | pathlib._local.Path",
+      "required": false
+    },
+    "permission_mode": {
+      "type": "typing.Optional[typing.Literal['default', 'acceptEdits', 'plan', 'bypassPermissions', 'dontAsk', 'auto']]",
+      "required": false
+    },
+    "continue_conversation": {
+      "type": "<class 'bool'>",
+      "required": false
+    },
+    "resume": {
+      "type": "str | None",
+      "required": false
+    },
+    "session_id": {
+      "type": "str | None",
+      "required": false
+    },
+    "max_turns": {
+      "type": "int | None",
+      "required": false
+    },
+    "max_budget_usd": {
+      "type": "float | None",
+      "required": false
+    },
+    "disallowed_tools": {
+      "type": "list[str]",
+      "required": false
+    },
+    "model": {
+      "type": "str | None",
+      "required": false
+    },
+    "fallback_model": {
+      "type": "str | None",
+      "required": false
+    },
+    "betas": {
+      "type": "list[typing.Literal['context-1m-2025-08-07']]",
+      "required": false
+    },
+    "permission_prompt_tool_name": {
+      "type": "str | None",
+      "required": false
+    },
+    "cwd": {
+      "type": "str | pathlib._local.Path | None",
+      "required": false
+    },
+    "cli_path": {
+      "type": "str | pathlib._local.Path | None",
+      "required": false
+    },
+    "settings": {
+      "type": "str | None",
+      "required": false
+    },
+    "add_dirs": {
+      "type": "list[str | pathlib._local.Path]",
+      "required": false
+    },
+    "env": {
+      "type": "dict[str, str]",
+      "required": false
+    },
+    "extra_args": {
+      "type": "dict[str, str | None]",
+      "required": false
+    },
+    "max_buffer_size": {
+      "type": "int | None",
+      "required": false
+    },
+    "debug_stderr": {
+      "type": "typing.Any",
+      "required": false
+    },
+    "stderr": {
+      "type": "collections.abc.Callable[[str], None] | None",
+      "required": false
+    },
+    "can_use_tool": {
+      "type": "collections.abc.Callable[[str, dict[str, typing.Any], claude_agent_sdk.types.ToolPermissionContext], collections.abc.Awaitable[claude_agent_sdk.types.PermissionResultAllow | claude_agent_sdk.types.PermissionResultDeny]] | None",
+      "required": false
+    },
+    "hooks": {
+      "type": "dict[typing.Union[typing.Literal['PreToolUse'], typing.Literal['PostToolUse'], typing.Literal['PostToolUseFailure'], typing.Literal['UserPromptSubmit'], typing.Literal['Stop'], typing.Literal['SubagentStop'], typing.Literal['PreCompact'], typing.Literal['Notification'], typing.Literal['SubagentStart'], typing.Literal['PermissionRequest']], list[claude_agent_sdk.types.HookMatcher]] | None",
+      "required": false
+    },
+    "user": {
+      "type": "str | None",
+      "required": false
+    },
+    "include_partial_messages": {
+      "type": "<class 'bool'>",
+      "required": false
+    },
+    "fork_session": {
+      "type": "<class 'bool'>",
+      "required": false
+    },
+    "agents": {
+      "type": "dict[str, claude_agent_sdk.types.AgentDefinition] | None",
+      "required": false
+    },
+    "setting_sources": {
+      "type": "list[typing.Literal['user', 'project', 'local']] | None",
+      "required": false
+    },
+    "sandbox": {
+      "type": "claude_agent_sdk.types.SandboxSettings | None",
+      "required": false
+    },
+    "plugins": {
+      "type": "list[claude_agent_sdk.types.SdkPluginConfig]",
+      "required": false
+    },
+    "max_thinking_tokens": {
+      "type": "int | None",
+      "required": false
+    },
+    "thinking": {
+      "type": "claude_agent_sdk.types.ThinkingConfigAdaptive | claude_agent_sdk.types.ThinkingConfigEnabled | claude_agent_sdk.types.ThinkingConfigDisabled | None",
+      "required": false
+    },
+    "effort": {
+      "type": "typing.Optional[typing.Literal['low', 'medium', 'high', 'max']]",
+      "required": false
+    },
+    "output_format": {
+      "type": "dict[str, typing.Any] | None",
+      "required": false
+    },
+    "enable_file_checkpointing": {
+      "type": "<class 'bool'>",
+      "required": false
+    },
+    "task_budget": {
+      "type": "claude_agent_sdk.types.TaskBudget | None",
+      "required": false
+    }
+  }
+}

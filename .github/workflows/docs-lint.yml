@@ -1,0 +1,49 @@
+name: Docs Lint
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+
+jobs:
+  lint:
+    name: Lint Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: '22'
+        cache: 'npm'
+        cache-dependency-path: docs/package-lock.json
+
+    - name: Install Vale
+      run: |
+        curl -sfL https://github.com/errata-ai/vale/releases/download/v3.12.1/vale_3.12.1_Linux_64-bit.tar.gz | tar xz -C /usr/local/bin vale
+
+    - name: Install npm tools
+      run: npm install -g markdownlint-cli2 cspell
+
+    - name: Run Vale
+      working-directory: docs
+      run: vale src/content/docs/
+
+    - name: Run markdownlint
+      working-directory: docs
+      run: markdownlint-cli2 "src/content/docs/**/*.md"
+
+    - name: Run cspell
+      working-directory: docs
+      run: cspell lint --no-progress "src/content/docs/**/*.md"
+
+    - name: Build docs (structural validation)
+      working-directory: docs
+      run: |
+        npm ci
+        npx playwright install --with-deps chromium
+        npm run build

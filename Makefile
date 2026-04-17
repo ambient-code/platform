@@ -966,6 +966,18 @@ test-e2e-setup: ## Install e2e test dependencies
 
 e2e-setup: test-e2e-setup ## Alias for test-e2e-setup (backward compatibility)
 
+##@ Documentation Quality
+
+docs-lint: ## Lint documentation content (Vale + markdownlint + cspell)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Linting documentation..."
+	@cd docs && vale src/content/docs/ && \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Vale passed"
+	@cd docs && npx markdownlint-cli2 "src/content/docs/**/*.md" && \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) markdownlint passed"
+	@cd docs && npx cspell lint --no-progress "src/content/docs/**/*.md" && \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) cspell passed"
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) All docs lint checks passed"
+
 ##@ Documentation Screenshots
 
 screenshots: ## Capture documentation screenshots against running kind cluster

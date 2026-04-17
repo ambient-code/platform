@@ -99,6 +99,26 @@ app/
         page.tsx           # Uses session-card
 ```
 
+## Feature Flags
+
+**FORBIDDEN:** `useFlag()` from `@unleash/proxy-client-react` — it doesn't work with workspace overrides.
+
+**REQUIRED:** `useWorkspaceFlag(projectName, flagName)` for workspace-scoped flags (shared hook, 15s staleTime). Evaluates: ConfigMap override > Unleash default.
+
+```typescript
+// ❌ BAD
+import { useFlag } from "@unleash/proxy-client-react"
+const enabled = useFlag("my-feature")
+
+// ✅ GOOD
+import { useWorkspaceFlag } from "@/services/queries/feature-flags"
+const enabled = useWorkspaceFlag(projectName, "my-feature")
+```
+
+If a specific page needs instant flag freshness, use `useQuery` with `evaluateFeatureFlag()` directly and set `staleTime: 0, refetchOnMount: 'always'` — don't modify the shared hook.
+
+New flags go in `components/manifests/base/core/flags.json` with `scope:workspace` tag. Use `/unleash-flag` to scaffold.
+
 ## Common Patterns
 
 ### Page Structure
@@ -156,6 +176,37 @@ export function useCreateSession(projectName: string) {
   })
 }
 ```
+
+## Session Creation: Adding Options to the + Menu
+
+The `+` button dropdown in `new-session-view.tsx` is the single entry point for all per-session configuration.
+
+**File:** `src/app/projects/[name]/sessions/[sessionName]/components/new-session-view.tsx`
+
+### Adding a Boolean Toggle
+
+1. Add state: `const [myToggle, setMyToggle] = useState(false)`
+2. Add `DropdownMenuCheckboxItem` after `<DropdownMenuSeparator />`
+3. Wire into `handleSubmit` → `onCreateSession({ ..., myToggle: myToggle || undefined })`
+4. Update `NewSessionViewProps.onCreateSession` config type
+5. Wire through `page.tsx` into the mutation payload
+6. Bump `MENU_VERSION` constant (triggers the discovery dot)
+
+### Adding a Form-Heavy Config
+
+1. Create form component (e.g., `components/my-config.tsx`) with save/preview/dirty-guard
+2. Add `DropdownMenuItem` that opens a `Dialog`
+3. Render the `Dialog` outside the dropdown (at component root level)
+4. Wire saved values into `handleSubmit` → `onCreateSession`
+5. Bump `MENU_VERSION` constant
+
+### Discovery Dot
+
+`MENU_VERSION` constant (date string) + `useLocalStorage` with key `acp-menu-seen-version`. Bump the version when adding new menu items — the dot appears until the user opens the menu.
+
+### Backend Wiring
+
+New options flow: `onCreateSession` config → `page.tsx` → `createSessionMutation.mutate()` → POST `/api/projects/{project}/agentic-sessions` → backend handler → CR spec. For booleans, add to `CreateAgenticSessionRequest` in `types/session.go`. For complex options, serialize to env var on the CR and parse in the runner.
 
 ## Pre-Commit Checklist
 

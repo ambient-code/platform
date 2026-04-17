@@ -105,6 +105,15 @@ if !found || err != nil {
 4. **Update operator:** Handle new field in reconciliation
 5. **Test:** Create sample CR with new field
 
+## OOTB Workflows
+
+Workflows live in `github.com/ambient-code/workflows`. Each has `.ambient/ambient.json` with: `name`, `description`, `systemPrompt`, `startupPrompt`, `greeting`.
+
+- `greeting` = user-facing text displayed instantly with typewriter effect (no LLM call)
+- `startupPrompt` = instruction to Claude (reserved for future use, not currently sent)
+- Backend caches OOTB workflows for 5 min (`ootbCacheTTL`) — restart backend to force refresh
+- Backend parses `ambient.json` via GitHub API — invalid JSON silently fails (returns empty fields)
+
 ## Pre-Commit Checklist
 
 - [ ] All user operations use `GetK8sClientsForRequest`

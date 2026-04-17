@@ -90,7 +90,8 @@ Benchmark notes:
 
 ## Critical Conventions
 
-Rules that apply across ALL components. Per-component details live in component DEVELOPMENT.md files.
+Cross-cutting rules that apply across ALL components. Component-specific conventions live in
+component DEVELOPMENT.md files (see [BOOKMARKS.md](BOOKMARKS.md) > Component Development Guides).
 
 - **User token auth required**: All user-facing API ops use `GetK8sClientsForRequest(c)`, never the backend service account
 - **No tokens in logs/errors/responses**: Use `len(token)` for logging, generic messages to users
@@ -98,7 +99,23 @@ Rules that apply across ALL components. Per-component details live in component 
 - **No `panic()` in production**: Return explicit `fmt.Errorf` with context
 - **No `any` types in frontend**: Use proper types, `unknown`, or generic constraints
 - **Feature flags strongly recommended**: Gate new features behind Unleash flags. Use `/unleash-flag` to set up
+- **No new CRDs**: Existing CRDs (AgenticSession, ProjectSettings) are grandfathered. For new persistent storage, confirm with the user whether to use repo files or PostgreSQL — do not default to K8s custom resources
 - **Conventional commits**: Squashed on merge to `main`
+- **Design for extensibility before adding items**: When building infrastructure that will have
+  things added to it (menus, config schemas, API surfaces), build the extensibility mechanism
+  first — conditional rendering, feature-flag gating, discovery. Retrofitting causes rework.
+- **Verify contracts and references**: Before building on an assumption (env var exists, path is
+  correct, URL is reachable), verify the contract. After moving anything, grep scripts, workflows,
+  manifests, and configs — not just source code.
+- **CI/CD security**: Never use `pull_request_target` (grants write access to forked PR code).
+  Never hardcode tokens — use `actions/create-github-app-token`. For automated pipelines:
+  discovery → validation → PR → auto-merge.
+- **Full-stack awareness**: Before building a new pipeline, check if an existing one can be
+  reused. Auth/credential/API changes must update ALL consumers (backend, CLI, SDK, runner,
+  sidecar) in the same PR.
+- **Separate configuration from code**: Config changes must not require code changes. Externalize
+  via env vars, ConfigMaps, manifests, or feature flags. If a value varies across environments
+  or changes over time, it's config, not code.
 
 Component-specific conventions:
 - Backend: [DEVELOPMENT.md](components/backend/DEVELOPMENT.md), [ERROR_PATTERNS.md](components/backend/ERROR_PATTERNS.md), [K8S_CLIENT_PATTERNS.md](components/backend/K8S_CLIENT_PATTERNS.md)

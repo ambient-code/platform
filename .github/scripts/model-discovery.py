@@ -42,6 +42,7 @@ DEFAULT_MANIFEST = (
     / "components"
     / "manifests"
     / "base"
+    / "core"
     / "models.json"
 )
 
