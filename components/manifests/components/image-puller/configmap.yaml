@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: acp-image-puller-config
+  namespace: acp-image-puller
+  labels:
+    app.kubernetes.io/part-of: acp-image-puller
+data:
+  # Managed by the pre-pull-images GHA job during releases.
+  # Format: semicolon-separated name=image pairs.
+  IMAGES: ""
+  CACHING_INTERVAL_HOURS: "1"
+  DAEMONSET_NAME: "acp-image-puller-ds"
+  NAMESPACE: "acp-image-puller"
+  CACHING_MEMORY_REQUEST: "1Mi"
+  CACHING_MEMORY_LIMIT: "5Mi"
+  CACHING_CPU_REQUEST: "5m"
+  CACHING_CPU_LIMIT: "10m"
+  NODE_SELECTOR: '{}'
+  IMAGE_PULL_SECRETS: "quay-pull-secret"
+  TOLERATIONS: '[]'
+  AFFINITY: '{}'
