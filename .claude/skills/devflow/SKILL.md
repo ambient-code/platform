@@ -35,14 +35,14 @@ Then re-read this file before continuing.
 1. Ticket (optional)
 2. Branch (from ticket name if available)
 3. Spec change (load + modify the component's .spec.md)
-4. Commit spec → push → PR against `alpha`
+4. Commit spec → push → PR against `main`
 5. Review (agentic: thorough PR review; human: desired but optional)
 6. On spec acceptance → load the component's .guide.md (the implementation workflow)
 7. Branch (from ticket name if available)
 8. Commit order:
    a. Guide/skill/workflow self-improvement changes (1 commit)
    b. Code changes grouped by component
-9. Push → PR against `alpha`
+9. Push → PR against `main`
 10. Review (human + bot comments; local review too)
 11. On merge → await quay.io image
 12. Update gitops repository with new image SHA (Skill TBD)
@@ -95,7 +95,7 @@ git commit -m "spec(<component>): <description of spec change>"
 
 ```bash
 git push origin <branch-name> -u
-gh pr create --base alpha --title "spec(<component>): <description>" --body "Spec change for review."
+gh pr create --base main --title "spec(<component>): <description>" --body "Spec change for review."
 ```
 
 - **Agentic workflow:** thorough review occurs in the PR. Feedback is incorporated. On approval/merge, the spec change becomes requirements.
@@ -157,8 +157,8 @@ Commits are ordered deliberately:
 ```bash
 git push origin <branch-name> -u
 
-# Agentic: new PR against alpha
-gh pr create --base alpha --title "feat(<component>): <description>" --body "Implementation of <spec change>."
+# Agentic: new PR against main
+gh pr create --base main --title "feat(<component>): <description>" --body "Implementation of <spec change>."
 
 # Human: push adds to existing PR, or create new PR
 ```
@@ -177,7 +177,7 @@ gh pr create --base alpha --title "feat(<component>): <description>" --body "Imp
 
 ### 5a. Await Image Build
 
-After merge to `alpha`, images are built and pushed to `quay.io/ambient_code/`. Watch for the image:
+After merge to `main`, images are built and pushed to `quay.io/ambient_code/`. Watch for the image:
 
 ```bash
 # Check if image exists for a given SHA
