@@ -15,6 +15,7 @@ import (
 	"ambient-code-backend/k8s"
 	"ambient-code-backend/ldap"
 	"ambient-code-backend/server"
+	"ambient-code-backend/storage"
 	"ambient-code-backend/websocket"
 
 	"github.com/joho/godotenv"
@@ -138,14 +139,24 @@ func main() {
 		return server.Namespace
 	}
 
-	// Initialize LDAP client (optional - requires LDAP_URL to be set)
+	// Initialize LDAP client (optional - requires LDAP_URL or LDAP_SRV_DOMAIN)
 	// Access is gated by the "ldap.autocomplete.enabled" Unleash feature flag.
-	if ldapURL := os.Getenv("LDAP_URL"); ldapURL != "" {
-		ldapBaseDN := getEnvOrDefault("LDAP_BASE_DN", "ou=users,dc=redhat,dc=com")
+	ldapURL := os.Getenv("LDAP_URL")
+	ldapSRVDomain := os.Getenv("LDAP_SRV_DOMAIN")
+	if ldapURL != "" || ldapSRVDomain != "" {
+		ldapBaseDN := getEnvOrDefault("LDAP_BASE_DN", "cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com")
 		ldapGroupBaseDN := os.Getenv("LDAP_GROUP_BASE_DN") // optional, derived from LDAP_BASE_DN if empty
-		skipTLS := os.Getenv("LDAP_SKIP_TLS_VERIFY") == "true"
-		handlers.LDAPClient = ldap.NewClient(ldapURL, ldapBaseDN, ldapGroupBaseDN, skipTLS)
-		log.Printf("LDAP client initialized: %s (base DN: %s, group base DN: %s, skipTLSVerify: %v)", ldapURL, ldapBaseDN, ldapGroupBaseDN, skipTLS)
+		ldapBindDN := os.Getenv("LDAP_BIND_DN")
+		ldapBindPassword := os.Getenv("LDAP_BIND_PASSWORD")
+		ldapCACertPath := os.Getenv("LDAP_CA_CERT_PATH")
+		if ldapBindDN == "" || ldapBindPassword == "" {
+			log.Printf("LDAP disabled: missing bind credentials")
+		} else if ldapClient, err := ldap.NewClient(ldapURL, ldapSRVDomain, ldapBaseDN, ldapGroupBaseDN, ldapBindDN, ldapBindPassword, ldapCACertPath); err != nil {
+			log.Printf("LDAP disabled: %v", err)
+		} else {
+			handlers.LDAPClient = ldapClient
+			log.Printf("LDAP client configured (URL: %s, SRV domain: %s, base DN: %s)", ldapURL, ldapSRVDomain, ldapBaseDN)
+		}
 	}
 
 	// Initialize GitHub auth handlers
@@ -157,6 +168,16 @@ func main() {
 	handlers.GetOpenShiftProjectResource = k8s.GetOpenShiftProjectResource
 	handlers.K8sClientProjects = server.K8sClient         // Backend SA client for namespace operations
 	handlers.DynamicClientProjects = server.DynamicClient // Backend SA dynamic client for Project operations
+
+	// Initialize S3 storage for pre-upload file support (optional - degrades gracefully)
+	if s3Cfg, err := storage.LoadS3ConfigFromEnv(); err != nil {
+		log.Printf("S3 storage not configured (pre-upload disabled): %v", err)
+	} else if s3Client, err := storage.NewS3Client(s3Cfg); err != nil {
+		log.Printf("Failed to initialize S3 client (pre-upload disabled): %v", err)
+	} else {
+		handlers.S3Storage = s3Client
+		log.Printf("S3 storage initialized for pre-upload support (endpoint: %s, bucket: %s)", s3Cfg.Endpoint, s3Cfg.Bucket)
+	}
 
 	// Initialize session handlers
 	handlers.GetAgenticSessionV1Alpha1Resource = k8s.GetAgenticSessionV1Alpha1Resource

@@ -21,6 +21,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.GitVersion=${AMBIE
 # Final stage
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 
+ARG GIT_COMMIT=unknown
+
 RUN microdnf install -y git && microdnf clean all
 WORKDIR /app
 
@@ -39,4 +41,6 @@ USER 1001
 EXPOSE 8080
 
 # Command to run the executable
+LABEL org.opencontainers.image.revision=$GIT_COMMIT
+
 CMD ["./main"]

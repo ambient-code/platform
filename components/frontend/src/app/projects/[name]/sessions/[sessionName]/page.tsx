@@ -30,6 +30,7 @@ import { TaskTranscriptViewer } from "./components/task-transcript-viewer";
 import { ExplorerPanel } from "./components/explorer/explorer-panel";
 import { SessionSettingsModal } from "./components/session-settings-modal";
 import { WorkflowSelector } from "./components/workflow-selector";
+import { LiveModelSelector } from "./components/live-model-selector";
 import { useExplorerState } from "./hooks/use-explorer-state";
 import { useFileTabs } from "./hooks/use-file-tabs";
 
@@ -58,6 +59,7 @@ import {
   useCurrentUser,
   sessionKeys,
   useRunnerTypes,
+  useSwitchSessionModel,
 } from "@/services/queries";
 import { useCapabilities } from "@/services/queries/use-capabilities";
 import {
@@ -188,13 +190,13 @@ export default function ProjectSessionDetailPage({
   // Fetch runner capabilities and derive agent display name
   const { data: capabilities } = useCapabilities(projectName, sessionName, phase === "Running");
   const { data: runnerTypes } = useRunnerTypes(projectName);
-  const agentName = useMemo(() => {
+  const currentRunner = useMemo(() => {
     if (capabilities?.framework && runnerTypes) {
-      const matched = runnerTypes.find((rt) => rt.id === capabilities.framework);
-      if (matched) return matched.displayName;
+      return runnerTypes.find((rt) => rt.id === capabilities.framework);
     }
     return undefined;
   }, [capabilities?.framework, runnerTypes]);
+  const agentName = currentRunner?.displayName;
 
   // Track the current Langfuse trace ID for feedback association
   const [langfuseTraceId, setLangfuseTraceId] = useState<string | null>(null);
@@ -215,6 +217,7 @@ export default function ProjectSessionDetailPage({
   const aguiSendMessage = aguiStream.sendMessage;
   const aguiInterrupt = aguiStream.interrupt;
   const isRunActive = aguiStream.isRunActive;
+  const switchModelMutation = useSwitchSessionModel();
   const aguiConnectRef = useRef(aguiStream.connect);
 
   // Keep connect ref up to date
@@ -334,13 +337,15 @@ export default function ProjectSessionDetailPage({
     return () => clearInterval(pollInterval);
   }, [sessionQueue.messages, session?.status?.phase, refetchSession]);
 
-  // Process queued messages when session becomes Running
+  // Process queued messages when session becomes Running or when an active run finishes.
+  // This handles two cases:
+  // 1. Startup: session transitions to "Running" phase and queued messages exist
+  // 2. Mid-task: user queued messages during an active run, and the run just finished
   useEffect(() => {
     const phase = session?.status?.phase;
     const unsentMessages = sessionQueue.messages.filter(m => !m.sentAt);
 
-    if (phase === "Running" && unsentMessages.length > 0) {
-      // Session is now running, send all queued messages
+    if (phase === "Running" && !isRunActive && unsentMessages.length > 0) {
       const processMessages = async () => {
         for (const messageItem of unsentMessages) {
           try {
@@ -357,7 +362,7 @@ export default function ProjectSessionDetailPage({
       processMessages();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.status?.phase, sessionQueue.messages.length]);
+  }, [session?.status?.phase, sessionQueue.messages.length, isRunActive]);
 
   // Repo management mutations
   const addRepoMutation = useMutation({
@@ -738,6 +743,17 @@ export default function ProjectSessionDetailPage({
       workflowManagement.activateWorkflow(workflow, session?.status?.phase);
     }
   };
+
+  const handleModelSwitch = useCallback((model: string) => {
+    switchModelMutation.mutate(
+      { projectName, sessionName, model },
+      {
+        onError: (error: Error) => {
+          toast.error(`Failed to switch model: ${error.message}`);
+        },
+      },
+    );
+  }, [projectName, sessionName, switchModelMutation]);
 
   // Phase 1: convert committed messages + streaming tool cards into display format.
   // Does NOT depend on currentMessage / currentReasoning so it skips the full
@@ -1413,6 +1429,12 @@ export default function ProjectSessionDetailPage({
       return;
     }
 
+    // If a run is active, queue the message to be sent when the current run finishes
+    if (isRunActive) {
+      sessionQueue.addMessage(finalMessage);
+      return;
+    }
+
     try {
       await aguiSendMessage(finalMessage);
       // Invalidate session caches so sidebar/list reflect the new activity
@@ -1578,113 +1600,148 @@ export default function ProjectSessionDetailPage({
     );
   }
 
-  // Chat/FileViewer/TaskTranscript content rendering helper
+  // all tab content is rendered simultaneously and toggled via CSS `hidden`
+  // so scroll position, input state, and react query cache are preserved across tab switches
   const renderMainContent = () => {
-    if (fileTabs.activeTab.type === "task") {
-      const task = aguiState.backgroundTasks.get(fileTabs.activeTab.taskId);
-      return (
-        <TaskTranscriptViewer
-          projectName={projectName}
-          sessionName={sessionName}
-          taskId={fileTabs.activeTab.taskId}
-          task={task}
-        />
-      );
-    }
+    const isChatActive = fileTabs.activeTab.type === "chat";
 
-    if (fileTabs.activeTab.type === "file") {
-      return (
-        <FileViewer
-          projectName={projectName}
-          sessionName={sessionName}
-          filePath={fileTabs.activeTab.path}
-          sessionPhase={phase}
-        />
-      );
-    }
-
-    // Chat view
     return (
-      <Card className="relative flex-1 flex flex-col overflow-hidden py-0 border-0 rounded-none">
-        <CardContent className="px-6 pt-0 pb-0 flex-1 flex flex-col overflow-hidden">
-          {repoChanging && (
-            <div className="absolute inset-0 bg-background/90 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
-              <Alert className="max-w-md mx-4">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <AlertTitle>Updating Repositories...</AlertTitle>
-                <AlertDescription>
-                  <p>Please wait while repositories are being updated. This may take 10-20 seconds...</p>
-                </AlertDescription>
-              </Alert>
-            </div>
-          )}
+      <>
+        {/* chat -- always mounted, hidden when a file/task tab is active */}
+        <div className={cn("relative flex-1 flex flex-col overflow-hidden", !isChatActive && "hidden")}>
+          <Card className="relative flex-1 flex flex-col overflow-hidden py-0 border-0 rounded-none">
+            <CardContent className="px-6 pt-0 pb-0 flex-1 flex flex-col overflow-hidden">
+              {repoChanging && (
+                <div className="absolute inset-0 bg-background/90 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
+                  <Alert className="max-w-md mx-4">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <AlertTitle>Updating Repositories...</AlertTitle>
+                    <AlertDescription>
+                      <p>Please wait while repositories are being updated. This may take 10-20 seconds...</p>
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              )}
 
-          <div className="relative flex flex-col flex-1 overflow-hidden">
-            {(phase === "Creating" || phase === "Pending") && (
-              <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10">
-                <SessionStartingEvents
+              <div className="relative flex flex-col flex-1 overflow-hidden">
+                {(phase === "Creating" || phase === "Pending") && (
+                  <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10">
+                    <SessionStartingEvents
+                      projectName={projectName}
+                      sessionName={sessionName}
+                    />
+                  </div>
+                )}
+                <FeedbackProvider
                   projectName={projectName}
                   sessionName={sessionName}
-                />
-              </div>
-            )}
-            <FeedbackProvider
-              projectName={projectName}
-              sessionName={sessionName}
-              username={currentUser?.username || currentUser?.displayName || "anonymous"}
-              initialPrompt={session?.spec?.initialPrompt}
-              activeWorkflow={workflowManagement.activeWorkflow || undefined}
-              messages={streamMessages}
-              traceId={langfuseTraceId || undefined}
-              messageFeedback={aguiState.messageFeedback}
-            >
-              <MessagesTab
-                session={session}
-                streamMessages={streamMessages}
-                chatInput={chatInput}
-                setChatInput={setChatInput}
-                onSendChat={() => Promise.resolve(sendChat())}
-                onSendToolAnswer={sendToolAnswer}
-                onInterrupt={aguiInterrupt}
-                onGoToResults={() => {}}
-                onContinue={handleContinue}
-                workflowMetadata={workflowMetadata}
-                onCommandClick={handleCommandClick}
-                isRunActive={isRunActive}
-                queuedMessages={sessionQueue.messages}
-                hasRealMessages={hasRealMessages}
-                onCancelQueuedMessage={sessionQueue.cancelMessage}
-                onUpdateQueuedMessage={sessionQueue.updateMessage}
-                onClearQueue={sessionQueue.clearMessages}
-                agentName={agentName}
-                onAddRepository={handleOpenContextModal}
-                onUploadFile={handleOpenUploadModal}
-                projectName={projectName}
-                workflowSlot={
-                  <WorkflowSelector
-                    sessionPhase={session?.status?.phase}
-                    activeWorkflow={workflowManagement.activeWorkflow}
-                    activeWorkflowDetails={
-                      workflowManagement.activeWorkflow === "custom" && session?.spec?.activeWorkflow
-                        ? {
-                            gitUrl: session.spec.activeWorkflow.gitUrl,
-                            branch: session.spec.activeWorkflow.branch || "main",
-                            path: session.spec.activeWorkflow.path || "",
-                          }
-                        : undefined
+                  username={currentUser?.username || currentUser?.displayName || "anonymous"}
+                  initialPrompt={session?.spec?.initialPrompt}
+                  activeWorkflow={workflowManagement.activeWorkflow || undefined}
+                  messages={streamMessages}
+                  traceId={langfuseTraceId || undefined}
+                  messageFeedback={aguiState.messageFeedback}
+                >
+                  <MessagesTab
+                    session={session}
+                    streamMessages={streamMessages}
+                    chatInput={chatInput}
+                    setChatInput={setChatInput}
+                    onSendChat={() => Promise.resolve(sendChat())}
+                    onSendToolAnswer={sendToolAnswer}
+                    onInterrupt={aguiInterrupt}
+                    onGoToResults={() => {}}
+                    onContinue={handleContinue}
+                    workflowMetadata={workflowMetadata}
+                    onCommandClick={handleCommandClick}
+                    isRunActive={isRunActive}
+                    queuedMessages={sessionQueue.messages}
+                    hasRealMessages={hasRealMessages}
+                    onCancelQueuedMessage={sessionQueue.cancelMessage}
+                    onUpdateQueuedMessage={sessionQueue.updateMessage}
+                    onClearQueue={sessionQueue.clearMessages}
+                    agentName={agentName}
+                    onAddRepository={handleOpenContextModal}
+                    onUploadFile={handleOpenUploadModal}
+                    projectName={projectName}
+                    modelSlot={
+                      phase === "Running" ? (
+                        <LiveModelSelector
+                          projectName={projectName}
+                          currentModel={session?.spec?.llmSettings?.model || ""}
+                          provider={currentRunner?.provider}
+                          disabled={isRunActive}
+                          switching={switchModelMutation.isPending}
+                          onSelect={handleModelSwitch}
+                        />
+                      ) : undefined
                     }
-                    selectedWorkflow={workflowManagement.selectedWorkflow}
-                    workflowActivating={workflowManagement.workflowActivating}
-                    ootbWorkflows={ootbWorkflows}
-                    onWorkflowChange={handleWorkflowChange}
-                    onLoadCustom={() => setCustomWorkflowDialogOpen(true)}
+                    workflowSlot={
+                      <WorkflowSelector
+                        sessionPhase={session?.status?.phase}
+                        activeWorkflow={workflowManagement.activeWorkflow}
+                        activeWorkflowDetails={
+                          workflowManagement.activeWorkflow === "custom" && session?.spec?.activeWorkflow
+                            ? {
+                                gitUrl: session.spec.activeWorkflow.gitUrl,
+                                branch: session.spec.activeWorkflow.branch || "main",
+                                path: session.spec.activeWorkflow.path || "",
+                              }
+                            : undefined
+                        }
+                        selectedWorkflow={workflowManagement.selectedWorkflow}
+                        workflowActivating={workflowManagement.workflowActivating}
+                        ootbWorkflows={ootbWorkflows}
+                        onWorkflowChange={handleWorkflowChange}
+                        onLoadCustom={() => setCustomWorkflowDialogOpen(true)}
+                      />
+                    }
                   />
-                }
+                </FeedbackProvider>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* file tabs -- one FileViewer per open tab, only the active one is visible */}
+        {fileTabs.openTabs.map((tab) => {
+          const isActive = fileTabs.activeTab.type === "file" && fileTabs.activeTab.path === tab.path;
+          return (
+            <div
+              key={tab.path}
+              className={cn("flex-1 flex flex-col overflow-hidden", !isActive && "hidden")}
+            >
+              <FileViewer
+                projectName={projectName}
+                sessionName={sessionName}
+                filePath={tab.path}
+                sessionPhase={phase}
+                isActive={isActive}
               />
-            </FeedbackProvider>
-          </div>
-        </CardContent>
-      </Card>
+            </div>
+          );
+        })}
+
+        {/* task tabs -- same pattern */}
+        {fileTabs.openTaskTabs.map((tab) => {
+          const isActive = fileTabs.activeTab.type === "task" && fileTabs.activeTab.taskId === tab.taskId;
+          const task = aguiState.backgroundTasks.get(tab.taskId);
+          return (
+            <div
+              key={tab.taskId}
+              className={cn("flex-1 flex flex-col overflow-hidden", !isActive && "hidden")}
+            >
+              <TaskTranscriptViewer
+                projectName={projectName}
+                sessionName={sessionName}
+                taskId={tab.taskId}
+                task={task}
+                isActive={isActive}
+              />
+            </div>
+          );
+        })}
+      </>
     );
   };
 

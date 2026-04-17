@@ -100,7 +100,7 @@ export function EditableSessionName({
           }}
           placeholder="New session..."
           disabled={isSaving}
-          className={cn('h-auto py-1 px-2 w-auto min-w-[300px] flex-1 !text-[1em] !font-[inherit] !leading-[inherit]', className)}
+          className={cn('h-auto py-1 px-2 w-auto min-w-[200px] sm:min-w-[300px] flex-1 !text-[1em] !font-[inherit] !leading-[inherit]', className)}
         />
         <Button
           onClick={handleSave}

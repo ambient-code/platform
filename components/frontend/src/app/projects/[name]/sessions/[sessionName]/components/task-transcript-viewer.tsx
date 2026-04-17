@@ -15,6 +15,8 @@ type TaskTranscriptViewerProps = {
   sessionName: string
   taskId: string
   task?: BackgroundTask
+  /** whether this tab is the currently visible one (gates polling to avoid background fetches) */
+  isActive?: boolean
 }
 
 export function TaskTranscriptViewer({
@@ -22,13 +24,14 @@ export function TaskTranscriptViewer({
   sessionName,
   taskId,
   task,
+  isActive = true,
 }: TaskTranscriptViewerProps) {
   const isRunning = task?.status === "running"
 
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["task-output", projectName, sessionName, taskId],
     queryFn: () => getTaskOutput(projectName, sessionName, taskId),
-    refetchInterval: isRunning ? 5000 : false,
+    refetchInterval: isActive && isRunning ? 5000 : false,
   })
 
   const messages = useMemo(

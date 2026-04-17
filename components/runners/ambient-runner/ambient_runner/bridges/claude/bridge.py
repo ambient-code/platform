@@ -10,10 +10,12 @@ Owns the entire Claude session lifecycle:
 """
 
 import asyncio
+import json
 import logging
 import os
 import time
-from typing import Any, AsyncIterator, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 from ag_ui.core import (
     BaseEvent,
@@ -38,6 +40,89 @@ logger = logging.getLogger(__name__)
 
 # Maximum stderr lines kept in ring buffer for error reporting
 _MAX_STDERR_LINES = 50
+
+# Keys the platform controls — user SDK_OPTIONS cannot override these.
+_SDK_OPTIONS_DENYLIST = frozenset(
+    {
+        "cwd",
+        "resume",
+        "mcp_servers",
+        "setting_sources",
+        "stderr",
+        "continue_conversation",
+        "add_dirs",
+        "api_key",
+        "cli_path",
+        "env",
+    }
+)
+
+
+def _parse_sdk_options(
+    raw: str,
+    existing_system_prompt: str | dict | None = None,
+) -> dict[str, Any]:
+    """Parse the SDK_OPTIONS JSON string and return filtered options.
+
+    - Empty/whitespace input returns ``{}``.
+    - Invalid JSON logs a warning and returns ``{}``.
+    - Non-object JSON (e.g. array) logs a warning and returns ``{}``.
+    - Denylisted keys are dropped with per-key warnings.
+    - ``system_prompt`` (truthy string) is merged into the existing
+      platform prompt under a ``## Custom Instructions`` heading.
+    - ``None`` values are silently dropped.
+    """
+    if not raw or not raw.strip():
+        return {}
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        logger.warning("SDK_OPTIONS contains invalid JSON, ignoring: %s", exc)
+        return {}
+
+    if not isinstance(parsed, dict):
+        logger.warning(
+            "SDK_OPTIONS must be a JSON object, got %s — ignoring",
+            type(parsed).__name__,
+        )
+        return {}
+
+    result: dict[str, Any] = {}
+    for key, value in parsed.items():
+        if key in _SDK_OPTIONS_DENYLIST:
+            logger.warning("SDK_OPTIONS key '%s' is denied — skipping", key)
+            continue
+
+        if key == "system_prompt":
+            if not value or not isinstance(value, str) or not value.strip():
+                continue
+            # Merge into existing system prompt
+            suffix = f"\n\n## Custom Instructions\n{value}"
+            if isinstance(existing_system_prompt, dict):
+                merged = dict(existing_system_prompt)
+                if "append" in merged:
+                    merged["append"] = merged["append"] + suffix
+                elif "text" in merged:
+                    merged["text"] = merged["text"] + suffix
+                else:
+                    # Unknown dict shape — add an "append" field
+                    merged["append"] = suffix
+                result["system_prompt"] = merged
+            elif isinstance(existing_system_prompt, str):
+                result["system_prompt"] = existing_system_prompt + suffix
+            else:
+                # No existing prompt — use the custom instructions directly
+                result["system_prompt"] = f"## Custom Instructions\n{value}"
+            continue
+
+        if value is not None:
+            result[key] = value
+
+    if result:
+        logger.info("Applied %d SDK option(s) from SDK_OPTIONS", len(result))
+
+    return result
 
 
 class ClaudeBridge(PlatformBridge):
@@ -77,11 +162,15 @@ class ClaudeBridge(PlatformBridge):
     # ------------------------------------------------------------------
 
     def capabilities(self) -> FrameworkCapabilities:
-        has_tracing = (
-            self._obs is not None
-            and hasattr(self._obs, "langfuse_client")
-            and self._obs.langfuse_client is not None
-        )
+        tracing_label = None
+        if self._obs is not None:
+            cap = getattr(self._obs, "tracing_capability_label", None)
+            if isinstance(cap, str) and cap:
+                tracing_label = cap
+            elif getattr(self._obs, "langfuse_client", None):
+                tracing_label = "langfuse"
+            elif getattr(self._obs, "mlflow_tracing_active", False):
+                tracing_label = "mlflow"
         return FrameworkCapabilities(
             framework="claude-agent-sdk",
             agent_features=[
@@ -93,7 +182,7 @@ class ClaudeBridge(PlatformBridge):
             ],
             file_system=True,
             mcp=True,
-            tracing="langfuse" if has_tracing else None,
+            tracing=tracing_label,
             session_persistence=True,
         )
 
@@ -171,7 +260,7 @@ class ClaudeBridge(PlatformBridge):
             thread_id, None
         ) or self._session_manager.get_session_id(thread_id)
         sdk_options = self._adapter.build_options(
-            input_data, thread_id=thread_id, resume_from=saved_session_id
+            input_data, resume_from=saved_session_id
         )
         worker = await self._session_manager.get_or_create(
             thread_id, sdk_options, api_key
@@ -247,7 +336,7 @@ class ClaudeBridge(PlatformBridge):
 
         self._first_run = False
 
-    async def interrupt(self, thread_id: Optional[str] = None) -> None:
+    async def interrupt(self, thread_id: str | None = None) -> None:
         """Interrupt the running session for a given thread."""
         if not self._session_manager:
             raise RuntimeError("No active session manager")
@@ -267,7 +356,7 @@ class ClaudeBridge(PlatformBridge):
         if self._obs:
             self._obs.record_interrupt()
 
-    async def stop_task(self, task_id: str, thread_id: Optional[str] = None) -> None:
+    async def stop_task(self, task_id: str, thread_id: str | None = None) -> None:
         """Stop a background task (subagent) by ID."""
         if not self._session_manager:
             raise RuntimeError("No active session manager")
@@ -663,6 +752,15 @@ class ClaudeBridge(PlatformBridge):
             options["add_dirs"] = self._add_dirs
         if self._configured_model:
             options["model"] = self._configured_model
+
+        # Apply user SDK_OPTIONS (from CR env vars) with denylist filtering
+        sdk_options_raw = os.getenv("SDK_OPTIONS", "")
+        if sdk_options_raw:
+            user_opts = _parse_sdk_options(
+                sdk_options_raw,
+                existing_system_prompt=options.get("system_prompt"),
+            )
+            options.update(user_opts)
 
         adapter = ClaudeAgentAdapter(
             name="claude_code_runner",

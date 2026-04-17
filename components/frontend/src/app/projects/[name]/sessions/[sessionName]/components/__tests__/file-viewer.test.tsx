@@ -118,6 +118,47 @@ describe('FileViewer', () => {
     expect(downloadButtons[0].hasAttribute('disabled')).toBe(false);
   });
 
+  describe('isActive prop controls polling', () => {
+    it('polls when isActive and session is Running', () => {
+      mockUseWorkspaceFile.mockReturnValue({
+        data: 'hello',
+        isLoading: false,
+        error: null,
+      } as ReturnType<typeof useWorkspaceFile>);
+
+      render(<FileViewer {...defaultProps} sessionPhase="Running" isActive={true} />);
+
+      const opts = mockUseWorkspaceFile.mock.calls.at(-1)?.[3];
+      expect(opts?.refetchInterval).toBe(5000);
+    });
+
+    it('does not poll when isActive is false even if session is Running', () => {
+      mockUseWorkspaceFile.mockReturnValue({
+        data: 'hello',
+        isLoading: false,
+        error: null,
+      } as ReturnType<typeof useWorkspaceFile>);
+
+      render(<FileViewer {...defaultProps} sessionPhase="Running" isActive={false} />);
+
+      const opts = mockUseWorkspaceFile.mock.calls.at(-1)?.[3];
+      expect(opts?.refetchInterval).toBe(false);
+    });
+
+    it('does not poll when session is not Running regardless of isActive', () => {
+      mockUseWorkspaceFile.mockReturnValue({
+        data: 'hello',
+        isLoading: false,
+        error: null,
+      } as ReturnType<typeof useWorkspaceFile>);
+
+      render(<FileViewer {...defaultProps} sessionPhase="Completed" isActive={true} />);
+
+      const opts = mockUseWorkspaceFile.mock.calls.at(-1)?.[3];
+      expect(opts?.refetchInterval).toBe(false);
+    });
+  });
+
   describe('download uses direct link instead of triggerDownload', () => {
     it('downloads via direct workspace API link, not triggerDownload', () => {
       mockUseWorkspaceFile.mockReturnValue({

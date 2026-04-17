@@ -40,11 +40,14 @@ Open **OpenShift Console → Observe → Metrics** and query:
 If you want custom dashboards:
 
 ```bash
-# Add Grafana overlay
+make add-grafana
+
+# Or manually
+kubectl apply -f components/manifests/observability/overlays/with-grafana/grafana-pvc.yaml
 kubectl apply -k components/manifests/observability/overlays/with-grafana/
 ```
 
-**Adds**: Grafana (additional 128MB) - still uses OpenShift Prometheus
+**Adds**: Grafana (additional 128MB) with pre-provisioned dashboards - still uses OpenShift Prometheus
 
 **Access Grafana**:
 ```bash
@@ -53,10 +56,10 @@ oc create route edge grafana --service=grafana -n ambient-code
 
 # Get URL
 oc get route grafana -n ambient-code -o jsonpath='{.spec.host}'
-# Login: admin/admin
+# Login: admin/admin (change on first login)
 ```
 
-**Import dashboard**: Upload `dashboards/ambient-operator-dashboard.json` in Grafana UI
+**Dashboards** are provisioned automatically from `overlays/with-grafana/dashboards/`. See [dashboards/README.md](./overlays/with-grafana/dashboards/README.md) for how to add new ones.
 
 ---
 
@@ -185,6 +188,6 @@ EOF
 ## Cleanup
 
 ```bash
-kubectl delete -k components/manifests/observability/overlays/with-grafana/  # If Grafana deployed
-kubectl delete -k components/manifests/observability/
+make clean-observability                    # Removes stack but preserves Grafana PVC
+kubectl delete pvc grafana-storage -n ambient-code  # Also delete Grafana data
 ```

@@ -1,0 +1,20 @@
+# ServiceAccount for Grafana to access OpenShift Prometheus
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grafana
+  namespace: ambient-code
+---
+# ClusterRoleBinding to allow Grafana to query metrics
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grafana-cluster-monitoring-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-monitoring-view
+subjects:
+- kind: ServiceAccount
+  name: grafana
+  namespace: ambient-code
