@@ -40,10 +40,10 @@ jobs:
       cli: ${{ steps.filter.outputs.cli }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Detect changed components
-        uses: dorny/paths-filter@v4
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
         id: filter
         with:
           filters: |
@@ -80,10 +80,10 @@ jobs:
     name: Frontend Lint and Type Check
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version-file: 'components/frontend/package.json'
           cache: 'npm'
@@ -116,10 +116,10 @@ jobs:
     name: Go Lint - Backend
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: 'components/backend/go.mod'
           cache-dependency-path: 'components/backend/go.sum'
@@ -141,15 +141,8 @@ jobs:
           cd components/backend
           go vet ./...
 
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: latest
-          working-directory: components/backend
-          args: --timeout=5m
-
-      - name: Run golangci-lint (test build tags)
-        uses: golangci/golangci-lint-action@v9
+      - name: Run golangci-lint (all build tags)
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9
         with:
           version: latest
           working-directory: components/backend
@@ -162,10 +155,10 @@ jobs:
     name: Go Lint - Operator
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: 'components/operator/go.mod'
           cache-dependency-path: 'components/operator/go.sum'
@@ -188,7 +181,7 @@ jobs:
           go vet ./...
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9
         with:
           version: latest
           working-directory: components/operator
@@ -201,10 +194,10 @@ jobs:
     name: Go Lint - API Server
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: 'components/ambient-api-server/go.mod'
           cache-dependency-path: 'components/ambient-api-server/go.sum'
@@ -227,7 +220,7 @@ jobs:
           go vet ./...
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9
         with:
           version: latest
           working-directory: components/ambient-api-server
@@ -240,10 +233,10 @@ jobs:
     name: Go Lint - CLI
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: 'components/ambient-cli/go.mod'
           cache-dependency-path: 'components/ambient-cli/go.sum'
@@ -266,7 +259,7 @@ jobs:
           go vet ./...
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9
         with:
           version: latest
           working-directory: components/ambient-cli
