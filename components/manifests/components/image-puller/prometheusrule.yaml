@@ -35,7 +35,11 @@ spec:
 
         - alert: ImagePullerDeploymentDown
           expr: |
-            kube_deployment_status_available_replicas{namespace="acp-image-puller", deployment="acp-image-puller"} < 1
+            (
+              kube_deployment_status_available_replicas{namespace="acp-image-puller", deployment="acp-image-puller"} < 1
+            )
+            or
+            absent(kube_deployment_status_available_replicas{namespace="acp-image-puller", deployment="acp-image-puller"})
           for: 10m
           labels:
             severity: critical
