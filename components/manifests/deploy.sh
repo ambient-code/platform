@@ -356,6 +356,12 @@ fi
 echo -e "${BLUE}Updating operator with custom runner image...${NC}"
 oc patch deployment agentic-operator -n ${NAMESPACE} -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"agentic-operator\",\"env\":[{\"name\":\"AMBIENT_CODE_RUNNER_IMAGE\",\"value\":\"${DEFAULT_RUNNER_IMAGE}\"}]}]}}}}" --type=strategic
 
+# Pin OPERATOR_IMAGE in operator-config so scheduled session triggers use the correct image
+echo -e "${BLUE}Pinning OPERATOR_IMAGE in operator-config configmap...${NC}"
+oc patch configmap operator-config -n ${NAMESPACE} \
+    --type=merge -p "{\"data\":{\"OPERATOR_IMAGE\":\"${DEFAULT_OPERATOR_IMAGE}\"}}" 2>/dev/null || \
+oc create configmap operator-config -n ${NAMESPACE} --from-literal=OPERATOR_IMAGE="${DEFAULT_OPERATOR_IMAGE}" 2>/dev/null || true
+
 # Update agent-registry configmap with custom runner and state-sync images
 echo -e "${BLUE}Updating agent-registry configmap with custom images...${NC}"
 REGISTRY_JSON=$(oc get configmap ambient-agent-registry -n ${NAMESPACE} -o jsonpath='{.data.agent-registry\.json}')

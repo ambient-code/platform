@@ -1,6 +1,6 @@
 """Tests for Gemini CLI authentication setup."""
 
-import tempfile
+
 import warnings
 
 import pytest
@@ -128,36 +128,38 @@ class TestSetupGeminiCliAuth:
         assert api_key == ""
         assert use_vertex is False
 
-    async def test_vertex_mode_returns_empty_api_key(self, monkeypatch):
+    async def test_vertex_mode_returns_empty_api_key(self, monkeypatch, tmp_path):
         """In Vertex mode, api_key is always empty and use_vertex is True."""
+        creds_file = tmp_path / "creds.json"
+        creds_file.write_text("{}")
         monkeypatch.setenv("USE_VERTEX", "1")
+        monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(creds_file))
         monkeypatch.delenv("GEMINI_USE_VERTEX", raising=False)
         monkeypatch.delenv("GEMINI_API_KEY", raising=False)
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
 
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-            cred_path = f.name
         ctx = _make_context(
             USE_VERTEX="1",
-            GOOGLE_APPLICATION_CREDENTIALS=cred_path,
+            GOOGLE_APPLICATION_CREDENTIALS=str(creds_file),
         )
         model, api_key, use_vertex = await setup_gemini_cli_auth(ctx)
 
         assert api_key == ""
         assert use_vertex is True
 
-    async def test_vertex_mode_ignores_api_keys(self, monkeypatch):
+    async def test_vertex_mode_ignores_api_keys(self, monkeypatch, tmp_path):
         """In Vertex mode, even if API keys are set, they're not returned."""
+        creds_file = tmp_path / "creds.json"
+        creds_file.write_text("{}")
         monkeypatch.setenv("USE_VERTEX", "1")
         monkeypatch.setenv("GEMINI_API_KEY", "should-be-ignored")
+        monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(creds_file))
         monkeypatch.delenv("GEMINI_USE_VERTEX", raising=False)
 
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-            cred_path = f.name
         ctx = _make_context(
             USE_VERTEX="1",
             GEMINI_API_KEY="should-be-ignored",
-            GOOGLE_APPLICATION_CREDENTIALS=cred_path,
+            GOOGLE_APPLICATION_CREDENTIALS=str(creds_file),
         )
         model, api_key, use_vertex = await setup_gemini_cli_auth(ctx)
 
@@ -201,22 +203,25 @@ class TestSetupGeminiCliAuth:
 
         assert model == DEFAULT_MODEL
 
-    async def test_vertex_project_and_location_logged(self, monkeypatch, caplog):
+    async def test_vertex_project_and_location_logged(
+        self, monkeypatch, caplog, tmp_path
+    ):
         """Verify GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION are logged."""
+        creds_file = tmp_path / "creds.json"
+        creds_file.write_text("{}")
         monkeypatch.setenv("USE_VERTEX", "1")
+        monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(creds_file))
         monkeypatch.delenv("GEMINI_USE_VERTEX", raising=False)
         monkeypatch.delenv("GEMINI_API_KEY", raising=False)
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
         monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "my-project")
         monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "us-central1")
 
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-            cred_path = f.name
         ctx = _make_context(
             USE_VERTEX="1",
+            GOOGLE_APPLICATION_CREDENTIALS=str(creds_file),
             GOOGLE_CLOUD_PROJECT="my-project",
             GOOGLE_CLOUD_LOCATION="us-central1",
-            GOOGLE_APPLICATION_CREDENTIALS=cred_path,
         )
 
         import logging

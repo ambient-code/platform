@@ -6,8 +6,7 @@ queue_rules:
       - "#approved-reviews-by>=2"
       - "#changes-requested-reviews-by=0"
       - check-success=End-to-End Tests
-      - check-success=validate-manifests
-      - check-success=test-local-dev-simulation
+      - check-success=Local Dev CI Gate
 
   - name: default
     autoqueue: true
@@ -16,10 +15,23 @@ queue_rules:
       - "#approved-reviews-by>=1"
       - "#changes-requested-reviews-by=0"
       - check-success=End-to-End Tests
-      - check-success=validate-manifests
-      - check-success=test-local-dev-simulation
+      - check-success=Local Dev CI Gate
 
 pull_request_rules:
+  - name: automatic approval for Dependabot pull requests
+    conditions:
+      - author = dependabot[bot]
+    actions:
+      review:
+        type: APPROVE
+
+  - name: keep PRs up to date with main
+    conditions:
+      - -conflict
+      - -draft
+    actions:
+      update: {}
+
   - name: queue large PRs
     conditions:
       - or:

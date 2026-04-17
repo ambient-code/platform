@@ -128,4 +128,3 @@ The harness now preflights these before worktree setup so failures happen fast.
 - `scripts/benchmarks/component-bench.sh` - main harness
 - `scripts/benchmarks/bench-manifest.sh` - component definitions and session stubs
 - `tests/bench-test.sh` - harness self-tests
-

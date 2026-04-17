@@ -90,7 +90,13 @@ dmypy.json
 
 # Claude Code
 .claude/settings.local.json
+.claude/worktrees/
+
+# Git worktrees
 .worktrees/
+
+# CodeRabbit triage raw data (metrics/ is committed, data/ is transient)
+scripts/coderabbit-triage/data/
 
 # mkdocs
 /site
@@ -123,6 +129,9 @@ reports/
 
 # Feedback loop runtime state
 scripts/feedback-loop/.last-run
+
+# SDK version bump transient output
+.sdk-bump-output/
 
 # Secrets (use .example templates instead)
 **/minio-credentials-secret.yaml

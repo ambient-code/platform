@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+spec:
+  template:
+    spec:
+      serviceAccountName: grafana
+      initContainers:
+      - name: inject-token
+        image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+        command: ["sh", "-c"]
+        args:
+        - |
+          TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+          sed "s/INJECT_TOKEN_HERE/${TOKEN}/" /etc/grafana-base/datasources.yaml > /etc/grafana-provisioning/datasources.yaml
+        volumeMounts:
+        - name: datasources
+          mountPath: /etc/grafana-base
+        - name: datasources-provisioned
+          mountPath: /etc/grafana-provisioning
+      - name: collect-dashboards
+        image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+        command: ["sh", "-c"]
+        args:
+        - |
+          cp /dashboards-src/*/*.json /var/lib/grafana/dashboards/
+        volumeMounts:
+        - name: dashboard-operator
+          mountPath: /dashboards-src/operator
+        - name: dashboard-cluster
+          mountPath: /dashboards-src/cluster
+        - name: dashboard-nodes
+          mountPath: /dashboards-src/nodes
+        - name: dashboard-namespace
+          mountPath: /dashboards-src/namespace
+        - name: dashboard-pods
+          mountPath: /dashboards-src/pods
+        - name: dashboards
+          mountPath: /var/lib/grafana/dashboards
+      containers:
+      - name: grafana
+        volumeMounts:
+        - name: datasources-provisioned
+          mountPath: /etc/grafana/provisioning/datasources
+        - name: dashboards-provider
+          mountPath: /etc/grafana/provisioning/dashboards/dashboards.yaml
+          subPath: dashboards.yaml
+        - name: dashboards
+          mountPath: /var/lib/grafana/dashboards
+        - name: storage
+          mountPath: /var/lib/grafana
+      volumes:
+      - name: datasources
+        configMap:
+          name: grafana-datasources
+      - name: datasources-provisioned
+        emptyDir: {}
+      - name: dashboards-provider
+        configMap:
+          name: grafana-dashboards-provider
+      - name: dashboards
+        emptyDir: {}
+      - name: dashboard-operator
+        configMap:
+          name: grafana-dashboard-operator
+      - name: dashboard-cluster
+        configMap:
+          name: grafana-dashboard-cluster
+      - name: dashboard-nodes
+        configMap:
+          name: grafana-dashboard-nodes
+      - name: dashboard-namespace
+        configMap:
+          name: grafana-dashboard-namespace
+      - name: dashboard-pods
+        configMap:
+          name: grafana-dashboard-pods
+      - name: storage
+        persistentVolumeClaim:
+          claimName: grafana-storage

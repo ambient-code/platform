@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "viewport": { "width": 1280, "height": 720 },
+  "screenshots": [
+    {
+      "id": "workspaces-page",
+      "page": "/projects",
+      "waitFor": "Workspaces",
+      "setupSteps": ["waitForThemeToggle"]
+    },
+    {
+      "id": "workspace-settings",
+      "page": "/projects/{workspace}/settings",
+      "waitFor": "Settings",
+      "setupSteps": []
+    },
+    {
+      "id": "integrations-page",
+      "page": "/projects/{workspace}/settings",
+      "waitFor": "Integration",
+      "setupSteps": ["navigateToIntegrations"]
+    },
+    {
+      "id": "workspace-sharing",
+      "page": "/projects/{workspace}/settings",
+      "waitFor": "Settings",
+      "setupSteps": ["navigateToSharing"]
+    },
+    {
+      "id": "api-keys",
+      "page": "/projects/{workspace}/keys",
+      "waitFor": "Access Keys",
+      "setupSteps": []
+    },
+    {
+      "id": "new-session-dialog",
+      "page": "/projects/{workspace}/new",
+      "waitFor": "New Session",
+      "setupSteps": []
+    },
+    {
+      "id": "session-list",
+      "page": "/projects/{workspace}/sessions",
+      "waitFor": "Sessions",
+      "setupSteps": []
+    },
+    {
+      "id": "session-page",
+      "page": "/projects/{workspace}/sessions/{session}",
+      "waitFor": "Chat",
+      "setupSteps": []
+    },
+    {
+      "id": "scheduled-sessions",
+      "page": "/projects/{workspace}/scheduled-sessions",
+      "waitFor": "Scheduled",
+      "setupSteps": []
+    }
+  ]
+}

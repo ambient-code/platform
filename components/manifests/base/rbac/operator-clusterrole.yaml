@@ -72,3 +72,7 @@ rules:
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get", "create", "delete", "update"]
+# MLflow Experiment CRs (operator must hold these to grant them in session Roles)
+- apiGroups: ["mlflow.kubeflow.org"]
+  resources: ["experiments"]
+  verbs: ["get", "list", "update"]

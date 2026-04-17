@@ -115,8 +115,9 @@ func TransitionToStopped(ctx context.Context, session *unstructured.Unstructured
 	// Cleanup secrets
 	deleteCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	_ = deleteAmbientVertexSecret(deleteCtx, namespace)
-	_ = deleteAmbientLangfuseSecret(deleteCtx, namespace)
+	_ = deleteAmbientVertexSecret(deleteCtx, namespace, name)
+	_ = deleteAmbientLangfuseSecret(deleteCtx, namespace, name)
+	_ = deleteAmbientMlflowObservabilitySecret(deleteCtx, namespace, name)
 
 	return nil
 }

@@ -1,5 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as sessionsApi from "@/services/api/sessions";
+import type { MCPServersConfig } from "@/types/agentic-session";
 
 export const mcpKeys = {
   all: ["mcp"] as const,
@@ -26,6 +27,22 @@ export function useMcpStatus(
       const updatedCount = (query.state as { dataUpdatedCount?: number }).dataUpdatedCount ?? 0
       if (updatedCount >= 12) return false
       return 10 * 1000
+    },
+  });
+}
+
+export function useUpdateSessionMcpServers(
+  projectName: string,
+  sessionName: string
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (mcpServers: MCPServersConfig) =>
+      sessionsApi.updateSessionMcpServers(projectName, sessionName, mcpServers),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: mcpKeys.status(projectName, sessionName),
+      });
     },
   });
 }

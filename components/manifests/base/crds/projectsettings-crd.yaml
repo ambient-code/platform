@@ -67,6 +67,21 @@ spec:
                 minimum: 0
                 default: 86400
                 description: "Default inactivity timeout for sessions in this project (seconds). 0 disables. Overridden by session-level spec.inactivityTimeout."
+              mcpServers:
+                type: object
+                description: "Default MCP server configuration for sessions in this project. Session-level config takes precedence."
+                properties:
+                  custom:
+                    type: object
+                    description: "Map of server name to server configuration applied to all new sessions"
+                    additionalProperties:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                  disabled:
+                    type: array
+                    description: "List of default MCP server names to disable for all sessions in this project"
+                    items:
+                      type: string
           status:
             type: object
             properties:

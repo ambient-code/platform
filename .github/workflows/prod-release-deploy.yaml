@@ -170,6 +170,27 @@ jobs:
 
           cat RELEASE_CHANGELOG.md
 
+      - name: Generate Loading Tips
+        run: |
+          LATEST_TAG="${{ steps.get_latest_tag.outputs.latest_tag }}"
+          NEW_TAG="${{ steps.next_version.outputs.new_tag }}"
+          REPO="${{ github.repository }}"
+          OUTPUT="components/frontend/src/lib/loading-tips.ts"
+
+          python3 scripts/generate-loading-tips.py "$NEW_TAG" "$LATEST_TAG" "$REPO" "$OUTPUT"
+
+          # Commit the updated loading tips so the frontend build includes them
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$OUTPUT"
+          if git diff --cached --quiet; then
+            echo "No loading tips changes to commit"
+          else
+            git commit -m "chore(frontend): update loading tips for ${NEW_TAG}
+
+          Auto-generated release tips highlighting contributors and changes."
+          fi
+
       - name: Create Tag
         id: create_tag
         uses: rickstaa/action-create-tag@v1
@@ -212,7 +233,7 @@ jobs:
             {"name":"frontend","context":"./components/frontend","image":"quay.io/ambient_code/vteam_frontend","dockerfile":"./components/frontend/Dockerfile"},
             {"name":"backend","context":"./components/backend","image":"quay.io/ambient_code/vteam_backend","dockerfile":"./components/backend/Dockerfile"},
             {"name":"operator","context":"./components/operator","image":"quay.io/ambient_code/vteam_operator","dockerfile":"./components/operator/Dockerfile"},
-            {"name":"ambient-runner","context":"./components/runners","image":"quay.io/ambient_code/vteam_claude_runner","dockerfile":"./components/runners/ambient-runner/Dockerfile"},
+            {"name":"ambient-runner","context":"./components/runners/ambient-runner","image":"quay.io/ambient_code/vteam_claude_runner","dockerfile":"./components/runners/ambient-runner/Dockerfile"},
             {"name":"state-sync","context":"./components/runners/state-sync","image":"quay.io/ambient_code/vteam_state_sync","dockerfile":"./components/runners/state-sync/Dockerfile"},
             {"name":"public-api","context":"./components/public-api","image":"quay.io/ambient_code/vteam_public_api","dockerfile":"./components/public-api/Dockerfile"},
             {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/vteam_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"},
@@ -296,7 +317,9 @@ jobs:
           platforms: ${{ matrix.arch.platform }}
           push: true
           tags: ${{ matrix.component.image }}:${{ needs.release.outputs.new_tag }}-${{ matrix.arch.suffix }}
-          build-args: AMBIENT_VERSION=${{ needs.release.outputs.new_tag }}
+          build-args: |
+            AMBIENT_VERSION=${{ needs.release.outputs.new_tag }}
+            GIT_COMMIT=${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
 
@@ -331,9 +354,107 @@ jobs:
             ${{ matrix.component.image }}:${{ needs.release.outputs.new_tag }}-amd64 \
             ${{ matrix.component.image }}:${{ needs.release.outputs.new_tag }}-arm64
 
-  deploy-to-openshift:
+  pre-pull-images:
     runs-on: ubuntu-latest
     needs: [release, merge-manifests]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code from release tag
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.release.outputs.new_tag }}
+
+      - name: Install oc
+        uses: redhat-actions/openshift-tools-installer@144527c7d98999f2652264c048c7a9bd103f8a82 # v1
+        with:
+          oc: latest
+
+      - name: Log in to OpenShift Cluster
+        run: |
+          oc login ${{ secrets.PROD_OPENSHIFT_SERVER }} --token=${{ secrets.PROD_OPENSHIFT_TOKEN }}
+
+      - name: Deploy image puller infrastructure
+        run: |
+          oc apply -f components/manifests/components/image-puller/namespace.yaml
+          oc apply -f components/manifests/components/image-puller/rbac.yaml
+          oc apply -f components/manifests/components/image-puller/configmap.yaml
+          oc apply -f components/manifests/components/image-puller/deployment.yaml
+          oc apply -f components/manifests/components/image-puller/prometheusrule.yaml
+
+      - name: Ensure registry pull secrets exist
+        run: |
+          # Secret for pulling the image puller itself from registry.redhat.io
+          oc create secret docker-registry redhat-registry-pull-secret \
+            --docker-server=registry.redhat.io \
+            --docker-username="${{ secrets.REDHAT_USERNAME }}" \
+            --docker-password="${{ secrets.REDHAT_PASSWORD }}" \
+            -n acp-image-puller --dry-run=client -o yaml | oc apply -f -
+
+          # Secret for pulling ACP component images from quay.io
+          oc create secret docker-registry quay-pull-secret \
+            --docker-server=quay.io \
+            --docker-username="${{ secrets.QUAY_USERNAME }}" \
+            --docker-password="${{ secrets.QUAY_PASSWORD }}" \
+            -n acp-image-puller --dry-run=client -o yaml | oc apply -f -
+
+      - name: Build image list from release components
+        id: image-list
+        run: |
+          RELEASE_TAG="${{ needs.release.outputs.new_tag }}"
+          MERGE_MATRIX='${{ needs.release.outputs.merge-matrix }}'
+
+          # Build semicolon-separated name=image:tag list from the merge matrix
+          IMAGES=$(echo "$MERGE_MATRIX" | jq -r \
+            --arg tag "$RELEASE_TAG" \
+            '[.[] | "\(.name)=\(.image):\($tag)"] | join(";")')
+
+          echo "images=${IMAGES}" >> $GITHUB_OUTPUT
+          echo "Image list for pre-pull:"
+          echo "$IMAGES" | tr ';' '\n'
+
+      - name: Update image puller ConfigMap with new images
+        run: |
+          oc patch configmap acp-image-puller-config \
+            -n acp-image-puller \
+            --type merge \
+            -p "{\"data\":{\"IMAGES\":\"${{ steps.image-list.outputs.images }}\"}}"
+
+      - name: Restart image puller to pick up new image list
+        run: |
+          oc rollout restart deployment/acp-image-puller -n acp-image-puller
+          oc rollout status deployment/acp-image-puller -n acp-image-puller --timeout=120s
+
+      - name: Wait for DaemonSet to pull images on all nodes
+        run: |
+          echo "Waiting for image puller DaemonSet to schedule on all nodes..."
+          for i in $(seq 1 60); do
+            # The puller needs a moment to create the DaemonSet
+            DS_STATUS=$(oc get daemonset acp-image-puller-ds -n acp-image-puller \
+              -o jsonpath='{.status.desiredNumberScheduled},{.status.numberReady}' 2>/dev/null || echo "0,0")
+            DESIRED=$(echo "$DS_STATUS" | cut -d, -f1)
+            READY=$(echo "$DS_STATUS" | cut -d, -f2)
+
+            if [ "$DESIRED" -gt 0 ] && [ "$DESIRED" -eq "$READY" ]; then
+              echo "All $READY/$DESIRED nodes have images pre-pulled."
+              break
+            fi
+
+            if [ "$i" -eq 60 ]; then
+              echo "::warning::Image pre-pull did not complete on all nodes within timeout ($READY/$DESIRED ready). Proceeding with deploy."
+              break
+            fi
+
+            echo "Attempt $i/60 - DaemonSet $READY/$DESIRED ready, waiting 10s..."
+            sleep 10
+          done
+
+          echo "DaemonSet status:"
+          oc get daemonset -n acp-image-puller || true
+
+  deploy-rhoai-mlflow:
+    runs-on: ubuntu-latest
+    needs: [release]
     steps:
       - name: Checkout code from release tag
         uses: actions/checkout@v6
@@ -341,9 +462,131 @@ jobs:
           ref: ${{ needs.release.outputs.new_tag }}
 
       - name: Install oc
-        uses: redhat-actions/oc-installer@v1
+        uses: redhat-actions/openshift-tools-installer@v1
         with:
-          oc_version: 'latest'
+          oc: latest
+
+      - name: Log in to OpenShift Cluster
+        run: |
+          oc login ${{ secrets.PROD_OPENSHIFT_SERVER }} --token=${{ secrets.PROD_OPENSHIFT_TOKEN }}
+
+      - name: Deploy Service Mesh operator via OLM
+        run: |
+          oc apply -f components/manifests/components/openshift-ai/service-mesh-namespace.yaml
+          oc apply -f components/manifests/components/openshift-ai/service-mesh-operatorgroup.yaml
+          oc apply -f components/manifests/components/openshift-ai/service-mesh-subscription.yaml
+
+      - name: Deploy RHOAI operator via OLM
+        run: |
+          oc apply -f components/manifests/components/openshift-ai/namespace.yaml
+          oc apply -f components/manifests/components/openshift-ai/operatorgroup.yaml
+          oc apply -f components/manifests/components/openshift-ai/subscription.yaml
+
+      - name: Wait for RHOAI operator to be ready
+        run: |
+          echo "Waiting for RHOAI operator CSV to appear..."
+          for i in $(seq 1 60); do
+            CSV=$(oc get subscription rhods-operator -n redhat-ods-operator \
+              -o jsonpath='{.status.installedCSV}' 2>/dev/null)
+            if [ -n "$CSV" ]; then
+              echo "Found CSV: $CSV"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "::error::RHOAI operator CSV did not appear within timeout"
+              exit 1
+            fi
+            echo "Attempt $i/60 - CSV not yet available, waiting 10s..."
+            sleep 10
+          done
+          echo "Waiting for CSV $CSV to succeed..."
+          oc wait csv "$CSV" -n redhat-ods-operator \
+            --for=jsonpath='{.status.phase}'=Succeeded --timeout=600s
+
+      - name: Wait for DataScienceCluster v2 API to be available
+        run: |
+          echo "Waiting for DataScienceCluster v2 API to be served..."
+          for i in $(seq 1 60); do
+            if oc api-resources --api-group=datasciencecluster.opendatahub.io 2>/dev/null | grep -q v2; then
+              echo "DataScienceCluster v2 API is available"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "::error::DataScienceCluster v2 API did not become available within timeout"
+              exit 1
+            fi
+            echo "Attempt $i/60 - v2 API not yet available, waiting 10s..."
+            sleep 10
+          done
+
+      - name: Apply DSCInitialization and DataScienceCluster
+        run: |
+          oc apply -f components/manifests/components/openshift-ai/dsci.yaml
+          oc apply -f components/manifests/components/openshift-ai/datasciencecluster.yaml
+
+      - name: Wait for MLflow Operator CRD to be available
+        run: |
+          echo "Waiting for MLflow CRD to be registered..."
+          for i in $(seq 1 60); do
+            if oc get crd mlflows.mlflow.opendatahub.io &>/dev/null; then
+              echo "MLflow CRD is available"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "::error::MLflow CRD did not become available within timeout"
+              exit 1
+            fi
+            echo "Attempt $i/60 - MLflow CRD not yet available, waiting 10s..."
+            sleep 10
+          done
+
+      - name: Ensure mlflow database exists in PostgreSQL
+        run: |
+          oc exec -n ambient-code deploy/postgresql -- \
+            psql -U postgres -tAc \
+            "SELECT 1 FROM pg_database WHERE datname = 'mlflow'" | grep -q 1 \
+          || oc exec -n ambient-code deploy/postgresql -- \
+            psql -U postgres -c "CREATE DATABASE mlflow"
+
+      - name: Ensure mlflow-db-credentials secret exists
+        run: |
+          echo "Reconciling mlflow-db-credentials from postgresql-credentials..."
+          DB_USER=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.user}' | base64 -d)
+          DB_PASS=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.password}' | base64 -d)
+          DB_HOST=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.host}' | base64 -d)
+          DB_PORT=$(oc get secret postgresql-credentials -n ambient-code -o jsonpath='{.data.db\.port}' | base64 -d)
+          ENC_USER=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$DB_USER")
+          ENC_PASS=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$DB_PASS")
+          ENCODED_URI="postgresql://${ENC_USER}:${ENC_PASS}@${DB_HOST}.ambient-code.svc.cluster.local:${DB_PORT}/mlflow?sslmode=disable"
+          oc create namespace redhat-ods-applications --dry-run=client -o yaml | oc apply -f -
+          oc apply -f - <<EOF
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: mlflow-db-credentials
+            namespace: redhat-ods-applications
+          type: Opaque
+          stringData:
+            uri: "${ENCODED_URI}"
+          EOF
+
+      - name: Deploy MLflow instance
+        run: |
+          oc apply -f components/manifests/components/openshift-ai/mlflow.yaml
+
+  deploy-to-openshift:
+    runs-on: ubuntu-latest
+    needs: [release, merge-manifests, pre-pull-images]
+    steps:
+      - name: Checkout code from release tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.release.outputs.new_tag }}
+
+      - name: Install oc
+        uses: redhat-actions/openshift-tools-installer@v1
+        with:
+          oc: latest
 
       - name: Install kustomize
         uses: imranismail/setup-kustomize@v2
@@ -352,7 +595,7 @@ jobs:
 
       - name: Log in to OpenShift Cluster
         run: |
-          oc login ${{ secrets.PROD_OPENSHIFT_SERVER }} --token=${{ secrets.PROD_OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
+          oc login ${{ secrets.PROD_OPENSHIFT_SERVER }} --token=${{ secrets.PROD_OPENSHIFT_TOKEN }}
 
       - name: Deploy observability stack
         run: |
@@ -463,13 +706,13 @@ jobs:
             oc set env deployment/agentic-operator -n ambient-code -c agentic-operator $ARGS
           fi
 
-      - name: Pin OPERATOR_IMAGE on backend for scheduled session triggers
+      - name: Pin OPERATOR_IMAGE in operator-config ConfigMap
         run: |
           RELEASE_TAG="${{ needs.release.outputs.new_tag }}"
           BUILT="${{ steps.built.outputs.names }}"
           if echo ",$BUILT," | grep -q ",operator,"; then
-            oc set env deployment/agentic-backend -n ambient-code -c agentic-backend \
-              OPERATOR_IMAGE="quay.io/ambient_code/vteam_operator:${RELEASE_TAG}"
+            oc patch configmap operator-config -n ambient-code --type=merge \
+              -p "{\"data\":{\"OPERATOR_IMAGE\":\"quay.io/ambient_code/vteam_operator:${RELEASE_TAG}\"}}"
           fi
 
       - name: Update agent registry ConfigMap with release image tags
@@ -488,3 +731,74 @@ jobs:
           fi
           oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
             -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"
+
+  coderabbit-triage:
+    needs: [release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: read
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: '3.12'
+
+      - name: Run CodeRabbit triage pipeline
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_TAG: ${{ needs.release.outputs.new_tag }}
+          REPO: ${{ github.repository }}
+        working-directory: scripts/coderabbit-triage
+        run: |
+          PREV_TAG=$(git tag --list 'v*.*.*' --sort=-version:refname | grep -v "^${NEW_TAG}$" | head -1)
+
+          echo "Analyzing CodeRabbit reviews for ${NEW_TAG} (since ${PREV_TAG})..."
+          bash fetch.sh --repo "${REPO}" --release "${NEW_TAG}" --since "${PREV_TAG}"
+          python3 parse.py "data/${NEW_TAG}"
+          python3 analyze.py "data/${NEW_TAG}" metrics/
+          python3 report.py metrics/ --release "${NEW_TAG}" > ../../triage-summary.md
+
+          echo "### Summary"
+          cat ../../triage-summary.md
+
+      - name: Commit metrics and open PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_TAG: ${{ needs.release.outputs.new_tag }}
+        run: |
+          BRANCH="chore/coderabbit-triage-${NEW_TAG}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${BRANCH}"
+          git add "scripts/coderabbit-triage/metrics/${NEW_TAG}.json"
+          git commit -m "chore: add CodeRabbit triage metrics for ${NEW_TAG}"
+          git push -u origin "${BRANCH}"
+
+          gh pr create \
+            --title "chore: CodeRabbit triage for ${NEW_TAG}" \
+            --body-file triage-summary.md \
+            --base main
+
+      - name: Append triage summary to release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_TAG: ${{ needs.release.outputs.new_tag }}
+        run: |
+          EXISTING_BODY=$(gh release view "${NEW_TAG}" --json body -q .body)
+          TRIAGE=$(cat triage-summary.md)
+
+          gh release edit "${NEW_TAG}" \
+            --notes "${EXISTING_BODY}
+
+          ---
+          ## CodeRabbit Triage Summary
+          ${TRIAGE}"

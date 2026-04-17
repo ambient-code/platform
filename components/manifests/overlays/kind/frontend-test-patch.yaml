@@ -12,6 +12,9 @@ spec:
         # Backend API URL for server-side Next.js API routes
         - name: BACKEND_URL
           value: "http://backend-service.ambient-code.svc.cluster.local:8080/api"
+        # API Server URL for intelligence and other ambient-api-server proxy routes
+        - name: API_SERVER_URL
+          value: "http://ambient-api-server.ambient-code.svc.cluster.local:8000"
         # E2E testing: provide token for both server-side and client-side
         - name: OC_TOKEN
           valueFrom:

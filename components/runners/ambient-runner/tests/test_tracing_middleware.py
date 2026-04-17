@@ -85,7 +85,7 @@ class TestTracingMiddlewareObservability:
 
         custom_events = [e for e in events_out if isinstance(e, CustomEvent)]
         assert len(custom_events) == 1
-        assert custom_events[0].name == "ambient:langfuse_trace"
+        assert custom_events[0].name == "ambient:trace_id"
         assert custom_events[0].value == {"traceId": "trace-abc"}
 
     async def test_trace_id_emitted_only_once(self):

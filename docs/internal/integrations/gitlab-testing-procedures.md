@@ -18,7 +18,7 @@ This guide provides step-by-step instructions for manually testing the GitLab in
    - Click your profile icon (top right)
    - Select "Preferences"
    - Click "Access Tokens" in left sidebar
-   - Or direct link: https://gitlab.com/-/profile/personal_access_tokens
+   - Or direct link: https://gitlab.com/-/user_settings/personal_access_tokens
 
 3. **Create New Token**:
    - **Token name**: `Ambient Code Platform Integration Test`

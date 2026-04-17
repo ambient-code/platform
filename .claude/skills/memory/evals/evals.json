@@ -1,0 +1,26 @@
+[
+  {
+    "input": "/memory audit",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "memory", "args": "audit" },
+    "description": "Audit memories for staleness and duplicates"
+  },
+  {
+    "input": "what do we remember about feature flags?",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "memory", "args": "search feature flags" },
+    "description": "Natural language memory search"
+  },
+  {
+    "input": "clean up the project memories",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "memory", "args": "prune" },
+    "description": "Request to prune stale memories"
+  },
+  {
+    "input": "/memory",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "memory" },
+    "description": "Default to summary when no arguments provided"
+  }
+]
