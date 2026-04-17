@@ -1,0 +1,50 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: acp-image-puller
+  namespace: acp-image-puller
+  labels:
+    app.kubernetes.io/part-of: acp-image-puller
+spec:
+  groups:
+    - name: acp-image-puller
+      rules:
+        - alert: ImagePullerDaemonSetUnavailable
+          expr: |
+            kube_daemonset_status_number_unavailable{namespace="acp-image-puller", daemonset="acp-image-puller-ds"} > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Image puller DaemonSet has unavailable pods"
+            description: >-
+              {{ $value }} node(s) do not have a running image puller pod.
+              New sessions on those nodes will hit cold container pulls.
+
+        - alert: ImagePullerDaemonSetMissing
+          expr: |
+            absent(kube_daemonset_status_desired_number_scheduled{namespace="acp-image-puller", daemonset="acp-image-puller-ds"})
+          for: 30m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Image puller DaemonSet does not exist"
+            description: >-
+              The acp-image-puller-ds DaemonSet is missing. The image puller
+              deployment may have failed or been deleted.
+
+        - alert: ImagePullerDeploymentDown
+          expr: |
+            (
+              kube_deployment_status_available_replicas{namespace="acp-image-puller", deployment="acp-image-puller"} < 1
+            )
+            or
+            absent(kube_deployment_status_available_replicas{namespace="acp-image-puller", deployment="acp-image-puller"})
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Image puller deployment has no available replicas"
+            description: >-
+              The image puller controller is down. It will not recreate the
+              DaemonSet or respond to image list changes.
