@@ -3,51 +3,185 @@ name: Review Queue
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 13 * * 1-5'  # weekdays 1pm UTC
+    - cron: '0 * * * 1-5'  # hourly on weekdays
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
-  create-session:
+  review-queue:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    concurrency:
+      group: review-queue
+      cancel-in-progress: false
 
     steps:
-      - name: Create review queue session
-        id: session
-        uses: ambient-code/ambient-action@v0.0.2
-        with:
-          api-url: ${{ secrets.AMBIENT_API_URL }}
-          api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
-          project: ${{ secrets.AMBIENT_PROJECT }}
-          prompt: >-
-            Review all open PRs in https://github.com/${{ github.repository }}
-            and generate a prioritized review queue. Evaluate each PR via
-            sub-agents, classify by type (bug-fix, feature, refactor, etc.),
-            rank by urgency, test merge order, manage the "Review Queue"
-            milestone, and update the milestone description with the report.
-          repos: >-
-            [{"url": "https://github.com/${{ github.repository }}", "branch": "main"}]
-          workflow: >-
-            {"gitUrl": "https://github.com/ambient-code/workflows", "branch": "main", "path": "internal-workflows/pr-overview"}
-          model: claude-sonnet-4-5
-          wait: 'true'
-          timeout: '10'
-
-      - name: Session summary
-        if: always()
+      - name: Evaluate PRs and update milestone
+        id: evaluate
         env:
-          SESSION_NAME: ${{ steps.session.outputs.session-name }}
-          SESSION_UID: ${{ steps.session.outputs.session-uid }}
-          SESSION_PHASE: ${{ steps.session.outputs.session-phase }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          pip install --quiet 'requests>=2.31.0'
+
+          python3 - << 'PYEOF'
+          import json
+          import os
+          import subprocess
+
+          REPO = os.environ.get("GITHUB_REPOSITORY", "")
+          SLACK_URL = os.environ.get("SLACK_WEBHOOK_URL", "")
+          MILESTONE_NAME = "Review Queue"
+
+          def gh(*args, input_text=None):
+              result = subprocess.run(["gh"] + list(args), capture_output=True, text=True, input=input_text)
+              return result.stdout.strip()
+
+          def get_or_create_milestone():
+              """Get the Review Queue milestone number, creating it if needed."""
+              milestones = gh("api", f"repos/{REPO}/milestones", "--jq",
+                             f'[.[] | select(.title == "{MILESTONE_NAME}")] | .[0].number')
+              if milestones and milestones != "null":
+                  return int(milestones)
+              # Create it
+              result = gh("api", f"repos/{REPO}/milestones", "-X", "POST",
+                          "-f", f"title={MILESTONE_NAME}",
+                          "-f", "description=PRs ready for human review and merge",
+                          "--jq", ".number")
+              return int(result) if result else None
+
+          def get_milestone_prs(milestone_number):
+              """Get PR numbers currently in the milestone."""
+              prs = gh("pr", "list", "--repo", REPO, "--state", "open",
+                       "--json", "number,milestone",
+                       "--jq", f'[.[] | select(.milestone.number == {milestone_number})] | [.[].number]')
+              return set(json.loads(prs)) if prs else set()
+
+          def is_ready_to_review(pr):
+              """Check if a PR is ready for human review."""
+              number = pr["number"]
+
+              # Skip drafts
+              if pr.get("isDraft", False):
+                  return False, "draft"
+
+              # Check CI status
+              status_checks = gh("pr", "checks", str(number), "--repo", REPO,
+                                "--json", "name,state",
+                                "--jq", '[.[] | .state] | unique')
+              try:
+                  states = json.loads(status_checks) if status_checks else []
+              except json.JSONDecodeError:
+                  states = []
+
+              if not states:
+                  return False, "CI unknown"
+
+              if "FAILURE" in states:
+                  return False, "CI failing"
+              if "PENDING" in states:
+                  return False, "CI pending"
+
+              # Check for unresolved critical/major review comments
+              bot_logins = ["github-actions[bot]", "ambient-code[bot]", "ambient-bot"]
+              bot_filter = " and ".join([f'.user.login != "{b}"' for b in bot_logins])
+              reviews = gh("api", f"repos/{REPO}/pulls/{number}/reviews",
+                          "--jq", f'[.[] | select(.state == "CHANGES_REQUESTED" and {bot_filter})] | length')
+              try:
+                  changes_requested = int(reviews) if reviews else 0
+              except ValueError:
+                  changes_requested = 0
+
+              if changes_requested > 0:
+                  return False, "changes requested"
+
+              return True, "ready"
+
+          def slack_notify(text):
+              """Send a Slack notification."""
+              if not SLACK_URL:
+                  return
+              import requests
+              try:
+                  requests.post(SLACK_URL, json={"text": text}, timeout=10)
+              except Exception as e:
+                  print(f"  Slack notification failed: {e}")
+
+          # Get milestone
+          milestone_number = get_or_create_milestone()
+          if not milestone_number:
+              print("Failed to get/create milestone")
+              exit(1)
+
+          current_milestone_prs = get_milestone_prs(milestone_number)
+          print(f"Current milestone PRs: {current_milestone_prs}")
+
+          # Get all open non-draft PRs (not just ambient-code:managed)
+          prs_json = gh("pr", "list", "--repo", REPO, "--state", "open",
+                        "--limit", "200", "--json", "number,title,isDraft,url,headRefName")
+          prs = json.loads(prs_json) if prs_json else []
+          print(f"Found {len(prs)} open PRs")
+
+          ready_prs = []
+          not_ready = []
+          newly_added = []
+
+          for pr in prs:
+              number = pr["number"]
+              ready, reason = is_ready_to_review(pr)
+
+              if ready:
+                  ready_prs.append(pr)
+                  if number not in current_milestone_prs:
+                      # Add to milestone
+                      gh("api", f"repos/{REPO}/issues/{number}",
+                         "-X", "PATCH", "-f", f"milestone={milestone_number}")
+                      newly_added.append(pr)
+                      print(f"  PR #{number}: added to milestone (ready)")
+                  else:
+                      print(f"  PR #{number}: already in milestone")
+              else:
+                  # Remove from milestone if it was there
+                  if number in current_milestone_prs:
+                      gh("api", f"repos/{REPO}/issues/{number}",
+                         "-X", "PATCH", "--input", "-",
+                         input_text=json.dumps({"milestone": None}))
+                      print(f"  PR #{number}: removed from milestone ({reason})")
+                  else:
+                      print(f"  PR #{number}: not ready ({reason})")
+                  not_ready.append({"number": number, "reason": reason})
+
+          # Send Slack notification only for newly added PRs
+          if newly_added:
+              lines = [f"📋 *{len(newly_added)} PR{'s' if len(newly_added) > 1 else ''} ready for review*\n"]
+              for pr in newly_added:
+                  lines.append(f"• <{pr['url']}|#{pr['number']}> — {pr['title']}")
+              lines.append(f"\n_Total in <https://github.com/{REPO}/milestone/{milestone_number}|Review Queue>: {len(ready_prs)}_")
+              slack_notify("\n".join(lines))
+              print(f"\nSlack: notified about {len(newly_added)} new PR(s)")
+          else:
+              print("\nNo new PRs added to milestone — no Slack notification")
+
+          # Update milestone description
+          ready_list = "\n".join([f"- #{pr['number']} — {pr['title']}" for pr in ready_prs])
+          not_ready_list = "\n".join([f"- #{item['number']} ({item['reason']})" for item in not_ready[:10]])
+          description = f"## Ready for Review ({len(ready_prs)})\n\n{ready_list or 'None'}"
+          if not_ready_list:
+              description += f"\n\n## Not Ready ({len(not_ready)})\n\n{not_ready_list}"
+              if len(not_ready) > 10:
+                  description += f"\n- ... and {len(not_ready) - 10} more"
+
+          gh("api", f"repos/{REPO}/milestones/{milestone_number}",
+             "-X", "PATCH", "-f", f"description={description}")
+
+          print(f"\nSummary: {len(ready_prs)} ready, {len(not_ready)} not ready, {len(newly_added)} newly added")
+          PYEOF
+
+      - name: Summary
+        if: always()
         run: |
           echo "### Review Queue" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ -n "$SESSION_NAME" ]; then
-            echo "- **Session**: \`$SESSION_NAME\`" >> $GITHUB_STEP_SUMMARY
-            echo "- **UID**: \`$SESSION_UID\`" >> $GITHUB_STEP_SUMMARY
-            echo "- **Phase**: \`$SESSION_PHASE\`" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "- **Status**: Failed to create session" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "See step logs for details" >> $GITHUB_STEP_SUMMARY

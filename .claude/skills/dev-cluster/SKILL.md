@@ -1,6 +1,11 @@
 ---
 name: dev-cluster
-description: Manages Ambient Code Platform development clusters (kind) for testing changes
+description: >
+  Manages Ambient Code Platform development clusters (kind) for testing changes
+  locally. Use when deploying PRs to kind, bringing up local clusters, rebuilding
+  images, troubleshooting pod issues, or running benchmarks. Triggers on: "test
+  in kind", "deploy locally", "kind cluster", "rebuild images", "pod crashing",
+  "bring up cluster", "kind-up", "dev environment", "local dev".
 ---
 
 # Development Cluster Management Skill
@@ -247,15 +252,63 @@ kubectl get pods -n ambient-code
 kubectl get events -n ambient-code --sort-by='.lastTimestamp'
 ```
 
-### Step 6: Provide Access Info
+### Step 6: Validate Frontend Accessibility
 
-**Detect the actual URL** by checking the kind container's port mapping (see "Detecting the Access URL" above), then provide the correct URL to the user.
+After deployment, **always verify the frontend is reachable** before reporting success. Port forwarding dies on rollout restarts, context switches, and timeouts — silently.
+
+**Key distinction:**
+- **Connection refused (curl exit code 7)** → port forwarding is broken. Fix it and retry.
+- **HTTP error (4xx/5xx)** → port forwarding works but the app is unhealthy. Check pod logs.
+
+```bash
+# Validate frontend is reachable
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$KIND_FWD_FRONTEND_PORT 2>/dev/null)
+CURL_EXIT=$?
+```
+
+**If connection refused (exit code 7):**
+
+1. Kill stale port-forward processes: `pkill -f "port-forward.*ambient-code"`
+2. Verify kubectl context: `kubectl config current-context` should start with `kind-`
+3. If wrong context: `kubectl config use-context kind-$KIND_CLUSTER_NAME`
+4. Restart: `make kind-port-forward &`
+5. Wait and retry
+
+**Retry loop (use this pattern):**
+```bash
+for attempt in 1 2 3; do
+  STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$KIND_FWD_FRONTEND_PORT 2>/dev/null)
+  CURL_EXIT=$?
+  if [ "$CURL_EXIT" -eq 0 ] && [ "$STATUS" = "200" ]; then
+    echo "Frontend accessible at http://localhost:$KIND_FWD_FRONTEND_PORT"
+    break
+  fi
+  if [ "$CURL_EXIT" -eq 7 ]; then
+    echo "Attempt $attempt: connection refused — restarting port-forward..."
+    pkill -f "port-forward.*ambient-code" 2>/dev/null
+    sleep 1
+    kubectl config use-context kind-$(make -s kind-cluster-name 2>/dev/null || echo "ambient-local") 2>/dev/null
+    make kind-port-forward &
+    sleep 3
+  else
+    echo "Attempt $attempt: frontend returned HTTP $STATUS — check pod logs"
+    kubectl logs -l app=frontend -n ambient-code --tail=20
+    break
+  fi
+done
+```
+
+**CRITICAL:** Never tell the user "the cluster is ready" or provide a URL without first confirming the frontend responds. A URL that doesn't load is worse than no URL.
+
+### Step 7: Provide Access Info
+
+Only after frontend validation passes:
 
 ```
-✓ Deployment complete!
+✓ Deployment complete! Frontend verified accessible.
 
 Access the platform at:
-- Frontend: <detected URL from port mapping>
+- Frontend: http://localhost:$KIND_FWD_FRONTEND_PORT (verified ✓)
 - Test credentials: Check .env.test for the token
 
 To view logs:
@@ -281,7 +334,7 @@ make kind-rebuild
 
 ### "Just rebuild the backend"
 ```bash
-make build-backend
+make build-backend CONTAINER_ENGINE=$CONTAINER_ENGINE
 kind load docker-image localhost/vteam_backend:latest --name $KIND_CLUSTER_NAME
 kubectl set image deployment/backend backend=localhost/vteam_backend:latest -n ambient-code
 kubectl rollout restart deployment/backend -n ambient-code
@@ -315,7 +368,7 @@ kubectl get deployments -n ambient-code
 **Solution:**
 ```bash
 # Ensure images are built locally
-make build-all
+make build-all CONTAINER_ENGINE=$CONTAINER_ENGINE
 
 # Load images into kind
 kind load docker-image localhost/vteam_backend:latest --name $KIND_CLUSTER_NAME
@@ -346,14 +399,7 @@ kubectl describe pod -l app=backend -n ambient-code
 ### Sessions fail with init-hydrate exit code 1
 **Cause:** MinIO `ambient-sessions` bucket doesn't exist. This happens when `make kind-up` fails partway through (e.g., due to image pull errors) and the `init-minio.sh` step is skipped.
 
-**Solution:**
-```bash
-# Create the bucket manually
-kubectl exec deployment/minio -n ambient-code -- mc alias set local http://localhost:9000 minioadmin minioadmin123
-kubectl exec deployment/minio -n ambient-code -- mc mb local/ambient-sessions
-```
-
-**Prevention:** If `make kind-up` fails, fix the underlying issue and re-run it rather than manually recovering individual steps. The Makefile runs `init-minio.sh` near the end of `kind-up`.
+**Solution:** Fix the underlying issue (e.g., image pull errors) and re-run `make kind-down && make kind-up`. The Makefile runs `init-minio.sh` near the end of `kind-up`, which creates the required buckets. If `make kind-up` completes successfully, the bucket will exist.
 
 ### Port forwarding not working
 **Cause:** Port already in use or forwarding process died

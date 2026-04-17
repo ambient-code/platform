@@ -369,10 +369,11 @@ class TestSessionSummaryEmission:
         # Verify Langfuse span was created
         assert mgr.langfuse_client.start_as_current_span.called
         call_kwargs = mgr.langfuse_client.start_as_current_span.call_args[1]
-        assert call_kwargs["name"] == "Claude Code - Session Metrics"
+        assert call_kwargs["name"] == "Session Metrics"
 
         meta = call_kwargs["metadata"]
-        assert meta["source"] == "claude-code-metrics"
+        assert meta["source"] == "ambient-runner-metrics"
+        assert meta["runner_type"] == "claude-agent-sdk"
         # Verify consolidated metadata matches trace-level fields
         assert meta["namespace"] == ""
         assert meta["user_name"] == "Test User"

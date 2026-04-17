@@ -22,7 +22,7 @@ Extract the following from `$ARGUMENTS`:
 
 - **Summary** (required): The title/summary of the issue
 - **Description** (optional): Detailed description of the work
-- **Issue Type** (optional): Defaults to `Story`, but can be `Bug` or `Task`. Tasks are tech debt related and not user facing
+- **Issue Type** (optional): Defaults to `Story`, but can be `Bug` or `Task`. Tasks are tech debt related and not user facing. Normalize case before use (e.g. "bug" → "Bug", "TASK" → "Task") and validate against this allowlist; reject unrecognized values with a prompt to the user.
 - **Priority** (optional): Defaults to `Normal`
 
 If the user provides a simple sentence, use it as the summary. If they provide multiple lines, use the first line as summary and the rest as description.
@@ -101,7 +101,7 @@ Before creating the issue, confirm with the user:
 📋 About to create RHOAIENG Jira:
 
 **Summary**: [extracted summary]
-**Type**: Story
+**Type**: [parsed issue type — Story/Bug/Task]
 **Component**: Agentic
 **Team**: Ambient team
 
@@ -119,7 +119,7 @@ Use the `mcp__jira__jira_create_issue` tool with:
 {
   "project_key": "RHOAIENG",
   "summary": "[user provided summary]",
-  "issue_type": "Story",
+  "issue_type": "[validated issue type: normalize to Story|Bug|Task — reject and re-prompt if unrecognized]",
   "description": "[structured description from template]",
   "components": "Agentic",
   "additional_fields": "{\"labels\": [\"team:ambient\"]}"

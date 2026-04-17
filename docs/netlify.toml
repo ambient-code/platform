@@ -1,0 +1,13 @@
+[build]
+  base = "docs/"
+  command = "npm ci && npx playwright install chromium && npm run build"
+  publish = "dist/"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Image paths use /platform/ prefix for GH Pages; redirect on Netlify
+[[redirects]]
+  from = "/platform/*"
+  to = "/:splat"
+  status = 200

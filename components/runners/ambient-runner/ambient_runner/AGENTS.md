@@ -15,7 +15,10 @@ and platform services. Framework-specific logic lives in bridge subpackages.
 ambient_runner/
 ├── app.py                    # create_ambient_app(), run_ambient_app(), add_ambient_endpoints()
 ├── bridge.py                 # PlatformBridge ABC, FrameworkCapabilities, RunnerContext import
-├── observability.py          # ObservabilityManager (Langfuse, ~900 lines)
+├── observability.py          # ObservabilityManager (Langfuse + optional MLflow)
+├── observability_config.py   # OBSERVABILITY_BACKENDS, use_*_backend()
+├── observability_privacy.py # Shared message masking (LANGFUSE_MASK_MESSAGES)
+├── mlflow_observability.py   # MLflowSessionTracer (parallel spans)
 ├── bridges/
 │   ├── claude/               # Claude Agent SDK bridge
 │   │   ├── bridge.py         # ClaudeBridge class (full lifecycle)

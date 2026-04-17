@@ -130,7 +130,7 @@ make local-test-dev
 
 ```bash
 # Start environment
-make local-up
+make kind-up
 
 # Wait for pods to be ready
 sleep 30
@@ -216,7 +216,7 @@ make local-troubleshoot
 #### "Backend not responding"
 ```bash
 make local-logs-backend
-make local-reload-backend
+make kind-reload-backend
 ```
 
 ## Writing New Tests
@@ -309,7 +309,7 @@ When adding features to the local development environment:
 Wait for pods to be ready before running tests:
 
 ```bash
-make local-up
+make kind-up
 sleep 30
 make local-test-dev
 ```
@@ -346,8 +346,8 @@ Run with verbose output:
 - **Before every PR** - `make local-test-dev`
 - **Weekly** - Full cleanup and restart
   ```bash
-  make local-clean
-  make local-up
+  make kind-down
+  make kind-up
   make local-test-dev
   ```
 

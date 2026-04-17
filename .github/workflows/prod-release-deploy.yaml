@@ -170,6 +170,27 @@ jobs:
 
           cat RELEASE_CHANGELOG.md
 
+      - name: Generate Loading Tips
+        run: |
+          LATEST_TAG="${{ steps.get_latest_tag.outputs.latest_tag }}"
+          NEW_TAG="${{ steps.next_version.outputs.new_tag }}"
+          REPO="${{ github.repository }}"
+          OUTPUT="components/frontend/src/lib/loading-tips.ts"
+
+          python3 scripts/generate-loading-tips.py "$NEW_TAG" "$LATEST_TAG" "$REPO" "$OUTPUT"
+
+          # Commit the updated loading tips so the frontend build includes them
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$OUTPUT"
+          if git diff --cached --quiet; then
+            echo "No loading tips changes to commit"
+          else
+            git commit -m "chore(frontend): update loading tips for ${NEW_TAG}
+
+          Auto-generated release tips highlighting contributors and changes."
+          fi
+
       - name: Create Tag
         id: create_tag
         uses: rickstaa/action-create-tag@v1
@@ -212,7 +233,7 @@ jobs:
             {"name":"frontend","context":"./components/frontend","image":"quay.io/ambient_code/vteam_frontend","dockerfile":"./components/frontend/Dockerfile"},
             {"name":"backend","context":"./components/backend","image":"quay.io/ambient_code/vteam_backend","dockerfile":"./components/backend/Dockerfile"},
             {"name":"operator","context":"./components/operator","image":"quay.io/ambient_code/vteam_operator","dockerfile":"./components/operator/Dockerfile"},
-            {"name":"ambient-runner","context":"./components/runners","image":"quay.io/ambient_code/vteam_claude_runner","dockerfile":"./components/runners/ambient-runner/Dockerfile"},
+            {"name":"ambient-runner","context":"./components/runners/ambient-runner","image":"quay.io/ambient_code/vteam_claude_runner","dockerfile":"./components/runners/ambient-runner/Dockerfile"},
             {"name":"state-sync","context":"./components/runners/state-sync","image":"quay.io/ambient_code/vteam_state_sync","dockerfile":"./components/runners/state-sync/Dockerfile"},
             {"name":"public-api","context":"./components/public-api","image":"quay.io/ambient_code/vteam_public_api","dockerfile":"./components/public-api/Dockerfile"},
             {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/vteam_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"}
@@ -294,7 +315,9 @@ jobs:
           platforms: ${{ matrix.arch.platform }}
           push: true
           tags: ${{ matrix.component.image }}:${{ needs.release.outputs.new_tag }}-${{ matrix.arch.suffix }}
-          build-args: AMBIENT_VERSION=${{ needs.release.outputs.new_tag }}
+          build-args: |
+            AMBIENT_VERSION=${{ needs.release.outputs.new_tag }}
+            GIT_COMMIT=${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
 
@@ -339,13 +362,13 @@ jobs:
           ref: ${{ needs.release.outputs.new_tag }}
 
       - name: Install oc
-        uses: redhat-actions/oc-installer@v1
+        uses: redhat-actions/openshift-tools-installer@v1
         with:
-          oc_version: 'latest'
+          oc: latest
 
       - name: Log in to OpenShift Cluster
         run: |
-          oc login ${{ secrets.PROD_OPENSHIFT_SERVER }} --token=${{ secrets.PROD_OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
+          oc login ${{ secrets.PROD_OPENSHIFT_SERVER }} --token=${{ secrets.PROD_OPENSHIFT_TOKEN }}
 
       - name: Deploy Service Mesh operator via OLM
         run: |
@@ -461,9 +484,9 @@ jobs:
           ref: ${{ needs.release.outputs.new_tag }}
 
       - name: Install oc
-        uses: redhat-actions/oc-installer@v1
+        uses: redhat-actions/openshift-tools-installer@v1
         with:
-          oc_version: 'latest'
+          oc: latest
 
       - name: Install kustomize
         uses: imranismail/setup-kustomize@v2
@@ -472,7 +495,7 @@ jobs:
 
       - name: Log in to OpenShift Cluster
         run: |
-          oc login ${{ secrets.PROD_OPENSHIFT_SERVER }} --token=${{ secrets.PROD_OPENSHIFT_TOKEN }} --insecure-skip-tls-verify
+          oc login ${{ secrets.PROD_OPENSHIFT_SERVER }} --token=${{ secrets.PROD_OPENSHIFT_TOKEN }}
 
       - name: Deploy observability stack
         run: |

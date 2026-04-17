@@ -39,6 +39,7 @@ The workflow provides a set of slash commands that map to distinct phases:
 The Spec-kit workflow has access to a roster of 21 specialized sub-agents that it engages automatically based on the phase and complexity. Key agents include:
 
 **Engineering and architecture:**
+
 - **Archie (Architect)** -- System design, technical vision, architectural patterns.
 - **Stella (Staff Engineer)** -- Technical leadership, implementation excellence, code review.
 - **Neil (Test Engineer)** -- Testing strategy, QA, test automation.
@@ -46,18 +47,21 @@ The Spec-kit workflow has access to a roster of 21 specialized sub-agents that i
 - **Emma (Engineering Manager)** -- Engineering management and capacity planning.
 
 **Product and strategy:**
+
 - **Parker (Product Manager)** -- Market strategy, customer feedback, business value.
 - **Olivia (Product Owner)** -- Backlog management, user stories, sprint planning.
 - **Dan (Senior Director)** -- Strategic direction and executive alignment.
 - **Diego (Program Manager)** -- Cross-team program management.
 
 **UX and design:**
+
 - **Aria (UX Architect)** -- UX strategy, journey mapping, design system architecture.
 - **Felix (UX Feature Lead)** -- Feature-level UX design, interaction design.
 - **Steve (UX Designer)** -- Visual design and interaction patterns.
 - **Uma (UX Team Lead)** -- UX team coordination.
 
 **Content and documentation:**
+
 - **Terry (Technical Writer)** -- Technical documentation standards.
 - **Tessa (Writing Manager)** -- Writing quality and editorial oversight.
 - **Casey (Content Strategist)** -- Content strategy and information architecture.
