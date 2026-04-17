@@ -9,6 +9,13 @@ on:
   push:
     branches: [ main ]
 
+env:
+  KIND_VERSION: "v0.27.0"
+
+permissions:
+  contents: read
+  actions: write
+
 concurrency:
   group: e2e-tests-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
@@ -26,12 +33,12 @@ jobs:
       claude-runner: ${{ steps.filter.outputs.claude-runner }}
     steps:
       - name: Checkout PR code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Check for component changes
-        uses: dorny/paths-filter@v4
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
         id: filter
         with:
           filters: |
@@ -54,12 +61,12 @@ jobs:
 
     steps:
     - name: Checkout PR code
-      uses: actions/checkout@v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
         ref: ${{ github.event.pull_request.head.sha }}
 
     - name: Cleanup Diskspace
-      uses: kubeflow/pipelines/.github/actions/github-disk-cleanup@master
+      uses: kubeflow/pipelines/.github/actions/github-disk-cleanup@ab1231a5c32c688bcb62314e467011b586aee796 # master
       if: (!cancelled())
 
     - name: Validate AGENTS.md symlink
@@ -72,7 +79,7 @@ jobs:
         echo "✅ AGENTS.md symlink is valid"
 
     - name: Set up Node.js
-      uses: actions/setup-node@v6
+      uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
       with:
         node-version: '20'
         cache: 'npm'
@@ -83,74 +90,106 @@ jobs:
       run: npm ci
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       with:
         driver-opts: network=host
 
-    - name: Build component images from PR code
+    - name: Build or pull frontend image
+      if: needs.detect-changes.outputs.frontend == 'true'
+      uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
+      with:
+        context: components/frontend
+        file: components/frontend/Dockerfile
+        load: true
+        tags: quay.io/ambient_code/vteam_frontend:e2e-test
+        cache-from: |
+          type=gha,scope=frontend-amd64
+          type=gha,scope=e2e-frontend
+        cache-to: type=gha,mode=max,scope=e2e-frontend
+
+    - name: Pull frontend latest (unchanged)
+      if: needs.detect-changes.outputs.frontend != 'true'
       run: |
-        echo "======================================"
-        echo "Building images from PR code..."
-        echo "PR #${{ github.event.pull_request.number }}"
-        echo "SHA: ${{ github.event.pull_request.head.sha }}"
-        echo "======================================"
+        docker pull quay.io/ambient_code/vteam_frontend:latest
+        docker tag quay.io/ambient_code/vteam_frontend:latest quay.io/ambient_code/vteam_frontend:e2e-test
 
-        # Build frontend image (if changed or use latest)
-        if [ "${{ needs.detect-changes.outputs.frontend }}" == "true" ]; then
-          echo "Building frontend (changed)..."
-          docker build -t quay.io/ambient_code/vteam_frontend:e2e-test \
-            -f components/frontend/Dockerfile \
-            components/frontend
-        else
-          echo "Frontend unchanged, pulling latest..."
-          docker pull quay.io/ambient_code/vteam_frontend:latest
-          docker tag quay.io/ambient_code/vteam_frontend:latest quay.io/ambient_code/vteam_frontend:e2e-test
-        fi
+    - name: Build or pull backend image
+      if: needs.detect-changes.outputs.backend == 'true'
+      uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
+      with:
+        context: components/backend
+        file: components/backend/Dockerfile
+        load: true
+        tags: quay.io/ambient_code/vteam_backend:e2e-test
+        cache-from: |
+          type=gha,scope=backend-amd64
+          type=gha,scope=e2e-backend
+        cache-to: type=gha,mode=max,scope=e2e-backend
 
-        # Build backend image (if changed or use latest)
-        if [ "${{ needs.detect-changes.outputs.backend }}" == "true" ]; then
-          echo "Building backend (changed)..."
-          docker build -t quay.io/ambient_code/vteam_backend:e2e-test \
-            -f components/backend/Dockerfile \
-            components/backend
-        else
-          echo "Backend unchanged, pulling latest..."
-          docker pull quay.io/ambient_code/vteam_backend:latest
-          docker tag quay.io/ambient_code/vteam_backend:latest quay.io/ambient_code/vteam_backend:e2e-test
-        fi
+    - name: Pull backend latest (unchanged)
+      if: needs.detect-changes.outputs.backend != 'true'
+      run: |
+        docker pull quay.io/ambient_code/vteam_backend:latest
+        docker tag quay.io/ambient_code/vteam_backend:latest quay.io/ambient_code/vteam_backend:e2e-test
 
-        # Build operator image (if changed or use latest)
-        if [ "${{ needs.detect-changes.outputs.operator }}" == "true" ]; then
-          echo "Building operator (changed)..."
-          docker build -t quay.io/ambient_code/vteam_operator:e2e-test \
-            -f components/operator/Dockerfile \
-            components/operator
-        else
-          echo "Operator unchanged, pulling latest..."
-          docker pull quay.io/ambient_code/vteam_operator:latest
-          docker tag quay.io/ambient_code/vteam_operator:latest quay.io/ambient_code/vteam_operator:e2e-test
-        fi
+    - name: Build or pull operator image
+      if: needs.detect-changes.outputs.operator == 'true'
+      uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
+      with:
+        context: components/operator
+        file: components/operator/Dockerfile
+        load: true
+        tags: quay.io/ambient_code/vteam_operator:e2e-test
+        cache-from: |
+          type=gha,scope=operator-amd64
+          type=gha,scope=e2e-operator
+        cache-to: type=gha,mode=max,scope=e2e-operator
 
-        # Build ambient-runner image (if changed or use latest)
-        if [ "${{ needs.detect-changes.outputs.claude-runner }}" == "true" ]; then
-          echo "Building ambient-runner (changed)..."
-          docker build -t quay.io/ambient_code/vteam_claude_runner:e2e-test \
-            components/runners/ambient-runner
-        else
-          echo "Claude-runner unchanged, pulling latest..."
-          docker pull quay.io/ambient_code/vteam_claude_runner:latest
-          docker tag quay.io/ambient_code/vteam_claude_runner:latest quay.io/ambient_code/vteam_claude_runner:e2e-test
-        fi
+    - name: Pull operator latest (unchanged)
+      if: needs.detect-changes.outputs.operator != 'true'
+      run: |
+        docker pull quay.io/ambient_code/vteam_operator:latest
+        docker tag quay.io/ambient_code/vteam_operator:latest quay.io/ambient_code/vteam_operator:e2e-test
 
-        echo ""
-        echo "✅ All images ready"
-        docker images | grep e2e-test
+    - name: Build or pull ambient-runner image
+      if: needs.detect-changes.outputs.claude-runner == 'true'
+      uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
+      with:
+        context: components/runners
+        file: components/runners/ambient-runner/Dockerfile
+        load: true
+        tags: quay.io/ambient_code/vteam_claude_runner:e2e-test
+        cache-from: |
+          type=gha,scope=ambient-runner-amd64
+          type=gha,scope=e2e-ambient-runner
+        cache-to: type=gha,mode=max,scope=e2e-ambient-runner
+
+    - name: Pull ambient-runner latest (unchanged)
+      if: needs.detect-changes.outputs.claude-runner != 'true'
+      run: |
+        docker pull quay.io/ambient_code/vteam_claude_runner:latest
+        docker tag quay.io/ambient_code/vteam_claude_runner:latest quay.io/ambient_code/vteam_claude_runner:e2e-test
+
+    - name: Show built images
+      run: docker images | grep e2e-test
+
+    - name: Cache kind binary
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: ~/k8s-tools/kind
+        key: kind-${{ runner.os }}-${{ env.KIND_VERSION }}
 
     - name: Install kind
       run: |
-        curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.27.0/kind-linux-amd64
-        chmod +x ./kind
-        sudo mv ./kind /usr/local/bin/kind
+        mkdir -p ~/k8s-tools
+        if [[ ! -f ~/k8s-tools/kind ]]; then
+          echo "Downloading kind $KIND_VERSION..."
+          curl -sLo ~/k8s-tools/kind "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
+          chmod +x ~/k8s-tools/kind
+        else
+          echo "Using cached kind"
+        fi
+        sudo cp ~/k8s-tools/kind /usr/local/bin/kind
         kind version
 
     - name: Setup kind cluster
@@ -194,7 +233,7 @@ jobs:
 
     - name: Upload test results
       if: failure()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
       with:
         name: cypress-screenshots-pr-${{ github.event.pull_request.number }}
         path: e2e/cypress/screenshots
@@ -203,7 +242,7 @@ jobs:
 
     - name: Upload test videos
       if: failure()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
       with:
         name: cypress-videos-pr-${{ github.event.pull_request.number }}
         path: e2e/cypress/videos
