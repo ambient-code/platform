@@ -16,6 +16,10 @@ resources:
 - ambient-api-server-route.yaml
 - operator-config-openshift.yaml
 
+# Components (optional features)
+components:
+- ../../components/oauth-proxy
+
 # Patches to configure external resources
 patches:
 # Update operator to use Konflux runner image
@@ -62,6 +66,20 @@ patches:
   target:
     kind: Secret
     name: ambient-code-rds
+
+# Ambient API Server: enable SSL for RDS, set environment, enable service-ca TLS
+- path: ambient-api-server-ssl-patch.yaml
+  target:
+    kind: Deployment
+    name: ambient-api-server
+- path: ambient-api-server-env-patch.yaml
+  target:
+    kind: Deployment
+    name: ambient-api-server
+- path: ambient-api-server-service-ca-patch.yaml
+  target:
+    kind: Service
+    name: ambient-api-server
 
 # Konflux image overrides (redhat-services-prod)
 images:

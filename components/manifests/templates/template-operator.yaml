@@ -3,7 +3,8 @@ kind: Template
 metadata:
   name: ambient-code-operator
   annotations:
-    description: Ambient Code Platform - Platform components (CRDs, RBAC, Operator)
+    description: Ambient Code Platform - Operator and CRDs
+    tags: ambient-code,operator
 parameters:
 - name: IMAGE_TAG
   description: Image tag to deploy (auto-generated from git commit)
@@ -11,11 +12,9 @@ parameters:
 - name: IMAGE_OPERATOR
   description: Operator image
   value: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-operator-main
-  required: true
 - name: IMAGE_AMBIENT_RUNNER
-  description: Ambient Runner image
+  description: Ambient runner image
   value: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-ambient-runner-main
-  required: true
 objects:
 - apiVersion: apiextensions.k8s.io/v1
   kind: CustomResourceDefinition
@@ -347,6 +346,30 @@ objects:
   kind: ServiceAccount
   metadata:
     name: agentic-operator
+    namespace: ambient-code
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    labels:
+      app: ambient-api-server
+    name: ambient-api-server
+    namespace: ambient-code
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    name: backend-api
+    namespace: ambient-code
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    name: frontend
+    namespace: ambient-code
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    labels:
+      app: public-api
+    name: public-api
     namespace: ambient-code
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: ClusterRole
@@ -1162,18 +1185,34 @@ objects:
     namespace: ambient-code
 - apiVersion: v1
   data:
-    agent-registry.json: "[\n  {\n    \"id\": \"claude-agent-sdk\",\n    \"displayName\": \"Claude Code\",\n    \"description\": \"Anthropic Claude with full coding capabilities\",\n    \"framework\": \"claude-agent-sdk\",\n    \"provider\": \"anthropic\",\n    \"container\": {\n      \"image\": \"${IMAGE_AMBIENT_RUNNER}:${IMAGE_TAG}\",\n      \"port\": 8001,\n      \"env\": {\n        \"RUNNER_TYPE\": \"claude-agent-sdk\",\n        \"RUNNER_STATE_DIR\": \".claude\"\n      },\n      \"resources\": {\n        \"requests\": {\"cpu\": \"500m\", \"memory\": \"512Mi\"},\n        \"limits\": {\"cpu\": \"2\", \"memory\": \"8Gi\"}\n      }\n    },\n    \"sandbox\": {\n      \"stateDir\": \".claude\",\n      \"stateSyncImage\": \"quay.io/ambient_code/vteam_state_sync:latest\",\n      \"persistence\": \"s3\",\n      \"workspaceSize\": \"10Gi\",\n      \"terminationGracePeriod\": 60,\n      \"seed\": {\"cloneRepos\": true, \"hydrateState\": true}\n    },\n    \"auth\": {\n      \"requiredSecretKeys\"\
-      : [\"ANTHROPIC_API_KEY\"],\n      \"secretKeyLogic\": \"any\",\n      \"vertexSupported\": true\n    },\n    \"featureGate\": \"\"\n  },\n  {\n    \"id\": \"gemini-cli\",\n    \"displayName\": \"Gemini CLI\",\n    \"description\": \"Google Gemini coding agent with built-in file, bash, and search tools\",\n    \"framework\": \"gemini-cli\",\n    \"provider\": \"google\",\n    \"container\": {\n      \"image\": \"${IMAGE_AMBIENT_RUNNER}:${IMAGE_TAG}\",\n      \"port\": 8001,\n      \"env\": {\n        \"RUNNER_TYPE\": \"gemini-cli\",\n        \"RUNNER_STATE_DIR\": \".gemini\"\n      }\n    },\n    \"sandbox\": {\n      \"stateDir\": \".gemini\",\n      \"stateSyncImage\": \"quay.io/ambient_code/vteam_state_sync:latest\",\n      \"persistence\": \"s3\",\n      \"workspaceSize\": \"10Gi\",\n      \"terminationGracePeriod\": 60,\n      \"seed\": {\"cloneRepos\": true, \"hydrateState\": true}\n    },\n    \"auth\": {\n      \"requiredSecretKeys\": [\"GEMINI_API_KEY\", \"GOOGLE_API_KEY\"\
-      ],\n      \"secretKeyLogic\": \"any\",\n      \"vertexSupported\": true\n    },\n    \"featureGate\": \"runner.gemini-cli.enabled\"\n  }\n]\n"
+    agent-registry.json: "[\n  {\n    \"id\": \"claude-agent-sdk\",\n    \"displayName\": \"Claude Code\",\n    \"description\": \"Anthropic Claude with full coding capabilities\",\n    \"framework\": \"claude-agent-sdk\",\n    \"provider\": \"anthropic\",\n    \"container\": {\n      \"image\": \"quay.io/ambient_code/vteam_claude_runner:latest\",\n      \"port\": 8001,\n      \"env\": {\n        \"RUNNER_TYPE\": \"claude-agent-sdk\",\n        \"RUNNER_STATE_DIR\": \".claude\"\n      },\n      \"resources\": {\n        \"requests\": {\"cpu\": \"500m\", \"memory\": \"512Mi\"},\n        \"limits\": {\"cpu\": \"2\", \"memory\": \"8Gi\"}\n      }\n    },\n    \"sandbox\": {\n      \"stateDir\": \".claude\",\n      \"stateSyncImage\": \"quay.io/ambient_code/vteam_state_sync:latest\",\n      \"persistence\": \"s3\",\n      \"workspaceSize\": \"10Gi\",\n      \"terminationGracePeriod\": 60,\n      \"seed\": {\"cloneRepos\": true, \"hydrateState\": true}\n    },\n    \"auth\": {\n      \"requiredSecretKeys\": [\"ANTHROPIC_API_KEY\"],\n      \"secretKeyLogic\": \"any\",\n      \"vertexSupported\": true\n    },\n    \"featureGate\": \"\"\n  },\n  {\n    \"id\": \"gemini-cli\",\n    \"displayName\": \"Gemini CLI\",\n    \"description\": \"Google Gemini coding agent with built-in file, bash, and search tools\",\n    \"framework\": \"gemini-cli\",\n    \"provider\": \"google\",\n    \"container\": {\n      \"image\": \"quay.io/ambient_code/vteam_claude_runner:latest\",\n      \"port\": 8001,\n      \"env\": {\n        \"RUNNER_TYPE\": \"gemini-cli\",\n        \"RUNNER_STATE_DIR\": \".gemini\"\n      }\n    },\n    \"sandbox\": {\n      \"stateDir\": \".gemini\",\n      \"stateSyncImage\": \"quay.io/ambient_code/vteam_state_sync:latest\",\n      \"persistence\": \"s3\",\n      \"workspaceSize\": \"10Gi\",\n      \"terminationGracePeriod\": 60,\n      \"seed\": {\"cloneRepos\": true, \"hydrateState\": true}\n    },\n    \"auth\": {\n      \"requiredSecretKeys\": [\"GEMINI_API_KEY\", \"GOOGLE_API_KEY\"],\n      \"secretKeyLogic\": \"any\",\n      \"vertexSupported\": true\n    },\n    \"featureGate\": \"runner.gemini-cli.enabled\"\n  }\n]\n"
   kind: ConfigMap
   metadata:
     name: ambient-agent-registry
     namespace: ambient-code
 - apiVersion: v1
   data:
-    models.json: "{\n  \"version\": 2,\n  \"defaultModel\": \"claude-sonnet-4-5\",\n  \"providerDefaults\": {\n    \"anthropic\": \"claude-sonnet-4-5\",\n    \"google\": \"gemini-2.5-flash\"\n  },\n  \"models\": [\n    {\n      \"id\": \"claude-sonnet-4-5\",\n      \"label\": \"Claude Sonnet 4.5\",\n      \"vertexId\": \"claude-sonnet-4-5@20250929\",\n      \"provider\": \"anthropic\",\n      \"available\": true,\n      \"featureGated\": false\n    },\n    {\n      \"id\": \"claude-opus-4-6\",\n      \"label\": \"Claude Opus 4.6\",\n      \"vertexId\": \"claude-opus-4-6@default\",\n      \"provider\": \"anthropic\",\n      \"available\": true,\n      \"featureGated\": true\n    },\n    {\n      \"id\": \"claude-opus-4-5\",\n      \"label\": \"Claude Opus 4.5\",\n      \"vertexId\": \"claude-opus-4-5@20251101\",\n      \"provider\": \"anthropic\",\n      \"available\": true,\n      \"featureGated\": false\n    },\n    {\n      \"id\": \"claude-haiku-4-5\",\n      \"label\": \"Claude Haiku\
-      \ 4.5\",\n      \"vertexId\": \"claude-haiku-4-5@20251001\",\n      \"provider\": \"anthropic\",\n      \"available\": true,\n      \"featureGated\": false\n    },\n    {\n      \"id\": \"claude-sonnet-4-6\",\n      \"label\": \"Claude Sonnet 4.6\",\n      \"vertexId\": \"claude-sonnet-4-6@default\",\n      \"provider\": \"anthropic\",\n      \"available\": true,\n      \"featureGated\": true\n    },\n    {\n      \"id\": \"gemini-2.5-flash\",\n      \"label\": \"Gemini 2.5 Flash\",\n      \"vertexId\": \"gemini-2.5-flash@default\",\n      \"provider\": \"google\",\n      \"available\": true,\n      \"featureGated\": false\n    },\n    {\n      \"id\": \"gemini-2.5-pro\",\n      \"label\": \"Gemini 2.5 Pro\",\n      \"vertexId\": \"gemini-2.5-pro@default\",\n      \"provider\": \"google\",\n      \"available\": true,\n      \"featureGated\": true\n    },\n    {\n      \"id\": \"gemini-2.5-flash-lite\",\n      \"label\": \"Gemini 2.5 Flash Lite\",\n      \"vertexId\": \"gemini-2.5-flash-lite@default\"\
-      ,\n      \"provider\": \"google\",\n      \"available\": true,\n      \"featureGated\": true\n    },\n    {\n      \"id\": \"gemini-2.5-flash-preview-04-17\",\n      \"label\": \"Gemini 2.5 Flash Preview 04.17\",\n      \"vertexId\": \"gemini-2.5-flash-preview-04-17@default\",\n      \"provider\": \"google\",\n      \"available\": false,\n      \"featureGated\": true\n    },\n    {\n      \"id\": \"gemini-3.1-flash-image-preview\",\n      \"label\": \"Gemini 3.1 Flash Image Preview\",\n      \"vertexId\": \"gemini-3.1-flash-image-preview@default\",\n      \"provider\": \"google\",\n      \"available\": false,\n      \"featureGated\": true\n    }\n  ]\n}\n"
+    acl.yml: "- claim: email\n  pattern: ^.*@(redhat\\.com|ambient\\.code)$\n"
+    jwks.json: '{"keys":[]}
+
+      '
+  kind: ConfigMap
+  metadata:
+    labels:
+      app: ambient-api-server
+      component: auth
+    name: ambient-api-server-auth
+    namespace: ambient-code
+- apiVersion: v1
+  data:
+    flags.json: "{\n  \"flags\": [\n    {\n      \"name\": \"runner.gemini-cli.enabled\",\n      \"description\": \"Enable Gemini CLI runner type for session creation\",\n      \"tags\": [\n        {\n          \"type\": \"scope\",\n          \"value\": \"workspace\"\n        }\n      ]\n    },\n    {\n      \"name\": \"ldap.autocomplete.enabled\",\n      \"description\": \"Enable LDAP user and group autocomplete for workspace sharing\",\n      \"tags\": [\n        {\n          \"type\": \"scope\",\n          \"value\": \"workspace\"\n        }\n      ]\n    },\n    {\n      \"name\": \"scheduled-session.reuse.enabled\",\n      \"description\": \"Enable reuse last session option for scheduled sessions\",\n      \"tags\": [\n        {\n          \"type\": \"scope\",\n          \"value\": \"workspace\"\n        }\n      ]\n    },\n    {\n      \"name\": \"jira-write\",\n      \"description\": \"Allow Jira MCP server to perform write operations in new sessions\",\n      \"tags\": [\n        {\n          \"type\": \"scope\",\n          \"value\": \"workspace\"\n        }\n      ]\n    }\n  ]\n}\n"
+  kind: ConfigMap
+  metadata:
+    name: ambient-flags
+    namespace: ambient-code
+- apiVersion: v1
+  data:
+    models.json: "{\n  \"version\": 2,\n  \"defaultModel\": \"claude-sonnet-4-5\",\n  \"providerDefaults\": {\n    \"anthropic\": \"claude-sonnet-4-5\",\n    \"google\": \"gemini-2.5-flash\"\n  },\n  \"models\": [\n    {\n      \"id\": \"claude-sonnet-4-5\",\n      \"label\": \"Claude Sonnet 4.5\",\n      \"vertexId\": \"claude-sonnet-4-5@20250929\",\n      \"provider\": \"anthropic\",\n      \"available\": true,\n      \"featureGated\": false\n    },\n    {\n      \"id\": \"claude-opus-4-6\",\n      \"label\": \"Claude Opus 4.6\",\n      \"vertexId\": \"claude-opus-4-6@default\",\n      \"provider\": \"anthropic\",\n      \"available\": true,\n      \"featureGated\": true\n    },\n    {\n      \"id\": \"claude-opus-4-5\",\n      \"label\": \"Claude Opus 4.5\",\n      \"vertexId\": \"claude-opus-4-5@20251101\",\n      \"provider\": \"anthropic\",\n      \"available\": true,\n      \"featureGated\": false\n    },\n    {\n      \"id\": \"claude-haiku-4-5\",\n      \"label\": \"Claude Haiku 4.5\",\n      \"vertexId\": \"claude-haiku-4-5@20251001\",\n      \"provider\": \"anthropic\",\n      \"available\": true,\n      \"featureGated\": false\n    },\n    {\n      \"id\": \"claude-sonnet-4-6\",\n      \"label\": \"Claude Sonnet 4.6\",\n      \"vertexId\": \"claude-sonnet-4-6@default\",\n      \"provider\": \"anthropic\",\n      \"available\": true,\n      \"featureGated\": true\n    },\n    {\n      \"id\": \"gemini-2.5-flash\",\n      \"label\": \"Gemini 2.5 Flash\",\n      \"vertexId\": \"gemini-2.5-flash@default\",\n      \"provider\": \"google\",\n      \"available\": true,\n      \"featureGated\": false\n    },\n    {\n      \"id\": \"gemini-2.5-pro\",\n      \"label\": \"Gemini 2.5 Pro\",\n      \"vertexId\": \"gemini-2.5-pro@default\",\n      \"provider\": \"google\",\n      \"available\": true,\n      \"featureGated\": true\n    },\n    {\n      \"id\": \"gemini-2.5-flash-lite\",\n      \"label\": \"Gemini 2.5 Flash Lite\",\n      \"vertexId\": \"gemini-2.5-flash-lite@default\",\n      \"provider\": \"google\",\n      \"available\": true,\n      \"featureGated\": true\n    },\n    {\n      \"id\": \"gemini-2.5-flash-preview-04-17\",\n      \"label\": \"Gemini 2.5 Flash Preview 04.17\",\n      \"vertexId\": \"gemini-2.5-flash-preview-04-17@default\",\n      \"provider\": \"google\",\n      \"available\": false,\n      \"featureGated\": true\n    },\n    {\n      \"id\": \"gemini-3.1-flash-image-preview\",\n      \"label\": \"Gemini 3.1 Flash Image Preview\",\n      \"vertexId\": \"gemini-3.1-flash-image-preview@default\",\n      \"provider\": \"google\",\n      \"available\": false,\n      \"featureGated\": true\n    }\n  ]\n}\n"
   kind: ConfigMap
   metadata:
     name: ambient-models
@@ -1296,9 +1335,6 @@ objects:
             value: http://minio.ambient-code.svc:9000
           - name: S3_BUCKET
             value: ambient-sessions
-          # Disabled: OTel collector not deployed. Uncomment when collector is available.
-          # - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          #   value: otel-collector.ambient-code.svc:4317
           - name: DEPLOYMENT_ENV
             value: production
           - name: VERSION
