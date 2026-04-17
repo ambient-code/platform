@@ -1,6 +1,11 @@
 ---
 name: dev-cluster
-description: Manages Ambient Code Platform development clusters (kind) for testing changes
+description: >
+  Manages Ambient Code Platform development clusters (kind) for testing changes
+  locally. Use when deploying PRs to kind, bringing up local clusters, rebuilding
+  images, troubleshooting pod issues, or running benchmarks. Triggers on: "test
+  in kind", "deploy locally", "kind cluster", "rebuild images", "pod crashing",
+  "bring up cluster", "kind-up", "dev environment", "local dev".
 ---
 
 # Development Cluster Management Skill
@@ -281,7 +286,7 @@ make kind-rebuild
 
 ### "Just rebuild the backend"
 ```bash
-make build-backend
+make build-backend CONTAINER_ENGINE=$CONTAINER_ENGINE
 kind load docker-image localhost/vteam_backend:latest --name $KIND_CLUSTER_NAME
 kubectl set image deployment/backend backend=localhost/vteam_backend:latest -n ambient-code
 kubectl rollout restart deployment/backend -n ambient-code
@@ -315,7 +320,7 @@ kubectl get deployments -n ambient-code
 **Solution:**
 ```bash
 # Ensure images are built locally
-make build-all
+make build-all CONTAINER_ENGINE=$CONTAINER_ENGINE
 
 # Load images into kind
 kind load docker-image localhost/vteam_backend:latest --name $KIND_CLUSTER_NAME
@@ -346,14 +351,7 @@ kubectl describe pod -l app=backend -n ambient-code
 ### Sessions fail with init-hydrate exit code 1
 **Cause:** MinIO `ambient-sessions` bucket doesn't exist. This happens when `make kind-up` fails partway through (e.g., due to image pull errors) and the `init-minio.sh` step is skipped.
 
-**Solution:**
-```bash
-# Create the bucket manually
-kubectl exec deployment/minio -n ambient-code -- mc alias set local http://localhost:9000 minioadmin minioadmin123
-kubectl exec deployment/minio -n ambient-code -- mc mb local/ambient-sessions
-```
-
-**Prevention:** If `make kind-up` fails, fix the underlying issue and re-run it rather than manually recovering individual steps. The Makefile runs `init-minio.sh` near the end of `kind-up`.
+**Solution:** Fix the underlying issue (e.g., image pull errors) and re-run `make kind-down && make kind-up`. The Makefile runs `init-minio.sh` near the end of `kind-up`, which creates the required buckets. If `make kind-up` completes successfully, the bucket will exist.
 
 ### Port forwarding not working
 **Cause:** Port already in use or forwarding process died

@@ -571,9 +571,21 @@ preflight-cluster: ## Validate kind, kubectl, and container engine (daemon runni
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) kind $$KVER"; \
 	else \
 		echo "$(COLOR_RED)✗$(COLOR_RESET) kind not found"; \
-		if [ "$$OS" = "Darwin" ]; then echo "  Install: brew install kind"; else echo "  Install: go install sigs.k8s.io/kind@latest"; fi; \
-		echo "           https://kind.sigs.k8s.io/docs/user/quick-start/"; \
-		FAILED=1; \
+		if [ "$$OS" = "Darwin" ]; then \
+			echo "  Install: brew install kind"; \
+		elif command -v dnf >/dev/null 2>&1; then \
+			printf "  Install with 'sudo dnf install kind'? [y/N] "; \
+			read _ans; \
+			case "$$_ans" in y|Y|yes|YES) \
+				sudo dnf install -y kind && echo "$(COLOR_GREEN)✓$(COLOR_RESET) kind installed" ;; \
+			*) FAILED=1 ;; esac; \
+		else \
+			echo "  Install: go install sigs.k8s.io/kind@latest"; \
+		fi; \
+		if ! command -v kind >/dev/null 2>&1; then \
+			echo "           https://kind.sigs.k8s.io/docs/user/quick-start/"; \
+			FAILED=1; \
+		fi; \
 	fi; \
 	if command -v kubectl >/dev/null 2>&1; then \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) kubectl $$(kubectl version --client -o yaml 2>/dev/null | grep gitVersion | head -1 | sed 's/.*: //' || kubectl version --client 2>/dev/null | head -1)"; \
@@ -954,6 +966,48 @@ test-e2e-setup: ## Install e2e test dependencies
 
 e2e-setup: test-e2e-setup ## Alias for test-e2e-setup (backward compatibility)
 
+##@ Documentation Quality
+
+docs-lint: ## Lint documentation content (Vale + markdownlint + cspell)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Linting documentation..."
+	@cd docs && vale src/content/docs/ && \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Vale passed"
+	@cd docs && npx markdownlint-cli2 "src/content/docs/**/*.md" && \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) markdownlint passed"
+	@cd docs && npx cspell lint --no-progress "src/content/docs/**/*.md" && \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) cspell passed"
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) All docs lint checks passed"
+
+##@ Documentation Screenshots
+
+screenshots: ## Capture documentation screenshots against running kind cluster
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Capturing documentation screenshots..."
+	@if [ ! -f e2e/.env.test ] && [ -z "$(CYPRESS_BASE_URL)" ]; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) No cluster config. Run 'make kind-up' first."; \
+		exit 1; \
+	fi
+	cd e2e && \
+		CYPRESS_SCREENSHOT_MODE=true \
+		CYPRESS_TEST_TOKEN="$$(grep TEST_TOKEN .env.test 2>/dev/null | cut -d= -f2)" \
+		CYPRESS_BASE_URL="$$(grep CYPRESS_BASE_URL .env.test 2>/dev/null | cut -d= -f2)" \
+		CYPRESS_ANTHROPIC_API_KEY=mock-replay-key \
+		npx cypress run --browser chrome --spec cypress/e2e/screenshots.cy.ts
+	@mkdir -p docs/public/images/screenshots
+	@find e2e/cypress/screenshots/output -name '*.png' ! -name '*failed*' -exec cp {} docs/public/images/screenshots/ \;
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Screenshots updated in docs/public/images/screenshots/"
+
+screenshots-headed: ## Open Cypress for screenshot debugging
+	cd e2e && \
+		CYPRESS_SCREENSHOT_MODE=true \
+		CYPRESS_TEST_TOKEN="$$(grep TEST_TOKEN .env.test 2>/dev/null | cut -d= -f2)" \
+		CYPRESS_BASE_URL="$$(grep CYPRESS_BASE_URL .env.test 2>/dev/null | cut -d= -f2)" \
+		CYPRESS_ANTHROPIC_API_KEY=mock-replay-key \
+		npx cypress open --e2e --browser chrome
+
+screenshots-clean: ## Remove generated screenshots
+	@rm -rf e2e/cypress/screenshots/output/
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Screenshot output cleaned"
+
 kind-rebuild: check-kind check-kubectl check-local-context build-all ## Rebuild, reload, and restart all components in kind
 	@$(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null | grep -q '^$(KIND_CLUSTER_NAME)$$' || \
 		(echo "$(COLOR_RED)✗$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' not found. Run 'make kind-up LOCAL_IMAGES=true' first." && exit 1)
@@ -1113,9 +1167,21 @@ check-kind: ## Check if kind is installed
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) kind $$(kind version -q 2>/dev/null || kind version 2>/dev/null | head -1)"; \
 	else \
 		echo "$(COLOR_RED)✗$(COLOR_RESET) kind not found"; \
-		if [ "$$OS" = "Darwin" ]; then echo "  Install: brew install kind"; else echo "  Install: go install sigs.k8s.io/kind@latest"; fi; \
-		echo "  https://kind.sigs.k8s.io/docs/user/quick-start/"; \
-		exit 1; \
+		if [ "$$OS" = "Darwin" ]; then \
+			echo "  Install: brew install kind"; \
+		elif command -v dnf >/dev/null 2>&1; then \
+			printf "  Install with 'sudo dnf install kind'? [y/N] "; \
+			read _ans; \
+			case "$$_ans" in y|Y|yes|YES) \
+				sudo dnf install -y kind && echo "$(COLOR_GREEN)✓$(COLOR_RESET) kind installed" ;; \
+			esac; \
+		else \
+			echo "  Install: go install sigs.k8s.io/kind@latest"; \
+		fi; \
+		if ! command -v kind >/dev/null 2>&1; then \
+			echo "  https://kind.sigs.k8s.io/docs/user/quick-start/"; \
+			exit 1; \
+		fi; \
 	fi
 
 check-kubectl: ## Check if kubectl is installed

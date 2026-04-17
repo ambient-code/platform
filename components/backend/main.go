@@ -15,6 +15,7 @@ import (
 	"ambient-code-backend/k8s"
 	"ambient-code-backend/ldap"
 	"ambient-code-backend/server"
+	"ambient-code-backend/storage"
 	"ambient-code-backend/websocket"
 
 	"github.com/joho/godotenv"
@@ -167,6 +168,16 @@ func main() {
 	handlers.GetOpenShiftProjectResource = k8s.GetOpenShiftProjectResource
 	handlers.K8sClientProjects = server.K8sClient         // Backend SA client for namespace operations
 	handlers.DynamicClientProjects = server.DynamicClient // Backend SA dynamic client for Project operations
+
+	// Initialize S3 storage for pre-upload file support (optional - degrades gracefully)
+	if s3Cfg, err := storage.LoadS3ConfigFromEnv(); err != nil {
+		log.Printf("S3 storage not configured (pre-upload disabled): %v", err)
+	} else if s3Client, err := storage.NewS3Client(s3Cfg); err != nil {
+		log.Printf("Failed to initialize S3 client (pre-upload disabled): %v", err)
+	} else {
+		handlers.S3Storage = s3Client
+		log.Printf("S3 storage initialized for pre-upload support (endpoint: %s, bucket: %s)", s3Cfg.Endpoint, s3Cfg.Bucket)
+	}
 
 	// Initialize session handlers
 	handlers.GetAgenticSessionV1Alpha1Resource = k8s.GetAgenticSessionV1Alpha1Resource

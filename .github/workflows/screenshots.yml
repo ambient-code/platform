@@ -1,0 +1,136 @@
+name: Update Documentation Screenshots
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: doc-screenshots
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  capture:
+    name: Capture Screenshots
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+
+    - name: Cleanup Diskspace
+      uses: kubeflow/pipelines/.github/actions/github-disk-cleanup@master
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: e2e/package-lock.json
+
+    - name: Install Cypress dependencies
+      working-directory: e2e
+      run: npm ci
+
+    - name: Pull component images
+      run: |
+        for img in frontend backend operator claude_runner; do
+          docker pull quay.io/ambient_code/vteam_${img}:latest
+          docker tag quay.io/ambient_code/vteam_${img}:latest \
+            quay.io/ambient_code/vteam_${img}:e2e-test
+        done
+
+    - name: Install kind
+      run: |
+        curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.27.0/kind-linux-amd64
+        chmod +x ./kind
+        sudo mv ./kind /usr/local/bin/kind
+
+    - name: Setup kind cluster
+      working-directory: e2e
+      run: |
+        chmod +x scripts/*.sh
+        ./scripts/setup-kind.sh
+
+    - name: Load images into kind
+      run: |
+        for img in frontend backend operator claude_runner; do
+          kind load docker-image quay.io/ambient_code/vteam_${img}:e2e-test --name ambient-local
+        done
+
+    - name: Deploy (mock SDK mode)
+      working-directory: e2e
+      env:
+        IMAGE_FRONTEND: quay.io/ambient_code/vteam_frontend:e2e-test
+        IMAGE_BACKEND: quay.io/ambient_code/vteam_backend:e2e-test
+        IMAGE_OPERATOR: quay.io/ambient_code/vteam_operator:e2e-test
+        IMAGE_RUNNER: quay.io/ambient_code/vteam_claude_runner:e2e-test
+      run: ./scripts/deploy.sh
+
+    - name: Capture screenshots
+      working-directory: e2e
+      run: |
+        CYPRESS_SCREENSHOT_MODE=true \
+        CYPRESS_TEST_TOKEN="$(grep TEST_TOKEN .env.test | cut -d= -f2)" \
+        CYPRESS_BASE_URL="$(grep CYPRESS_BASE_URL .env.test | cut -d= -f2)" \
+        CYPRESS_ANTHROPIC_API_KEY=mock-replay-key \
+        npx cypress run --browser chrome --spec cypress/e2e/screenshots.cy.ts
+
+    - name: Copy screenshots to docs
+      run: |
+        mkdir -p docs/public/images/screenshots
+        find e2e/cypress/screenshots/output -name '*.png' ! -name '*failed*' -exec cp {} docs/public/images/screenshots/ \;
+
+    - name: Check for changes
+      id: changes
+      run: |
+        if git diff --quiet docs/public/images/screenshots/ 2>/dev/null; then
+          echo "changed=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          git diff --stat docs/public/images/screenshots/
+        fi
+
+    - name: Create PR with updated screenshots
+      if: steps.changes.outputs.changed == 'true'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        BRANCH="docs/update-screenshots-$(date +%Y%m%d)"
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git checkout -b "$BRANCH"
+        git add docs/public/images/screenshots/
+        git commit -m "docs: update automated screenshots $(date +%Y-%m-%d)"
+        git push origin "$BRANCH"
+        gh pr create \
+          --title "docs: update screenshots $(date +%Y-%m-%d)" \
+          --body "Automated daily screenshot update. Review changed PNGs in the Files tab." \
+          --label "docs,automated"
+
+    - name: Upload screenshots as artifact
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: doc-screenshots
+        path: e2e/cypress/screenshots/output/
+        if-no-files-found: ignore
+        retention-days: 7
+
+    - name: Debug logs on failure
+      if: failure()
+      run: |
+        echo "=== Frontend logs ==="
+        kubectl logs -n ambient-code -l app=frontend --tail=50 || true
+        echo "=== Backend logs ==="
+        kubectl logs -n ambient-code -l app=backend-api --tail=50 || true
+
+    - name: Cleanup
+      if: always()
+      working-directory: e2e
+      run: CLEANUP_ARTIFACTS=true ./scripts/cleanup.sh || true

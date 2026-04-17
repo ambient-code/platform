@@ -88,13 +88,23 @@ Benchmark notes:
 - `warm` measures rebuild proxies, not browser-observed hot reload latency
 - See `scripts/benchmarks/README.md` for semantics and caveats
 
-## Critical Context
+## Critical Conventions
+
+Rules that apply across ALL components. Per-component details live in component DEVELOPMENT.md files.
 
 - **User token auth required**: All user-facing API ops use `GetK8sClientsForRequest(c)`, never the backend service account
+- **No tokens in logs/errors/responses**: Use `len(token)` for logging, generic messages to users
 - **OwnerReferences on all child resources**: Jobs, Secrets, PVCs must have controller owner refs
 - **No `panic()` in production**: Return explicit `fmt.Errorf` with context
 - **No `any` types in frontend**: Use proper types, `unknown`, or generic constraints
+- **Feature flags strongly recommended**: Gate new features behind Unleash flags. Use `/unleash-flag` to set up
 - **Conventional commits**: Squashed on merge to `main`
+
+Component-specific conventions:
+- Backend: [DEVELOPMENT.md](components/backend/DEVELOPMENT.md), [ERROR_PATTERNS.md](components/backend/ERROR_PATTERNS.md), [K8S_CLIENT_PATTERNS.md](components/backend/K8S_CLIENT_PATTERNS.md)
+- Frontend: [DEVELOPMENT.md](components/frontend/DEVELOPMENT.md), [REACT_QUERY_PATTERNS.md](components/frontend/REACT_QUERY_PATTERNS.md)
+- Operator: [DEVELOPMENT.md](components/operator/DEVELOPMENT.md)
+- Security: [security-standards.md](docs/security-standards.md)
 
 ## Pre-commit Hooks
 
