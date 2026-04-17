@@ -17,6 +17,7 @@ import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { formatTimestamp } from "@/lib/format-timestamp";
+import { useFlag } from "@/lib/feature-flags";
 
 export type ToolMessageProps = {
   toolUseBlock?: ToolUseBlock;
@@ -565,6 +566,7 @@ const ChildToolCall: React.FC<ChildToolCallProps> = ({ toolUseBlock, resultBlock
 export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
   ({ toolUseBlock, resultBlock, childToolCalls, className, borderless, timestamp, ...props }, ref) => {
     const [isExpanded, setIsExpanded] = useState(false);
+    const todoWriteEnabled = useFlag("todowrite-visualization") ?? false;
 
     const toolResultBlock = resultBlock;
 
@@ -623,7 +625,7 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                   {getInitials(subagentType)}
                 </span>
               </div>
-            ) : isTodoWriteTool(toolUseBlock?.name ?? "") ? (
+            ) : todoWriteEnabled && isTodoWriteTool(toolUseBlock?.name ?? "") ? (
               <div className="w-8 h-8 rounded-full flex items-center justify-center bg-indigo-600">
                 <ListTodo className="w-4 h-4 text-white" />
               </div>
@@ -791,8 +793,8 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                 // Default tool rendering (existing behavior)
                 isExpanded && (
                   <div className="px-3 pb-3 space-y-3 bg-muted/50">
-                    {/* TodoWrite: render structured task list */}
-                    {isTodoWriteTool(toolUseBlock?.name ?? "") && (() => {
+                    {/* TodoWrite: render structured task list (feature-flagged) */}
+                    {todoWriteEnabled && isTodoWriteTool(toolUseBlock?.name ?? "") && (() => {
                       const todos = parseTodoItems(inputData);
                       if (!todos) return null;
                       return (
@@ -808,8 +810,8 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                       );
                     })()}
 
-                    {/* Generic input for non-TodoWrite tools */}
-                    {toolUseBlock?.input && !isTodoWriteTool(toolUseBlock.name) && (
+                    {/* Generic input for non-TodoWrite tools (or when flag is off) */}
+                    {toolUseBlock?.input && (!todoWriteEnabled || !isTodoWriteTool(toolUseBlock.name)) && (
                       <div>
                         <h4 className="text-xs font-medium text-foreground/80 mb-1">Input</h4>
                         <div className="bg-slate-950 dark:bg-black rounded text-xs p-2 overflow-x-auto">

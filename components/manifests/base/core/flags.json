@@ -49,6 +49,16 @@
           "value": "workspace"
         }
       ]
+    },
+    {
+      "name": "todowrite-visualization",
+      "description": "Show structured task list UI for TodoWrite tool calls",
+      "tags": [
+        {
+          "type": "scope",
+          "value": "workspace"
+        }
+      ]
     }
   ]
 }
