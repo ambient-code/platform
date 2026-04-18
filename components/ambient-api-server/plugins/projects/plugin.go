@@ -1,6 +1,7 @@
 package projects
 
 import (
+	"context"
 	"net/http"
 
 	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
@@ -19,6 +20,18 @@ import (
 	"github.com/openshift-online/rh-trex-ai/plugins/generic"
 	"google.golang.org/grpc"
 )
+
+type projectPromptAdapter struct {
+	svc ProjectService
+}
+
+func (a *projectPromptAdapter) GetPrompt(ctx context.Context, projectID string) (*string, error) {
+	p, err := a.svc.Get(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return p.Prompt, nil
+}
 
 const EventSource = "Projects"
 
@@ -48,6 +61,18 @@ func Service(s *environments.Services) ProjectService {
 func init() {
 	registry.RegisterService("Projects", func(env interface{}) interface{} {
 		return NewServiceLocator(env.(*environments.Env))
+	})
+
+	registry.RegisterService("ProjectPromptFetcher", func(env interface{}) interface{} {
+		e := env.(*environments.Env)
+		loc := func() agents.ProjectPromptFetcher {
+			return &projectPromptAdapter{svc: NewProjectService(
+				db.NewAdvisoryLockFactory(e.Database.SessionFactory),
+				NewProjectDao(&e.Database.SessionFactory),
+				events.Service(&e.Services),
+			)}
+		}
+		return loc
 	})
 
 	pkgserver.RegisterRoutes("projects", func(apiV1Router *mux.Router, services pkgserver.ServicesInterface, authMiddleware environments.JWTMiddleware, authzMiddleware auth.AuthorizationMiddleware) {
@@ -101,4 +126,5 @@ func init() {
 	})
 
 	db.RegisterMigration(migration())
+	db.RegisterMigration(promptMigration())
 }

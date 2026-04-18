@@ -57,7 +57,7 @@ func (m *DBAuthorizationMiddleware) AuthorizeApi(next http.Handler) http.Handler
 }
 
 func (m *DBAuthorizationMiddleware) isAllowed(g *gorm.DB, username, method, path string) (bool, error) {
-	action := httpMethodToAction(method)
+	action := pathToAction(method, path)
 	resource := pathToResource(path)
 
 	var bindings []roleBindingRow
@@ -128,6 +128,22 @@ func httpMethodToAction(method string) string {
 	default:
 		return "read"
 	}
+}
+
+func pathToAction(method, path string) string {
+	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	for i, p := range parts {
+		if p == "v1" && i+2 < len(parts) {
+			last := parts[len(parts)-1]
+			switch last {
+			case "token":
+				return "fetch_token"
+			case "start", "stop":
+				return last
+			}
+		}
+	}
+	return httpMethodToAction(method)
 }
 
 func pathToResource(path string) string {

@@ -78,18 +78,33 @@ All URIs are relative to *http://localhost:8000*
 
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
-*DefaultAPI* | [**ApiAmbientV1AgentsGet**](docs/DefaultAPI.md#apiambientv1agentsget) | **Get** /api/ambient/v1/agents | Returns a list of agents
-*DefaultAPI* | [**ApiAmbientV1AgentsIdGet**](docs/DefaultAPI.md#apiambientv1agentsidget) | **Get** /api/ambient/v1/agents/{id} | Get an agent by id
-*DefaultAPI* | [**ApiAmbientV1AgentsIdPatch**](docs/DefaultAPI.md#apiambientv1agentsidpatch) | **Patch** /api/ambient/v1/agents/{id} | Update an agent
-*DefaultAPI* | [**ApiAmbientV1AgentsPost**](docs/DefaultAPI.md#apiambientv1agentspost) | **Post** /api/ambient/v1/agents | Create a new agent
 *DefaultAPI* | [**ApiAmbientV1ProjectSettingsGet**](docs/DefaultAPI.md#apiambientv1projectsettingsget) | **Get** /api/ambient/v1/project_settings | Returns a list of project settings
 *DefaultAPI* | [**ApiAmbientV1ProjectSettingsIdDelete**](docs/DefaultAPI.md#apiambientv1projectsettingsiddelete) | **Delete** /api/ambient/v1/project_settings/{id} | Delete a project settings by id
 *DefaultAPI* | [**ApiAmbientV1ProjectSettingsIdGet**](docs/DefaultAPI.md#apiambientv1projectsettingsidget) | **Get** /api/ambient/v1/project_settings/{id} | Get a project settings by id
 *DefaultAPI* | [**ApiAmbientV1ProjectSettingsIdPatch**](docs/DefaultAPI.md#apiambientv1projectsettingsidpatch) | **Patch** /api/ambient/v1/project_settings/{id} | Update a project settings
 *DefaultAPI* | [**ApiAmbientV1ProjectSettingsPost**](docs/DefaultAPI.md#apiambientv1projectsettingspost) | **Post** /api/ambient/v1/project_settings | Create a new project settings
 *DefaultAPI* | [**ApiAmbientV1ProjectsGet**](docs/DefaultAPI.md#apiambientv1projectsget) | **Get** /api/ambient/v1/projects | Returns a list of projects
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsAgentIdDelete**](docs/DefaultAPI.md#apiambientv1projectsidagentsagentiddelete) | **Delete** /api/ambient/v1/projects/{id}/agents/{agent_id} | Delete an agent from a project
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsAgentIdGet**](docs/DefaultAPI.md#apiambientv1projectsidagentsagentidget) | **Get** /api/ambient/v1/projects/{id}/agents/{agent_id} | Get an agent by id
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsAgentIdIgnitionGet**](docs/DefaultAPI.md#apiambientv1projectsidagentsagentidignitionget) | **Get** /api/ambient/v1/projects/{id}/agents/{agent_id}/ignition | Preview start context (dry run — no session created)
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsAgentIdInboxGet**](docs/DefaultAPI.md#apiambientv1projectsidagentsagentidinboxget) | **Get** /api/ambient/v1/projects/{id}/agents/{agent_id}/inbox | Read inbox messages for an agent (unread first)
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsAgentIdInboxMsgIdDelete**](docs/DefaultAPI.md#apiambientv1projectsidagentsagentidinboxmsgiddelete) | **Delete** /api/ambient/v1/projects/{id}/agents/{agent_id}/inbox/{msg_id} | Delete an inbox message
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsAgentIdInboxMsgIdPatch**](docs/DefaultAPI.md#apiambientv1projectsidagentsagentidinboxmsgidpatch) | **Patch** /api/ambient/v1/projects/{id}/agents/{agent_id}/inbox/{msg_id} | Mark an inbox message as read
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsAgentIdInboxPost**](docs/DefaultAPI.md#apiambientv1projectsidagentsagentidinboxpost) | **Post** /api/ambient/v1/projects/{id}/agents/{agent_id}/inbox | Send a message to an agent&#39;s inbox
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsAgentIdPatch**](docs/DefaultAPI.md#apiambientv1projectsidagentsagentidpatch) | **Patch** /api/ambient/v1/projects/{id}/agents/{agent_id} | Update an agent (name, prompt, labels, annotations)
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsAgentIdSessionsGet**](docs/DefaultAPI.md#apiambientv1projectsidagentsagentidsessionsget) | **Get** /api/ambient/v1/projects/{id}/agents/{agent_id}/sessions | Get session run history for an agent
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsAgentIdStartPost**](docs/DefaultAPI.md#apiambientv1projectsidagentsagentidstartpost) | **Post** /api/ambient/v1/projects/{id}/agents/{agent_id}/start | Start an agent — creates a Session (idempotent)
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsGet**](docs/DefaultAPI.md#apiambientv1projectsidagentsget) | **Get** /api/ambient/v1/projects/{id}/agents | Returns a list of agents in a project
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsPost**](docs/DefaultAPI.md#apiambientv1projectsidagentspost) | **Post** /api/ambient/v1/projects/{id}/agents | Create an agent in a project
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsCredIdDelete**](docs/DefaultAPI.md#apiambientv1projectsidcredentialscrediddelete) | **Delete** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Delete a credential
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsCredIdGet**](docs/DefaultAPI.md#apiambientv1projectsidcredentialscredidget) | **Get** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Get a credential by id
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsCredIdPatch**](docs/DefaultAPI.md#apiambientv1projectsidcredentialscredidpatch) | **Patch** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Update a credential
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsCredIdTokenGet**](docs/DefaultAPI.md#apiambientv1projectsidcredentialscredidtokenget) | **Get** /api/ambient/v1/projects/{id}/credentials/{cred_id}/token | Get a decrypted token for a credential
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsGet**](docs/DefaultAPI.md#apiambientv1projectsidcredentialsget) | **Get** /api/ambient/v1/projects/{id}/credentials | Returns a list of credentials in a project
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsPost**](docs/DefaultAPI.md#apiambientv1projectsidcredentialspost) | **Post** /api/ambient/v1/projects/{id}/credentials | Create a new credential in a project
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdDelete**](docs/DefaultAPI.md#apiambientv1projectsiddelete) | **Delete** /api/ambient/v1/projects/{id} | Delete a project by id
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdGet**](docs/DefaultAPI.md#apiambientv1projectsidget) | **Get** /api/ambient/v1/projects/{id} | Get a project by id
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdHomeGet**](docs/DefaultAPI.md#apiambientv1projectsidhomeget) | **Get** /api/ambient/v1/projects/{id}/home | Project home — latest status for every Agent in this project
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdPatch**](docs/DefaultAPI.md#apiambientv1projectsidpatch) | **Patch** /api/ambient/v1/projects/{id} | Update a project
 *DefaultAPI* | [**ApiAmbientV1ProjectsPost**](docs/DefaultAPI.md#apiambientv1projectspost) | **Post** /api/ambient/v1/projects | Create a new project
 *DefaultAPI* | [**ApiAmbientV1RoleBindingsGet**](docs/DefaultAPI.md#apiambientv1rolebindingsget) | **Get** /api/ambient/v1/role_bindings | Returns a list of roleBindings
@@ -121,10 +136,20 @@ Class | Method | HTTP request | Description
  - [Agent](docs/Agent.md)
  - [AgentList](docs/AgentList.md)
  - [AgentPatchRequest](docs/AgentPatchRequest.md)
+ - [AgentSessionList](docs/AgentSessionList.md)
+ - [Credential](docs/Credential.md)
+ - [CredentialList](docs/CredentialList.md)
+ - [CredentialPatchRequest](docs/CredentialPatchRequest.md)
+ - [CredentialTokenResponse](docs/CredentialTokenResponse.md)
  - [Error](docs/Error.md)
+ - [InboxMessage](docs/InboxMessage.md)
+ - [InboxMessageList](docs/InboxMessageList.md)
+ - [InboxMessagePatchRequest](docs/InboxMessagePatchRequest.md)
  - [List](docs/List.md)
  - [ObjectReference](docs/ObjectReference.md)
  - [Project](docs/Project.md)
+ - [ProjectHome](docs/ProjectHome.md)
+ - [ProjectHomeAgent](docs/ProjectHomeAgent.md)
  - [ProjectList](docs/ProjectList.md)
  - [ProjectPatchRequest](docs/ProjectPatchRequest.md)
  - [ProjectSettings](docs/ProjectSettings.md)
@@ -142,6 +167,8 @@ Class | Method | HTTP request | Description
  - [SessionMessagePushRequest](docs/SessionMessagePushRequest.md)
  - [SessionPatchRequest](docs/SessionPatchRequest.md)
  - [SessionStatusPatchRequest](docs/SessionStatusPatchRequest.md)
+ - [StartRequest](docs/StartRequest.md)
+ - [StartResponse](docs/StartResponse.md)
  - [User](docs/User.md)
  - [UserList](docs/UserList.md)
  - [UserPatchRequest](docs/UserPatchRequest.md)

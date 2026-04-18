@@ -16,9 +16,9 @@ type Agent struct {
 	Prompt               *string `json:"prompt"                 gorm:"type:text"`
 	RepoUrl              *string `json:"repo_url"`
 	WorkflowId           *string `json:"workflow_id"`
-	LlmModel             string  `json:"llm_model"              gorm:"default:'claude-sonnet-4-6'"`
-	LlmTemperature       float64 `json:"llm_temperature"        gorm:"default:0.7"`
-	LlmMaxTokens         int32   `json:"llm_max_tokens"         gorm:"default:4000"`
+	LlmModel             string  `json:"llm_model"`
+	LlmTemperature       float64 `json:"llm_temperature"`
+	LlmMaxTokens         int32   `json:"llm_max_tokens"`
 	BotAccountName       *string `json:"bot_account_name"`
 	ResourceOverrides    *string `json:"resource_overrides"`
 	EnvironmentVariables *string `json:"environment_variables"`
@@ -50,22 +50,4 @@ func (d *Agent) BeforeCreate(tx *gorm.DB) error {
 		d.LlmMaxTokens = 4000
 	}
 	return nil
-}
-
-type AgentPatchRequest struct {
-	DisplayName          *string  `json:"display_name,omitempty"`
-	Description          *string  `json:"description,omitempty"`
-	Prompt               *string  `json:"prompt,omitempty"`
-	RepoUrl              *string  `json:"repo_url,omitempty"`
-	WorkflowId           *string  `json:"workflow_id,omitempty"`
-	LlmModel             *string  `json:"llm_model,omitempty"`
-	LlmTemperature       *float64 `json:"llm_temperature,omitempty"`
-	LlmMaxTokens         *int32   `json:"llm_max_tokens,omitempty"`
-	BotAccountName       *string  `json:"bot_account_name,omitempty"`
-	ResourceOverrides    *string  `json:"resource_overrides,omitempty"`
-	EnvironmentVariables *string  `json:"environment_variables,omitempty"`
-	Labels               *string  `json:"labels,omitempty"`
-	Annotations          *string  `json:"annotations,omitempty"`
-	CurrentSessionId     *string  `json:"current_session_id,omitempty"`
-	ParentAgentId        *string  `json:"parent_agent_id,omitempty"`
 }

@@ -44,7 +44,7 @@ func discoverSubSpecs(specDir string) (map[string]string, map[string]string, err
 			continue
 		}
 
-		pathSeg := inferPathSegment(doc.Paths)
+		pathSeg := inferPathSegment(doc.Paths, resourceName)
 		if pathSeg == "" {
 			continue
 		}
@@ -76,25 +76,61 @@ func inferResourceName(schemas map[string]interface{}) string {
 	return ""
 }
 
-func inferPathSegment(paths map[string]interface{}) string {
+func inferPathSegment(paths map[string]interface{}, resourceName string) string {
 	basePath := extractBasePath(paths)
-	var segments []string
+	expectedLeaf := strings.ToLower(resourcePlural(resourceName))
+
+	var collectionMatch string
+	var shortest string
 	for path := range paths {
 		if !strings.HasPrefix(path, basePath+"/") {
 			continue
 		}
 		rest := strings.TrimPrefix(path, basePath+"/")
-		parts := strings.SplitN(rest, "/", 2)
-		if len(parts) >= 1 && parts[0] != "" {
-			segments = append(segments, parts[0])
+		rest = strings.TrimSuffix(rest, "/")
+
+		parts := strings.Split(rest, "/")
+		leaf := parts[len(parts)-1]
+		if leaf == expectedLeaf {
+			if collectionMatch == "" || len(rest) < len(collectionMatch) {
+				collectionMatch = rest
+			}
+		}
+
+		if shortest == "" || len(rest) < len(shortest) {
+			shortest = rest
 		}
 	}
-	for _, seg := range segments {
-		if !strings.Contains(seg, "{") {
-			return seg
+
+	if collectionMatch != "" {
+		return collectionMatch
+	}
+	return shortest
+}
+
+func inferParentPath(pathSegment string) string {
+	parts := strings.Split(pathSegment, "/")
+	if len(parts) <= 1 {
+		return ""
+	}
+	lastSeg := parts[len(parts)-1]
+	if strings.Contains(lastSeg, "{") {
+		if len(parts) <= 2 {
+			return ""
+		}
+		return strings.Join(parts[:len(parts)-2], "/")
+	}
+	return strings.Join(parts[:len(parts)-1], "/")
+}
+
+func leafSegment(pathSegment string) string {
+	parts := strings.Split(pathSegment, "/")
+	for i := len(parts) - 1; i >= 0; i-- {
+		if !strings.Contains(parts[i], "{") {
+			return parts[i]
 		}
 	}
-	return ""
+	return pathSegment
 }
 
 type openAPIDoc struct {
@@ -229,11 +265,14 @@ func extractResource(name, pathSegment string, doc *subSpecDoc) (*Resource, erro
 	hasDelete := checkHasDelete(doc.Paths, pathSegment)
 	hasPatch := checkHasPatch(doc.Paths, pathSegment)
 	actions := detectActions(doc.Paths, pathSegment)
+	parentPath := inferParentPath(pathSegment)
+	isSubResource := parentPath != ""
 
 	return &Resource{
 		Name:              name,
 		Plural:            resourcePlural(name),
 		PathSegment:       pathSegment,
+		ParentPath:        parentPath,
 		Fields:            fields,
 		RequiredFields:    requiredFields,
 		PatchFields:       patchFields,
@@ -242,6 +281,7 @@ func extractResource(name, pathSegment string, doc *subSpecDoc) (*Resource, erro
 		HasPatch:          hasPatch,
 		HasStatusPatch:    hasStatusPatch,
 		Actions:           actions,
+		IsSubResource:     isSubResource,
 	}, nil
 }
 
@@ -392,56 +432,63 @@ func extractPatchFields(schemaMap map[string]interface{}) ([]Field, []string, er
 	return fields, nil, nil
 }
 
+func findItemPath(paths map[string]interface{}, basePath, collectionPath string) (map[string]interface{}, bool) {
+	fullCollection := basePath + "/" + collectionPath
+	for path, val := range paths {
+		if !strings.HasPrefix(path, fullCollection+"/") {
+			continue
+		}
+		suffix := strings.TrimPrefix(path, fullCollection+"/")
+		if strings.HasPrefix(suffix, "{") && !strings.Contains(suffix, "/") {
+			if pathMap, ok := val.(map[string]interface{}); ok {
+				return pathMap, true
+			}
+		}
+	}
+	return nil, false
+}
+
 func checkHasPatch(paths map[string]interface{}, pathSegment string) bool {
 	basePath := extractBasePath(paths)
-	idPath := fmt.Sprintf("%s/%s/{id}", basePath, pathSegment)
-	pathVal, ok := paths[idPath]
+	pathMap, ok := findItemPath(paths, basePath, pathSegment)
 	if !ok {
 		return false
 	}
-
-	pathMap, ok := pathVal.(map[string]interface{})
-	if !ok {
-		return false
-	}
-
 	_, hasPatch := pathMap["patch"]
 	return hasPatch
 }
 
 func checkHasDelete(paths map[string]interface{}, pathSegment string) bool {
 	basePath := extractBasePath(paths)
-	idPath := fmt.Sprintf("%s/%s/{id}", basePath, pathSegment)
-	pathVal, ok := paths[idPath]
+	pathMap, ok := findItemPath(paths, basePath, pathSegment)
 	if !ok {
 		return false
 	}
-
-	pathMap, ok := pathVal.(map[string]interface{})
-	if !ok {
-		return false
-	}
-
 	_, hasDelete := pathMap["delete"]
 	return hasDelete
 }
 
 func detectActions(paths map[string]interface{}, pathSegment string) []string {
 	basePath := extractBasePath(paths)
+	fullCollection := basePath + "/" + pathSegment
 	knownActions := []string{"start", "stop"}
 	var found []string
 	for _, action := range knownActions {
-		actionPath := fmt.Sprintf("%s/%s/{id}/%s", basePath, pathSegment, action)
-		pathVal, ok := paths[actionPath]
-		if !ok {
-			continue
-		}
-		pathMap, ok := pathVal.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		if _, hasPost := pathMap["post"]; hasPost {
-			found = append(found, action)
+		for path, val := range paths {
+			if !strings.HasPrefix(path, fullCollection+"/") {
+				continue
+			}
+			if !strings.HasSuffix(path, "/"+action) {
+				continue
+			}
+			pathMap, ok := val.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if _, hasPost := pathMap["post"]; hasPost {
+				found = append(found, action)
+				break
+			}
 		}
 	}
 	return found

@@ -307,6 +307,45 @@ paths:
                 $ref: 'openapi.yaml#/components/schemas/Error'
     parameters:
       - $ref: '#/components/parameters/id'
+  /api/ambient/v1/sessions/{id}/events:
+    get:
+      summary: Stream live AG-UI events from the runner pod
+      description: SSE stream proxied from the runner pod. Only available during an active session run. Returns 404 if the runner has not been scheduled yet; 502 if the runner is unreachable.
+      security:
+        - Bearer: []
+      responses:
+        '200':
+          description: SSE stream of AG-UI events
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: Session not found or runner not yet scheduled
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '502':
+          description: Runner pod is not reachable
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+      parameters:
+        - $ref: '#/components/parameters/id'
   /api/ambient/v1/sessions/{id}/stop:
     post:
       summary: Stop a session
@@ -400,6 +439,13 @@ components:
               type: string
             annotations:
               type: string
+            agent_id:
+              type: string
+              description: The Agent that owns this session. Immutable after creation.
+            triggered_by_user_id:
+              type: string
+              readOnly: true
+              description: User who started the agent
             project_id:
               type: string
               description: Immutable after creation. Set at creation time only.

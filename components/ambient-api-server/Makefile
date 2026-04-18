@@ -1,6 +1,9 @@
 BINARY_NAME=ambient-api-server
 CONTAINER_ENGINE?=$(shell command -v podman 2>/dev/null || echo docker)
 
+PODMAN_SOCK=unix:///run/user/$(shell id -u)/podman/podman.sock
+DOCKER_HOST?=$(shell [ -S /run/user/$(shell id -u)/podman/podman.sock ] && echo $(PODMAN_SOCK) || echo "")
+
 # Version information for ldflags
 git_sha:=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 git_dirty:=$(shell git diff --quiet 2>/dev/null || echo "-modified")
@@ -29,11 +32,11 @@ run-no-auth: binary
 
 .PHONY: test
 test: install
-	AMBIENT_ENV=integration_testing go test -p 1 -v ./...
+	DOCKER_HOST=$(DOCKER_HOST) TESTCONTAINERS_RYUK_DISABLED=true AMBIENT_ENV=integration_testing go test -p 1 -v ./...
 
 .PHONY: test-integration
 test-integration: install
-	AMBIENT_ENV=integration_testing go test -p 1 -v ./test/integration/...
+	DOCKER_HOST=$(DOCKER_HOST) TESTCONTAINERS_RYUK_DISABLED=true AMBIENT_ENV=integration_testing go test -p 1 -v ./test/integration/...
 
 .PHONY: proto
 proto:

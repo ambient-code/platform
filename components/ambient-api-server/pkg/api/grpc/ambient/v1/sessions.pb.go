@@ -54,6 +54,7 @@ type Session struct {
 	KubeCrName           *string                `protobuf:"bytes,29,opt,name=kube_cr_name,json=kubeCrName,proto3,oneof" json:"kube_cr_name,omitempty"`
 	KubeCrUid            *string                `protobuf:"bytes,30,opt,name=kube_cr_uid,json=kubeCrUid,proto3,oneof" json:"kube_cr_uid,omitempty"`
 	KubeNamespace        *string                `protobuf:"bytes,31,opt,name=kube_namespace,json=kubeNamespace,proto3,oneof" json:"kube_namespace,omitempty"`
+	AgentId              *string                `protobuf:"bytes,32,opt,name=agent_id,json=agentId,proto3,oneof" json:"agent_id,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -294,6 +295,13 @@ func (x *Session) GetKubeCrUid() string {
 func (x *Session) GetKubeNamespace() string {
 	if x != nil && x.KubeNamespace != nil {
 		return *x.KubeNamespace
+	}
+	return ""
+}
+
+func (x *Session) GetAgentId() string {
+	if x != nil && x.AgentId != nil {
+		return *x.AgentId
 	}
 	return ""
 }
@@ -1307,7 +1315,7 @@ var File_ambient_v1_sessions_proto protoreflect.FileDescriptor
 const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\n" +
 	"\x19ambient/v1/sessions.proto\x12\n" +
-	"ambient.v1\x1a\x17ambient/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x87\x0e\n" +
+	"ambient.v1\x1a\x17ambient/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb4\x0e\n" +
 	"\aSession\x127\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x1b.ambient.v1.ObjectReferenceR\bmetadata\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1e\n" +
@@ -1346,7 +1354,8 @@ const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\fkube_cr_name\x18\x1d \x01(\tH\x19R\n" +
 	"kubeCrName\x88\x01\x01\x12#\n" +
 	"\vkube_cr_uid\x18\x1e \x01(\tH\x1aR\tkubeCrUid\x88\x01\x01\x12*\n" +
-	"\x0ekube_namespace\x18\x1f \x01(\tH\x1bR\rkubeNamespace\x88\x01\x01B\v\n" +
+	"\x0ekube_namespace\x18\x1f \x01(\tH\x1bR\rkubeNamespace\x88\x01\x01\x12\x1e\n" +
+	"\bagent_id\x18  \x01(\tH\x1cR\aagentId\x88\x01\x01B\v\n" +
 	"\t_repo_urlB\t\n" +
 	"\a_promptB\x15\n" +
 	"\x13_created_by_user_idB\x13\n" +
@@ -1376,7 +1385,8 @@ const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\x14_reconciled_workflowB\x0f\n" +
 	"\r_kube_cr_nameB\x0e\n" +
 	"\f_kube_cr_uidB\x11\n" +
-	"\x0f_kube_namespaceJ\x04\b\t\x10\n" +
+	"\x0f_kube_namespaceB\v\n" +
+	"\t_agent_idJ\x04\b\t\x10\n" +
 	"R\vinteractive\"\x91\b\n" +
 	"\x14CreateSessionRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1e\n" +

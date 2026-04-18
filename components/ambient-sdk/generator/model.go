@@ -10,6 +10,7 @@ type Resource struct {
 	Name              string
 	Plural            string
 	PathSegment       string
+	ParentPath        string
 	Fields            []Field
 	RequiredFields    []string
 	PatchFields       []Field
@@ -18,6 +19,7 @@ type Resource struct {
 	HasPatch          bool
 	HasStatusPatch    bool
 	Actions           []string
+	IsSubResource     bool
 }
 
 type Field struct {

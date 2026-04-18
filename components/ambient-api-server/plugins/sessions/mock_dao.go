@@ -77,3 +77,19 @@ func (d *sessionDaoMock) AllByProjectId(ctx context.Context, projectId string) (
 	}
 	return filtered, nil
 }
+
+func (d *sessionDaoMock) ActiveByAgentID(ctx context.Context, agentID string) (*Session, error) {
+	activePhases := map[string]bool{"Pending": true, "Creating": true, "Running": true}
+	var newest *Session
+	for _, s := range d.sessions {
+		if s.AgentId != nil && *s.AgentId == agentID && s.Phase != nil && activePhases[*s.Phase] {
+			if newest == nil || s.CreatedAt.After(newest.CreatedAt) {
+				newest = s
+			}
+		}
+	}
+	if newest != nil {
+		return newest, nil
+	}
+	return nil, gorm.ErrRecordNotFound
+}

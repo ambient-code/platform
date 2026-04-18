@@ -6,6 +6,9 @@
 from __future__ import annotations
 
 from typing import Any, Iterator, Optional, TYPE_CHECKING
+{{- if .Resource.IsSubResource}}
+from urllib.parse import quote
+{{- end}}
 
 from ._base import ListOptions
 from .{{.Resource.Name | snakeCase}} import {{.Resource.Name}}, {{.Resource.Name}}List{{if .Resource.HasStatusPatch}}, {{.Resource.Name}}StatusPatch{{end}}
@@ -18,38 +21,71 @@ class {{.Resource.Name}}API:
     def __init__(self, client: AmbientClient) -> None:
         self._client = client
 
+{{- if .Resource.IsSubResource}}
+    def _base_path(self) -> str:
+        return "/{{.Resource.PathSegment}}".replace("{id}", quote(self._client._project, safe=""))
+{{end}}
+
     def create(self, data: dict) -> {{.Resource.Name}}:
+{{- if .Resource.IsSubResource}}
+        resp = self._client._request("POST", self._base_path(), json=data)
+{{- else}}
         resp = self._client._request("POST", "/{{.Resource.PathSegment}}", json=data)
+{{- end}}
         return {{.Resource.Name}}.from_dict(resp)
 
     def get(self, resource_id: str) -> {{.Resource.Name}}:
+{{- if .Resource.IsSubResource}}
+        resp = self._client._request("GET", f"{self._base_path()}/{resource_id}")
+{{- else}}
         resp = self._client._request("GET", f"/{{.Resource.PathSegment}}/{resource_id}")
+{{- end}}
         return {{.Resource.Name}}.from_dict(resp)
 
     def list(self, opts: Optional[ListOptions] = None) -> {{.Resource.Name}}List:
         params = opts.to_params() if opts else None
+{{- if .Resource.IsSubResource}}
+        resp = self._client._request("GET", self._base_path(), params=params)
+{{- else}}
         resp = self._client._request("GET", "/{{.Resource.PathSegment}}", params=params)
+{{- end}}
         return {{.Resource.Name}}List.from_dict(resp)
 
 {{- if .Resource.HasPatch}}
     def update(self, resource_id: str, patch: Any) -> {{.Resource.Name}}:
         data = patch.to_dict() if hasattr(patch, "to_dict") else patch
+{{- if .Resource.IsSubResource}}
+        resp = self._client._request("PATCH", f"{self._base_path()}/{resource_id}", json=data)
+{{- else}}
         resp = self._client._request("PATCH", f"/{{.Resource.PathSegment}}/{resource_id}", json=data)
+{{- end}}
         return {{.Resource.Name}}.from_dict(resp)
 {{end}}
 {{- if .Resource.HasDelete}}
     def delete(self, resource_id: str) -> None:
+{{- if .Resource.IsSubResource}}
+        self._client._request("DELETE", f"{self._base_path()}/{resource_id}", expect_json=False)
+{{- else}}
         self._client._request("DELETE", f"/{{.Resource.PathSegment}}/{resource_id}", expect_json=False)
+{{- end}}
 {{end}}
 {{- if .Resource.HasStatusPatch}}
     def update_status(self, resource_id: str, patch: Any) -> {{.Resource.Name}}:
         data = patch.to_dict() if hasattr(patch, "to_dict") else patch
+{{- if .Resource.IsSubResource}}
+        resp = self._client._request("PATCH", f"{self._base_path()}/{resource_id}/status", json=data)
+{{- else}}
         resp = self._client._request("PATCH", f"/{{.Resource.PathSegment}}/{resource_id}/status", json=data)
+{{- end}}
         return {{.Resource.Name}}.from_dict(resp)
 {{end}}
 {{- range .Resource.Actions}}
     def {{.}}(self, resource_id: str) -> {{$.Resource.Name}}:
+{{- if $.Resource.IsSubResource}}
+        resp = self._client._request("POST", f"{self._base_path()}/{resource_id}/{{.}}")
+{{- else}}
         resp = self._client._request("POST", f"/{{$.Resource.PathSegment}}/{resource_id}/{{.}}")
+{{- end}}
         return {{$.Resource.Name}}.from_dict(resp)
 {{end}}
     def list_all(self, size: int = 100, **kwargs: Any) -> Iterator[{{.Resource.Name}}]:

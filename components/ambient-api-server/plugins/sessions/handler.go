@@ -1,7 +1,12 @@
 package sessions
 
 import (
+	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
@@ -16,6 +21,16 @@ import (
 )
 
 var _ handlers.RestHandler = sessionHandler{}
+
+// EventsHTTPClient is used to proxy SSE streams from runner pods.
+// Replaceable in tests to simulate runner behavior without a live cluster.
+// ResponseHeaderTimeout times out only the header phase; body streaming is unlimited.
+var EventsHTTPClient = &http.Client{
+	Transport: &http.Transport{
+		DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
+		ResponseHeaderTimeout: 5 * time.Second,
+	},
+}
 
 type sessionHandler struct {
 	session SessionService
@@ -266,4 +281,73 @@ func (h sessionHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	handlers.HandleDelete(w, r, cfg, http.StatusNoContent)
+}
+
+func (h sessionHandler) StreamRunnerEvents(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id := mux.Vars(r)["id"]
+
+	session, err := h.session.Get(ctx, id)
+	if err != nil {
+		http.Error(w, "session not found", http.StatusNotFound)
+		return
+	}
+
+	if session.KubeCrName == nil || session.KubeNamespace == nil {
+		http.Error(w, "session has no associated runner pod", http.StatusNotFound)
+		return
+	}
+
+	runnerURL := fmt.Sprintf(
+		"http://session-%s.%s.svc.cluster.local:8001/events/%s",
+		strings.ToLower(*session.KubeCrName), *session.KubeNamespace, *session.KubeCrName,
+	)
+
+	req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, runnerURL, nil)
+	if reqErr != nil {
+		glog.Errorf("StreamRunnerEvents: build request for session %s: %v", id, reqErr)
+		http.Error(w, "failed to build upstream request", http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("Accept", "text/event-stream")
+
+	resp, doErr := EventsHTTPClient.Do(req)
+	if doErr != nil {
+		glog.Warningf("StreamRunnerEvents: upstream unreachable for session %s: %v", id, doErr)
+		http.Error(w, "runner not reachable", http.StatusBadGateway)
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		glog.Warningf("StreamRunnerEvents: upstream returned %d for session %s", resp.StatusCode, id)
+		http.Error(w, "runner returned non-OK status", http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	rc := http.NewResponseController(w)
+	_ = rc.Flush()
+
+	buf := make([]byte, 4096)
+	for {
+		n, readErr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+				glog.V(4).Infof("StreamRunnerEvents: write error for session %s: %v", id, writeErr)
+				return
+			}
+			_ = rc.Flush()
+		}
+		if readErr != nil {
+			if readErr != io.EOF {
+				glog.V(4).Infof("StreamRunnerEvents: read error for session %s: %v", id, readErr)
+			}
+			return
+		}
+	}
 }

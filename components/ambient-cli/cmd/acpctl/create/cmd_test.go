@@ -65,7 +65,7 @@ func TestCreateProject_JSON(t *testing.T) {
 
 func TestCreateAgent_Success(t *testing.T) {
 	srv := testhelper.NewServer(t)
-	srv.Handle("/api/ambient/v1/agents", func(w http.ResponseWriter, r *http.Request) {
+	srv.Handle("/api/ambient/v1/projects/"+testhelper.TestProject+"/agents", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Errorf("expected POST, got %s", r.Method)
 		}

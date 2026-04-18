@@ -225,6 +225,9 @@ components:
               type: string
             annotations:
               type: string
+            prompt:
+              type: string
+              description: Workspace-level context injected into every agent start in this project
             status:
               type: string
             created_at:
@@ -254,6 +257,8 @@ components:
         labels:
           type: string
         annotations:
+          type: string
+        prompt:
           type: string
         status:
           type: string

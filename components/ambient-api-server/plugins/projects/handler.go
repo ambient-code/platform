@@ -65,11 +65,11 @@ func (h projectHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			if patch.Name != nil {
 				found.Name = *patch.Name
 			}
-			if patch.DisplayName != nil {
-				found.DisplayName = patch.DisplayName
-			}
 			if patch.Description != nil {
 				found.Description = patch.Description
+			}
+			if patch.Prompt != nil {
+				found.Prompt = patch.Prompt
 			}
 			if patch.Labels != nil {
 				found.Labels = patch.Labels

@@ -2,12 +2,14 @@ package sessions
 
 import (
 	"context"
+	stderrors "errors"
 
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/db"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/logger"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
+	"gorm.io/gorm"
 )
 
 const sessionsLockType db.LockType = "sessions"
@@ -22,6 +24,7 @@ type SessionService interface {
 	UpdateStatus(ctx context.Context, id string, patch *SessionStatusPatchRequest) (*Session, *errors.ServiceError)
 	Start(ctx context.Context, id string) (*Session, *errors.ServiceError)
 	Stop(ctx context.Context, id string) (*Session, *errors.ServiceError)
+	ActiveByAgentID(ctx context.Context, agentID string) (*Session, *errors.ServiceError)
 
 	FindByIDs(ctx context.Context, ids []string) (SessionList, *errors.ServiceError)
 
@@ -262,6 +265,17 @@ func (s *sqlSessionService) Start(ctx context.Context, id string) (*Session, *er
 		return nil, services.HandleUpdateError("Session", evErr)
 	}
 
+	return session, nil
+}
+
+func (s *sqlSessionService) ActiveByAgentID(ctx context.Context, agentID string) (*Session, *errors.ServiceError) {
+	session, err := s.sessionDao.ActiveByAgentID(ctx, agentID)
+	if err != nil {
+		if stderrors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, errors.GeneralError("unable to look up active session for agent %s: %s", agentID, err)
+	}
 	return session, nil
 }
 
