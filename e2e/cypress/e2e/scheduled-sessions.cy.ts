@@ -427,6 +427,82 @@ describe('Scheduled Sessions', () => {
     })
   })
 
+  // ─── Suspend / Resume ─────────────────────────────────────────
+
+  describe('Suspend and Resume', () => {
+    let scheduleName: string
+
+    before(() => {
+      createScheduledSessionViaApi('0 * * * *', 'Suspend Resume Test').then((name) => {
+        scheduleName = name
+      })
+    })
+
+    it('should suspend an active scheduled session', () => {
+      cy.visit(`/projects/${workspaceSlug}/scheduled-sessions`)
+
+      cy.get(`[data-testid="scheduled-session-row-${scheduleName}"]`, { timeout: 10000 })
+        .should('exist')
+
+      cy.get(`[data-testid="scheduled-session-actions-${scheduleName}"]`).click()
+      cy.get('[data-testid="scheduled-session-suspend"]').click()
+
+      cy.get('[data-sonner-toast]', { timeout: 10000 }).should('exist')
+
+      cy.request({
+        url: `/api/projects/${workspaceSlug}/scheduled-sessions/${scheduleName}`,
+        headers: apiHeaders(),
+      }).then((resp) => {
+        expect(resp.status).to.eq(200)
+        expect(resp.body.suspend).to.eq(true)
+      })
+    })
+
+    it('should resume a suspended scheduled session', () => {
+      cy.visit(`/projects/${workspaceSlug}/scheduled-sessions`)
+
+      cy.get(`[data-testid="scheduled-session-row-${scheduleName}"]`, { timeout: 10000 })
+        .should('exist')
+
+      cy.get(`[data-testid="scheduled-session-actions-${scheduleName}"]`).click()
+      cy.get('[data-testid="scheduled-session-resume"]').click()
+
+      cy.get('[data-sonner-toast]', { timeout: 10000 }).should('exist')
+
+      cy.request({
+        url: `/api/projects/${workspaceSlug}/scheduled-sessions/${scheduleName}`,
+        headers: apiHeaders(),
+      }).then((resp) => {
+        expect(resp.status).to.eq(200)
+        expect(resp.body.suspend).to.eq(false)
+      })
+    })
+  })
+
+  // ─── Trigger Now ──────────────────────────────────────────────
+
+  describe('Trigger Now', () => {
+    let scheduleName: string
+
+    before(() => {
+      createScheduledSessionViaApi('0 * * * *', 'Trigger Now Test').then((name) => {
+        scheduleName = name
+      })
+    })
+
+    it('should trigger a scheduled session immediately', () => {
+      cy.visit(`/projects/${workspaceSlug}/scheduled-sessions`)
+
+      cy.get(`[data-testid="scheduled-session-row-${scheduleName}"]`, { timeout: 10000 })
+        .should('exist')
+
+      cy.get(`[data-testid="scheduled-session-actions-${scheduleName}"]`).click()
+      cy.get('[data-testid="scheduled-session-trigger"]').click()
+
+      cy.get('[data-sonner-toast]', { timeout: 10000 }).should('exist')
+    })
+  })
+
   // ─── Schedule Deletion ────────────────────────────────────────
 
   describe('Schedule Deletion', () => {

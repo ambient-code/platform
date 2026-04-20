@@ -196,17 +196,17 @@ export function SchedulesSection({ projectName }: SchedulesSectionProps) {
                                   Edit
                                 </Link>
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleTrigger(ss.name)}>
+                              <DropdownMenuItem onClick={() => handleTrigger(ss.name)} data-testid="scheduled-session-trigger">
                                 <PlayCircle className="h-4 w-4 mr-2" />
                                 Trigger Now
                               </DropdownMenuItem>
                               {ss.suspend ? (
-                                <DropdownMenuItem onClick={() => handleResume(ss.name)}>
+                                <DropdownMenuItem onClick={() => handleResume(ss.name)} data-testid="scheduled-session-resume">
                                   <Play className="h-4 w-4 mr-2" />
                                   Resume
                                 </DropdownMenuItem>
                               ) : (
-                                <DropdownMenuItem onClick={() => handleSuspend(ss.name)}>
+                                <DropdownMenuItem onClick={() => handleSuspend(ss.name)} data-testid="scheduled-session-suspend">
                                   <Pause className="h-4 w-4 mr-2" />
                                   Suspend
                                 </DropdownMenuItem>
