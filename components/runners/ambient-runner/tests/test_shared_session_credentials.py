@@ -16,6 +16,7 @@ from ambient_runner.platform.auth import (
     _GH_WRAPPER_PATH,
     _GITHUB_TOKEN_FILE,
     _GITLAB_TOKEN_FILE,
+    _GOOGLE_WORKSPACE_CREDS_FILE,
     _fetch_credential,
     clear_runtime_credentials,
     install_gh_wrapper,
@@ -142,6 +143,27 @@ class TestClearRuntimeCredentials:
             os.environ.pop(key, None)
         # Should not raise
         clear_runtime_credentials()
+
+    def test_preserves_google_credentials_file(self, tmp_path, monkeypatch):
+        """clear_runtime_credentials must NOT delete the Google credentials file.
+
+        The workspace-mcp process reads credentials from this file. Deleting it
+        between turns causes workspace-mcp to fall back to an inaccessible
+        localhost OAuth flow (issue #1222).
+        """
+        fake_cred_file = tmp_path / "credentials.json"
+        fake_cred_file.write_text('{"token": "test-access-token"}')
+        monkeypatch.setattr(
+            "ambient_runner.platform.auth._GOOGLE_WORKSPACE_CREDS_FILE",
+            fake_cred_file,
+        )
+
+        clear_runtime_credentials()
+
+        assert fake_cred_file.exists(), (
+            "Google credentials file must NOT be deleted — workspace-mcp needs it"
+        )
+        assert fake_cred_file.read_text() == '{"token": "test-access-token"}'
 
     def test_does_not_clear_unrelated_vars(self):
         try:
@@ -709,11 +731,46 @@ class TestRefreshCredentialsTool:
                 "ambient_runner.platform.utils.get_active_integrations",
                 return_value=["github", "jira"],
             ),
+            patch(
+                "ambient_runner.bridges.claude.tools._check_mcp_auth_after_refresh",
+                return_value="",
+            ),
         ):
             result = await tool_fn({})
 
         assert result.get("isError") is None or result.get("isError") is False
         assert "successfully" in result["content"][0]["text"].lower()
+
+    @pytest.mark.asyncio
+    async def test_includes_mcp_diagnostics_on_auth_warning(self):
+        """refresh_credentials_tool includes MCP diagnostic warnings when auth issues are detected."""
+        from ambient_runner.bridges.claude.tools import create_refresh_credentials_tool
+
+        mock_context = MagicMock()
+        tool_fn = create_refresh_credentials_tool(
+            mock_context, self._make_tool_decorator()
+        )
+
+        with (
+            patch(
+                "ambient_runner.platform.auth.populate_runtime_credentials",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "ambient_runner.platform.utils.get_active_integrations",
+                return_value=["github", "google"],
+            ),
+            patch(
+                "ambient_runner.bridges.claude.tools._check_mcp_auth_after_refresh",
+                return_value="google-workspace: Google OAuth token expired - re-authenticate",
+            ),
+        ):
+            result = await tool_fn({})
+
+        text = result["content"][0]["text"]
+        assert "successfully" in text.lower()
+        assert "MCP diagnostics:" in text
+        assert "google-workspace" in text
 
 
 # ---------------------------------------------------------------------------
