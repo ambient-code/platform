@@ -10,10 +10,10 @@ Name | Type | Description | Notes
 **CreatedAt** | Pointer to **time.Time** |  | [optional] 
 **UpdatedAt** | Pointer to **time.Time** |  | [optional] 
 **Name** | **string** |  | 
-**DisplayName** | Pointer to **string** |  | [optional] 
 **Description** | Pointer to **string** |  | [optional] 
 **Labels** | Pointer to **string** |  | [optional] 
 **Annotations** | Pointer to **string** |  | [optional] 
+**Prompt** | Pointer to **string** | Workspace-level context injected into every agent start in this project | [optional] 
 **Status** | Pointer to **string** |  | [optional] 
 
 ## Methods
@@ -180,31 +180,6 @@ and a boolean to check if the value has been set.
 SetName sets Name field to given value.
 
 
-### GetDisplayName
-
-`func (o *Project) GetDisplayName() string`
-
-GetDisplayName returns the DisplayName field if non-nil, zero value otherwise.
-
-### GetDisplayNameOk
-
-`func (o *Project) GetDisplayNameOk() (*string, bool)`
-
-GetDisplayNameOk returns a tuple with the DisplayName field if it's non-nil, zero value otherwise
-and a boolean to check if the value has been set.
-
-### SetDisplayName
-
-`func (o *Project) SetDisplayName(v string)`
-
-SetDisplayName sets DisplayName field to given value.
-
-### HasDisplayName
-
-`func (o *Project) HasDisplayName() bool`
-
-HasDisplayName returns a boolean if a field has been set.
-
 ### GetDescription
 
 `func (o *Project) GetDescription() string`
@@ -279,6 +254,31 @@ SetAnnotations sets Annotations field to given value.
 `func (o *Project) HasAnnotations() bool`
 
 HasAnnotations returns a boolean if a field has been set.
+
+### GetPrompt
+
+`func (o *Project) GetPrompt() string`
+
+GetPrompt returns the Prompt field if non-nil, zero value otherwise.
+
+### GetPromptOk
+
+`func (o *Project) GetPromptOk() (*string, bool)`
+
+GetPromptOk returns a tuple with the Prompt field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetPrompt
+
+`func (o *Project) SetPrompt(v string)`
+
+SetPrompt sets Prompt field to given value.
+
+### HasPrompt
+
+`func (o *Project) HasPrompt() bool`
+
+HasPrompt returns a boolean if a field has been set.
 
 ### GetStatus
 

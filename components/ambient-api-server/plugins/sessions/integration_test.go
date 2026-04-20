@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -861,4 +863,103 @@ func TestSessionLlmTemperatureZeroAllowed(t *testing.T) {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 	Expect(*created.LlmTemperature).To(BeNumerically("~", 0.0, 0.001), "temperature 0.0 must be preserved, not overwritten by default")
+}
+
+// runnerRedirectTransport rewrites every request's host to a fixed target,
+// preserving the path. Used to redirect cluster-local runner URLs to a local
+// httptest.Server during integration tests.
+type runnerRedirectTransport struct {
+	target string
+}
+
+func (t *runnerRedirectTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	parsed, err := url.Parse(t.target)
+	if err != nil {
+		return nil, err
+	}
+	reqCopy := req.Clone(req.Context())
+	reqCopy.URL.Scheme = parsed.Scheme
+	reqCopy.URL.Host = parsed.Host
+	return http.DefaultTransport.RoundTrip(reqCopy)
+}
+
+func TestSessionStreamRunnerEvents(t *testing.T) {
+	h, client := test.RegisterIntegration(t)
+
+	account := h.NewRandAccount()
+	ctx := h.NewAuthenticatedContext(account)
+	jwtToken := ctx.Value(openapi.ContextAccessToken)
+
+	// ── Case 1: unauthenticated → 401 ──────────────────────────────────────────
+	resp1, err := resty.R().
+		SetHeader("Accept", "text/event-stream").
+		Get(h.RestURL("/sessions/foo/events"))
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp1.StatusCode()).To(Equal(http.StatusUnauthorized))
+
+	// ── Case 2: session not found → 404 ────────────────────────────────────────
+	resp2, err := resty.R().
+		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
+		SetHeader("Accept", "text/event-stream").
+		Get(h.RestURL("/sessions/doesnotexist/events"))
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp2.StatusCode()).To(Equal(http.StatusNotFound))
+
+	// ── Case 3: session exists but KubeNamespace is nil → 404 ──────────────────
+	// BeforeCreate sets KubeCrName = &session.ID but leaves KubeNamespace nil.
+	sess3, err := newSession(h.NewID())
+	Expect(err).NotTo(HaveOccurred())
+
+	resp3, err := resty.R().
+		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
+		SetHeader("Accept", "text/event-stream").
+		Get(h.RestURL("/sessions/" + sess3.ID + "/events"))
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp3.StatusCode()).To(Equal(http.StatusNotFound))
+	Expect(string(resp3.Body())).To(ContainSubstring("session has no associated runner pod"))
+
+	// ── Case 4: session has runner info, runner unreachable → 502 ──────────────
+	sess4, err := newSession(h.NewID())
+	Expect(err).NotTo(HaveOccurred())
+	ns4 := "test-namespace"
+	_, _, patchErr := client.DefaultAPI.ApiAmbientV1SessionsIdStatusPatch(ctx, sess4.ID).
+		SessionStatusPatchRequest(openapi.SessionStatusPatchRequest{KubeNamespace: &ns4}).Execute()
+	Expect(patchErr).NotTo(HaveOccurred())
+
+	resp4, err := resty.R().
+		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
+		SetHeader("Accept", "text/event-stream").
+		Get(h.RestURL("/sessions/" + sess4.ID + "/events"))
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp4.StatusCode()).To(Equal(http.StatusBadGateway))
+	Expect(string(resp4.Body())).To(ContainSubstring("runner not reachable"))
+
+	// ── Case 5: session has runner info, mock runner reachable → 200 + SSE ──────
+	mockPayload := "data: {\"type\":\"TEXT_MESSAGE_CONTENT\"}\n\ndata: {\"type\":\"RUN_FINISHED\"}\n\n"
+	mockRunner := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprint(w, mockPayload)
+	}))
+	defer mockRunner.Close()
+
+	origClient := sessions.EventsHTTPClient
+	sessions.EventsHTTPClient = &http.Client{Transport: &runnerRedirectTransport{target: mockRunner.URL}}
+	defer func() { sessions.EventsHTTPClient = origClient }()
+
+	sess5, err := newSession(h.NewID())
+	Expect(err).NotTo(HaveOccurred())
+	ns5 := "test-namespace-5"
+	_, _, patchErr = client.DefaultAPI.ApiAmbientV1SessionsIdStatusPatch(ctx, sess5.ID).
+		SessionStatusPatchRequest(openapi.SessionStatusPatchRequest{KubeNamespace: &ns5}).Execute()
+	Expect(patchErr).NotTo(HaveOccurred())
+
+	resp5, err := resty.R().
+		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
+		SetHeader("Accept", "text/event-stream").
+		Get(h.RestURL("/sessions/" + sess5.ID + "/events"))
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp5.StatusCode()).To(Equal(http.StatusOK))
+	Expect(resp5.Header().Get("Content-Type")).To(ContainSubstring("text/event-stream"))
+	Expect(string(resp5.Body())).To(ContainSubstring("TEXT_MESSAGE_CONTENT"))
 }

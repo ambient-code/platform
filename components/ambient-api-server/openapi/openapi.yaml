@@ -38,10 +38,6 @@ paths:
     $ref: 'openapi.users.yaml#/paths/~1api~1ambient~1v1~1users'
   /api/ambient/v1/users/{id}:
     $ref: 'openapi.users.yaml#/paths/~1api~1ambient~1v1~1users~1{id}'
-  /api/ambient/v1/agents:
-    $ref: 'openapi.agents.yaml#/paths/~1api~1ambient~1v1~1agents'
-  /api/ambient/v1/agents/{id}:
-    $ref: 'openapi.agents.yaml#/paths/~1api~1ambient~1v1~1agents~1{id}'
   /api/ambient/v1/roles:
     $ref: 'openapi.roles.yaml#/paths/~1api~1ambient~1v1~1roles'
   /api/ambient/v1/roles/{id}:
@@ -52,6 +48,28 @@ paths:
     $ref: 'openapi.roleBindings.yaml#/paths/~1api~1ambient~1v1~1role_bindings~1{id}'
   /api/ambient/v1/sessions/{id}/messages:
     $ref: 'openapi.sessionMessages.yaml#/paths/~1api~1ambient~1v1~1sessions~1{id}~1messages'
+  /api/ambient/v1/projects/{id}/agents:
+    $ref: 'openapi.agents.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents'
+  /api/ambient/v1/projects/{id}/agents/{agent_id}:
+    $ref: 'openapi.agents.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents~1{agent_id}'
+  /api/ambient/v1/projects/{id}/agents/{agent_id}/start:
+    $ref: 'openapi.agents.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents~1{agent_id}~1start'
+  /api/ambient/v1/projects/{id}/agents/{agent_id}/ignition:
+    $ref: 'openapi.agents.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents~1{agent_id}~1ignition'
+  /api/ambient/v1/projects/{id}/agents/{agent_id}/sessions:
+    $ref: 'openapi.agents.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents~1{agent_id}~1sessions'
+  /api/ambient/v1/projects/{id}/home:
+    $ref: 'openapi.agents.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1home'
+  /api/ambient/v1/projects/{id}/agents/{agent_id}/inbox:
+    $ref: 'openapi.inbox.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents~1{agent_id}~1inbox'
+  /api/ambient/v1/projects/{id}/agents/{agent_id}/inbox/{msg_id}:
+    $ref: 'openapi.inbox.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents~1{agent_id}~1inbox~1{msg_id}'
+  /api/ambient/v1/projects/{id}/credentials:
+    $ref: 'openapi.credentials.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1credentials'
+  /api/ambient/v1/projects/{id}/credentials/{cred_id}:
+    $ref: 'openapi.credentials.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1credentials~1{cred_id}'
+  /api/ambient/v1/projects/{id}/credentials/{cred_id}/token:
+    $ref: 'openapi.credentials.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1credentials~1{cred_id}~1token'
   # AUTO-ADD NEW PATHS
 components:
   securitySchemes:
@@ -129,12 +147,6 @@ components:
       $ref: 'openapi.users.yaml#/components/schemas/UserList'
     UserPatchRequest:
       $ref: 'openapi.users.yaml#/components/schemas/UserPatchRequest'
-    Agent:
-      $ref: 'openapi.agents.yaml#/components/schemas/Agent'
-    AgentList:
-      $ref: 'openapi.agents.yaml#/components/schemas/AgentList'
-    AgentPatchRequest:
-      $ref: 'openapi.agents.yaml#/components/schemas/AgentPatchRequest'
     Role:
       $ref: 'openapi.roles.yaml#/components/schemas/Role'
     RoleList:
@@ -153,6 +165,64 @@ components:
       $ref: 'openapi.sessionMessages.yaml#/components/schemas/SessionMessageList'
     SessionMessagePushRequest:
       $ref: 'openapi.sessionMessages.yaml#/components/schemas/SessionMessagePushRequest'
+    Agent:
+      $ref: 'openapi.agents.yaml#/components/schemas/Agent'
+    AgentList:
+      $ref: 'openapi.agents.yaml#/components/schemas/AgentList'
+    AgentPatchRequest:
+      $ref: 'openapi.agents.yaml#/components/schemas/AgentPatchRequest'
+    AgentSessionList:
+      $ref: 'openapi.agents.yaml#/components/schemas/AgentSessionList'
+    StartRequest:
+      type: object
+      properties:
+        prompt:
+          type: string
+          description: Task scope for this specific run (Session.prompt)
+    StartResponse:
+      type: object
+      properties:
+        session:
+          $ref: 'openapi.sessions.yaml#/components/schemas/Session'
+        start_prompt:
+          type: string
+          description: Assembled start prompt — Agent.prompt + Inbox + Session.prompt + peer roster
+    ProjectHome:
+      type: object
+      properties:
+        project_id:
+          type: string
+        agents:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectHomeAgent'
+    ProjectHomeAgent:
+      type: object
+      properties:
+        agent_id:
+          type: string
+        agent_name:
+          type: string
+        session_phase:
+          type: string
+        inbox_unread_count:
+          type: integer
+        summary:
+          type: string
+    InboxMessage:
+      $ref: 'openapi.inbox.yaml#/components/schemas/InboxMessage'
+    InboxMessageList:
+      $ref: 'openapi.inbox.yaml#/components/schemas/InboxMessageList'
+    InboxMessagePatchRequest:
+      $ref: 'openapi.inbox.yaml#/components/schemas/InboxMessagePatchRequest'
+    Credential:
+      $ref: 'openapi.credentials.yaml#/components/schemas/Credential'
+    CredentialList:
+      $ref: 'openapi.credentials.yaml#/components/schemas/CredentialList'
+    CredentialPatchRequest:
+      $ref: 'openapi.credentials.yaml#/components/schemas/CredentialPatchRequest'
+    CredentialTokenResponse:
+      $ref: 'openapi.credentials.yaml#/components/schemas/CredentialTokenResponse'
     # AUTO-ADD NEW SCHEMAS
   parameters:
     id:
