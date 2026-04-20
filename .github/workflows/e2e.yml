@@ -27,6 +27,7 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
+      e2e-relevant: ${{ steps.filter.outputs.e2e-relevant }}
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
       operator: ${{ steps.filter.outputs.operator }}
@@ -42,6 +43,10 @@ jobs:
         id: filter
         with:
           filters: |
+            e2e-relevant:
+              - 'components/**'
+              - 'e2e/**'
+              - '.github/workflows/e2e.yml'
             frontend:
               - 'components/frontend/**'
             backend:
@@ -55,7 +60,9 @@ jobs:
     name: End-to-End Tests
     runs-on: ubuntu-latest
     needs: [detect-changes]
-    if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push'
+    if: |
+      (github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push')
+      && needs.detect-changes.outputs.e2e-relevant == 'true'
 
     timeout-minutes: 25
 
@@ -66,17 +73,18 @@ jobs:
         ref: ${{ github.event.pull_request.head.sha }}
 
     - name: Cleanup Diskspace
-      uses: kubeflow/pipelines/.github/actions/github-disk-cleanup@ab1231a5c32c688bcb62314e467011b586aee796 # master
-      if: (!cancelled())
+      run: |
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+        sudo docker image prune -af 2>/dev/null || true
 
     - name: Validate AGENTS.md symlink
       run: |
-        echo "Validating AGENTS.md → CLAUDE.md symlink..."
-        [ -L AGENTS.md ] || (echo "❌ AGENTS.md is not a symlink" && exit 1)
-        [ "$(readlink AGENTS.md)" = "CLAUDE.md" ] || (echo "❌ AGENTS.md points to wrong target" && exit 1)
-        [ -f CLAUDE.md ] || (echo "❌ CLAUDE.md does not exist" && exit 1)
-        diff -q AGENTS.md CLAUDE.md > /dev/null || (echo "❌ AGENTS.md content differs from CLAUDE.md" && exit 1)
-        echo "✅ AGENTS.md symlink is valid"
+        echo "Validating AGENTS.md -> CLAUDE.md symlink..."
+        [ -L AGENTS.md ] || (echo "AGENTS.md is not a symlink" && exit 1)
+        [ "$(readlink AGENTS.md)" = "CLAUDE.md" ] || (echo "AGENTS.md points to wrong target" && exit 1)
+        [ -f CLAUDE.md ] || (echo "CLAUDE.md does not exist" && exit 1)
+        diff -q AGENTS.md CLAUDE.md > /dev/null || (echo "AGENTS.md content differs from CLAUDE.md" && exit 1)
+        echo "AGENTS.md symlink is valid"
 
     - name: Set up Node.js
       uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
@@ -107,13 +115,39 @@ jobs:
           type=gha,scope=e2e-frontend
         cache-to: type=gha,mode=max,scope=e2e-frontend
 
-    - name: Pull frontend latest (unchanged)
-      if: needs.detect-changes.outputs.frontend != 'true'
+    - name: Pull unchanged images (parallel)
       run: |
-        docker pull quay.io/ambient_code/vteam_frontend:latest
-        docker tag quay.io/ambient_code/vteam_frontend:latest quay.io/ambient_code/vteam_frontend:e2e-test
+        pull_pids=()
+        PULL_FRONTEND="${{ needs.detect-changes.outputs.frontend }}"
+        PULL_BACKEND="${{ needs.detect-changes.outputs.backend }}"
+        PULL_OPERATOR="${{ needs.detect-changes.outputs.operator }}"
+        PULL_RUNNER="${{ needs.detect-changes.outputs.claude-runner }}"
+        if [ "$PULL_FRONTEND" != "true" ]; then
+          (docker pull quay.io/ambient_code/vteam_frontend:latest && \
+           docker tag quay.io/ambient_code/vteam_frontend:latest quay.io/ambient_code/vteam_frontend:e2e-test) &
+          pull_pids+=($!)
+        fi
+        if [ "$PULL_BACKEND" != "true" ]; then
+          (docker pull quay.io/ambient_code/vteam_backend:latest && \
+           docker tag quay.io/ambient_code/vteam_backend:latest quay.io/ambient_code/vteam_backend:e2e-test) &
+          pull_pids+=($!)
+        fi
+        if [ "$PULL_OPERATOR" != "true" ]; then
+          (docker pull quay.io/ambient_code/vteam_operator:latest && \
+           docker tag quay.io/ambient_code/vteam_operator:latest quay.io/ambient_code/vteam_operator:e2e-test) &
+          pull_pids+=($!)
+        fi
+        if [ "$PULL_RUNNER" != "true" ]; then
+          (docker pull quay.io/ambient_code/vteam_claude_runner:latest && \
+           docker tag quay.io/ambient_code/vteam_claude_runner:latest quay.io/ambient_code/vteam_claude_runner:e2e-test) &
+          pull_pids+=($!)
+        fi
+        for pid in "${pull_pids[@]}"; do
+          wait "$pid" || exit 1
+        done
+        echo "All unchanged images pulled"
 
-    - name: Build or pull backend image
+    - name: Build changed backend image
       if: needs.detect-changes.outputs.backend == 'true'
       uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
       with:
@@ -126,13 +160,7 @@ jobs:
           type=gha,scope=e2e-backend
         cache-to: type=gha,mode=max,scope=e2e-backend
 
-    - name: Pull backend latest (unchanged)
-      if: needs.detect-changes.outputs.backend != 'true'
-      run: |
-        docker pull quay.io/ambient_code/vteam_backend:latest
-        docker tag quay.io/ambient_code/vteam_backend:latest quay.io/ambient_code/vteam_backend:e2e-test
-
-    - name: Build or pull operator image
+    - name: Build changed operator image
       if: needs.detect-changes.outputs.operator == 'true'
       uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
       with:
@@ -145,13 +173,7 @@ jobs:
           type=gha,scope=e2e-operator
         cache-to: type=gha,mode=max,scope=e2e-operator
 
-    - name: Pull operator latest (unchanged)
-      if: needs.detect-changes.outputs.operator != 'true'
-      run: |
-        docker pull quay.io/ambient_code/vteam_operator:latest
-        docker tag quay.io/ambient_code/vteam_operator:latest quay.io/ambient_code/vteam_operator:e2e-test
-
-    - name: Build or pull ambient-runner image
+    - name: Build changed ambient-runner image
       if: needs.detect-changes.outputs.claude-runner == 'true'
       uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
       with:
@@ -163,12 +185,6 @@ jobs:
           type=gha,scope=ambient-runner-amd64
           type=gha,scope=e2e-ambient-runner
         cache-to: type=gha,mode=max,scope=e2e-ambient-runner
-
-    - name: Pull ambient-runner latest (unchanged)
-      if: needs.detect-changes.outputs.claude-runner != 'true'
-      run: |
-        docker pull quay.io/ambient_code/vteam_claude_runner:latest
-        docker tag quay.io/ambient_code/vteam_claude_runner:latest quay.io/ambient_code/vteam_claude_runner:e2e-test
 
     - name: Show built images
       run: docker images | grep e2e-test
@@ -200,14 +216,14 @@ jobs:
 
     - name: Load images into kind cluster
       run: |
-        echo "======================================"
-        echo "Loading images into kind cluster..."
-        echo "======================================"
-        kind load docker-image quay.io/ambient_code/vteam_frontend:e2e-test --name ambient-local
-        kind load docker-image quay.io/ambient_code/vteam_backend:e2e-test --name ambient-local
-        kind load docker-image quay.io/ambient_code/vteam_operator:e2e-test --name ambient-local
-        kind load docker-image quay.io/ambient_code/vteam_claude_runner:e2e-test --name ambient-local
-        echo "✅ All images loaded into kind cluster"
+        echo "Saving and loading all images into kind via archive..."
+        docker save \
+          quay.io/ambient_code/vteam_frontend:e2e-test \
+          quay.io/ambient_code/vteam_backend:e2e-test \
+          quay.io/ambient_code/vteam_operator:e2e-test \
+          quay.io/ambient_code/vteam_claude_runner:e2e-test \
+          | kind load image-archive /dev/stdin --name ambient-local
+        echo "All images loaded into kind cluster"
 
     - name: Deploy vTeam (mock SDK mode)
       working-directory: e2e
