@@ -73,9 +73,11 @@ describe('Scheduled Sessions', () => {
   })
 
   function waitForFormReady() {
-    cy.get('[data-testid="scheduled-session-name-input"]', { timeout: 10000 })
+    cy.get('[data-testid="runner-type-select"]', { timeout: 15000 })
       .should('not.be.disabled')
-    cy.get('[data-testid="schedule-preset-select"]', { timeout: 10000 })
+    cy.get('[data-testid="model-select"]', { timeout: 15000 })
+      .should('not.be.disabled')
+    cy.get('[data-testid="scheduled-session-name-input"]', { timeout: 10000 })
       .should('not.be.disabled')
   }
 
