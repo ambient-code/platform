@@ -134,8 +134,9 @@ describe('Scheduled Sessions', () => {
     it('should create a scheduled session with a custom cron expression', () => {
       cy.visit(`/projects/${workspaceSlug}/scheduled-sessions/new`)
 
-      // Fill display name
+      // Wait for form to be ready before typing
       cy.get('[data-testid="scheduled-session-name-input"]', { timeout: 10000 })
+        .should('not.be.disabled')
         .type('Custom Cron Test')
 
       // Select "Custom" preset
