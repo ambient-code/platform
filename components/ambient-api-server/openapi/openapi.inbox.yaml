@@ -1,0 +1,259 @@
+paths:
+  # NEW ENDPOINT START
+  /api/ambient/v1/projects/{id}/agents/{agent_id}/inbox:
+  # NEW ENDPOINT END
+    get:
+      summary: Read inbox messages for an agent (unread first)
+      security:
+        - Bearer: []
+      responses:
+        '200':
+          description: Inbox messages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboxMessageList'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No agent with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/size'
+    post:
+      summary: Send a message to an agent's inbox
+      security:
+        - Bearer: []
+      requestBody:
+        description: Inbox message to send
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InboxMessage'
+      responses:
+        '201':
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboxMessage'
+        '400':
+          description: Validation errors occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No agent with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred sending the message
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    parameters:
+      - $ref: '#/components/parameters/id'
+      - name: agent_id
+        in: path
+        description: The id of the agent
+        required: true
+        schema:
+          type: string
+  # NEW ENDPOINT START
+  /api/ambient/v1/projects/{id}/agents/{agent_id}/inbox/{msg_id}:
+  # NEW ENDPOINT END
+    patch:
+      summary: Mark an inbox message as read
+      security:
+        - Bearer: []
+      requestBody:
+        description: Inbox message patch
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InboxMessagePatchRequest'
+      responses:
+        '200':
+          description: Message updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboxMessage'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No inbox message with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    delete:
+      summary: Delete an inbox message
+      security:
+        - Bearer: []
+      responses:
+        '204':
+          description: Message deleted
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No inbox message with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    parameters:
+      - $ref: '#/components/parameters/id'
+      - name: agent_id
+        in: path
+        description: The id of the agent
+        required: true
+        schema:
+          type: string
+      - name: msg_id
+        in: path
+        description: The id of the inbox message
+        required: true
+        schema:
+          type: string
+components:
+  schemas:
+    # NEW SCHEMA START
+    InboxMessage:
+    # NEW SCHEMA END
+      allOf:
+        - $ref: 'openapi.yaml#/components/schemas/ObjectReference'
+        - type: object
+          required:
+            - agent_id
+            - body
+          properties:
+            agent_id:
+              type: string
+              description: Recipient — the agent address
+            from_agent_id:
+              type: string
+              description: Sender Agent id — null if sent by a human
+            from_name:
+              type: string
+              description: Denormalized sender display name
+            body:
+              type: string
+            read:
+              type: boolean
+              readOnly: true
+              description: false = unread; drained at session start
+    # NEW SCHEMA START
+    InboxMessageList:
+    # NEW SCHEMA END
+      allOf:
+        - $ref: 'openapi.yaml#/components/schemas/List'
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/InboxMessage'
+    # NEW SCHEMA START
+    InboxMessagePatchRequest:
+    # NEW SCHEMA END
+      type: object
+      properties:
+        read:
+          type: boolean
+  parameters:
+    id:
+      name: id
+      in: path
+      description: The id of the project
+      required: true
+      schema:
+        type: string
+    page:
+      name: page
+      in: query
+      description: Page number of record list when record list exceeds specified page size
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+      required: false
+    size:
+      name: size
+      in: query
+      description: Maximum number of records to return
+      schema:
+        type: integer
+        default: 100
+        minimum: 0
+      required: false

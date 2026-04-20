@@ -2,6 +2,7 @@ package sessions_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -226,4 +227,152 @@ func TestSessionGRPCWatch(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("Timed out waiting for DELETED watch event")
 	}
+}
+
+func TestWatchSessionMessages(t *testing.T) {
+	h, _ := test.RegisterIntegration(t)
+
+	account := h.NewRandAccount()
+	token := h.CreateJWTString(account)
+
+	conn, err := grpc.NewClient(
+		h.GRPCAddress(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	Expect(err).NotTo(HaveOccurred())
+	defer func() { _ = conn.Close() }()
+
+	client := pb.NewSessionServiceClient(conn)
+	ctx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer "+token)
+
+	created, err := client.CreateSession(ctx, &pb.CreateSessionRequest{
+		Name:   "msg-watch-session",
+		Prompt: stringPtr("watch messages test"),
+	})
+	Expect(err).NotTo(HaveOccurred())
+	sessionID := created.GetMetadata().GetId()
+	defer func() {
+		_, _ = client.DeleteSession(ctx, &pb.DeleteSessionRequest{Id: sessionID})
+	}()
+
+	watchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	stream, err := client.WatchSessionMessages(watchCtx, &pb.WatchSessionMessagesRequest{
+		SessionId: sessionID,
+		AfterSeq:  0,
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	received := make(chan *pb.SessionMessage, 10)
+	go func() {
+		for {
+			msg, err := stream.Recv()
+			if err != nil {
+				return
+			}
+			select {
+			case received <- msg:
+			case <-watchCtx.Done():
+				return
+			}
+		}
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+
+	pushed, err := client.PushSessionMessage(ctx, &pb.PushSessionMessageRequest{
+		SessionId: sessionID,
+		EventType: "system",
+		Payload:   "hello from test",
+	})
+	Expect(err).NotTo(HaveOccurred())
+	Expect(pushed.GetSeq()).To(BeNumerically(">", 0))
+
+	select {
+	case msg := <-received:
+		Expect(msg.GetSessionId()).To(Equal(sessionID))
+		Expect(msg.GetEventType()).To(Equal("system"))
+		Expect(msg.GetPayload()).To(Equal("hello from test"))
+		Expect(msg.GetSeq()).To(Equal(pushed.GetSeq()))
+	case <-time.After(10 * time.Second):
+		t.Fatal("Timed out waiting for streamed session message")
+	}
+
+	pushed2, err := client.PushSessionMessage(ctx, &pb.PushSessionMessageRequest{
+		SessionId: sessionID,
+		EventType: "assistant",
+		Payload:   "second message",
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	select {
+	case msg := <-received:
+		Expect(msg.GetSeq()).To(Equal(pushed2.GetSeq()))
+		Expect(msg.GetPayload()).To(Equal("second message"))
+	case <-time.After(10 * time.Second):
+		t.Fatal("Timed out waiting for second streamed message")
+	}
+}
+
+func TestWatchSessionMessagesReplay(t *testing.T) {
+	h, _ := test.RegisterIntegration(t)
+
+	account := h.NewRandAccount()
+	token := h.CreateJWTString(account)
+
+	conn, err := grpc.NewClient(
+		h.GRPCAddress(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	Expect(err).NotTo(HaveOccurred())
+	defer func() { _ = conn.Close() }()
+
+	client := pb.NewSessionServiceClient(conn)
+	ctx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer "+token)
+
+	created, err := client.CreateSession(ctx, &pb.CreateSessionRequest{
+		Name: "msg-replay-session",
+	})
+	Expect(err).NotTo(HaveOccurred())
+	sessionID := created.GetMetadata().GetId()
+	defer func() {
+		_, _ = client.DeleteSession(ctx, &pb.DeleteSessionRequest{Id: sessionID})
+	}()
+
+	for i := range 3 {
+		_, err := client.PushSessionMessage(ctx, &pb.PushSessionMessageRequest{
+			SessionId: sessionID,
+			EventType: "system",
+			Payload:   fmt.Sprintf("pre-existing message %d", i+1),
+		})
+		Expect(err).NotTo(HaveOccurred())
+	}
+
+	watchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	stream, err := client.WatchSessionMessages(watchCtx, &pb.WatchSessionMessagesRequest{
+		SessionId: sessionID,
+		AfterSeq:  0,
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	for i := range 3 {
+		msg, err := stream.Recv()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(msg.GetPayload()).To(Equal(fmt.Sprintf("pre-existing message %d", i+1)))
+	}
+
+	pushed, err := client.PushSessionMessage(ctx, &pb.PushSessionMessageRequest{
+		SessionId: sessionID,
+		EventType: "system",
+		Payload:   "live message after replay",
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	msg, err := stream.Recv()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(msg.GetSeq()).To(Equal(pushed.GetSeq()))
+	Expect(msg.GetPayload()).To(Equal("live message after replay"))
 }

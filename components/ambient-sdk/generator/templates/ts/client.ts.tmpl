@@ -10,37 +10,71 @@ import type { {{.Resource.Name}}, {{.Resource.Name}}List, {{.Resource.Name}}Crea
 export class {{.Resource.Name}}API {
   constructor(private readonly config: AmbientClientConfig) {}
 
+{{- if .Resource.IsSubResource}}
+  private basePath(): string {
+    return '/{{.Resource.PathSegment}}'.replace('{id}', encodeURIComponent(this.config.project));
+  }
+{{end}}
+
   async create(data: {{.Resource.Name}}CreateRequest, opts?: RequestOptions): Promise<{{.Resource.Name}}> {
+{{- if .Resource.IsSubResource}}
+    return ambientFetch<{{.Resource.Name}}>(this.config, 'POST', this.basePath(), data, opts);
+{{- else}}
     return ambientFetch<{{.Resource.Name}}>(this.config, 'POST', '/{{.Resource.PathSegment}}', data, opts);
+{{- end}}
   }
 
   async get(id: string, opts?: RequestOptions): Promise<{{.Resource.Name}}> {
+{{- if .Resource.IsSubResource}}
+    return ambientFetch<{{.Resource.Name}}>(this.config, 'GET', `${this.basePath()}/${id}`, undefined, opts);
+{{- else}}
     return ambientFetch<{{.Resource.Name}}>(this.config, 'GET', `/{{.Resource.PathSegment}}/${id}`, undefined, opts);
+{{- end}}
   }
 
   async list(listOpts?: ListOptions, opts?: RequestOptions): Promise<{{.Resource.Name}}List> {
     const qs = buildQueryString(listOpts);
+{{- if .Resource.IsSubResource}}
+    return ambientFetch<{{.Resource.Name}}List>(this.config, 'GET', `${this.basePath()}${qs}`, undefined, opts);
+{{- else}}
     return ambientFetch<{{.Resource.Name}}List>(this.config, 'GET', `/{{.Resource.PathSegment}}${qs}`, undefined, opts);
+{{- end}}
   }
 
 {{- if .Resource.HasPatch}}
   async update(id: string, patch: {{.Resource.Name}}PatchRequest, opts?: RequestOptions): Promise<{{.Resource.Name}}> {
+{{- if .Resource.IsSubResource}}
+    return ambientFetch<{{.Resource.Name}}>(this.config, 'PATCH', `${this.basePath()}/${id}`, patch, opts);
+{{- else}}
     return ambientFetch<{{.Resource.Name}}>(this.config, 'PATCH', `/{{.Resource.PathSegment}}/${id}`, patch, opts);
+{{- end}}
   }
 {{end}}
 {{- if .Resource.HasDelete}}
   async delete(id: string, opts?: RequestOptions): Promise<void> {
+{{- if .Resource.IsSubResource}}
+    return ambientFetch<void>(this.config, 'DELETE', `${this.basePath()}/${id}`, undefined, opts);
+{{- else}}
     return ambientFetch<void>(this.config, 'DELETE', `/{{.Resource.PathSegment}}/${id}`, undefined, opts);
+{{- end}}
   }
 {{end}}
 {{- if .Resource.HasStatusPatch}}
   async updateStatus(id: string, patch: {{.Resource.Name}}StatusPatchRequest, opts?: RequestOptions): Promise<{{.Resource.Name}}> {
+{{- if .Resource.IsSubResource}}
+    return ambientFetch<{{.Resource.Name}}>(this.config, 'PATCH', `${this.basePath()}/${id}/status`, patch, opts);
+{{- else}}
     return ambientFetch<{{.Resource.Name}}>(this.config, 'PATCH', `/{{.Resource.PathSegment}}/${id}/status`, patch, opts);
+{{- end}}
   }
 {{end}}
 {{- range .Resource.Actions}}
   async {{.}}(id: string, opts?: RequestOptions): Promise<{{$.Resource.Name}}> {
+{{- if $.Resource.IsSubResource}}
+    return ambientFetch<{{$.Resource.Name}}>(this.config, 'POST', `${this.basePath()}/${id}/{{.}}`, undefined, opts);
+{{- else}}
     return ambientFetch<{{$.Resource.Name}}>(this.config, 'POST', `/{{$.Resource.PathSegment}}/${id}/{{.}}`, undefined, opts);
+{{- end}}
   }
 {{end}}
   async *listAll(size: number = 100, opts?: RequestOptions): AsyncGenerator<{{.Resource.Name}}> {

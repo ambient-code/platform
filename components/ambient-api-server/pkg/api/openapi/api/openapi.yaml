@@ -1232,238 +1232,6 @@ paths:
       security:
       - Bearer: []
       summary: Update an user
-  /api/ambient/v1/agents:
-    get:
-      parameters:
-      - description: Page number of record list when record list exceeds specified
-          page size
-        explode: true
-        in: query
-        name: page
-        required: false
-        schema:
-          default: 1
-          minimum: 1
-          type: integer
-        style: form
-      - description: Maximum number of records to return
-        explode: true
-        in: query
-        name: size
-        required: false
-        schema:
-          default: 100
-          minimum: 0
-          type: integer
-        style: form
-      - description: Specifies the search criteria
-        explode: true
-        in: query
-        name: search
-        required: false
-        schema:
-          type: string
-        style: form
-      - description: Specifies the order by criteria
-        explode: true
-        in: query
-        name: orderBy
-        required: false
-        schema:
-          type: string
-        style: form
-      - description: Supplies a comma-separated list of fields to be returned
-        explode: true
-        in: query
-        name: fields
-        required: false
-        schema:
-          type: string
-        style: form
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AgentList"
-          description: A JSON array of agent objects
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Auth token is invalid
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unauthorized to perform operation
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unexpected error occurred
-      security:
-      - Bearer: []
-      summary: Returns a list of agents
-    post:
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Agent"
-        description: Agent data
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Agent"
-          description: Created
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Validation errors occurred
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Auth token is invalid
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unauthorized to perform operation
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Agent already exists
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: An unexpected error occurred creating the agent
-      security:
-      - Bearer: []
-      summary: Create a new agent
-  /api/ambient/v1/agents/{id}:
-    get:
-      parameters:
-      - description: The id of record
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Agent"
-          description: Agent found by id
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Auth token is invalid
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unauthorized to perform operation
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: No agent with specified id exists
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unexpected error occurred
-      security:
-      - Bearer: []
-      summary: Get an agent by id
-    patch:
-      parameters:
-      - description: The id of record
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AgentPatchRequest"
-        description: Updated agent data
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Agent"
-          description: Agent updated successfully
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Validation errors occurred
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Auth token is invalid
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unauthorized to perform operation
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: No agent with specified id exists
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Agent already exists
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-          description: Unexpected error updating agent
-      security:
-      - Bearer: []
-      summary: Update an agent
   /api/ambient/v1/roles:
     get:
       parameters:
@@ -2059,6 +1827,1177 @@ paths:
       security:
       - Bearer: []
       summary: Push a message to a session
+  /api/ambient/v1/projects/{id}/agents:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentList"
+          description: A JSON array of agent objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of agents in a project
+    post:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Agent"
+        description: Agent data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project with specified id exists
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Agent already exists in this project
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the agent
+      security:
+      - Bearer: []
+      summary: Create an agent in a project
+  /api/ambient/v1/projects/{id}/agents/{agent_id}:
+    delete:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the agent
+        in: path
+        name: agent_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Agent deleted successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No agent with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Delete an agent from a project
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the agent
+        in: path
+        name: agent_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+          description: Agent found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No agent with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get an agent by id
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the agent
+        in: path
+        name: agent_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentPatchRequest"
+        description: Updated agent data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+          description: Agent updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No agent with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating agent
+      security:
+      - Bearer: []
+      summary: "Update an agent (name, prompt, labels, annotations)"
+  /api/ambient/v1/projects/{id}/agents/{agent_id}/start:
+    post:
+      description: |
+        Creates a new Session for this Agent and drains the inbox into the start context.
+        If an active session already exists, it is returned as-is.
+        Unread Inbox messages are marked read and injected as context before the first turn.
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the agent
+        in: path
+        name: agent_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartRequest"
+        description: Optional start parameters
+        required: false
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StartResponse"
+          description: Session already active — returned as-is
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StartResponse"
+          description: New session created and started
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No agent with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Start an agent — creates a Session (idempotent)
+  /api/ambient/v1/projects/{id}/agents/{agent_id}/ignition:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the agent
+        in: path
+        name: agent_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StartResponse"
+          description: Start context preview
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No agent with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Preview start context (dry run — no session created)
+  /api/ambient/v1/projects/{id}/agents/{agent_id}/sessions:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the agent
+        in: path
+        name: agent_id
+        required: true
+        schema:
+          type: string
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentSessionList"
+          description: Session run history
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No agent with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get session run history for an agent
+  /api/ambient/v1/projects/{id}/home:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectHome"
+          description: Project home dashboard payload
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Project home — latest status for every Agent in this project
+  /api/ambient/v1/projects/{id}/agents/{agent_id}/inbox:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the agent
+        in: path
+        name: agent_id
+        required: true
+        schema:
+          type: string
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxMessageList"
+          description: Inbox messages
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No agent with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Read inbox messages for an agent (unread first)
+    post:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the agent
+        in: path
+        name: agent_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InboxMessage"
+        description: Inbox message to send
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxMessage"
+          description: Message sent
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No agent with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred sending the message
+      security:
+      - Bearer: []
+      summary: Send a message to an agent's inbox
+  /api/ambient/v1/projects/{id}/agents/{agent_id}/inbox/{msg_id}:
+    delete:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the agent
+        in: path
+        name: agent_id
+        required: true
+        schema:
+          type: string
+      - description: The id of the inbox message
+        in: path
+        name: msg_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Message deleted
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No inbox message with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Delete an inbox message
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the agent
+        in: path
+        name: agent_id
+        required: true
+        schema:
+          type: string
+      - description: The id of the inbox message
+        in: path
+        name: msg_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InboxMessagePatchRequest"
+        description: Inbox message patch
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxMessage"
+          description: Message updated
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No inbox message with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Mark an inbox message as read
+  /api/ambient/v1/projects/{id}/credentials:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Filter credentials by provider
+        in: query
+        name: provider
+        required: false
+        schema:
+          enum:
+          - github
+          - gitlab
+          - jira
+          - google
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CredentialList"
+          description: A JSON array of credential objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of credentials in a project
+    post:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Credential"
+        description: Credential data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Credential"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Credential already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the credential
+      security:
+      - Bearer: []
+      summary: Create a new credential in a project
+  /api/ambient/v1/projects/{id}/credentials/{cred_id}:
+    delete:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the credential
+        in: path
+        name: cred_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Credential deleted successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No credential with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error deleting credential
+      security:
+      - Bearer: []
+      summary: Delete a credential
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the credential
+        in: path
+        name: cred_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Credential"
+          description: Credential found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No credential with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get a credential by id
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the credential
+        in: path
+        name: cred_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CredentialPatchRequest"
+        description: Updated credential data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Credential"
+          description: Credential updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No credential with specified id exists
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Credential already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating credential
+      security:
+      - Bearer: []
+      summary: Update a credential
+  /api/ambient/v1/projects/{id}/credentials/{cred_id}/token:
+    get:
+      description: Returns the decrypted token value for the given credential. Requires
+        token-reader role.
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the credential
+        in: path
+        name: cred_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CredentialTokenResponse"
+          description: Credential token retrieved successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No credential with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error retrieving token
+      security:
+      - Bearer: []
+      summary: Get a decrypted token for a credential
 components:
   parameters:
     id:
@@ -2120,6 +3059,13 @@ components:
       schema:
         type: string
       style: form
+    cred_id:
+      description: The id of the credential
+      in: path
+      name: cred_id
+      required: true
+      schema:
+        type: string
   schemas:
     ObjectReference:
       properties:
@@ -2215,6 +3161,13 @@ components:
             type: string
           annotations:
             type: string
+          agent_id:
+            description: The Agent that owns this session. Immutable after creation.
+            type: string
+          triggered_by_user_id:
+            description: User who started the agent
+            readOnly: true
+            type: string
           project_id:
             description: Immutable after creation. Set at creation time only.
             type: string
@@ -2259,12 +3212,14 @@ components:
       example:
         workflow_id: workflow_id
         completion_time: 2000-01-23T04:56:07.000+00:00
+        agent_id: agent_id
         created_at: 2000-01-23T04:56:07.000+00:00
         annotations: annotations
         reconciled_workflow: reconciled_workflow
         timeout: 5
         environment_variables: environment_variables
         kube_cr_uid: kube_cr_uid
+        triggered_by_user_id: triggered_by_user_id
         sdk_restart_count: 7
         updated_at: 2000-01-23T04:56:07.000+00:00
         project_id: project_id
@@ -2308,12 +3263,14 @@ components:
         items:
         - workflow_id: workflow_id
           completion_time: 2000-01-23T04:56:07.000+00:00
+          agent_id: agent_id
           created_at: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
           reconciled_workflow: reconciled_workflow
           timeout: 5
           environment_variables: environment_variables
           kube_cr_uid: kube_cr_uid
+          triggered_by_user_id: triggered_by_user_id
           sdk_restart_count: 7
           updated_at: 2000-01-23T04:56:07.000+00:00
           project_id: project_id
@@ -2342,12 +3299,14 @@ components:
           prompt: prompt
         - workflow_id: workflow_id
           completion_time: 2000-01-23T04:56:07.000+00:00
+          agent_id: agent_id
           created_at: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
           reconciled_workflow: reconciled_workflow
           timeout: 5
           environment_variables: environment_variables
           kube_cr_uid: kube_cr_uid
+          triggered_by_user_id: triggered_by_user_id
           sdk_restart_count: 7
           updated_at: 2000-01-23T04:56:07.000+00:00
           project_id: project_id
@@ -2469,13 +3428,15 @@ components:
       - properties:
           name:
             type: string
-          display_name:
-            type: string
           description:
             type: string
           labels:
             type: string
           annotations:
+            type: string
+          prompt:
+            description: Workspace-level context injected into every agent start in
+              this project
             type: string
           status:
             type: string
@@ -2497,7 +3458,7 @@ components:
         annotations: annotations
         id: id
         href: href
-        display_name: display_name
+        prompt: prompt
         labels: labels
         status: status
     ProjectList:
@@ -2523,7 +3484,7 @@ components:
           annotations: annotations
           id: id
           href: href
-          display_name: display_name
+          prompt: prompt
           labels: labels
           status: status
         - updated_at: 2000-01-23T04:56:07.000+00:00
@@ -2534,7 +3495,7 @@ components:
           annotations: annotations
           id: id
           href: href
-          display_name: display_name
+          prompt: prompt
           labels: labels
           status: status
     ProjectPatchRequest:
@@ -2542,19 +3503,19 @@ components:
         name: name
         description: description
         annotations: annotations
-        display_name: display_name
+        prompt: prompt
         labels: labels
         status: status
       properties:
         name:
-          type: string
-        display_name:
           type: string
         description:
           type: string
         labels:
           type: string
         annotations:
+          type: string
+        prompt:
           type: string
         status:
           type: string
@@ -2696,198 +3657,6 @@ components:
         name:
           type: string
         email:
-          type: string
-      type: object
-    Agent:
-      allOf:
-      - $ref: "#/components/schemas/ObjectReference"
-      - properties:
-          project_id:
-            type: string
-          parent_agent_id:
-            type: string
-          owner_user_id:
-            type: string
-          name:
-            type: string
-          display_name:
-            type: string
-          description:
-            type: string
-          prompt:
-            type: string
-          repo_url:
-            type: string
-          workflow_id:
-            type: string
-          llm_model:
-            type: string
-          llm_temperature:
-            format: double
-            type: number
-          llm_max_tokens:
-            format: int32
-            type: integer
-          bot_account_name:
-            type: string
-          resource_overrides:
-            type: string
-          environment_variables:
-            type: string
-          labels:
-            type: string
-          annotations:
-            type: string
-          current_session_id:
-            type: string
-        required:
-        - name
-        - owner_user_id
-        - project_id
-        type: object
-      example:
-        repo_url: repo_url
-        workflow_id: workflow_id
-        llm_model: llm_model
-        resource_overrides: resource_overrides
-        owner_user_id: owner_user_id
-        current_session_id: current_session_id
-        kind: kind
-        llm_temperature: 5.962133916683182
-        created_at: 2000-01-23T04:56:07.000+00:00
-        description: description
-        annotations: annotations
-        display_name: display_name
-        llm_max_tokens: 5
-        labels: labels
-        environment_variables: environment_variables
-        parent_agent_id: parent_agent_id
-        updated_at: 2000-01-23T04:56:07.000+00:00
-        project_id: project_id
-        bot_account_name: bot_account_name
-        name: name
-        id: id
-        href: href
-        prompt: prompt
-    AgentList:
-      allOf:
-      - $ref: "#/components/schemas/List"
-      - properties:
-          items:
-            items:
-              $ref: "#/components/schemas/Agent"
-            type: array
-        type: object
-      example:
-        total: 1
-        size: 6
-        kind: kind
-        page: 0
-        items:
-        - repo_url: repo_url
-          workflow_id: workflow_id
-          llm_model: llm_model
-          resource_overrides: resource_overrides
-          owner_user_id: owner_user_id
-          current_session_id: current_session_id
-          kind: kind
-          llm_temperature: 5.962133916683182
-          created_at: 2000-01-23T04:56:07.000+00:00
-          description: description
-          annotations: annotations
-          display_name: display_name
-          llm_max_tokens: 5
-          labels: labels
-          environment_variables: environment_variables
-          parent_agent_id: parent_agent_id
-          updated_at: 2000-01-23T04:56:07.000+00:00
-          project_id: project_id
-          bot_account_name: bot_account_name
-          name: name
-          id: id
-          href: href
-          prompt: prompt
-        - repo_url: repo_url
-          workflow_id: workflow_id
-          llm_model: llm_model
-          resource_overrides: resource_overrides
-          owner_user_id: owner_user_id
-          current_session_id: current_session_id
-          kind: kind
-          llm_temperature: 5.962133916683182
-          created_at: 2000-01-23T04:56:07.000+00:00
-          description: description
-          annotations: annotations
-          display_name: display_name
-          llm_max_tokens: 5
-          labels: labels
-          environment_variables: environment_variables
-          parent_agent_id: parent_agent_id
-          updated_at: 2000-01-23T04:56:07.000+00:00
-          project_id: project_id
-          bot_account_name: bot_account_name
-          name: name
-          id: id
-          href: href
-          prompt: prompt
-    AgentPatchRequest:
-      example:
-        repo_url: repo_url
-        workflow_id: workflow_id
-        llm_model: llm_model
-        resource_overrides: resource_overrides
-        owner_user_id: owner_user_id
-        current_session_id: current_session_id
-        llm_temperature: 0.8008281904610115
-        description: description
-        annotations: annotations
-        display_name: display_name
-        llm_max_tokens: 6
-        labels: labels
-        environment_variables: environment_variables
-        parent_agent_id: parent_agent_id
-        project_id: project_id
-        bot_account_name: bot_account_name
-        name: name
-        prompt: prompt
-      properties:
-        project_id:
-          type: string
-        parent_agent_id:
-          type: string
-        owner_user_id:
-          type: string
-        name:
-          type: string
-        display_name:
-          type: string
-        description:
-          type: string
-        prompt:
-          type: string
-        repo_url:
-          type: string
-        workflow_id:
-          type: string
-        llm_model:
-          type: string
-        llm_temperature:
-          format: double
-          type: number
-        llm_max_tokens:
-          format: int32
-          type: integer
-        bot_account_name:
-          type: string
-        resource_overrides:
-          type: string
-        environment_variables:
-          type: string
-        labels:
-          type: string
-        annotations:
-          type: string
-        current_session_id:
           type: string
       type: object
     Role:
@@ -3098,6 +3867,519 @@ components:
         payload:
           description: Message body
           type: string
+      type: object
+    Agent:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          project_id:
+            description: The project this agent belongs to
+            type: string
+          name:
+            description: Human-readable identifier; unique within the project
+            type: string
+          prompt:
+            description: Defines who this agent is. Mutable via PATCH. Access controlled
+              by RBAC.
+            type: string
+          current_session_id:
+            description: "Denormalized for fast reads — the active session, if any"
+            readOnly: true
+            type: string
+          labels:
+            type: string
+          annotations:
+            type: string
+          created_at:
+            format: date-time
+            type: string
+          updated_at:
+            format: date-time
+            type: string
+        required:
+        - name
+        - project_id
+        type: object
+      example:
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        project_id: project_id
+        current_session_id: current_session_id
+        kind: kind
+        name: name
+        created_at: 2000-01-23T04:56:07.000+00:00
+        annotations: annotations
+        id: id
+        href: href
+        prompt: prompt
+        labels: labels
+    AgentList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/Agent"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          current_session_id: current_session_id
+          kind: kind
+          name: name
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          id: id
+          href: href
+          prompt: prompt
+          labels: labels
+        - updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          current_session_id: current_session_id
+          kind: kind
+          name: name
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          id: id
+          href: href
+          prompt: prompt
+          labels: labels
+    AgentPatchRequest:
+      example:
+        name: name
+        annotations: annotations
+        prompt: prompt
+        labels: labels
+      properties:
+        name:
+          type: string
+        prompt:
+          description: Update agent prompt (access controlled by RBAC)
+          type: string
+        labels:
+          type: string
+        annotations:
+          type: string
+      type: object
+    AgentSessionList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/Session"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - workflow_id: workflow_id
+          completion_time: 2000-01-23T04:56:07.000+00:00
+          agent_id: agent_id
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          reconciled_workflow: reconciled_workflow
+          timeout: 5
+          environment_variables: environment_variables
+          kube_cr_uid: kube_cr_uid
+          triggered_by_user_id: triggered_by_user_id
+          sdk_restart_count: 7
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          parent_session_id: parent_session_id
+          id: id
+          href: href
+          phase: phase
+          repo_url: repo_url
+          llm_model: llm_model
+          resource_overrides: resource_overrides
+          kind: kind
+          llm_temperature: 5.637376656633329
+          assigned_user_id: assigned_user_id
+          created_by_user_id: created_by_user_id
+          llm_max_tokens: 2
+          labels: labels
+          reconciled_repos: reconciled_repos
+          start_time: 2000-01-23T04:56:07.000+00:00
+          sdk_session_id: sdk_session_id
+          bot_account_name: bot_account_name
+          repos: repos
+          name: name
+          kube_cr_name: kube_cr_name
+          conditions: conditions
+          kube_namespace: kube_namespace
+          prompt: prompt
+        - workflow_id: workflow_id
+          completion_time: 2000-01-23T04:56:07.000+00:00
+          agent_id: agent_id
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          reconciled_workflow: reconciled_workflow
+          timeout: 5
+          environment_variables: environment_variables
+          kube_cr_uid: kube_cr_uid
+          triggered_by_user_id: triggered_by_user_id
+          sdk_restart_count: 7
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          parent_session_id: parent_session_id
+          id: id
+          href: href
+          phase: phase
+          repo_url: repo_url
+          llm_model: llm_model
+          resource_overrides: resource_overrides
+          kind: kind
+          llm_temperature: 5.637376656633329
+          assigned_user_id: assigned_user_id
+          created_by_user_id: created_by_user_id
+          llm_max_tokens: 2
+          labels: labels
+          reconciled_repos: reconciled_repos
+          start_time: 2000-01-23T04:56:07.000+00:00
+          sdk_session_id: sdk_session_id
+          bot_account_name: bot_account_name
+          repos: repos
+          name: name
+          kube_cr_name: kube_cr_name
+          conditions: conditions
+          kube_namespace: kube_namespace
+          prompt: prompt
+    StartRequest:
+      example:
+        prompt: prompt
+      properties:
+        prompt:
+          description: Task scope for this specific run (Session.prompt)
+          type: string
+      type: object
+    StartResponse:
+      example:
+        session:
+          workflow_id: workflow_id
+          completion_time: 2000-01-23T04:56:07.000+00:00
+          agent_id: agent_id
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          reconciled_workflow: reconciled_workflow
+          timeout: 5
+          environment_variables: environment_variables
+          kube_cr_uid: kube_cr_uid
+          triggered_by_user_id: triggered_by_user_id
+          sdk_restart_count: 7
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          parent_session_id: parent_session_id
+          id: id
+          href: href
+          phase: phase
+          repo_url: repo_url
+          llm_model: llm_model
+          resource_overrides: resource_overrides
+          kind: kind
+          llm_temperature: 5.637376656633329
+          assigned_user_id: assigned_user_id
+          created_by_user_id: created_by_user_id
+          llm_max_tokens: 2
+          labels: labels
+          reconciled_repos: reconciled_repos
+          start_time: 2000-01-23T04:56:07.000+00:00
+          sdk_session_id: sdk_session_id
+          bot_account_name: bot_account_name
+          repos: repos
+          name: name
+          kube_cr_name: kube_cr_name
+          conditions: conditions
+          kube_namespace: kube_namespace
+          prompt: prompt
+        start_prompt: start_prompt
+      properties:
+        session:
+          $ref: "#/components/schemas/Session"
+        start_prompt:
+          description: Assembled start prompt — Agent.prompt + Inbox + Session.prompt
+            + peer roster
+          type: string
+      type: object
+    ProjectHome:
+      example:
+        project_id: project_id
+        agents:
+        - summary: summary
+          agent_id: agent_id
+          agent_name: agent_name
+          session_phase: session_phase
+          inbox_unread_count: 0
+        - summary: summary
+          agent_id: agent_id
+          agent_name: agent_name
+          session_phase: session_phase
+          inbox_unread_count: 0
+      properties:
+        project_id:
+          type: string
+        agents:
+          items:
+            $ref: "#/components/schemas/ProjectHomeAgent"
+          type: array
+      type: object
+    ProjectHomeAgent:
+      example:
+        summary: summary
+        agent_id: agent_id
+        agent_name: agent_name
+        session_phase: session_phase
+        inbox_unread_count: 0
+      properties:
+        agent_id:
+          type: string
+        agent_name:
+          type: string
+        session_phase:
+          type: string
+        inbox_unread_count:
+          type: integer
+        summary:
+          type: string
+      type: object
+    InboxMessage:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          agent_id:
+            description: Recipient — the agent address
+            type: string
+          from_agent_id:
+            description: Sender Agent id — null if sent by a human
+            type: string
+          from_name:
+            description: Denormalized sender display name
+            type: string
+          body:
+            type: string
+          read:
+            description: false = unread; drained at session start
+            readOnly: true
+            type: boolean
+        required:
+        - agent_id
+        - body
+        type: object
+      example:
+        read: true
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        agent_id: agent_id
+        kind: kind
+        created_at: 2000-01-23T04:56:07.000+00:00
+        id: id
+        href: href
+        from_name: from_name
+        body: body
+        from_agent_id: from_agent_id
+    InboxMessageList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/InboxMessage"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - read: true
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          agent_id: agent_id
+          kind: kind
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: id
+          href: href
+          from_name: from_name
+          body: body
+          from_agent_id: from_agent_id
+        - read: true
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          agent_id: agent_id
+          kind: kind
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: id
+          href: href
+          from_name: from_name
+          body: body
+          from_agent_id: from_agent_id
+    InboxMessagePatchRequest:
+      example:
+        read: true
+      properties:
+        read:
+          type: boolean
+      type: object
+    Credential:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          project_id:
+            description: ID of the project this credential belongs to
+            type: string
+          name:
+            type: string
+          description:
+            type: string
+          provider:
+            enum:
+            - github
+            - gitlab
+            - jira
+            - google
+            type: string
+          token:
+            description: "Credential token value; write-only, never returned in GET/LIST\
+              \ responses"
+            type: string
+            writeOnly: true
+          url:
+            type: string
+          email:
+            type: string
+          labels:
+            type: string
+          annotations:
+            type: string
+        required:
+        - name
+        - project_id
+        - provider
+        type: object
+      example:
+        kind: kind
+        created_at: 2000-01-23T04:56:07.000+00:00
+        description: description
+        annotations: annotations
+        url: url
+        token: token
+        labels: labels
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        project_id: project_id
+        provider: github
+        name: name
+        id: id
+        href: href
+        email: email
+    CredentialList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/Credential"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - kind: kind
+          created_at: 2000-01-23T04:56:07.000+00:00
+          description: description
+          annotations: annotations
+          url: url
+          token: token
+          labels: labels
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          provider: github
+          name: name
+          id: id
+          href: href
+          email: email
+        - kind: kind
+          created_at: 2000-01-23T04:56:07.000+00:00
+          description: description
+          annotations: annotations
+          url: url
+          token: token
+          labels: labels
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          provider: github
+          name: name
+          id: id
+          href: href
+          email: email
+    CredentialPatchRequest:
+      example:
+        provider: github
+        name: name
+        description: description
+        annotations: annotations
+        url: url
+        email: email
+        token: token
+        labels: labels
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        provider:
+          enum:
+          - github
+          - gitlab
+          - jira
+          - google
+          type: string
+        token:
+          description: "Credential token value; write-only, never returned in GET/LIST\
+            \ responses"
+          type: string
+          writeOnly: true
+        url:
+          type: string
+        email:
+          type: string
+        labels:
+          type: string
+        annotations:
+          type: string
+      type: object
+    CredentialTokenResponse:
+      example:
+        provider: github
+        credential_id: credential_id
+        token: token
+      properties:
+        credential_id:
+          description: ID of the credential
+          type: string
+        provider:
+          description: Provider type for this credential
+          enum:
+          - github
+          - gitlab
+          - jira
+          - google
+          type: string
+        token:
+          description: Decrypted token value
+          type: string
+      required:
+      - credential_id
+      - provider
+      - token
       type: object
   securitySchemes:
     Bearer:
