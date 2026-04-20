@@ -1,5 +1,6 @@
 # Patch for production frontend deployment
-# - Adds OAuth proxy sidecar for authentication
+# - Adds OAuth proxy sidecar for authentication using OpenShift OAuth
+# - Uses service account token for cookie secret (no vault secret needed)
 # - Overrides resource limits to prevent OOMKills (sawtooth memory pattern)
 apiVersion: apps/v1
 kind: Deployment
@@ -20,19 +21,18 @@ spec:
             cpu: 1000m
       # OAuth proxy sidecar
       - name: oauth-proxy
-        image: quay.io/openshift/origin-oauth-proxy:4.14
+        image: registry.redhat.io/openshift4/ose-oauth-proxy-rhel9:v4.18.0-202506230505.p0.gcbd44ad.assembly.stream.el9
+        imagePullPolicy: IfNotPresent
         args:
-        - --http-address=:8443
-        - --https-address=
+        - --https-address=:8443
         - --provider=openshift
+        - --openshift-service-account=frontend
         - --upstream=http://localhost:3000
-        - --client-id=ambient-frontend
-        - --client-secret-file=/etc/oauth/config/client-secret
-        - --cookie-secret-file=/etc/oauth/config/cookie_secret
-        - --cookie-expire=23h0m0s
-        - --pass-access-token
-        - --scope=user:full
-        - --openshift-delegate-urls={"/":{"resource":"projects","verb":"list"}}
+        - --openshift-delegate-urls={"/api":{"resource":"namespaces","verb":"get","name":"ambient-code","namespace":"ambient-code"},"/federate":{"resource":"namespaces","verb":"get","name":"ambient-code","namespace":"ambient-code"}}
+        - --tls-cert=/etc/tls/private/tls.crt
+        - --tls-key=/etc/tls/private/tls.key
+        - --cookie-secret-file=/var/run/secrets/kubernetes.io/serviceaccount/token
+        - --upstream-timeout=5m
         - --skip-auth-regex=^/metrics
         ports:
         - containerPort: 8443
@@ -41,38 +41,33 @@ spec:
           httpGet:
             path: /oauth/healthz
             port: dashboard-ui
-            scheme: HTTP
-          initialDelaySeconds: 30
+            scheme: HTTPS
+          initialDelaySeconds: 10
           timeoutSeconds: 1
-          periodSeconds: 5
+          periodSeconds: 10
           successThreshold: 1
           failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /oauth/healthz
             port: dashboard-ui
-            scheme: HTTP
-          initialDelaySeconds: 5
+            scheme: HTTPS
+          initialDelaySeconds: 10
           timeoutSeconds: 1
-          periodSeconds: 5
+          periodSeconds: 10
           successThreshold: 1
           failureThreshold: 3
         resources:
           requests:
-            memory: 256Mi
-            cpu: 50m
+            memory: 50Mi
+            cpu: 10m
           limits:
-            memory: 512Mi
+            memory: 200Mi
             cpu: 200m
         volumeMounts:
-        - mountPath: /etc/oauth/config
-          name: oauth-config
         - mountPath: /etc/tls/private
-          name: proxy-tls
+          name: frontend-proxy-tls
       volumes:
-      - name: oauth-config
+      - name: frontend-proxy-tls
         secret:
-          secretName: frontend-oauth-config
-      - name: proxy-tls
-        secret:
-          secretName: dashboard-proxy-tls
+          secretName: frontend-proxy-tls
