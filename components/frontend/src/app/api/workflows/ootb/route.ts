@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
 
     // Forward authorization header if present (enables GitHub token lookup for better rate limits)
     const headers: HeadersInit = {
-      "Content-Type": "application/json",
+      "Accept": "application/json",
     };
     const authHeader = request.headers.get("Authorization");
     if (authHeader) {
