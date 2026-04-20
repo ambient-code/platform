@@ -12,8 +12,7 @@ export async function GET(
     const response = await fetch(`${BACKEND_URL}/projects/${projectName}/settings`, {
       method: "GET",
       headers: {
-        "Content-Type": "application/json",
-        // Forward authentication headers from the client request
+        "Accept": "application/json",
         "X-User-ID": request.headers.get("X-User-ID") || "",
         "X-User-Groups": request.headers.get("X-User-Groups") || "",
       },
