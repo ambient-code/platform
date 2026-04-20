@@ -871,7 +871,7 @@ objects:
       targetPort: dashboard-ui
     tls:
       insecureEdgeTerminationPolicy: Redirect
-      termination: edge
+      termination: reencrypt
     to:
       kind: Service
       name: frontend-service
