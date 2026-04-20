@@ -28,9 +28,18 @@ from ag_ui.core import (
     MessagesSnapshotEvent,
 )
 
+from ag_ui_claude_sdk.reasoning_events import (
+    ReasoningStartEvent,
+    ReasoningEndEvent,
+    ReasoningMessageStartEvent,
+    ReasoningMessageContentEvent,
+    ReasoningMessageEndEvent,
+)
+
 from .types import (
     InitEvent,
     MessageEvent,
+    ThinkingEvent,
     ToolUseEvent,
     ToolResultEvent,
     ErrorEvent,
@@ -65,6 +74,9 @@ def _summarize_event(event: object) -> str:
         return f"severity={event.severity} msg={event.message[:80]}"
     if isinstance(event, ResultEvent):
         return f"status={event.status} stats={event.stats}"
+    if isinstance(event, ThinkingEvent):
+        preview = (event.content or "")[:80]
+        return f"delta={event.delta} content={preview!r}"
     return ""
 
 
@@ -99,6 +111,10 @@ class GeminiCLIAdapter:
         current_message_id: str | None = None
         accumulated_text = ""
         message_timestamp_ms: int | None = None
+
+        # Reasoning/thinking state
+        reasoning_open = False
+        reasoning_message_id: str | None = None
 
         # Tool tracking
         current_tool_call_id: str | None = None
@@ -142,11 +158,66 @@ class GeminiCLIAdapter:
                     )
                     continue
 
+                # ── thinking ──
+                if isinstance(event, ThinkingEvent):
+                    if not reasoning_open:
+                        reasoning_message_id = str(uuid.uuid4())
+                        yield ReasoningStartEvent(
+                            threadId=thread_id,
+                            runId=run_id,
+                            messageId=reasoning_message_id,
+                        )
+                        yield ReasoningMessageStartEvent(
+                            threadId=thread_id,
+                            runId=run_id,
+                            messageId=reasoning_message_id,
+                        )
+                        reasoning_open = True
+
+                    if event.content:
+                        yield ReasoningMessageContentEvent(
+                            threadId=thread_id,
+                            runId=run_id,
+                            messageId=reasoning_message_id,
+                            delta=event.content,
+                        )
+
+                    # Non-delta thinking: close immediately
+                    if not event.delta and reasoning_open:
+                        yield ReasoningMessageEndEvent(
+                            threadId=thread_id,
+                            runId=run_id,
+                            messageId=reasoning_message_id,
+                        )
+                        yield ReasoningEndEvent(
+                            threadId=thread_id,
+                            runId=run_id,
+                            messageId=reasoning_message_id,
+                        )
+                        reasoning_open = False
+                        reasoning_message_id = None
+                    continue
+
                 # ── message (assistant, delta) ──
                 if isinstance(event, MessageEvent):
                     # Skip user messages (already in input)
                     if event.role == "user":
                         continue
+
+                    # Close open reasoning block before text output
+                    if reasoning_open and reasoning_message_id:
+                        yield ReasoningMessageEndEvent(
+                            threadId=thread_id,
+                            runId=run_id,
+                            messageId=reasoning_message_id,
+                        )
+                        yield ReasoningEndEvent(
+                            threadId=thread_id,
+                            runId=run_id,
+                            messageId=reasoning_message_id,
+                        )
+                        reasoning_open = False
+                        reasoning_message_id = None
 
                     if event.role == "assistant" and event.delta:
                         # First text chunk: open a text message
@@ -218,6 +289,21 @@ class GeminiCLIAdapter:
 
                 # ── tool_use ──
                 if isinstance(event, ToolUseEvent):
+                    # Close open reasoning block before tool call
+                    if reasoning_open and reasoning_message_id:
+                        yield ReasoningMessageEndEvent(
+                            threadId=thread_id,
+                            runId=run_id,
+                            messageId=reasoning_message_id,
+                        )
+                        yield ReasoningEndEvent(
+                            threadId=thread_id,
+                            runId=run_id,
+                            messageId=reasoning_message_id,
+                        )
+                        reasoning_open = False
+                        reasoning_message_id = None
+
                     # Close any open text message before tool call
                     if text_message_open and current_message_id:
                         yield TextMessageEndEvent(
@@ -356,6 +442,19 @@ class GeminiCLIAdapter:
 
         except Exception as exc:
             logger.error("Error in Gemini CLI adapter run: %s", exc)
+            # Clean up open reasoning block
+            if reasoning_open and reasoning_message_id:
+                try:
+                    yield ReasoningMessageEndEvent(
+                        threadId=thread_id, runId=run_id, messageId=reasoning_message_id,
+                    )
+                    yield ReasoningEndEvent(
+                        threadId=thread_id, runId=run_id, messageId=reasoning_message_id,
+                    )
+                except Exception:
+                    pass
+                reasoning_open = False
+
             # Clean up open text message
             if text_message_open and current_message_id:
                 try:
@@ -374,6 +473,18 @@ class GeminiCLIAdapter:
                 message=str(exc),
             )
         finally:
+            # Safety: close any hanging reasoning block
+            if reasoning_open and reasoning_message_id:
+                try:
+                    yield ReasoningMessageEndEvent(
+                        threadId=thread_id, runId=run_id, messageId=reasoning_message_id,
+                    )
+                    yield ReasoningEndEvent(
+                        threadId=thread_id, runId=run_id, messageId=reasoning_message_id,
+                    )
+                except Exception:
+                    pass
+
             # Safety: close any hanging text message
             if text_message_open and current_message_id:
                 try:

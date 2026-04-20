@@ -93,6 +93,7 @@ type ScheduledSessionFormProps = {
   initialData?: ScheduledSession;
 };
 
+/** Maps a cron string to a preset select value, falling back to "custom". */
 function resolveSchedulePreset(schedule: string): { preset: string; customCron: string } {
   const match = SCHEDULE_PRESETS.find((p) => p.value !== "custom" && p.value === schedule);
   if (match) {
@@ -101,6 +102,7 @@ function resolveSchedulePreset(schedule: string): { preset: string; customCron: 
   return { preset: "custom", customCron: schedule };
 }
 
+/** Reverse-matches stored workflow fields against OOTB workflows, returning the select value and custom fields. */
 function resolveWorkflowState(
   activeWorkflow: WorkflowSelection | undefined,
   ootbWorkflows: { id: string; gitUrl: string; branch: string; path?: string }[]
@@ -109,7 +111,8 @@ function resolveWorkflowState(
     return { selectedWorkflow: "none", customGitUrl: "", customBranch: "main", customPath: "" };
   }
   const match = ootbWorkflows.find(
-    (w) => w.gitUrl === activeWorkflow.gitUrl && w.branch === activeWorkflow.branch
+    (w) => w.gitUrl === activeWorkflow.gitUrl
+      && w.branch === activeWorkflow.branch
       && (w.path ?? "") === (activeWorkflow.path ?? "")
   );
   if (match) {
@@ -131,10 +134,22 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
     ? resolveSchedulePreset(initialData.schedule)
     : { preset: "0 * * * *", customCron: "" };
 
-  const [selectedWorkflow, setSelectedWorkflow] = useState("none");
-  const [customGitUrl, setCustomGitUrl] = useState("");
-  const [customBranch, setCustomBranch] = useState("main");
-  const [customPath, setCustomPath] = useState("");
+  const initialWorkflow = isEdit && initialData?.sessionTemplate.activeWorkflow
+    ? {
+        selectedWorkflow: "custom" as string,
+        customGitUrl: initialData.sessionTemplate.activeWorkflow.gitUrl,
+        customBranch: initialData.sessionTemplate.activeWorkflow.branch || "main",
+        customPath: initialData.sessionTemplate.activeWorkflow.path ?? "",
+      }
+    : { selectedWorkflow: "none", customGitUrl: "", customBranch: "main", customPath: "" };
+
+  const [selectedWorkflow, setSelectedWorkflow] = useState(initialWorkflow.selectedWorkflow);
+  const [customGitUrl, setCustomGitUrl] = useState(initialWorkflow.customGitUrl);
+  const [customBranch, setCustomBranch] = useState(initialWorkflow.customBranch);
+  const [customPath, setCustomPath] = useState(initialWorkflow.customPath);
+  const [workflowResolved, setWorkflowResolved] = useState(
+    !isEdit || !initialData?.sessionTemplate.activeWorkflow
+  );
   const [repos, setRepos] = useState<SessionRepo[]>(
     isEdit && initialData?.sessionTemplate.repos ? [...initialData.sessionTemplate.repos] : []
   );
@@ -197,18 +212,24 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
     }
   }, [modelsData?.defaultModel, form, isEdit, initialData]);
 
-  // Resolve workflow state once OOTB workflows are loaded (edit mode)
-  const [workflowResolved, setWorkflowResolved] = useState(false);
+  // Resolve workflow state once OOTB workflows finish loading. The Skeleton
+  // guard on the Select (workflowsLoading || !workflowResolved) ensures Radix
+  // never sees a value change after mount — the Select only mounts after this
+  // effect has set the final selectedWorkflow value.
   useEffect(() => {
-    if (isEdit && initialData && !workflowsLoading && !workflowResolved) {
-      const resolved = resolveWorkflowState(initialData.sessionTemplate.activeWorkflow, ootbWorkflows);
-      setSelectedWorkflow(resolved.selectedWorkflow);
-      setCustomGitUrl(resolved.customGitUrl);
-      setCustomBranch(resolved.customBranch);
-      setCustomPath(resolved.customPath);
-      setWorkflowResolved(true);
-    }
-  }, [isEdit, initialData, ootbWorkflows, workflowsLoading, workflowResolved]);
+    if (workflowResolved) return;
+    if (workflowsLoading) return;
+
+    const resolved = resolveWorkflowState(
+      initialData!.sessionTemplate.activeWorkflow,
+      ootbWorkflows
+    );
+    setSelectedWorkflow(resolved.selectedWorkflow);
+    setCustomGitUrl(resolved.customGitUrl);
+    setCustomBranch(resolved.customBranch);
+    setCustomPath(resolved.customPath);
+    setWorkflowResolved(true);
+  }, [workflowResolved, workflowsLoading, ootbWorkflows, initialData]);
 
   const effectiveCron = schedulePreset === "custom" ? (customCron ?? "") : schedulePreset;
   const nextRuns = useMemo(() => getNextRuns(effectiveCron, 3), [effectiveCron]);
@@ -345,7 +366,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                   <FormItem>
                     <FormLabel>Name</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="Enter a display name..." maxLength={50} disabled={mutation.isPending} />
+                      <Input {...field} placeholder="Enter a display name..." maxLength={50} disabled={mutation.isPending} data-testid="scheduled-session-name-input" />
                     </FormControl>
                     <p className="text-xs text-muted-foreground">{(field.value ?? "").length}/50 characters</p>
                     <FormMessage />
@@ -361,7 +382,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                     <FormLabel>Schedule</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <SelectTrigger className="w-full">
+                        <SelectTrigger className="w-full" data-testid="schedule-preset-select">
                           <SelectValue placeholder="Select a schedule" />
                         </SelectTrigger>
                       </FormControl>
@@ -384,7 +405,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                     <FormItem>
                       <FormLabel>Cron Expression</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="*/15 * * * *" disabled={mutation.isPending} />
+                        <Input {...field} placeholder="*/15 * * * *" disabled={mutation.isPending} data-testid="custom-cron-input" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -393,7 +414,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
               )}
 
               {effectiveCron && (
-                <div className="rounded-md border p-3 space-y-2">
+                <div className="rounded-md border p-3 space-y-2" data-testid="cron-preview">
                   <p className="text-sm font-medium">{cronDescription}</p>
                   {nextRuns.length > 0 && (
                     <div className="text-xs text-muted-foreground space-y-0.5">
@@ -458,7 +479,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                   <FormItem>
                     <FormLabel>Initial Prompt</FormLabel>
                     <FormControl>
-                      <Textarea {...field} placeholder="Enter the prompt for each scheduled session..." rows={4} disabled={mutation.isPending} />
+                      <Textarea {...field} placeholder="Enter the prompt for each scheduled session..." rows={4} disabled={mutation.isPending} data-testid="initial-prompt-input" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -467,7 +488,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
 
               <div className="space-y-2">
                 <FormLabel>Workflow</FormLabel>
-                {workflowsLoading ? (
+                {(workflowsLoading || !workflowResolved) ? (
                   <Skeleton className="h-10 w-full" />
                 ) : (
                   <Select
@@ -475,7 +496,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                     onValueChange={handleWorkflowChange}
                     disabled={mutation.isPending}
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger className="w-full" data-testid="workflow-select">
                       <SelectValue placeholder="Select workflow..." />
                     </SelectTrigger>
                     <SelectContent>
@@ -492,7 +513,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                     </SelectContent>
                   </Select>
                 )}
-                {selectedWorkflow === "custom" && (
+                {selectedWorkflow === "custom" && workflowResolved && (
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                     <div className="sm:col-span-2 space-y-1">
                       <FormLabel className="text-xs">Git Repository URL *</FormLabel>
@@ -501,6 +522,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                         onChange={(e) => setCustomGitUrl(e.target.value)}
                         placeholder="https://github.com/org/workflow-repo.git"
                         disabled={mutation.isPending}
+                        data-testid="workflow-git-url"
                       />
                     </div>
                     <div className="space-y-1">
@@ -510,6 +532,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                         onChange={(e) => setCustomBranch(e.target.value)}
                         placeholder="main"
                         disabled={mutation.isPending}
+                        data-testid="workflow-branch"
                       />
                     </div>
                     <div className="sm:col-span-3 space-y-1">
@@ -519,6 +542,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                         onChange={(e) => setCustomPath(e.target.value)}
                         placeholder="workflows/my-workflow"
                         disabled={mutation.isPending}
+                        data-testid="workflow-path"
                       />
                     </div>
                   </div>
@@ -553,7 +577,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                       ) : (
                         <Select onValueChange={(v) => handleRunnerTypeChange(v, field.onChange)} value={field.value}>
                           <FormControl>
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger className="w-full" data-testid="runner-type-select">
                               <SelectValue placeholder="Select a runner type" />
                             </SelectTrigger>
                           </FormControl>
@@ -579,7 +603,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                       <FormLabel>Model</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value} disabled={modelsLoading || (modelsError && models.length === 0)}>
                         <FormControl>
-                          <SelectTrigger className="w-full">
+                          <SelectTrigger className="w-full" data-testid="model-select">
                             <SelectValue placeholder={modelsLoading ? "Loading models..." : "Select a model"} />
                           </SelectTrigger>
                         </FormControl>
@@ -722,12 +746,13 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
 
           {/* Actions */}
           <div className="flex justify-end gap-3 pb-6">
-            <Button type="button" variant="outline" onClick={() => router.push(backUrl)} disabled={mutation.isPending}>
+            <Button type="button" variant="outline" onClick={() => router.push(backUrl)} disabled={mutation.isPending} data-testid="scheduled-session-cancel">
               Cancel
             </Button>
             <Button
               type="submit"
               disabled={mutation.isPending || runnerTypesLoading || runnerTypesError || modelsLoading || (modelsError && models.length === 0)}
+              data-testid="scheduled-session-submit"
             >
               {mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isEdit ? "Save Changes" : "Create Scheduled Session"}
