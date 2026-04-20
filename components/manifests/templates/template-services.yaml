@@ -694,7 +694,7 @@ objects:
             httpGet:
               path: /oauth/healthz
               port: dashboard-ui
-              scheme: HTTPS
+              scheme: HTTP
             initialDelaySeconds: 10
             periodSeconds: 10
             successThreshold: 1
@@ -708,7 +708,7 @@ objects:
             httpGet:
               path: /oauth/healthz
               port: dashboard-ui
-              scheme: HTTPS
+              scheme: HTTP
             initialDelaySeconds: 10
             periodSeconds: 10
             successThreshold: 1
