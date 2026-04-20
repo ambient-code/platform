@@ -36,6 +36,8 @@ Progressive disclosure for task-specific documentation and references.
 | [ADR-0005](docs/internal/adr/0005-nextjs-shadcn-react-query.md) | NextJS + Shadcn + React Query frontend stack |
 | [ADR-0006](docs/internal/adr/0006-ambient-runner-sdk-architecture.md) | Runner SDK design and architecture |
 | [ADR-0007](docs/internal/adr/0007-unleash-feature-flags.md) | Unleash with workspace-scoped overrides |
+| [ADR-0008](docs/internal/adr/0008-automate-code-reviews.md) | Automated inner-loop code review |
+| [ADR-0009](docs/internal/adr/0009-rest-api-postgresql-trex-foundation.md) | REST API + PostgreSQL via rh-trex-ai |
 
 ## Cross-Cutting Conventions
 

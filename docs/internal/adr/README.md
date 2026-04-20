@@ -63,6 +63,8 @@ Create an ADR for decisions that:
 | [0005](0005-nextjs-shadcn-react-query.md) | Next.js with Shadcn UI and React Query | Accepted | 2024-11-21 |
 | [0006](0006-ambient-runner-sdk-architecture.md) | Ambient Runner SDK Architecture | Accepted | 2024-11-21 |
 | [0007](0007-unleash-feature-flags.md) | Unleash for Feature Flag Management | Accepted | 2026-02-17 |
+| [0008](0008-automate-code-reviews.md) | Automate Code Reviews | Accepted | 2026-04-11 |
+| [0009](0009-rest-api-postgresql-trex-foundation.md) | REST API + PostgreSQL Foundation via rh-trex-ai | Accepted | 2026-02-16 |
 
 ## References
 
