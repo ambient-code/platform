@@ -28,6 +28,7 @@ type Session struct {
 	SessionLabels        *string  `json:"labels" gorm:"column:labels"`
 	SessionAnnotations   *string  `json:"annotations" gorm:"column:annotations"`
 	ProjectId            *string  `json:"project_id"`
+	AgentId              *string  `json:"agent_id"`
 
 	Phase              *string    `json:"phase"`
 	StartTime          *time.Time `json:"start_time"`

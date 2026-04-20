@@ -15,6 +15,8 @@ import (
 
 	// Backend-compatible plugins only
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/agents"
+	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/credentials"
+	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/inbox"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/projectSettings"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/projects"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/rbac"

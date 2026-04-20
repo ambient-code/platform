@@ -40,6 +40,7 @@ message Session {
   optional string kube_cr_name = 29;
   optional string kube_cr_uid = 30;
   optional string kube_namespace = 31;
+  optional string agent_id = 32;
 }
 
 message CreateSessionRequest {

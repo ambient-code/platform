@@ -155,7 +155,7 @@ func TestGetSessions_JSON(t *testing.T) {
 
 func TestGetAgents_List(t *testing.T) {
 	srv := testhelper.NewServer(t)
-	srv.Handle("/api/ambient/v1/agents", func(w http.ResponseWriter, r *http.Request) {
+	srv.Handle("/api/ambient/v1/projects/"+testhelper.TestProject+"/agents", func(w http.ResponseWriter, r *http.Request) {
 		srv.RespondJSON(t, w, http.StatusOK, &types.AgentList{
 			ListMeta: types.ListMeta{Total: 1},
 			Items: []types.Agent{
@@ -181,7 +181,7 @@ func TestGetAgents_List(t *testing.T) {
 
 func TestGetAgents_Single(t *testing.T) {
 	srv := testhelper.NewServer(t)
-	srv.Handle("/api/ambient/v1/agents/a1", func(w http.ResponseWriter, r *http.Request) {
+	srv.Handle("/api/ambient/v1/projects/"+testhelper.TestProject+"/agents/a1", func(w http.ResponseWriter, r *http.Request) {
 		srv.RespondJSON(t, w, http.StatusOK, &types.Agent{
 			ObjectReference: types.ObjectReference{ID: "a1"},
 			Name:            "overlord",
@@ -201,7 +201,7 @@ func TestGetAgents_Single(t *testing.T) {
 
 func TestGetAgents_JSON(t *testing.T) {
 	srv := testhelper.NewServer(t)
-	srv.Handle("/api/ambient/v1/agents", func(w http.ResponseWriter, r *http.Request) {
+	srv.Handle("/api/ambient/v1/projects/"+testhelper.TestProject+"/agents", func(w http.ResponseWriter, r *http.Request) {
 		srv.RespondJSON(t, w, http.StatusOK, &types.AgentList{
 			Items: []types.Agent{
 				{ObjectReference: types.ObjectReference{ID: "a1"}, Name: "api-agent"},
