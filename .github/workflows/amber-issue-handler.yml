@@ -127,7 +127,8 @@ jobs:
                ---
                🤖 [Ambient Session](<SESSION_URL>)
             6. Add the `ambient-code:managed` label to the PR.
-            7. After creating the PR, send a Slack notification with a brief summary
+            7. Add the `ambient-code:self-reviewed` label to the PR.
+            8. After creating the PR, send a Slack notification with a brief summary
                of what you changed. Use Slack mrkdwn link format: <URL|display text>. Example:
                ```bash
                TITLE=$(gh issue view ${{ steps.issue.outputs.number }} --repo ${{ github.repository }} --json title --jq '.title')
@@ -138,9 +139,9 @@ jobs:
                curl -X POST -H 'Content-type: application/json' --data "$PAYLOAD" "$SLACK_WEBHOOK_URL"
                ```
                Only send if SLACK_WEBHOOK_URL is set.
-            8. Ensure CI passes. If it fails, investigate and fix.
-            9. Do not merge. Leave the PR open for human review.
-            10. When you comment on the PR, include this footer at the end:
+            9. Ensure CI passes. If it fails, investigate and fix.
+            10. Do not merge. Leave the PR open for human review.
+            11. When you comment on the PR, include this footer at the end:
                _🤖 [Session](<SESSION_URL>)_
 
             ## Session URL
@@ -402,7 +403,8 @@ jobs:
                ---
                🤖 [Ambient Session](<SESSION_URL>)
             6. Add the `ambient-code:managed` label to the PR.
-            7. After creating the PR, send a Slack notification with a brief summary
+            7. Add the `ambient-code:self-reviewed` label to the PR.
+            8. After creating the PR, send a Slack notification with a brief summary
                of what you changed. Use Slack mrkdwn link format: <URL|display text>. Example:
                ```bash
                TITLE=$(gh issue view ${{ steps.context.outputs.number }} --repo ${{ github.repository }} --json title --jq '.title')
@@ -413,9 +415,9 @@ jobs:
                curl -X POST -H 'Content-type: application/json' --data "$PAYLOAD" "$SLACK_WEBHOOK_URL"
                ```
                Only send if SLACK_WEBHOOK_URL is set.
-            8. Ensure CI passes. If it fails, investigate and fix.
-            9. Do not merge. Leave the PR open for human review.
-            10. When you comment on the PR, include this footer at the end:
+            9. Ensure CI passes. If it fails, investigate and fix.
+            10. Do not merge. Leave the PR open for human review.
+            11. When you comment on the PR, include this footer at the end:
                _🤖 [Session](<SESSION_URL>)_
 
             ## Session URL
