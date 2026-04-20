@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
 
     const response = await fetch(`${BACKEND_URL}/projects`, {
       method: 'POST',
-      headers,
+      headers: { ...headers, 'Content-Type': 'application/json' },
       body: body,
     });
 

@@ -18,7 +18,7 @@ export async function PUT(
       `${BACKEND_URL}/projects/${encodeURIComponent(projectName)}/feature-flags/${encodeURIComponent(flagName)}/override`,
       {
         method: "PUT",
-        headers,
+        headers: { ...headers, 'Content-Type': 'application/json' },
         body,
       }
     );

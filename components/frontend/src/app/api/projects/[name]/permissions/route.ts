@@ -35,7 +35,7 @@ export async function POST(
 
     const response = await fetch(`${BACKEND_URL}/projects/${name}/permissions`, {
       method: 'POST',
-      headers,
+      headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
 

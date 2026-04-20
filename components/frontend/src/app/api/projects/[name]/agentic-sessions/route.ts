@@ -33,7 +33,7 @@ export async function POST(
 
     const response = await fetch(`${BACKEND_URL}/projects/${encodeURIComponent(name)}/agentic-sessions`, {
       method: 'POST',
-      headers,
+      headers: { ...headers, 'Content-Type': 'application/json' },
       body,
     });
 

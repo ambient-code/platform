@@ -33,7 +33,7 @@ export function extractAccessToken(request: Request): string | undefined {
 // Build headers to forward to backend, using only real incoming values.
 export function buildForwardHeaders(request: Request, extra?: Record<string, string>): ForwardHeaders {
   const headers: ForwardHeaders = {
-    'Content-Type': 'application/json',
+    'Accept': 'application/json',
   };
 
   const xfUser = request.headers.get('X-Forwarded-User');
