@@ -72,6 +72,13 @@ describe('Scheduled Sessions', () => {
     }
   })
 
+  function waitForFormReady() {
+    cy.get('[data-testid="scheduled-session-name-input"]', { timeout: 10000 })
+      .should('not.be.disabled')
+    cy.get('[data-testid="schedule-preset-select"]', { timeout: 10000 })
+      .should('not.be.disabled')
+  }
+
   // Helper: create a scheduled session via API, return its name
   function createScheduledSessionViaApi(schedule: string, displayName?: string): Cypress.Chainable<string> {
     return cy.request({
@@ -99,9 +106,9 @@ describe('Scheduled Sessions', () => {
   describe('Schedule Creation', () => {
     it('should create a scheduled session with a preset schedule', () => {
       cy.visit(`/projects/${workspaceSlug}/scheduled-sessions/new`)
+      waitForFormReady()
 
-      // Fill display name
-      cy.get('[data-testid="scheduled-session-name-input"]', { timeout: 10000 })
+      cy.get('[data-testid="scheduled-session-name-input"]')
         .type('Preset Schedule Test')
 
       // Select "Daily at 9:00 AM" preset
@@ -133,9 +140,9 @@ describe('Scheduled Sessions', () => {
 
     it('should create a scheduled session with a custom cron expression', () => {
       cy.visit(`/projects/${workspaceSlug}/scheduled-sessions/new`)
+      waitForFormReady()
 
-      // Fill display name
-      cy.get('[data-testid="scheduled-session-name-input"]', { timeout: 10000 })
+      cy.get('[data-testid="scheduled-session-name-input"]')
         .type('Custom Cron Test')
 
       // Select "Custom" preset
@@ -171,9 +178,9 @@ describe('Scheduled Sessions', () => {
   describe('Cron Validation', () => {
     it('should show client-side validation error when custom cron is empty', () => {
       cy.visit(`/projects/${workspaceSlug}/scheduled-sessions/new`)
+      waitForFormReady()
 
-      // Select "Custom" preset
-      cy.get('[data-testid="schedule-preset-select"]', { timeout: 10000 }).click()
+      cy.get('[data-testid="schedule-preset-select"]').click()
       cy.get('[role="option"]').contains('Custom').click()
 
       // Leave custom cron input empty
@@ -197,9 +204,9 @@ describe('Scheduled Sessions', () => {
 
     it('should show server-side validation error for invalid cron syntax', () => {
       cy.visit(`/projects/${workspaceSlug}/scheduled-sessions/new`)
+      waitForFormReady()
 
-      // Select "Custom" preset
-      cy.get('[data-testid="schedule-preset-select"]', { timeout: 10000 }).click()
+      cy.get('[data-testid="schedule-preset-select"]').click()
       cy.get('[role="option"]').contains('Custom').click()
 
       // Enter invalid cron (3 fields instead of required 5)
@@ -272,9 +279,9 @@ describe('Scheduled Sessions', () => {
   describe('Custom Workflow', () => {
     it('should create a scheduled session with a custom workflow', () => {
       cy.visit(`/projects/${workspaceSlug}/scheduled-sessions/new`)
+      waitForFormReady()
 
-      // Fill display name
-      cy.get('[data-testid="scheduled-session-name-input"]', { timeout: 10000 })
+      cy.get('[data-testid="scheduled-session-name-input"]')
         .type('Custom Workflow Test')
 
       // Leave default schedule preset (Every hour)
