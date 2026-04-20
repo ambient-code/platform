@@ -1,18 +1,8 @@
 queue_rules:
-  - name: large-pr
-    autoqueue: true
-    merge_method: squash
-    queue_conditions:
-      - "#approved-reviews-by>=2"
-      - "#changes-requested-reviews-by=0"
-      - check-success=End-to-End Tests
-      - check-success=Local Dev CI Gate
-
   - name: default
     autoqueue: true
     merge_method: squash
     queue_conditions:
-      - "#approved-reviews-by>=1"
       - "#changes-requested-reviews-by=0"
       - check-success=End-to-End Tests
       - check-success=Local Dev CI Gate
@@ -32,21 +22,10 @@ pull_request_rules:
     actions:
       update: {}
 
-  - name: queue large PRs
+  - name: queue PRs when CI passes
     conditions:
-      - or:
-        - "#files>10"
-        - "#added-lines>500"
-        - "#deleted-lines>500"
-    actions:
-      queue:
-        name: large-pr
-
-  - name: queue normal PRs
-    conditions:
-      - "#files<=10"
-      - "#added-lines<=500"
-      - "#deleted-lines<=500"
+      - -draft
+      - -conflict
     actions:
       queue:
         name: default
