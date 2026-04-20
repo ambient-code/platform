@@ -68,14 +68,13 @@ export const PermissionRequestMessage: React.FC<
   const status = deriveStatus(resultBlock);
   const formattedTime = formatTimestamp(timestamp);
 
-  const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const disabled = status !== "pending" || submitted || isSubmitting || !isNewest;
+  const canRespond = status === "pending" && !isSubmitting && isNewest;
 
   if (!isPermissionRequestInput(input)) return null;
 
   const handleResponse = async (allow: boolean) => {
-    if (!onSubmitAnswer || disabled) return;
+    if (!onSubmitAnswer || !canRespond) return;
 
     const response = JSON.stringify({
       approved: allow,
@@ -86,14 +85,13 @@ export const PermissionRequestMessage: React.FC<
     try {
       setIsSubmitting(true);
       await onSubmitAnswer(response);
-      setSubmitted(true);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const activeConfig = STATUS_CONFIG[disabled && status !== "pending" ? status : "pending"];
-  const Icon = activeConfig.icon;
+  const config = STATUS_CONFIG[status];
+  const Icon = config.icon;
 
   return (
     <div className="mb-3">
@@ -102,7 +100,7 @@ export const PermissionRequestMessage: React.FC<
           <div
             className={cn(
               "w-8 h-8 rounded-full flex items-center justify-center",
-              activeConfig.avatarClass
+              config.avatarClass
             )}
           >
             <Icon className="w-4 h-4 text-white" />
@@ -117,7 +115,7 @@ export const PermissionRequestMessage: React.FC<
           )}
 
           <div
-            className={cn("rounded-lg border-l-3 pl-3 pr-3 py-2.5", activeConfig.borderClass)}
+            className={cn("rounded-lg border-l-3 pl-3 pr-3 py-2.5", config.borderClass)}
           >
             <p className="text-sm font-medium text-foreground mb-1">
               Permission Required
@@ -132,13 +130,13 @@ export const PermissionRequestMessage: React.FC<
               </div>
             )}
 
-            {disabled && status !== "pending" && (
+            {status !== "pending" && (
               <p className="text-xs text-muted-foreground">
                 {status === "approved" ? "Approved" : "Denied"}
               </p>
             )}
 
-            {!disabled && (
+            {canRespond && (
               <div className="flex items-center gap-2 mt-2 pt-1.5 border-t border-border/40">
                 <Button
                   size="sm"

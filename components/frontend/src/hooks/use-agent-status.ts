@@ -1,18 +1,10 @@
 import { useMemo } from "react";
-import type {
-  AgenticSessionPhase,
-  AgentStatus,
+import {
+  isHumanInTheLoopTool,
+  type AgenticSessionPhase,
+  type AgentStatus,
 } from "@/types/agentic-session";
 import type { PlatformMessage } from "@/types/agui";
-
-function normalizeToolName(name: string): string {
-  return name.toLowerCase().replace(/[^a-z]/g, "");
-}
-
-function isHumanInTheLoopTool(name: string): boolean {
-  const normalized = normalizeToolName(name);
-  return normalized === "askuserquestion" || normalized === "permissionrequest";
-}
 
 /**
  * Derive agent status from session data and the raw AG-UI message stream.

@@ -151,7 +151,15 @@ export type ToolResultBlock = {
 
 export type ContentBlock = TextBlock | ReasoningBlock | ToolUseBlock | ToolResultBlock;
 
-/** Check whether a ToolResultBlock contains a non-empty result. */
+export function normalizeToolName(name: string): string {
+	return name.toLowerCase().replace(/[^a-z]/g, "");
+}
+
+export function isHumanInTheLoopTool(name: string): boolean {
+	const normalized = normalizeToolName(name);
+	return normalized === "askuserquestion" || normalized === "permissionrequest";
+}
+
 export function hasToolResult(resultBlock?: ToolResultBlock): boolean {
 	if (!resultBlock) return false;
 	const content = resultBlock.content;

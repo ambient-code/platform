@@ -13,6 +13,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator, TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from ambient_runner.bridges.claude.session import SessionWorker
+
 # AG-UI Protocol Events
 from ag_ui.core import (
     EventType,
@@ -79,7 +82,18 @@ from .handlers import (
 # tools registered via ``input_data.tools``.
 BUILTIN_FRONTEND_TOOLS: set[str] = {"AskUserQuestion", "PermissionRequest"}
 
-# Sentinel values for synthetic PermissionRequest events.
+# Tools that require user approval before execution.
+# All other tools are auto-allowed without prompting.
+SENSITIVE_TOOLS: set[str] = {
+    "Write",
+    "Edit",
+    "MultiEdit",
+    "Bash",
+    "NotebookEdit",
+}
+
+_MAX_APPROVED_OPERATIONS = 500
+
 _PERM_PLACEHOLDER_ID = "__perm__"
 _PERM_TOOL_ID_PREFIX = "perm-"
 
@@ -255,7 +269,7 @@ class ClaudeAgentAdapter:
 
         # Reference to the SessionWorker, set by the bridge before each run
         # so can_use_tool can inject synthetic events into the output queue.
-        self._permission_worker: Any | None = None
+        self._permission_worker: SessionWorker | None = None
 
         # Background task registry (task_id -> info dict).
         # Populated from TaskStarted/TaskProgress/TaskNotification messages.
@@ -277,7 +291,7 @@ class ClaudeAgentAdapter:
         """
         return self._halted
 
-    def set_permission_worker(self, worker: Any) -> None:
+    def set_permission_worker(self, worker: SessionWorker | None) -> None:
         """Set the session worker for permission request event injection."""
         self._permission_worker = worker
 
@@ -308,13 +322,17 @@ class ClaudeAgentAdapter:
         and Claude retries, the approved set will contain the key and the
         next invocation will return allow.
         """
+        if tool_name not in SENSITIVE_TOOLS:
+            return {"behavior": "allow", "updatedInput": input_data}
+
         key = self._permission_key(tool_name, input_data)
 
         if key in self._approved_operations:
-            logger.info(f"[PermissionRequest] Auto-approved (previously granted): {key}")
+            logger.info(
+                f"[PermissionRequest] Auto-approved (previously granted): {key}"
+            )
             return {"behavior": "allow", "updatedInput": input_data}
 
-        # Build a human-readable description of what Claude wants to do.
         file_path = input_data.get("file_path", "")
         command = input_data.get("command", "")
         if file_path:
@@ -326,8 +344,6 @@ class ClaudeAgentAdapter:
 
         logger.info(f"[PermissionRequest] Requesting user approval: {description}")
 
-        # Emit synthetic PermissionRequest tool call into the worker's
-        # output queue so the adapter's event loop picks it up and halts.
         queue = (
             self._permission_worker.active_output_queue
             if self._permission_worker is not None
@@ -342,9 +358,7 @@ class ClaudeAgentAdapter:
                 "description": description,
                 "key": key,
             }
-            # We use the same thread/run IDs as the current run — the adapter
-            # will fill these in from the BaseEvent pass-through path, but we
-            # need placeholder values since AG-UI events require them.
+            # Placeholder IDs — rewritten to real values in the event loop.
             thread_id = _PERM_PLACEHOLDER_ID
             run_id = _PERM_PLACEHOLDER_ID
             ts = now_ms()
@@ -402,6 +416,8 @@ class ClaudeAgentAdapter:
         approved = data.get("approved", False)
         key = data.get("key", "")
         if approved and key:
+            if len(self._approved_operations) >= _MAX_APPROVED_OPERATIONS:
+                self._approved_operations.clear()
             self._approved_operations.add(key)
             logger.info(f"[PermissionRequest] User approved: {key}")
         else:
@@ -755,6 +771,7 @@ class ClaudeAgentAdapter:
             TaskProgressMessage,
             TaskNotificationMessage,
         )
+
         if isinstance(message, TaskStartedMessage):
             return self._emit_task_started(message)
         elif isinstance(message, TaskProgressMessage):
@@ -781,6 +798,7 @@ class ClaudeAgentAdapter:
                         sid = val.get("session_id", "")
                         if sid:
                             from pathlib import Path
+
                             base = Path.home() / ".claude" / "projects"
                             if base.exists():
                                 expected = f"agent-{agent_id}.jsonl"
@@ -818,7 +836,9 @@ class ClaudeAgentAdapter:
         existing = self._task_registry.get(message.task_id, {})
         existing.update(progress_value)
         self._task_registry[message.task_id] = existing
-        return CustomEvent(type=EventType.CUSTOM, name="task:progress", value=progress_value)
+        return CustomEvent(
+            type=EventType.CUSTOM, name="task:progress", value=progress_value
+        )
 
     def _emit_task_notification(self, message: Any) -> "CustomEvent":
         usage = getattr(message, "usage", None)
@@ -835,7 +855,9 @@ class ClaudeAgentAdapter:
         self._task_registry[message.task_id] = existing
         if output_file:
             self._task_outputs[message.task_id] = output_file
-        return CustomEvent(type=EventType.CUSTOM, name="task:completed", value=notification_value)
+        return CustomEvent(
+            type=EventType.CUSTOM, name="task:completed", value=notification_value
+        )
 
     async def _stream_claude_sdk(
         self,
@@ -978,9 +1000,7 @@ class ClaudeAgentAdapter:
                         and message.tool_call_id
                         and message.tool_call_id.startswith(_PERM_TOOL_ID_PREFIX)
                     ):
-                        logger.debug(
-                            f"PermissionRequest halt: {message.tool_call_id}"
-                        )
+                        logger.debug(f"PermissionRequest halt: {message.tool_call_id}")
 
                         # Add to pending_msg snapshot (so MESSAGES_SNAPSHOT
                         # includes the PermissionRequest tool call).
@@ -1338,7 +1358,10 @@ class ClaudeAgentAdapter:
                             ):
                                 yield event
 
-                elif isinstance(message, (TaskStartedMessage, TaskProgressMessage, TaskNotificationMessage)):
+                elif isinstance(
+                    message,
+                    (TaskStartedMessage, TaskProgressMessage, TaskNotificationMessage),
+                ):
                     yield self._emit_task_event(message)
 
                 elif isinstance(message, SystemMessage):
@@ -1539,4 +1562,3 @@ class ClaudeAgentAdapter:
         # Re-raise to let run() emit RunErrorEvent
         if stream_error is not None:
             raise stream_error
-

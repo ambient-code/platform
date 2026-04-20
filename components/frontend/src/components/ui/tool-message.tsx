@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { ToolResultBlock, ToolUseBlock, ToolUseMessages } from "@/types/agentic-session";
+import { ToolResultBlock, ToolUseBlock, ToolUseMessages, normalizeToolName } from "@/types/agentic-session";
 import {
   ChevronDown,
   ChevronRight,
@@ -309,7 +309,7 @@ const generateToolSummary = (toolName: string, input?: Record<string, unknown>):
   if (!input || Object.keys(input).length === 0) return formatToolName(toolName);
 
   // AskUserQuestion - show first question text
-  if (toolName.toLowerCase().replace(/[^a-z]/g, "") === "askuserquestion") {
+  if (normalizeToolName(toolName) === "askuserquestion") {
     const questions = input.questions as Array<{ question: string }> | undefined;
     if (questions?.length) {
       const suffix = questions.length > 1 ? ` (+${questions.length - 1} more)` : "";

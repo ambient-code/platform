@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { MessageObject, ToolUseMessages, HierarchicalToolMessage } from "@/types/agentic-session";
+import { MessageObject, ToolUseMessages, HierarchicalToolMessage, normalizeToolName } from "@/types/agentic-session";
 import { LoadingDots, Message } from "@/components/ui/message";
 import { ToolMessage } from "@/components/ui/tool-message";
 import { AskUserQuestionMessage } from "@/components/session/ask-user-question";
@@ -20,18 +20,6 @@ export type StreamMessageProps = {
   agentName?: string;
   currentUserId?: string;
 };
-
-function normalizeToolName(name: string): string {
-  return name.toLowerCase().replace(/[^a-z]/g, "");
-}
-
-function isAskUserQuestionTool(name: string): boolean {
-  return normalizeToolName(name) === "askuserquestion";
-}
-
-function isPermissionRequestTool(name: string): boolean {
-  return normalizeToolName(name) === "permissionrequest";
-}
 
 const getRandomAgentMessage = () => {
   const messages = [
@@ -54,8 +42,7 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
     m != null && typeof m === "object" && "toolUseBlock" in m && "resultBlock" in m;
 
   if (isToolUsePair(message)) {
-    // Render AskUserQuestion with a custom interactive component
-    if (isAskUserQuestionTool(message.toolUseBlock.name)) {
+    if (normalizeToolName(message.toolUseBlock.name) === "askuserquestion") {
       return (
         <AskUserQuestionMessage
           toolUseBlock={message.toolUseBlock}
@@ -67,8 +54,7 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
       );
     }
 
-    // Render PermissionRequest with Allow/Deny buttons
-    if (isPermissionRequestTool(message.toolUseBlock.name)) {
+    if (normalizeToolName(message.toolUseBlock.name) === "permissionrequest") {
       return (
         <PermissionRequestMessage
           toolUseBlock={message.toolUseBlock}
