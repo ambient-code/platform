@@ -3,17 +3,14 @@ kind: Template
 metadata:
   name: ambient-code-operator
   annotations:
-    description: Ambient Code Platform - Operator and CRDs
-    tags: ambient-code,operator
+    description: Ambient Code Platform - Operator
 parameters:
 - name: IMAGE_TAG
-  description: Image tag to deploy (auto-generated from git commit)
+  description: Image tag
   required: true
 - name: IMAGE_OPERATOR
-  description: Operator image
   value: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-operator-main
 - name: IMAGE_AMBIENT_RUNNER
-  description: Ambient runner image
   value: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-ambient-runner-main
 objects:
 - apiVersion: apiextensions.k8s.io/v1
@@ -362,6 +359,8 @@ objects:
 - apiVersion: v1
   kind: ServiceAccount
   metadata:
+    annotations:
+      serviceaccounts.openshift.io/oauth-redirectreference.frontend: '{"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"frontend"}}'
     name: frontend
     namespace: ambient-code
 - apiVersion: v1
@@ -1155,6 +1154,18 @@ objects:
     apiGroup: rbac.authorization.k8s.io
     kind: ClusterRole
     name: ambient-frontend-auth
+  subjects:
+  - kind: ServiceAccount
+    name: frontend
+    namespace: ambient-code
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRoleBinding
+  metadata:
+    name: ambient-frontend-oauth-delegator
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: system:auth-delegator
   subjects:
   - kind: ServiceAccount
     name: frontend
