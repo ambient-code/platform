@@ -47,23 +47,6 @@ objects:
     sentry.key: ''
   type: Opaque
 - apiVersion: v1
-  kind: Secret
-  metadata:
-    annotations:
-      qontract.recycle: 'true'
-    labels:
-      app: ambient-api-server
-      component: database
-    name: ambient-code-rds
-    namespace: ambient-code
-  stringData:
-    db.host: VAULT_INJECTED
-    db.name: ambient_code
-    db.password: VAULT_INJECTED
-    db.port: '5432'
-    db.user: VAULT_INJECTED
-  type: Opaque
-- apiVersion: v1
   kind: Service
   metadata:
     annotations:
