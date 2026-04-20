@@ -24,7 +24,7 @@ export async function POST(
   const body = await request.text()
   const resp = await fetch(`${BACKEND_URL}/projects/${encodeURIComponent(name)}/users/forks`, {
     method: 'POST',
-    headers,
+    headers: { ...headers, 'Content-Type': 'application/json' },
     body,
   })
   const data = await resp.text()

@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
       method: 'GET',
       headers: {
         Authorization: clientKey,
-        'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       next: { revalidate: 15 },
     });

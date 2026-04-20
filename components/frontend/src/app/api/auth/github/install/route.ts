@@ -7,7 +7,7 @@ export async function POST(request: Request) {
 
   const resp = await fetch(`${BACKEND_URL}/auth/github/install`, {
     method: 'POST',
-    headers,
+    headers: { ...headers, 'Content-Type': 'application/json' },
     body,
   })
 

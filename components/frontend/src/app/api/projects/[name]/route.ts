@@ -34,7 +34,7 @@ export async function PUT(
 
     const response = await fetch(`${BACKEND_URL}/projects/${name}`, {
       method: 'PUT',
-      headers,
+      headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
 
