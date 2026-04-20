@@ -3,7 +3,12 @@
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "command": "scripts/hooks/pr-review-gate.sh"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "scripts/hooks/pr-review-gate.sh"
+          }
+        ]
       },
       {
         "matcher": "Edit|Write",
