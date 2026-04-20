@@ -23,6 +23,30 @@ logger = logging.getLogger(__name__)
 
 
 # ------------------------------------------------------------------
+# Credential refresh helpers
+# ------------------------------------------------------------------
+
+
+def _check_mcp_auth_after_refresh() -> str:
+    """Check MCP server auth status after a credential refresh.
+
+    Returns a diagnostic string with any warnings about MCP servers
+    that may not be able to use the refreshed credentials. Empty
+    string means all known servers look healthy.
+    """
+    from ambient_runner.bridges.claude.mcp import check_mcp_authentication
+
+    warnings = []
+    for server_name in ("google-workspace", "mcp-atlassian"):
+        is_auth, msg = check_mcp_authentication(server_name)
+        if is_auth is False:
+            warnings.append(f"{server_name}: {msg}")
+        elif is_auth is None and msg:
+            warnings.append(f"{server_name}: {msg}")
+    return "; ".join(warnings)
+
+
+# ------------------------------------------------------------------
 # Credential refresh tool
 # ------------------------------------------------------------------
 
@@ -70,14 +94,23 @@ def create_refresh_credentials_tool(context_ref, sdk_tool_decorator):
 
             integrations = get_active_integrations()
             summary = ", ".join(integrations) if integrations else "none detected"
+
+            # Verify MCP server auth status after refresh to detect
+            # false positives (credentials written but MCP server can't use them).
+            diagnostics = _check_mcp_auth_after_refresh()
+
+            parts = [
+                f"Credentials refreshed successfully. "
+                f"Active integrations: {summary}.",
+            ]
+            if diagnostics:
+                parts.append(f"MCP diagnostics: {diagnostics}")
+
             return {
                 "content": [
                     {
                         "type": "text",
-                        "text": (
-                            f"Credentials refreshed successfully. "
-                            f"Active integrations: {summary}."
-                        ),
+                        "text": "\n".join(parts),
                     }
                 ]
             }

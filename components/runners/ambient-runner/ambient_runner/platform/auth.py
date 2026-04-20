@@ -455,18 +455,13 @@ def clear_runtime_credentials() -> None:
         except OSError as e:
             logger.warning(f"Failed to remove token file {token_file}: {e}")
 
-    # Remove Google Workspace credential file if present (uses same hardcoded path as populate_runtime_credentials)
-    google_cred_file = _GOOGLE_WORKSPACE_CREDS_FILE
-    if google_cred_file.exists():
-        try:
-            google_cred_file.unlink()
-            cleared.append("google_workspace_credentials_file")
-            # Clean up empty parent dirs
-            cred_dir = google_cred_file.parent
-            if cred_dir.exists() and not any(cred_dir.iterdir()):
-                cred_dir.rmdir()
-        except OSError as e:
-            logger.warning(f"Failed to remove Google credential file: {e}")
+    # NOTE: Google Workspace credential file is intentionally NOT deleted here.
+    # The workspace-mcp process runs as a long-lived child process of the Claude
+    # CLI and reads credentials from this file. Deleting it between turns causes
+    # workspace-mcp to lose its credentials and fall back to initiating a new
+    # OAuth flow (with an inaccessible localhost:8000 callback URL).
+    # The file is overwritten with fresh credentials at the start of each run
+    # by populate_runtime_credentials(), so staleness is not a concern.
 
     if cleared:
         logger.info(f"Cleared credentials: {', '.join(cleared)}")

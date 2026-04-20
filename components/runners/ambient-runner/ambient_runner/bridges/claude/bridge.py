@@ -208,11 +208,18 @@ class ClaudeBridge(PlatformBridge):
 
         await self._ensure_ready()
 
-        # Fresh credentials for this user on every run
-        clear_runtime_credentials()
-        await populate_runtime_credentials(self._context)
-        await populate_mcp_server_credentials(self._context)
-        self._last_creds_refresh = time.monotonic()
+        # Fresh credentials for this user on every run.
+        # On first run, _setup_platform() already populated credentials and
+        # built MCP servers with the correct env vars — skip the redundant
+        # clear-then-repopulate cycle to avoid briefly removing env vars
+        # (like USER_GOOGLE_EMAIL) that MCP servers depend on.
+        if self._first_run:
+            logger.info("First run: using credentials from _setup_platform()")
+        else:
+            clear_runtime_credentials()
+            await populate_runtime_credentials(self._context)
+            await populate_mcp_server_credentials(self._context)
+            self._last_creds_refresh = time.monotonic()
 
         # If the caller changed, destroy the worker and rebuild MCP servers +
         # adapter so the new ClaudeSDKClient gets fresh mcp_servers config.
