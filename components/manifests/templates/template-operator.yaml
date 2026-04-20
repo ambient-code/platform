@@ -360,7 +360,7 @@ objects:
   kind: ServiceAccount
   metadata:
     annotations:
-      serviceaccounts.openshift.io/oauth-redirectreference.frontend: '{"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"frontend"}}'
+      serviceaccounts.openshift.io/oauth-redirectreference.frontend: '{"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"frontend-route"}}'
     name: frontend
     namespace: ambient-code
 - apiVersion: v1
