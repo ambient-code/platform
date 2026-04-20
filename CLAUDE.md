@@ -98,7 +98,7 @@ component DEVELOPMENT.md files (see [BOOKMARKS.md](BOOKMARKS.md) > Component Dev
 - **OwnerReferences on all child resources**: Jobs, Secrets, PVCs must have controller owner refs
 - **No `panic()` in production**: Return explicit `fmt.Errorf` with context
 - **No `any` types in frontend**: Use proper types, `unknown`, or generic constraints
-- **Feature flags strongly recommended**: Gate new features behind Unleash flags. Use `/unleash-flag` to set up
+- **Feature flags required for new features**: NEW user-facing features MUST be gated behind Unleash flags and disabled by default. Use `/unleash-flag` to set up. This allows safe rollout and easy rollback without code changes
 - **No new CRDs**: Existing CRDs (AgenticSession, ProjectSettings) are grandfathered. For new persistent storage, confirm with the user whether to use repo files or PostgreSQL — do not default to K8s custom resources
 - **Conventional commits**: Squashed on merge to `main`
 - **Design for extensibility before adding items**: When building infrastructure that will have
@@ -127,6 +127,7 @@ Component-specific conventions:
 - Frontend: [DEVELOPMENT.md](components/frontend/DEVELOPMENT.md), [REACT_QUERY_PATTERNS.md](components/frontend/REACT_QUERY_PATTERNS.md)
 - Operator: [DEVELOPMENT.md](components/operator/DEVELOPMENT.md)
 - Security: [security-standards.md](docs/security-standards.md)
+- Monitoring & Alerting: [monitoring-and-alerting-patterns.md](docs/internal/observability/monitoring-and-alerting-patterns.md)
 
 ## Pre-commit Hooks
 

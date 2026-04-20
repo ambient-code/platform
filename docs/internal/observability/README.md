@@ -4,6 +4,16 @@ Documentation for monitoring and observability features in the Ambient Code Plat
 
 ## 📊 Available Observability Tools
 
+### Monitoring & Alerting Patterns
+**[Monitoring & Alerting Guide](monitoring-and-alerting-patterns.md)**
+
+Choose the right monitoring approach:
+- Cluster-native PrometheusRule for Kubernetes resources
+- GitHub Actions for external system checks
+- Decision tree and implementation patterns
+
+---
+
 ### Langfuse - LLM Observability
 **[Langfuse Guide](observability-langfuse.md)**
 
