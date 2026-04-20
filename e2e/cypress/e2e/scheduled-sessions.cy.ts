@@ -108,7 +108,8 @@ describe('Scheduled Sessions', () => {
       cy.visit(`/projects/${workspaceSlug}/scheduled-sessions/new`)
       waitForFormReady()
 
-      cy.get('[data-testid="scheduled-session-name-input"]')
+      cy.get('[data-testid="scheduled-session-name-input"]', { timeout: 10000 })
+        .should('not.be.disabled')
         .type('Preset Schedule Test')
 
       // Select "Daily at 9:00 AM" preset
@@ -142,7 +143,8 @@ describe('Scheduled Sessions', () => {
       cy.visit(`/projects/${workspaceSlug}/scheduled-sessions/new`)
       waitForFormReady()
 
-      cy.get('[data-testid="scheduled-session-name-input"]')
+      cy.get('[data-testid="scheduled-session-name-input"]', { timeout: 10000 })
+        .should('not.be.disabled')
         .type('Custom Cron Test')
 
       // Select "Custom" preset
@@ -281,7 +283,8 @@ describe('Scheduled Sessions', () => {
       cy.visit(`/projects/${workspaceSlug}/scheduled-sessions/new`)
       waitForFormReady()
 
-      cy.get('[data-testid="scheduled-session-name-input"]')
+      cy.get('[data-testid="scheduled-session-name-input"]', { timeout: 10000 })
+        .should('not.be.disabled')
         .type('Custom Workflow Test')
 
       // Leave default schedule preset (Every hour)
