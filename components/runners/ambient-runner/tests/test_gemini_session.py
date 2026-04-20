@@ -106,7 +106,9 @@ class TestWorkerSubprocessConfig:
         """
         payload = "x" * 100_000  # 100 KB — well above the old 64 KB default
         proc = await asyncio.create_subprocess_exec(
-            "python3", "-c", f'print("{payload}")',
+            "python3",
+            "-c",
+            f'print("{payload}")',
             stdout=asyncio.subprocess.PIPE,
             limit=10 * 1024 * 1024,
         )
