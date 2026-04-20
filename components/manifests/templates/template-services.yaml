@@ -676,7 +676,8 @@ objects:
               cpu: 200m
               memory: 512Mi
         - args:
-          - --https-address=:8443
+          - --http-address=:8443
+          - --https-address=
           - --provider=openshift
           - --openshift-service-account=frontend
           - --upstream=http://localhost:3000
