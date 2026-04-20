@@ -3,24 +3,27 @@ kind: Template
 metadata:
   name: ambient-code-services
   annotations:
-    description: Ambient Code Platform - Application Services
-    tags: ambient-code,services
+    description: Ambient Code Platform - Services
 parameters:
 - name: IMAGE_TAG
-  description: Image tag to deploy (auto-generated from git commit)
+  description: Image tag
   required: true
 - name: IMAGE_BACKEND
-  description: Backend API image
   value: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-backend-main
 - name: IMAGE_FRONTEND
-  description: Frontend image
   value: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-frontend-main
 - name: IMAGE_PUBLIC_API
-  description: Public API image
   value: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-public-api-main
 - name: IMAGE_AMBIENT_API_SERVER
-  description: Ambient API Server image
   value: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-ambient-api-server-main
+- name: OAUTH_PROXY_IMAGE_NAME
+  value: registry.redhat.io/openshift4/ose-oauth-proxy-rhel9
+- name: OAUTH_PROXY_IMAGE_TAG
+  value: v4.18.0-202506230505.p0.gcbd44ad.assembly.stream.el9
+- name: NAMESPACE
+  value: ambient-code
+- name: UPSTREAM_TIMEOUT
+  value: 5m
 objects:
 - apiVersion: v1
   kind: Namespace
@@ -112,7 +115,7 @@ objects:
   kind: Service
   metadata:
     annotations:
-      service.beta.openshift.io/serving-cert-secret-name: dashboard-proxy-tls
+      service.alpha.openshift.io/serving-cert-secret-name: frontend-proxy-tls
     labels:
       app: frontend
     name: frontend-service
@@ -690,27 +693,26 @@ objects:
               cpu: 200m
               memory: 512Mi
         - args:
-          - --http-address=:8443
-          - --https-address=
+          - --https-address=:8443
           - --provider=openshift
+          - --openshift-service-account=frontend
           - --upstream=http://localhost:3000
-          - --client-id=ambient-frontend
-          - --client-secret-file=/etc/oauth/config/client-secret
-          - --cookie-secret-file=/etc/oauth/config/cookie_secret
-          - --cookie-expire=23h0m0s
-          - --pass-access-token
-          - --scope=user:full
-          - --openshift-delegate-urls={"/":{"resource":"projects","verb":"list"}}
+          - --openshift-delegate-urls={"/api":{"resource":"namespaces","verb":"get","name":"ambient-code","namespace":"ambient-code"},"/federate":{"resource":"namespaces","verb":"get","name":"ambient-code","namespace":"ambient-code"}}
+          - --tls-cert=/etc/tls/private/tls.crt
+          - --tls-key=/etc/tls/private/tls.key
+          - --cookie-secret-file=/var/run/secrets/kubernetes.io/serviceaccount/token
+          - --upstream-timeout=5m
           - --skip-auth-regex=^/metrics
-          image: quay.io/openshift/origin-oauth-proxy:4.14
+          image: ${OAUTH_PROXY_IMAGE_NAME}:${OAUTH_PROXY_IMAGE_TAG}
+          imagePullPolicy: IfNotPresent
           livenessProbe:
             failureThreshold: 3
             httpGet:
               path: /oauth/healthz
               port: dashboard-ui
-              scheme: HTTP
-            initialDelaySeconds: 30
-            periodSeconds: 5
+              scheme: HTTPS
+            initialDelaySeconds: 10
+            periodSeconds: 10
             successThreshold: 1
             timeoutSeconds: 1
           name: oauth-proxy
@@ -722,31 +724,26 @@ objects:
             httpGet:
               path: /oauth/healthz
               port: dashboard-ui
-              scheme: HTTP
-            initialDelaySeconds: 5
-            periodSeconds: 5
+              scheme: HTTPS
+            initialDelaySeconds: 10
+            periodSeconds: 10
             successThreshold: 1
             timeoutSeconds: 1
           resources:
             limits:
               cpu: 200m
-              memory: 512Mi
+              memory: 200Mi
             requests:
-              cpu: 50m
-              memory: 256Mi
+              cpu: 10m
+              memory: 50Mi
           volumeMounts:
-          - mountPath: /etc/oauth/config
-            name: oauth-config
           - mountPath: /etc/tls/private
-            name: proxy-tls
+            name: frontend-proxy-tls
         serviceAccountName: frontend
         volumes:
-        - name: oauth-config
+        - name: frontend-proxy-tls
           secret:
-            secretName: frontend-oauth-config
-        - name: proxy-tls
-          secret:
-            secretName: dashboard-proxy-tls
+            secretName: frontend-proxy-tls
 - apiVersion: apps/v1
   kind: Deployment
   metadata:
