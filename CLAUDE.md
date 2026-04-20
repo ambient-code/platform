@@ -136,6 +136,21 @@ Configured in `.pre-commit-config.yaml`. Install: `make setup-hooks`. Run all: `
 - `tsc --noEmit` and `npm run build` are **not** in pre-commit (slow; CI gates on them)
 - Branch/push protection blocks commits and pushes to main/master/production
 
+## PR Review Gate
+
+Before running `gh pr create`, agents MUST self-review their changes:
+
+1. Review the diff against conventions in this file and [BOOKMARKS.md](BOOKMARKS.md)
+2. Verify the changes follow patterns documented in `.claude/patterns/` and `.claude/context/`
+3. Check that no `panic()` calls exist in production Go code (use `fmt.Errorf`)
+4. Check that no `any` types exist in frontend TypeScript (use proper types, `unknown`, or generics)
+5. Ensure all new API endpoints have corresponding frontend proxy routes
+6. Verify owner references on any new K8s child resources
+
+A PreToolUse hook (`scripts/hooks/pr-review-gate.sh`) enforces mechanical checks (lint, format, secrets) and runs `coderabbit review --agent --base main` for AI-powered review (security, performance, K8s safety per `.coderabbit.yaml`). The hook will block `gh pr create` if any check fails. The self-review above covers what the hook cannot — architectural fit, convention adherence, and design quality.
+
+When both the self-review and the hook pass, apply the `ambient-code:self-reviewed` label to the PR if the changes were authored and reviewed without human involvement.
+
 ## Testing
 
 - **Frontend unit tests**: `cd components/frontend && npx vitest run --coverage`. See `components/frontend/README.md`.
