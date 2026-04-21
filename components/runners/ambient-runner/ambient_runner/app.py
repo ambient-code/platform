@@ -24,6 +24,7 @@ Usage::
 import asyncio
 import logging
 import os
+import secrets as _secrets_mod
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -31,6 +32,8 @@ from urllib.parse import urlparse
 
 import aiohttp
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from starlette.requests import Request
 
 from ambient_runner.bridge import PlatformBridge
 from ambient_runner.platform.config import load_ambient_config
@@ -212,6 +215,20 @@ def add_ambient_endpoints(
     """
     # Store bridge on app state so endpoints can access it
     app.state.bridge = bridge
+
+    # If AGUI_TOKEN is set, require X-Ambient-Session-Token on all non-health requests.
+    # This prevents cross-session attacks where an attacker uses another session's runner URL.
+    _agui_token = os.getenv("AGUI_TOKEN", "").strip()
+    if _agui_token:
+        @app.middleware("http")
+        async def _require_session_token(request: Request, call_next):
+            if request.url.path not in ("/health", "/healthz"):
+                provided = request.headers.get("X-Ambient-Session-Token", "")
+                # Use constant-time comparison to prevent timing attacks
+                if not provided or not _secrets_mod.compare_digest(provided, _agui_token):
+                    return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+            return await call_next(request)
+        logger.info("AG-UI token authentication enabled")
 
     # Core endpoints (always registered)
     from ambient_runner.endpoints.health import router as health_router
