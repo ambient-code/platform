@@ -12,9 +12,11 @@ var Cmd = &cobra.Command{
 
 Examples:
   acpctl session messages <id>               # list messages (snapshot)
-  acpctl session messages <id> -f            # stream messages live
-  acpctl session send <id> "Hello!"          # send a message (any event_type)
-  acpctl session send <id> "Hello!"          # send a message`,
+  acpctl session messages <id> -f            # live SSE stream (ends at turn end)
+  acpctl session messages <id> -F            # continuous follow (Ctrl+C to stop)
+  acpctl session send <id> "Hello!"          # send a message
+  acpctl session send <id> "Hello!" -f       # send and stream until done
+  acpctl session events <id>                 # raw AG-UI event stream`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cmd.Help()
 	},
@@ -23,4 +25,5 @@ Examples:
 func init() {
 	Cmd.AddCommand(messagesCmd)
 	Cmd.AddCommand(sendCmd)
+	Cmd.AddCommand(eventsCmd)
 }

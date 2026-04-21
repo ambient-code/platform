@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # demo-kind.sh — acpctl end-to-end demo against a local kind cluster
 #
-# Manages port-forwards for API (:18000), gRPC (:19000), and frontend (:18080).
-# Watches the gRPC WatchSessions stream in a background pane so you can see
-# control-plane events in real time as demo.sh drives the session lifecycle.
+# Layout: left half = demo output, right half = 3 stacked session watch panels.
+# As sessions are created, each gets a live `acpctl session messages -f` watch
+# in the next available right panel. Up to 3 concurrent session watches.
 #
 # Usage:
 #   ./demo-kind.sh                          # auto-detects kind cluster + token
@@ -23,6 +23,53 @@
 #   SKIP_GRPC_WATCH        — set to 1 to skip grpcurl stream (default: unset)
 
 set -euo pipefail
+
+# ── tmux layout bootstrap ──────────────────────────────────────────────────────
+#
+# If we are not already inside a tmux session, create one and re-exec this
+# script inside the left pane. The right side is pre-split into 3 watch panels
+# (right-0, right-1, right-2) which start idle and are claimed as sessions appear.
+
+TMUX_SESSION="ambient-demo"
+DEMO_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+
+if [[ -z "${TMUX:-}" ]]; then
+    tmux new-session -d -s "$TMUX_SESSION" -x 220 -y 50
+
+    # right column: split the window vertically (left=main, right=watches)
+    tmux split-window -h -t "${TMUX_SESSION}:0" -p 40
+    # right pane is now pane 1 — split into 3 equal rows
+    tmux split-window -v -t "${TMUX_SESSION}:0.1" -p 67
+    tmux split-window -v -t "${TMUX_SESSION}:0.2" -p 50
+
+    # label each watch pane so the user can see what it will show
+    tmux send-keys -t "${TMUX_SESSION}:0.1" "printf '\\033[2m[watch slot 1 — waiting for session]\\033[0m\\n'" Enter
+    tmux send-keys -t "${TMUX_SESSION}:0.2" "printf '\\033[2m[watch slot 2 — waiting for session]\\033[0m\\n'" Enter
+    tmux send-keys -t "${TMUX_SESSION}:0.3" "printf '\\033[2m[watch slot 3 — waiting for session]\\033[0m\\n'" Enter
+
+    # run this script in the left pane with TMUX_SESSION exported
+    tmux send-keys -t "${TMUX_SESSION}:0.0" \
+        "TMUX_SESSION=${TMUX_SESSION} INSIDE_DEMO_TMUX=1 bash ${DEMO_SCRIPT}" Enter
+
+    tmux select-pane -t "${TMUX_SESSION}:0.0"
+    tmux attach-session -t "$TMUX_SESSION"
+    exit 0
+fi
+
+# track which right panes are still free (pane indices 1, 2, 3)
+WATCH_PANES=(1 2 3)
+WATCH_PANE_IDX=0
+
+attach_session_watch() {
+    local session_id="$1"
+    if [[ $WATCH_PANE_IDX -ge ${#WATCH_PANES[@]} ]]; then
+        return
+    fi
+    local pane="${WATCH_PANES[$WATCH_PANE_IDX]}"
+    WATCH_PANE_IDX=$(( WATCH_PANE_IDX + 1 ))
+    tmux send-keys -t "${TMUX_SESSION}:0.${pane}" \
+        "AMBIENT_API_URL=${AMBIENT_API_URL} AMBIENT_TOKEN=${AMBIENT_TOKEN} AMBIENT_GRPC_URL=${AMBIENT_GRPC_URL} ${ACPCTL:-acpctl} session messages ${session_id} -f" Enter
+}
 
 NAMESPACE="${NAMESPACE:-ambient-code}"
 KIND_CONTEXT="${KIND_CONTEXT:-$(kubectl config current-context 2>/dev/null | grep -E '^kind-' | head -1)}"
@@ -163,6 +210,9 @@ wait_for_port "${API_PORT}"      "REST API"
 wait_for_port "${GRPC_PORT}"     "gRPC"
 wait_for_port "${FRONTEND_PORT}" "Frontend"
 
+export AMBIENT_GRPC_URL="localhost:${GRPC_PORT}"
+dim "   AMBIENT_GRPC_URL=${AMBIENT_GRPC_URL}"
+
 # ── token from cluster ─────────────────────────────────────────────────────────
 
 AMBIENT_TOKEN=$(
@@ -235,49 +285,25 @@ wait_for_running() {
 wait_for_run_finished() {
     local session_id="$1" after_seq="$2"
     local start=$(date +%s)
-    local deadline=$(( start + MESSAGE_WAIT_TIMEOUT ))
-    local spinner='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-    local spin_i=0
-    printf '   '
-    while true; do
-        local result
-        result=$(
-            api_get "/sessions/${session_id}/messages?after_seq=${after_seq}" \
-            | python3 -c "
-import sys, json
-try:
-    msgs = json.load(sys.stdin)
-    if not isinstance(msgs, list):
-        print('none')
-    else:
-        types = [m.get('event_type','') for m in msgs]
-        if 'RUN_FINISHED' in types or 'MESSAGES_SNAPSHOT' in types:
-            print('finished')
-        elif 'RUN_ERROR' in types:
-            print('error')
-        elif len(msgs) > 0:
-            print('partial')
-        else:
-            print('none')
-except Exception as e:
-    print('none')
-" 2>/dev/null || echo none
-        )
-        local elapsed=$(( $(date +%s) - start ))
-        case "$result" in
-            finished)
-                printf '\r'
-                green "   ✓ RUN_FINISHED (${elapsed}s)"; return 0 ;;
-            error)
-                printf '\r'
-                yellow "   ✗ RUN_ERROR (${elapsed}s)"; return 1 ;;
-        esac
-        [[ $(date +%s) -ge $deadline ]] && { printf '\r'; yellow "   ✗ timeout after ${MESSAGE_WAIT_TIMEOUT}s"; return 1; }
-        local ch="${spinner:$(( spin_i % ${#spinner} )):1}"
-        printf "\r   %s %ds" "$ch" "$elapsed"
-        spin_i=$(( spin_i + 1 ))
-        sleep 2
-    done
+    local status="none"
+    local matched_type=""
+
+    while IFS= read -r line; do
+        if echo "$line" | grep -qE '^\[|RUN_FINISHED|RUN_ERROR'; then
+            if echo "$line" | grep -q 'RUN_FINISHED'; then
+                status="finished"; matched_type="RUN_FINISHED"; break
+            elif echo "$line" | grep -q 'RUN_ERROR'; then
+                status="error"; matched_type="RUN_ERROR"; break
+            fi
+        fi
+    done < <(timeout "${MESSAGE_WAIT_TIMEOUT}" "${ACPCTL:-acpctl}" session messages "${session_id}" -f --after "${after_seq}" 2>/dev/null)
+
+    local elapsed=$(( $(date +%s) - start ))
+    case "$status" in
+        finished) green   "   ✓ ${matched_type} (${elapsed}s)"; return 0 ;;
+        error)    yellow  "   ✗ ${matched_type} (${elapsed}s)"; return 1 ;;
+        *)        yellow  "   ✗ timeout after ${MESSAGE_WAIT_TIMEOUT}s";  return 1 ;;
+    esac
 }
 
 max_seq() {
@@ -337,6 +363,8 @@ if [[ -z "$SESSION_ID" ]]; then
     exit 1
 fi
 dim "   session ID: ${SESSION_ID}"; echo
+
+attach_session_watch "${SESSION_ID}"
 
 if [[ -n "${GRPC_WATCH_PID:-}" ]]; then
     sleep 1

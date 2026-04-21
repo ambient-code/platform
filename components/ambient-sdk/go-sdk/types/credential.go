@@ -155,3 +155,9 @@ func (b *CredentialPatchBuilder) URL(v string) *CredentialPatchBuilder {
 func (b *CredentialPatchBuilder) Build() map[string]any {
 	return b.patch
 }
+
+type CredentialTokenResponse struct {
+	CredentialID string `json:"credential_id"`
+	Provider     string `json:"provider"`
+	Token        string `json:"token"`
+}
