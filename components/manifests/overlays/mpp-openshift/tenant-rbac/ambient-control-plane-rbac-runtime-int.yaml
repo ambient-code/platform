@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ambient-control-plane-tenant-namespaces-runtime-int
+  namespace: ambient-code--config
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ambient-control-plane-tenant-namespaces
+subjects:
+  - kind: ServiceAccount
+    name: ambient-control-plane
+    namespace: ambient-code--runtime-int

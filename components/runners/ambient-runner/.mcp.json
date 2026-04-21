@@ -23,6 +23,14 @@
         "READ_ONLY_MODE": "${JIRA_READ_ONLY_MODE:-true}"
       }
     },
+    "openshift": {
+      "command": "uvx",
+      "args": [
+        "kubernetes-mcp-server@latest",
+        "--kubeconfig", "/tmp/.ambient_kubeconfig",
+        "--disable-multi-cluster"
+      ]
+    },
     "google-workspace": {
       "command": "uvx",
       "args": [

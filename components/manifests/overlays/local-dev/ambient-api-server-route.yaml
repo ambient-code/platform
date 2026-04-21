@@ -6,6 +6,8 @@ metadata:
   labels:
     app: ambient-api-server
     component: api
+  annotations:
+    haproxy.router.openshift.io/timeout: 10m
 spec:
   to:
     kind: Service
@@ -23,6 +25,8 @@ metadata:
   labels:
     app: ambient-api-server
     component: grpc
+  annotations:
+    haproxy.router.openshift.io/timeout: 10m
 spec:
   to:
     kind: Service

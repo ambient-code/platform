@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-api-server
+spec:
+  template:
+    spec:
+      containers:
+        - name: api-server
+          command:
+            - /usr/local/bin/ambient-api-server
+            - serve
+            - --db-host-file=/secrets/db/db.host
+            - --db-port-file=/secrets/db/db.port
+            - --db-user-file=/secrets/db/db.user
+            - --db-password-file=/secrets/db/db.password
+            - --db-name-file=/secrets/db/db.name
+            - --enable-authz=false
+            - --enable-https=false
+            - --api-server-bindaddress=:8000
+            - --metrics-server-bindaddress=:4433
+            - --health-check-server-bindaddress=:4434
+            - --db-sslmode=disable
+            - --db-max-open-connections=50
+            - --enable-db-debug=false
+            - --enable-metrics-https=false
+            - --http-read-timeout=5s
+            - --http-write-timeout=30s
+            - --cors-allowed-origins=*
+            - --cors-allowed-headers=X-Ambient-Project
+            - --jwk-cert-file=/configs/authentication/jwks.json
+            - --enable-grpc=true
+            - --grpc-server-bindaddress=:9000
+            - --grpc-enable-tls=true
+            - --grpc-tls-cert-file=/etc/tls/tls.crt
+            - --grpc-tls-key-file=/etc/tls/tls.key
+            - --alsologtostderr
+            - -v=4
+          volumeMounts:
+            - name: tls-certs
+              mountPath: /etc/tls
+              readOnly: true
+      volumes:
+        - name: tls-certs
+          secret:
+            secretName: ambient-api-server-tls

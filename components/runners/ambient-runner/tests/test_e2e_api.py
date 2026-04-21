@@ -401,7 +401,6 @@ class TestPlatformLifecycle:
         data = resp.json()
         assert "detail" in data
 
-
     def test_run_endpoint_schema_validation(self, client):
         """Various payload validation checks."""
         # Missing messages entirely

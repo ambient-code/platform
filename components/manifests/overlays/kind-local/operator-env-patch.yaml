@@ -19,3 +19,5 @@ spec:
           value: "IfNotPresent"
         - name: POD_FSGROUP
           value: "0"
+        - name: RUNNER_LOG_LEVEL
+          value: "debug"
