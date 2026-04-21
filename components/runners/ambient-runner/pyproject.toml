@@ -20,8 +20,8 @@ dependencies = [
 
 [project.optional-dependencies]
 claude = [
-  "anthropic[vertex]>=0.88.0",
-  "claude-agent-sdk>=0.1.50",
+  "anthropic[vertex]>=0.96.0",
+  "claude-agent-sdk>=0.1.64",
 ]
 observability = [
   "langfuse>=3.14.5",
