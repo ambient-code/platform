@@ -70,14 +70,6 @@ func (a *AgentAPI) Delete(ctx context.Context, id string) error {
 	return a.client.do(ctx, http.MethodDelete, a.basePath()+"/"+url.PathEscape(id), nil, http.StatusNoContent, nil)
 }
 
-func (a *AgentAPI) Start(ctx context.Context, id string) (*types.Agent, error) {
-	var result types.Agent
-	if err := a.client.do(ctx, http.MethodPost, a.basePath()+"/"+url.PathEscape(id)+"/start", nil, http.StatusOK, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
 func (a *AgentAPI) ListAll(ctx context.Context, opts *types.ListOptions) *Iterator[types.Agent] {
 	return NewIterator(func(page int) (*types.AgentList, error) {
 		o := *opts
