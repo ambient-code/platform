@@ -116,12 +116,13 @@ func isPrivateOrBlocked(ip net.IP) bool {
 }
 
 // ssrfSafeTransport returns an http.Transport with a custom DialContext that
-// resolves the hostname and checks each resolved IP against isPrivateOrBlocked
-// before establishing the connection. This prevents DNS rebinding attacks.
+// resolves the hostname, checks each resolved IP against isPrivateOrBlocked,
+// and dials the resolved IP directly (not the original hostname) to prevent
+// DNS rebinding attacks (TOCTOU between validation and dial).
 func ssrfSafeTransport() *http.Transport {
 	return &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			host, _, err := net.SplitHostPort(addr)
+			host, port, err := net.SplitHostPort(addr)
 			if err != nil {
 				return nil, fmt.Errorf("invalid address: %w", err)
 			}
@@ -131,16 +132,27 @@ func ssrfSafeTransport() *http.Transport {
 				return nil, fmt.Errorf("failed to resolve host: %w", err)
 			}
 
+			var allowedIP string
 			for _, ipStr := range ips {
 				ip := net.ParseIP(ipStr)
-				if ip != nil && isPrivateOrBlocked(ip) {
+				if ip == nil {
+					continue
+				}
+				if isPrivateOrBlocked(ip) {
 					return nil, fmt.Errorf("connection to blocked IP address denied")
+				}
+				if allowedIP == "" {
+					allowedIP = ipStr
 				}
 			}
 
-			// Dial the first allowed IP
+			if allowedIP == "" {
+				return nil, fmt.Errorf("no valid IP address resolved")
+			}
+
+			// Dial the resolved IP directly to eliminate DNS rebinding window
 			dialer := &net.Dialer{Timeout: 10 * time.Second}
-			return dialer.DialContext(ctx, network, addr)
+			return dialer.DialContext(ctx, network, net.JoinHostPort(allowedIP, port))
 		},
 	}
 }

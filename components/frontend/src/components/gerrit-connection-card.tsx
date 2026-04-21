@@ -23,7 +23,7 @@ type Props = {
 }
 
 export function GerritConnectionCard({ onRefresh }: Props) {
-  const { data: instancesData, refetch: refetchInstances } = useGerritInstances()
+  const { data: instancesData, refetch: refetchInstances, isLoading, isError } = useGerritInstances()
   const connectMutation = useConnectGerrit()
   const disconnectMutation = useDisconnectGerrit()
   const testMutation = useTestGerritConnection()
@@ -158,8 +158,22 @@ export function GerritConnectionCard({ onRefresh }: Props) {
           </div>
         </div>
 
+        {/* Loading / error states */}
+        {isLoading && (
+          <div className="mb-4 flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="text-sm">Loading instances…</span>
+          </div>
+        )}
+        {isError && !isLoading && (
+          <div className="mb-4 space-y-2">
+            <p className="text-sm text-destructive">Failed to load Gerrit instances.</p>
+            <Button variant="outline" size="sm" onClick={() => refetchInstances()}>Retry</Button>
+          </div>
+        )}
+
         {/* Instance list */}
-        {hasInstances && (
+        {!isLoading && !isError && hasInstances && (
           <div className="mb-4 space-y-2">
             {instances.map((instance: GerritInstanceStatus) => (
               <div
@@ -199,7 +213,7 @@ export function GerritConnectionCard({ onRefresh }: Props) {
         )}
 
         {/* Status when no instances */}
-        {!hasInstances && !showForm && (
+        {!isLoading && !isError && !hasInstances && !showForm && (
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-2">
               <span className="w-2 h-2 rounded-full bg-gray-400" />
