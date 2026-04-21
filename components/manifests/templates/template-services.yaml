@@ -681,6 +681,7 @@ objects:
           - --provider=openshift
           - --openshift-service-account=frontend
           - --upstream=http://localhost:3000
+          - --openshift-delegate-urls={"/":{"resource":"projects","verb":"list"}}
           - --tls-cert=/etc/tls/private/tls.crt
           - --tls-key=/etc/tls/private/tls.key
           - --cookie-secret-file=/etc/oauth-cookie/cookie_secret

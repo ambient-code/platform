@@ -28,6 +28,7 @@ spec:
         - --provider=openshift
         - --openshift-service-account=frontend
         - --upstream=http://localhost:3000
+        - --openshift-delegate-urls={"/api":{"resource":"namespaces","verb":"get","name":"ambient-code","namespace":"ambient-code"},"/federate":{"resource":"namespaces","verb":"get","name":"ambient-code","namespace":"ambient-code"}}
         - --tls-cert=/etc/tls/private/tls.crt
         - --tls-key=/etc/tls/private/tls.key
         - --cookie-secret-file=/var/run/secrets/kubernetes.io/serviceaccount/token
