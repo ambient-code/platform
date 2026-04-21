@@ -597,7 +597,7 @@ objects:
         - name: vertex-credentials
           secret:
             optional: true
-            secretName: ambient-vertex
+            secretName: stage-gcp-creds
         - configMap:
             name: ambient-models
             optional: true
