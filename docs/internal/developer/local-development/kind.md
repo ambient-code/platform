@@ -249,6 +249,48 @@ CONTAINER_REGISTRY=quay.io/your-org
 make kind-down && make kind-up
 ```
 
+### Recreating the Vertex AI Secret
+
+If the `ambient-vertex` secret is missing (e.g., you deleted it manually, or
+you're on an older operator build that removed it during session cleanup), recreate
+it from your local credentials:
+
+**Step 0: Ensure the service account has Vertex AI access.** Without
+`roles/aiplatform.user` you'll get `403 Permission denied` from the Vertex API.
+
+```bash
+gcloud projects add-iam-policy-binding itpc-gcp-octo-eng-claude \
+  --member=serviceAccount:claude-container@itpc-gcp-octo-eng-claude.iam.gserviceaccount.com \
+  --role=roles/aiplatform.user \
+  --condition=None
+```
+
+> IAM propagation can take up to 7 minutes. If sessions fail with 403 right
+> after granting, wait and retry.
+
+```bash
+# Option A: Use Application Default Credentials (quickest)
+kubectl create secret generic ambient-vertex \
+  --from-file=ambient-code-key.json="$HOME/.config/gcloud/application_default_credentials.json" \
+  -n ambient-code
+
+# Option B: Use a dedicated service account key
+gcloud iam service-accounts keys create /tmp/sa-key.json \
+  --iam-account=ambient-code@YOUR_PROJECT.iam.gserviceaccount.com
+kubectl create secret generic ambient-vertex \
+  --from-file=ambient-code-key.json=/tmp/sa-key.json \
+  -n ambient-code
+rm /tmp/sa-key.json
+```
+
+The key filename **must** be `ambient-code-key.json` — operator, backend, and
+runner all mount the secret at `/app/vertex/ambient-code-key.json`.
+
+> **Note:** In Kind, the operator and sessions share the `ambient-code` namespace.
+> The operator no longer modifies or deletes the original secret during session
+> cleanup (see commit `c2ce8668`). If you're on an older operator image, deleting
+> all sessions will also delete this secret.
+
 ### Running Sessions (Not Just E2E Tests)
 
 To run interactive sessions from the UI (not just automated e2e tests), the runner

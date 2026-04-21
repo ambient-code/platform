@@ -253,6 +253,9 @@ def build_workspace_context_prompt(
         prompt += "## Corrections Feedback\n\n"
         prompt += CORRECTION_DETECTION_INSTRUCTIONS
 
+    # Repository intelligence context (from previous sessions)
+    prompt += _build_intelligence_context_section(repos_cfg)
+
     return prompt
 
 
@@ -275,6 +278,83 @@ def _build_rubric_prompt_section(ambient_config: dict) -> str:
     section += RUBRIC_EVALUATION_PROCESS
 
     return section
+
+
+def _build_intelligence_context_section(repos_cfg: list) -> str:
+    """Fetch intelligence context for all repos and format as a prompt section.
+
+    Calls the api-server context endpoint to get pre-formatted markdown
+    covering architecture, conventions, caveats, and known findings from
+    previous sessions. Returns empty string on any error so session startup
+    is never blocked.
+
+    Disabled when ``AMBIENT_DISABLE_INTELLIGENCE=true``.
+    """
+    from ambient_runner.endpoints.auto_analysis import is_intelligence_disabled
+
+    if is_intelligence_disabled():
+        logger.info("Intelligence disabled (AMBIENT_DISABLE_INTELLIGENCE), skipping injection")
+        return ""
+
+    if not repos_cfg:
+        return ""
+
+    repo_urls = [r.get("url", "") for r in repos_cfg if r.get("url")]
+    if not repo_urls:
+        return ""
+
+    try:
+        from urllib.parse import urlencode
+
+        from ambient_runner.tools.intelligence_api import IntelligenceAPIClient
+
+        client = IntelligenceAPIClient()
+
+        # Single call: the server skips repos without intelligence
+        urls_param = ",".join(repo_urls)
+        params = urlencode(
+            {"project_id": client.project_id, "repo_urls": urls_param, "max_entries": 20}
+        )
+        path = f"/api/ambient/v1/repo_intelligences/context?{params}"
+        data = client._make_request("GET", path)
+
+        result = ""
+
+        injected = data.get("injected_context", "")
+        if injected:
+            result += injected
+
+        # Determine which repos the server returned intelligence for
+        analyzed_repo_urls = {
+            intel.get("repo_url", "") for intel in data.get("intelligences", [])
+        }
+        logger.info(
+            "Injected intelligence context for %d repo(s) (%d chars)",
+            len(analyzed_repo_urls),
+            len(injected),
+        )
+
+        # Add hint for unanalyzed repos
+        unanalyzed_names = [
+            r.get("name", r.get("url", "").split("/")[-1])
+            for r in repos_cfg
+            if r.get("url") and r["url"] not in analyzed_repo_urls
+        ]
+        if unanalyzed_names:
+            names = ", ".join(unanalyzed_names)
+            result += (
+                f"\n## Unanalyzed Repositories\n\n"
+                f"The following repositories have not been analyzed yet: {names}. "
+                f"As you work on these repos, use `memory_store` to save findings "
+                f"(architecture, conventions, caveats) for future sessions.\n\n"
+            )
+            logger.info("Added unanalyzed repo hint for: %s", names)
+
+        return result
+
+    except Exception as e:
+        logger.debug("Intelligence context injection skipped: %s", e)
+        return ""
 
 
 def resolve_workspace_prompt(workspace_path: str, cwd_path: str) -> str:

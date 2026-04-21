@@ -96,9 +96,8 @@ describe('NewSessionView', () => {
 
   it('send button is disabled when textarea is empty', () => {
     render(<NewSessionView {...defaultProps} />);
-    const allButtons = screen.getAllByRole('button');
-    const lastButton = allButtons[allButtons.length - 1];
-    expect(lastButton.hasAttribute('disabled')).toBe(true);
+    const sendButton = screen.getByTestId('send-button');
+    expect(sendButton.hasAttribute('disabled')).toBe(true);
   });
 
   it('calls onCreateSession with prompt when submitted', () => {

@@ -254,6 +254,7 @@ export type RepoStatus = {
   branches: string[];
   currentActiveBranch: string;
   defaultBranch: string;
+  analyzing?: boolean;
 };
 
 export type ReposStatusResponse = {

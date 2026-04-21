@@ -802,6 +802,13 @@ function handleMessagesSnapshot(
       return { ...snapshotVersion, toolCalls: mergedToolCalls, timestamp: snapshotVersion.timestamp || msg.timestamp }
     }
 
+    // For user messages already in state (added by sendMessage), preserve
+    // the frontend timestamp. The snapshot stamps these with run_start_iso
+    // which can differ from the frontend clock, causing sort to reorder
+    // the user message below its response.
+    if (msg.role === 'user' && msg.timestamp) {
+      return { ...snapshotVersion, timestamp: msg.timestamp }
+    }
     return { ...snapshotVersion, timestamp: snapshotVersion.timestamp || msg.timestamp }
   })
 

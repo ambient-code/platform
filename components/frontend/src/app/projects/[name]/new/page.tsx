@@ -26,6 +26,7 @@ export default function NewSessionPage() {
       workflow?: string;
       repos?: Array<{ url: string; branch?: string; autoPush?: boolean }>;
       sdkOptions?: Record<string, unknown>;
+      disableIntelligence?: boolean;
     }) => {
       const workflowConfig = config.workflow === "custom" && customWorkflow
         ? { gitUrl: customWorkflow.gitUrl, branch: customWorkflow.branch, path: customWorkflow.path }
@@ -59,6 +60,7 @@ export default function NewSessionPage() {
                 }
               : {}),
             ...(config.sdkOptions ? { sdkOptions: config.sdkOptions } : {}),
+            ...(config.disableIntelligence ? { disableIntelligence: true } : {}),
           },
         },
         {

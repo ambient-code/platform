@@ -8,8 +8,8 @@ USER 0
 # Copy go mod and sum files
 COPY go.mod go.sum ./
 
-# Download dependencies
-RUN go mod download
+# Download dependencies (GOPROXY=direct works around HTTP/2 stream errors with proxy.golang.org inside Docker)
+RUN GOPROXY=direct go mod download
 
 # Copy the source code
 COPY . .

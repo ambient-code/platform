@@ -47,6 +47,7 @@ export type Repository = {
   currentActiveBranch?: string;
   defaultBranch?: string;
   status?: "Cloning" | "Ready" | "Failed" | "Removing";
+  analyzing?: boolean;
 };
 
 export type UploadedFile = {

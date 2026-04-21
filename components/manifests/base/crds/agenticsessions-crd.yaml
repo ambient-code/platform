@@ -82,6 +82,9 @@ spec:
               stopOnRunFinished:
                 type: boolean
                 description: "When true, automatically stop the session when the agent completes its run (RUN_FINISHED event). Useful for one-shot tasks triggered by automation."
+              disableIntelligence:
+                type: boolean
+                description: "When true, disables all project intelligence features: auto-analysis, prompt injection, and MCP memory tools."
               environmentVariables:
                 type: object
                 additionalProperties:

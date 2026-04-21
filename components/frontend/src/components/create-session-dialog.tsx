@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -64,6 +65,7 @@ const formSchema = z.object({
   temperature: z.number().min(0).max(2),
   maxTokens: z.number().min(100).max(8000),
   timeout: z.number().min(60).max(1800),
+  disableIntelligence: z.boolean().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -118,6 +120,7 @@ export function CreateSessionDialog({
       temperature: 0.7,
       maxTokens: 4000,
       timeout: 300,
+      disableIntelligence: false,
     },
   });
 
@@ -231,6 +234,10 @@ export function CreateSessionDialog({
 
     if (advancedAgentOptions) {
       request.sdkOptions = agentOptionsForm.getValues();
+    }
+
+    if (values.disableIntelligence) {
+      request.disableIntelligence = true;
     }
 
     createSessionMutation.mutate(
@@ -741,6 +748,30 @@ export function CreateSessionDialog({
                 )}
                 </CollapsibleContent>
               </Collapsible>
+
+              <FormField
+                control={form.control}
+                name="disableIntelligence"
+                render={({ field }) => (
+                  <FormItem className="flex items-center gap-2 space-y-0">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={createSessionMutation.isPending}
+                      />
+                    </FormControl>
+                    <div className="space-y-0.5 leading-none">
+                      <FormLabel className="text-sm font-normal cursor-pointer">
+                        Disable project intelligence
+                      </FormLabel>
+                      <p className="text-xs text-muted-foreground">
+                        Skip auto-analysis and knowledge injection (saves Vertex AI costs)
+                      </p>
+                    </div>
+                  </FormItem>
+                )}
+              />
 
               <DialogFooter>
                 <Button

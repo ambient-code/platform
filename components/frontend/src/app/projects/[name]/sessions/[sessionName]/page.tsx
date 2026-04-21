@@ -123,6 +123,8 @@ export default function ProjectSessionDetailPage({
   const [repoChanging, setRepoChanging] = useState(false);
   const [pendingRepo, setPendingRepo] = useState<{ url: string; branch: string; status: "Cloning" } | null>(null);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
+  const pendingMessageRef = useRef<string | null>(null);
 
   // Explorer panel state
   const explorer = useExplorerState();
@@ -186,6 +188,10 @@ export default function ProjectSessionDetailPage({
     sessionName,
     phase === "Running" // Only poll when session is running
   );
+
+  // Derive analysis state from reposStatus (single source of truth)
+  const isAnalyzing = reposStatus?.repos?.some((r: { analyzing?: boolean }) => r.analyzing) ?? false;
+  const prevIsAnalyzingRef = useRef(isAnalyzing);
 
   // Fetch runner capabilities and derive agent display name
   const { data: capabilities } = useCapabilities(projectName, sessionName, phase === "Running");
@@ -428,10 +434,11 @@ export default function ProjectSessionDetailPage({
   });
 
   const removeRepoMutation = useMutation({
-    mutationFn: async (repoName: string) => {
+    mutationFn: async ({ repoName, deleteIntelligence = false }: { repoName: string; deleteIntelligence?: boolean }) => {
       setRepoChanging(true);
+      const params = deleteIntelligence ? '?delete_intelligence=true' : '';
       const response = await fetch(
-        `/api/projects/${projectName}/agentic-sessions/${sessionName}/repos/${repoName}`,
+        `/api/projects/${projectName}/agentic-sessions/${sessionName}/repos/${repoName}${params}`,
         { method: "DELETE" },
       );
       if (!response.ok) throw new Error("Failed to remove repository");
@@ -443,6 +450,8 @@ export default function ProjectSessionDetailPage({
       queryClient.invalidateQueries({
         queryKey: sessionKeys.reposStatus(projectName, sessionName),
       });
+      // Clear stale intelligence cache so re-adding the repo doesn't show old "Analyzed" badge
+      queryClient.invalidateQueries({ queryKey: ['intelligence'] });
       setRepoChanging(false);
       toast.success("Repository removed successfully");
     },
@@ -1358,6 +1367,40 @@ export default function ProjectSessionDetailPage({
       }
     };
   }, [session?.status?.phase, refetchArtifactsFiles]);
+
+  // When analysis completes (isAnalyzing: true → false):
+  // 1. Invalidate intelligence queries so the "Analyzed" badge appears
+  // 2. Auto-send any pending message with full project intelligence
+  //
+  // pendingMessage is read from a ref (not state) so that setPendingMessage(null)
+  // doesn't re-trigger the effect and cancel the 2s send timer via cleanup.
+  useEffect(() => {
+    if (prevIsAnalyzingRef.current && !isAnalyzing) {
+      // Refetch intelligence data so IntelligenceSection shows the "Analyzed" badge
+      queryClient.invalidateQueries({ queryKey: ['intelligence'] });
+
+      const msg = pendingMessageRef.current;
+      if (msg) {
+        pendingMessageRef.current = null;
+        setPendingMessage(null);
+        toast.success("Analysis complete — sending your message with project intelligence");
+        // Wait 2s for bridge to reinitialize with intelligence
+        setTimeout(async () => {
+          try {
+            if (aguiSendMessage) {
+              await aguiSendMessage(msg);
+              queryClient.invalidateQueries({ queryKey: sessionKeys.detail(projectName, sessionName) });
+              queryClient.invalidateQueries({ queryKey: sessionKeys.list(projectName) });
+            }
+          } catch (err) {
+            toast.error("Failed to send queued message");
+          }
+        }, 2000);
+      }
+    }
+    prevIsAnalyzingRef.current = isAnalyzing;
+  }, [isAnalyzing, aguiSendMessage, projectName, sessionName, queryClient]);
+
   // Session action handlers
   const handleStop = () => {
     stopMutation.mutate(
@@ -1435,6 +1478,14 @@ export default function ProjectSessionDetailPage({
       return;
     }
 
+    // Hold message during analysis so agent responds with full project intelligence
+    if (isAnalyzing) {
+      setPendingMessage(finalMessage);
+      pendingMessageRef.current = finalMessage;
+      toast.info("Message queued — will send when analysis completes");
+      return;
+    }
+
     try {
       await aguiSendMessage(finalMessage);
       // Invalidate session caches so sidebar/list reflect the new activity
@@ -1476,18 +1527,32 @@ export default function ProjectSessionDetailPage({
 
   // Computed values for explorer panel
   const removingRepoName = removeRepoMutation.isPending
-    ? removeRepoMutation.variables
+    ? removeRepoMutation.variables?.repoName
     : null;
 
-  const explorerRepositories = useMemo(() => [
-    ...(pendingRepo ? [pendingRepo] : []),
-    ...(reposStatus?.repos || session?.status?.reconciledRepos || session?.spec?.repos || []).map(
-      (r) => {
-        const name = ('name' in r ? r.name : undefined) || r.url?.split('/').pop()?.replace('.git', '');
-        return name === removingRepoName ? { ...r, status: "Removing" as const } : r;
-      },
-    ),
-  ], [pendingRepo, reposStatus?.repos, session?.status?.reconciledRepos, session?.spec?.repos, removingRepoName]);
+  const explorerRepositories = useMemo(() => {
+    // Build a name→url lookup from spec and reconciled repos so we can
+    // fill in missing URLs when the runner's repos/status returns empty.
+    const urlByName = new Map<string, string>();
+    for (const r of session?.spec?.repos || []) {
+      const n = r.url?.split('/').pop()?.replace('.git', '');
+      if (n && r.url) urlByName.set(n, r.url);
+    }
+    for (const r of session?.status?.reconciledRepos || []) {
+      if (r.name && r.url) urlByName.set(r.name, r.url);
+    }
+
+    return [
+      ...(pendingRepo ? [pendingRepo] : []),
+      ...(reposStatus?.repos || session?.status?.reconciledRepos || session?.spec?.repos || []).map(
+        (r) => {
+          const name = ('name' in r ? r.name : undefined) || r.url?.split('/').pop()?.replace('.git', '');
+          const patched = (!r.url && name && urlByName.has(name)) ? { ...r, url: urlByName.get(name)! } : r;
+          return name === removingRepoName ? { ...patched, status: "Removing" as const } : patched;
+        },
+      ),
+    ];
+  }, [pendingRepo, reposStatus?.repos, session?.status?.reconciledRepos, session?.spec?.repos, removingRepoName]);
 
   const repoBranches = useMemo(() => {
     const branches: Record<string, string | undefined> = {};
@@ -1553,9 +1618,26 @@ export default function ProjectSessionDetailPage({
     setContextModalOpen(true);
   }, []);
 
-  const handleRemoveRepository = useCallback((repoName: string) => {
-    removeRepoMutation.mutate(repoName);
+  const handleRemoveRepository = useCallback((repoName: string, options?: { deleteIntelligence?: boolean }) => {
+    removeRepoMutation.mutate({ repoName, deleteIntelligence: options?.deleteIntelligence ?? false });
   }, [removeRepoMutation]);
+
+  const handleReanalyzeRepository = useCallback(async (repoName: string) => {
+    try {
+      const response = await fetch(
+        `/api/projects/${projectName}/agentic-sessions/${sessionName}/repos/reanalyze`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: repoName }),
+        },
+      );
+      if (!response.ok) throw new Error("Failed to trigger re-analysis");
+      toast.success(`Re-analysis started for ${repoName}`);
+    } catch (error) {
+      toast.error(`Failed to re-analyze ${repoName}`);
+    }
+  }, [projectName, sessionName]);
 
   const handleRemoveFile = useCallback((fileName: string) => {
     removeFileMutation.mutate(fileName);
@@ -1630,6 +1712,20 @@ export default function ProjectSessionDetailPage({
                       projectName={projectName}
                       sessionName={sessionName}
                     />
+                  </div>
+                )}
+                {isAnalyzing && (
+                  <div className="mx-4 mt-2 p-3 rounded-lg bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800 flex items-center gap-3">
+                    <Loader2 className="h-4 w-4 animate-spin text-purple-600 flex-shrink-0" />
+                    <div>
+                      <div className="text-sm font-medium text-purple-800 dark:text-purple-200">
+                        Analyzing repository...
+                      </div>
+                      <div className="text-xs text-purple-600 dark:text-purple-400">
+                        Building project intelligence. This usually takes 1-2 minutes.
+                        {pendingMessage && " Your message will be sent automatically when complete."}
+                      </div>
+                    </div>
                   </div>
                 )}
                 <FeedbackProvider
@@ -1850,6 +1946,7 @@ export default function ProjectSessionDetailPage({
               onAddRepository={handleOpenContextModal}
               onUploadFile={handleOpenUploadModal}
               onRemoveRepository={handleRemoveRepository}
+              onReanalyzeRepository={handleReanalyzeRepository}
               onRemoveFile={handleRemoveFile}
               backgroundTasks={aguiState.backgroundTasks}
               onOpenTranscript={(task) => {

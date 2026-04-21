@@ -7,9 +7,12 @@ export async function DELETE(
 ) {
   const { name, sessionName, repoName } = await params;
   const headers = await buildForwardHeadersAsync(request);
+  const { searchParams } = new URL(request.url);
+  const qs = searchParams.toString();
+  const suffix = qs ? `?${qs}` : '';
 
   const resp = await fetch(
-    `${BACKEND_URL}/projects/${encodeURIComponent(name)}/agentic-sessions/${encodeURIComponent(sessionName)}/repos/${encodeURIComponent(repoName)}`,
+    `${BACKEND_URL}/projects/${encodeURIComponent(name)}/agentic-sessions/${encodeURIComponent(sessionName)}/repos/${encodeURIComponent(repoName)}${suffix}`,
     {
       method: 'DELETE',
       headers,

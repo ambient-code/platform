@@ -395,16 +395,13 @@ if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_REPO_STATE}" 2>/dev
         SAVED_BRANCH=$(jq -r '.currentBranch // "main"' "${METADATA_FILE}" 2>/dev/null || echo "main")
         SAVED_HEAD=$(jq -r '.headSha // empty' "${METADATA_FILE}" 2>/dev/null || echo "")
 
-        # If repo was not already cloned (e.g., runtime-added repo), clone it
-        if [ ! -d "${REPO_DIR}" ] && [ -n "${REMOTE_URL}" ]; then
-            # Redact credentials from URL for logging
-            SAFE_URL=$(echo "${REMOTE_URL}" | sed 's|://[^@]*@|://|')
-            echo "  Cloning missing repo ${REPO_NAME} from ${SAFE_URL}..."
-            git config --global --add safe.directory "${REPO_DIR}" 2>/dev/null || true
-            git clone "${REMOTE_URL}" "${REPO_DIR}" 2>&1 || {
-                echo "  WARNING: Failed to clone ${REPO_NAME}, skipping restore"
-                continue
-            }
+        # Only restore repos that were already cloned from REPOS_JSON.
+        # Repos that only exist in S3 (e.g., runtime-added in a previous
+        # session that reused this session name) are skipped to prevent
+        # stale repos from leaking into new sessions.
+        if [ ! -d "${REPO_DIR}" ]; then
+            echo "  Skipping ${REPO_NAME}: not in current session spec (stale S3 state)"
+            continue
         fi
 
         if [ ! -d "${REPO_DIR}/.git" ] && [ ! -f "${REPO_DIR}/.git" ]; then
