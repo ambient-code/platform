@@ -29,6 +29,15 @@
             "command": "bash scripts/claude-hooks/auto-format.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && bash scripts/hooks/coderabbit-review-gate.sh"
+          }
+        ]
       }
     ],
     "Stop": [

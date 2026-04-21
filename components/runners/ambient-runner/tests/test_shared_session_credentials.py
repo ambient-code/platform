@@ -16,7 +16,6 @@ from ambient_runner.platform.auth import (
     _GH_WRAPPER_PATH,
     _GITHUB_TOKEN_FILE,
     _GITLAB_TOKEN_FILE,
-    _GOOGLE_WORKSPACE_CREDS_FILE,
     _fetch_credential,
     clear_runtime_credentials,
     install_gh_wrapper,

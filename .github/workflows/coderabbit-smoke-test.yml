@@ -1,0 +1,129 @@
+name: CodeRabbit Integration Smoke Test
+
+# Validates the CodeRabbit integration works end-to-end:
+# - CLI installs and authenticates
+# - Can review files against the real CodeRabbit API
+# - Config file (.coderabbit.yaml) is valid
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.coderabbit.yaml'
+      - 'components/backend/handlers/coderabbit_auth.go'
+      - 'components/backend/handlers/integration_validation.go'
+      - 'components/frontend/src/components/coderabbit-connection-card.tsx'
+      - 'components/runners/ambient-runner/ambient_runner/platform/auth.py'
+      - 'scripts/hooks/coderabbit-review-gate.sh'
+      - '.github/workflows/coderabbit-smoke-test.yml'
+
+  workflow_dispatch:
+
+  schedule:
+    - cron: '0 6 * * 1' # Weekly Monday 6am UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coderabbit-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke-test:
+    name: CodeRabbit Smoke Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: '20'
+
+      - name: Install CodeRabbit CLI
+        run: npm install -g coderabbit
+
+      - name: Verify CLI installed
+        run: |
+          coderabbit --version
+          echo "CLI binary: $(which coderabbit)"
+
+      - name: Validate .coderabbit.yaml schema
+        run: |
+          echo "=== Validating .coderabbit.yaml ==="
+          python3 -c "
+          import yaml, sys
+          with open('.coderabbit.yaml') as f:
+              config = yaml.safe_load(f)
+          assert 'reviews' in config, 'Missing reviews section'
+          assert 'language' in config, 'Missing language field'
+          print(f'Config valid: {len(config)} top-level keys')
+          print(f'Reviews profile: {config[\"reviews\"].get(\"profile\", \"not set\")}')
+          print(f'Auto review: {config[\"reviews\"].get(\"auto_review\", {}).get(\"enabled\", False)}')
+          print(f'Tools configured: {len(config[\"reviews\"].get(\"tools\", {}))}')
+          "
+          echo "PASSED: .coderabbit.yaml is valid"
+
+      - name: Run CodeRabbit review on config file
+        env:
+          CODERABBIT_API_KEY: ${{ secrets.CODERABBIT_API_KEY }}
+        run: |
+          echo "=== Running CodeRabbit review against real API ==="
+
+          # Skip if no API key (fork PRs, missing secret)
+          if [ -z "$CODERABBIT_API_KEY" ]; then
+            echo "CODERABBIT_API_KEY not set - skipping live review"
+            echo "This is expected for fork PRs or when the secret is not configured"
+            exit 0
+          fi
+
+          # Review the config file itself using agent mode for structured output
+          EXIT_CODE=0
+          OUTPUT=$(coderabbit review \
+            --agent \
+            --files .coderabbit.yaml \
+            2>&1) || EXIT_CODE=$?
+
+          echo "$OUTPUT"
+
+          # Auth errors are fatal
+          if echo "$OUTPUT" | grep -qiE "unauthorized|forbidden|invalid.*key"; then
+            echo "FAILED: CodeRabbit API key appears invalid"
+            exit 1
+          fi
+
+          # Non-zero exit from CLI is a real failure
+          if [ "$EXIT_CODE" -ne 0 ]; then
+            echo "FAILED: coderabbit review exited $EXIT_CODE"
+            exit 1
+          fi
+
+          echo "PASSED: CodeRabbit API responded successfully"
+
+      - name: Verify review gate runs in standalone mode
+        env:
+          CODERABBIT_API_KEY: ${{ secrets.CODERABBIT_API_KEY }}
+        run: |
+          echo "=== Testing review gate (standalone / CI mode) ==="
+          chmod +x scripts/hooks/coderabbit-review-gate.sh
+
+          # Run without CLAUDE_TOOL_INPUT — triggers standalone mode
+          # which runs coderabbit review --agent --base main directly.
+          EXIT_CODE=0
+          OUTPUT=$(bash scripts/hooks/coderabbit-review-gate.sh 2>&1) || EXIT_CODE=$?
+
+          echo "$OUTPUT"
+
+          # Exit 0 = review passed, exit 2 = findings or CLI missing
+          if [ "$EXIT_CODE" -eq 0 ]; then
+            echo "PASSED: Review gate completed successfully"
+          elif [ "$EXIT_CODE" -eq 2 ]; then
+            echo "PASSED: Review gate blocked (expected in CI — findings or rate limit)"
+          else
+            echo "FAILED: Unexpected exit code $EXIT_CODE"
+            exit 1
+          fi

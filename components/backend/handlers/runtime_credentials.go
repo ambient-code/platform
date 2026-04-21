@@ -343,6 +343,43 @@ func GetGitLabTokenForSession(c *gin.Context) {
 	})
 }
 
+// GetCodeRabbitCredentialsForSession handles GET /api/projects/:project/agentic-sessions/:session/credentials/coderabbit
+func GetCodeRabbitCredentialsForSession(c *gin.Context) {
+	project := c.Param("projectName")
+	session := c.Param("sessionName")
+
+	reqK8s, reqDyn := GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		return
+	}
+
+	effectiveUserID, ok := enforceCredentialRBAC(c, reqK8s, reqDyn, project, session)
+	if !ok {
+		return
+	}
+
+	creds, err := GetCodeRabbitCredentials(c.Request.Context(), effectiveUserID)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "CodeRabbit credentials not configured"})
+			return
+		}
+		log.Printf("Failed to get CodeRabbit credentials for user %s: %v", effectiveUserID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get CodeRabbit credentials"})
+		return
+	}
+
+	if creds == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "CodeRabbit credentials not configured"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"apiKey": creds.APIKey,
+	})
+}
+
 // refreshGoogleAccessToken refreshes a Google OAuth access token using the refresh token
 func refreshGoogleAccessToken(ctx context.Context, oldCreds *GoogleOAuthCredentials) (*GoogleOAuthCredentials, error) {
 	if oldCreds.RefreshToken == "" {
