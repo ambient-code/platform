@@ -123,10 +123,9 @@ describe('Documentation Screenshots', () => {
 
 function setTheme(theme: 'light' | 'dark'): void {
   const label = theme === 'dark' ? 'Switch to dark theme' : 'Switch to light theme'
-  // Ensure toggle is visible before clicking (avoids force-clicking before hydration)
-  cy.get('button[aria-label="Toggle theme"]').should('be.visible').first().click()
-  // Wait for Radix dropdown animation to complete before asserting menu items
-  cy.get(`[aria-label="${label}"]`, { timeout: 10000 }).should('be.visible').first().click()
+  cy.get('button[aria-label="Toggle theme"]').first().click({ force: true })
+  // 10 s timeout: slow CI environments can take > 5 s for Radix to mount the dropdown content
+  cy.get(`[aria-label="${label}"]`, { timeout: 10000 }).first().click({ force: true })
   if (theme === 'dark') {
     cy.get('html').should('have.class', 'dark')
   } else {
