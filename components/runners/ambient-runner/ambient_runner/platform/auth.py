@@ -534,7 +534,7 @@ def clear_runtime_credentials() -> None:
     """Remove sensitive credentials from environment after turn completes.
 
     Clears fixed credential keys, dynamically-injected MCP_* env vars,
-    and Google Workspace credential files.
+    and token files. Google credential files are preserved (issue #1222).
     """
     cleared = []
     for key in [
@@ -569,25 +569,11 @@ def clear_runtime_credentials() -> None:
         except OSError as e:
             logger.warning(f"Failed to remove token file {token_file}: {e}")
 
-    # Remove Google credential files — both the default workspace path and any
-    # path set via GOOGLE_APPLICATION_CREDENTIALS (used for SA JSON in Wave 5).
-    google_cred_files = {_GOOGLE_WORKSPACE_CREDS_FILE}
-    gac_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
-    if gac_path:
-        google_cred_files.add(Path(gac_path))
-
-    for google_cred_file in google_cred_files:
-        if google_cred_file.exists():
-            try:
-                google_cred_file.unlink()
-                cleared.append(str(google_cred_file.name))
-                cred_dir = google_cred_file.parent
-                if cred_dir.exists() and not any(cred_dir.iterdir()):
-                    cred_dir.rmdir()
-            except OSError as e:
-                logger.warning(
-                    f"Failed to remove Google credential file {google_cred_file}: {e}"
-                )
+    # NOTE: Google credential files (_GOOGLE_WORKSPACE_CREDS_FILE and
+    # GOOGLE_APPLICATION_CREDENTIALS) are intentionally NOT deleted here.
+    # The workspace-mcp process reads credentials from these files; deleting
+    # them between turns causes it to fall back to an inaccessible localhost
+    # OAuth flow (issue #1222).
 
     if cleared:
         logger.info(f"Cleared credentials: {', '.join(cleared)}")
