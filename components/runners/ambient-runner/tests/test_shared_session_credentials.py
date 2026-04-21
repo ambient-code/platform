@@ -325,6 +325,7 @@ class TestFetchCredentialHeaders:
         _CredentialHandler.response_body = {"token": "gh-token-for-userB"}
         _CredentialHandler.captured_headers = {}
 
+        cred_id = "cred-github-001"
         try:
             with patch.dict(
                 os.environ,
@@ -332,6 +333,7 @@ class TestFetchCredentialHeaders:
                     "BACKEND_API_URL": f"http://127.0.0.1:{port}/api",
                     "PROJECT_NAME": "test-project",
                     "BOT_TOKEN": "fake-bot-token",
+                    "CREDENTIAL_IDS": json.dumps({"github": cred_id}),
                 },
             ):
                 ctx = _make_context(
@@ -367,6 +369,7 @@ class TestFetchCredentialHeaders:
         _CredentialHandler.response_body = {"token": "owner-token"}
         _CredentialHandler.captured_headers = {}
 
+        cred_id = "cred-github-002"
         try:
             with patch.dict(
                 os.environ,
@@ -374,6 +377,7 @@ class TestFetchCredentialHeaders:
                     "BACKEND_API_URL": f"http://127.0.0.1:{port}/api",
                     "PROJECT_NAME": "test-project",
                     "BOT_TOKEN": "fake-bot-token",
+                    "CREDENTIAL_IDS": json.dumps({"github": cred_id}),
                 },
             ):
                 ctx = _make_context()  # no current_user_id
@@ -394,6 +398,7 @@ class TestFetchCredentialHeaders:
             {
                 "BACKEND_API_URL": "http://127.0.0.1:1/api",
                 "PROJECT_NAME": "test-project",
+                "CREDENTIAL_IDS": json.dumps({"github": "cred-unreachable"}),
             },
         ):
             ctx = _make_context(current_user_id="user-123")
@@ -417,23 +422,22 @@ class TestCredentialLifecycle:
         # We need to handle multiple requests (github, google, jira, gitlab, coderabbit, gerrit, kubeconfig)
         call_count = [0]
         responses = {
-            "/github": {"token": "gh-tok"},
-            "/google": {},
-            "/jira": {
-                "apiToken": "jira-tok",
+            "cred-gh": {"token": "gh-tok"},
+            "cred-google": {},
+            "cred-jira": {
+                "token": "jira-tok",
                 "url": "https://jira.example.com",
                 "email": "j@example.com",
             },
-            "/gitlab": {"token": "gl-tok"},
-            "/coderabbit": {},
-            "/gerrit": [],
-            "/kubeconfig": {},
+            "cred-gl": {"token": "gl-tok"},
+            "cred-coderabbit": {},
+            "cred-gerrit": [],
+            "cred-kubeconfig": {},
         }
 
         class MultiHandler(BaseHTTPRequestHandler):
             def do_GET(self):
                 call_count[0] += 1
-                # Extract credential type from URL path
                 for key, resp in responses.items():
                     if key in self.path:
                         self.send_response(200)
@@ -454,6 +458,18 @@ class TestCredentialLifecycle:
         )
         thread.start()
 
+        credential_ids = json.dumps(
+            {
+                "github": "cred-gh",
+                "google": "cred-google",
+                "jira": "cred-jira",
+                "gitlab": "cred-gl",
+                "coderabbit": "cred-coderabbit",
+                "gerrit": "cred-gerrit",
+                "kubeconfig": "cred-kubeconfig",
+            }
+        )
+
         try:
             with patch.dict(
                 os.environ,
@@ -461,6 +477,7 @@ class TestCredentialLifecycle:
                     "BACKEND_API_URL": f"http://127.0.0.1:{port}/api",
                     "PROJECT_NAME": "test-project",
                     "BOT_TOKEN": "fake-bot",
+                    "CREDENTIAL_IDS": credential_ids,
                 },
             ):
                 ctx = _make_context(current_user_id="userB")
@@ -512,9 +529,9 @@ class TestFetchCredentialAuthFailures:
         monkeypatch.setenv("BACKEND_API_URL", "http://backend.svc.cluster.local/api")
         monkeypatch.setenv("PROJECT_NAME", "test-project")
         monkeypatch.setenv("BOT_TOKEN", "bot-token")
+        monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"github": "cred-gh-001"}))
 
         ctx = _make_context(session_id="sess-1")
-        # No caller token — uses BOT_TOKEN directly
 
         err = HTTPError(
             "http://backend.svc.cluster.local/api/...",
@@ -537,6 +554,7 @@ class TestFetchCredentialAuthFailures:
         monkeypatch.setenv("BACKEND_API_URL", "http://backend.svc.cluster.local/api")
         monkeypatch.setenv("PROJECT_NAME", "test-project")
         monkeypatch.setenv("BOT_TOKEN", "bot-token")
+        monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"google": "cred-google-001"}))
 
         ctx = _make_context(session_id="sess-1")
 
@@ -561,6 +579,7 @@ class TestFetchCredentialAuthFailures:
         monkeypatch.setenv("BACKEND_API_URL", "http://backend.svc.cluster.local/api")
         monkeypatch.setenv("PROJECT_NAME", "test-project")
         monkeypatch.setenv("BOT_TOKEN", "bot-token")
+        monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"github": "cred-gh-002"}))
 
         ctx = _make_context(session_id="sess-1", current_user_id="user@example.com")
         ctx.caller_token = "Bearer expired-caller-token"
@@ -580,6 +599,7 @@ class TestFetchCredentialAuthFailures:
         """_fetch_credential returns {} for non-auth HTTP errors (404, 500, etc.)."""
         monkeypatch.setenv("BACKEND_API_URL", "http://backend.svc.cluster.local/api")
         monkeypatch.setenv("PROJECT_NAME", "test-project")
+        monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"github": "cred-gh-003"}))
 
         ctx = _make_context(session_id="sess-1")
 
@@ -597,6 +617,7 @@ class TestFetchCredentialAuthFailures:
         monkeypatch.setenv("BACKEND_API_URL", "http://backend.svc.cluster.local/api")
         monkeypatch.setenv("PROJECT_NAME", "test-project")
         monkeypatch.setenv("BOT_TOKEN", "valid-bot-token")
+        monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"github": "cred-gh-004"}))
 
         ctx = _make_context(session_id="sess-1", current_user_id="user@example.com")
         ctx.caller_token = "Bearer expired-caller-token"
@@ -801,6 +822,7 @@ class TestFetchCredentialBotToken:
                     {
                         "BACKEND_API_URL": f"http://127.0.0.1:{port}/api",
                         "PROJECT_NAME": "test-project",
+                        "CREDENTIAL_IDS": json.dumps({"github": "cred-gh-bot-test"}),
                     },
                 ),
                 patch(
@@ -838,6 +860,7 @@ class TestFetchCredentialBotToken:
                 {
                     "BACKEND_API_URL": "http://backend.svc.cluster.local/api",
                     "PROJECT_NAME": "test-project",
+                    "CREDENTIAL_IDS": json.dumps({"github": "cred-gh-pref"}),
                 },
             ),
             patch("urllib.request.urlopen", side_effect=fake_urlopen),
