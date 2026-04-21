@@ -680,14 +680,14 @@ objects:
           - --https-address=
           - --provider=openshift
           - --openshift-service-account=frontend
-          - --upstream=http://frontend-service:3000
+          - --upstream=http://localhost:3000
           - --openshift-delegate-urls={"/api":{"resource":"namespaces","verb":"get","name":"ambient-code","namespace":"ambient-code"},"/federate":{"resource":"namespaces","verb":"get","name":"ambient-code","namespace":"ambient-code"}}
           - --tls-cert=/etc/tls/private/tls.crt
           - --tls-key=/etc/tls/private/tls.key
           - --cookie-secret-file=/var/run/secrets/kubernetes.io/serviceaccount/token
           - --upstream-timeout=5m
           - --skip-auth-regex=^/metrics
-          - --request-logging
+          - --pass-access-token=true
           image: ${OAUTH_PROXY_IMAGE_NAME}:${OAUTH_PROXY_IMAGE_TAG}
           imagePullPolicy: IfNotPresent
           livenessProbe:
