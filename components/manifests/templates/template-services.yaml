@@ -687,6 +687,7 @@ objects:
           - --cookie-secret-file=/var/run/secrets/kubernetes.io/serviceaccount/token
           - --upstream-timeout=5m
           - --skip-auth-regex=^/metrics
+          - --pass-user-bearer-token
           image: ${OAUTH_PROXY_IMAGE_NAME}:${OAUTH_PROXY_IMAGE_TAG}
           imagePullPolicy: IfNotPresent
           livenessProbe:
