@@ -11,7 +11,7 @@ import (
 var (
 	colorOrange = lipgloss.Color("214")
 	colorCyan   = lipgloss.Color("36")
-	colorGreen  = lipgloss.Color("32")
+	colorGreen  = lipgloss.Color("28")
 	colorRed    = lipgloss.Color("31")
 	colorYellow = lipgloss.Color("33")
 	colorDim    = lipgloss.Color("240")
@@ -58,29 +58,75 @@ func (m *Model) renderHeader() string {
 	if m.refreshing {
 		spin = styleYellow.Render("  ⟳")
 	}
-	title := styleBold.Render("Ambient") +
-		styleCyan.Render(" Dashboard") +
-		age + spin +
-		styleDim.Render("  ↑↓/jk nav  ·  Tab cmd  ·  r refresh  ·  q quit")
+	title := styleOrange.Render(styleBold.Render("Ambient")) +
+		styleBlue.Render(" Dashboard") +
+		age + spin
 	return " " + title
 }
 
+func (m *Model) renderBreadcrumb() string {
+	sep := styleDim.Render(" › ")
+	crumb := styleOrange.Render(navLabels[m.nav])
+	if m.panelFocus && !m.detailMode {
+		enterHint := "Enter/→ open"
+		extra := ""
+		if m.nav == NavSessions {
+			enterHint = "Enter/→ send message"
+		}
+		if m.nav == NavAgents {
+			enterHint = "Enter/→ edit"
+			extra = "  ·  D delete"
+		}
+		return crumb + sep + styleOrange.Render("panel") + styleDim.Render("  ↑↓/jk navigate  ·  "+enterHint+extra+"  ·  Esc/← back")
+	}
+	if m.detailMode && m.detailSelectable {
+		return crumb + sep + styleDim.Render("panel") + sep + styleOrange.Render(m.detailTitle) + styleDim.Render("  ↑↓/jk navigate  ·  Enter/→ open  ·  Esc/← back")
+	}
+	if m.detailMode && m.detailSplit {
+		panel := "messages"
+		if m.detailSplitFocus == 1 {
+			panel = "pod logs"
+		}
+		return crumb + sep + styleDim.Render("panel") + sep + styleOrange.Render(m.detailTitle) + styleDim.Render("  ["+panel+"]  ↑↓/jk scroll  ·  ←/→ switch  ·  Esc back")
+	}
+	if m.detailMode {
+		return crumb + sep + styleDim.Render("panel") + sep + styleOrange.Render(m.detailTitle) + styleDim.Render("  ↑↓/jk scroll  ·  Esc/← back")
+	}
+	return styleOrange.Render(navLabels[m.nav]) + styleDim.Render("  ↑↓/jk nav  ·  Enter/→ panel  ·  Tab cmd  ·  r refresh  ·  q quit")
+}
+
 func (m *Model) renderFooter() string {
+	if m.agentConfirmDelete {
+		return styleRed.Render("⚠") + " " + styleBold.Render("Delete agent "+m.agentDeleteName+"?") + styleDim.Render("  y yes  ·  n/Esc cancel")
+	}
+	if m.agentEditMode {
+		dirty := ""
+		if m.agentEditDirty {
+			dirty = styleOrange.Render("  ●")
+		}
+		status := ""
+		if m.agentEditStatus != "" {
+			status = "  " + m.agentEditStatus
+		}
+		return styleOrange.Render("✎") + " " + styleBold.Render("Editing: "+m.agentEditAgent.Name) + dirty + styleDim.Render("  Enter save  ·  Esc cancel") + status
+	}
+	if m.composeMode {
+		return styleOrange.Render("▶") + " " + styleDim.Render("Enter send  ·  Esc cancel")
+	}
 	if m.cmdFocus {
 		return styleBlue.Render("▶") + " " + m.input.render()
 	}
 	if m.cmdRunning {
 		return styleYellow.Render("⏳") + " " + styleDim.Render("running…  (Tab to focus cmd bar)")
 	}
-	hint := styleDim.Render("Tab to focus command bar  ·  Esc to unfocus")
-	return "  " + hint
+	return " " + m.renderBreadcrumb()
 }
 
 func (m *Model) renderSidebar() []string {
 	lines := make([]string, 0, len(navLabels)+4)
-	lines = append(lines, styleBlue.Render("┌"+strings.Repeat("─", navW-2)+"┐"))
-	lines = append(lines, styleBlue.Render("│")+styleBold.Render(" Navigation")+styleBlue.Render(padTo(" ", navW-13))+"│")
-	lines = append(lines, styleBlue.Render("├"+strings.Repeat("─", navW-2)+"┤"))
+	lines = append(lines, styleOrange.Render("┌"+strings.Repeat("─", navW-2)+"┐"))
+	lines = append(lines, styleOrange.Render("│")+styleBold.Render(" Navigation")+styleOrange.Render(padTo(" ", navW-13))+"│")
+	lines = append(lines, styleOrange.Render("├"+strings.Repeat("─", navW-2)+"┤"))
 	for i, label := range navLabels {
 		nav := NavSection(i)
 		count := m.navCount(nav)
@@ -89,19 +135,21 @@ func (m *Model) renderSidebar() []string {
 			countStr = styleDim.Render(fmt.Sprintf(" (%d)", count))
 		}
 		if m.nav == nav {
-			text := styleGreen.Render("▶ "+label) + countStr
-			lines = append(lines, styleBlue.Render("│")+" "+padStyled(text, navW-3)+styleBlue.Render("│"))
+			text := styleOrange.Render("▶ "+label) + countStr
+			lines = append(lines, styleOrange.Render("│")+" "+padStyled(text, navW-3)+styleOrange.Render("│"))
 		} else {
 			text := styleDim.Render("  "+label) + countStr
-			lines = append(lines, styleBlue.Render("│")+" "+padStyled(text, navW-3)+styleBlue.Render("│"))
+			lines = append(lines, styleOrange.Render("│")+" "+padStyled(text, navW-3)+styleOrange.Render("│"))
 		}
 	}
-	lines = append(lines, styleBlue.Render("└"+strings.Repeat("─", navW-2)+"┘"))
+	lines = append(lines, styleOrange.Render("└"+strings.Repeat("─", navW-2)+"┘"))
 	return lines
 }
 
 func (m *Model) navCount(nav NavSection) int {
 	switch nav {
+	case NavDashboard:
+		return -1
 	case NavCluster:
 		return len(m.data.Pods)
 	case NavNamespaces:
@@ -120,9 +168,77 @@ func (m *Model) renderMain() []string {
 	mainW := m.width - navW - 1
 	contentH := m.mainContentH()
 
-	visible := m.mainLines
-	if m.mainScroll < len(visible) {
-		visible = visible[m.mainScroll:]
+	if m.detailMode && m.detailSplit {
+		halfH := contentH / 2
+		if halfH < 2 {
+			halfH = 2
+		}
+		bottomH := contentH - halfH - 1
+
+		renderPanel := func(src []string, scroll, h int, focused bool) []string {
+			visible := src
+			if scroll < len(visible) {
+				visible = visible[scroll:]
+			}
+			if len(visible) > h {
+				visible = visible[:h]
+			}
+			out := make([]string, h)
+			for i, l := range visible {
+				out[i] = truncateLine(l, mainW)
+			}
+			return out
+		}
+
+		topFocused := m.detailSplitFocus == 0
+		botFocused := m.detailSplitFocus == 1
+
+		sepChar := "─"
+		sepStyle := styleDim
+		if topFocused {
+			sepStyle = styleOrange
+		}
+		topIndicator := styleDim.Render(" ↑↓/jk  Tab switch")
+		if topFocused {
+			topIndicator = styleOrange.Render(" ↑↓/jk") + styleDim.Render("  Tab switch")
+		}
+
+		botSepStyle := styleDim
+		if botFocused {
+			botSepStyle = styleOrange
+		}
+		botIndicator := styleDim.Render(" ↑↓/jk")
+		if botFocused {
+			botIndicator = styleOrange.Render(" ↑↓/jk") + styleDim.Render("  Tab switch")
+		}
+		_ = botIndicator
+
+		sep := sepStyle.Render(strings.Repeat(sepChar, mainW/2)) + topIndicator
+
+		var lines []string
+		lines = append(lines, renderPanel(m.detailTopLines, m.detailTopScroll, halfH, topFocused)...)
+		lines = append(lines, sep)
+		botLines := renderPanel(m.detailBottomLines, m.detailBottomScroll, bottomH, botFocused)
+		if botFocused && len(botLines) > 0 {
+			botLines[0] = botSepStyle.Render(botLines[0])
+		}
+		lines = append(lines, botLines...)
+		return lines
+	}
+
+	var source []string
+	var scroll int
+	if m.detailMode {
+		source = m.detailLines
+		scroll = m.detailScroll
+	} else {
+		source = m.mainLines
+		scroll = m.mainScroll
+	}
+
+	visible := source
+	if scroll < len(visible) {
+		visible = visible[scroll:]
 	}
 	if len(visible) > contentH {
 		visible = visible[:contentH]
@@ -132,20 +248,6 @@ func (m *Model) renderMain() []string {
 	for i, l := range visible {
 		lines[i] = truncateLine(l, mainW)
 	}
-
-	scrollInfo := ""
-	if len(m.mainLines) > contentH {
-		pct := 0
-		if len(m.mainLines) > 0 {
-			pct = (m.mainScroll + contentH) * 100 / len(m.mainLines)
-			if pct > 100 {
-				pct = 100
-			}
-		}
-		scrollInfo = styleDim.Render(fmt.Sprintf("  %d%%  PgUp/PgDn to scroll", pct))
-	}
-	_ = scrollInfo
-
 	return lines
 }
 

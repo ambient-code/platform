@@ -3,6 +3,7 @@ package tui
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -10,9 +11,19 @@ import (
 	"sync"
 	"time"
 
+	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
 	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+)
+
+type sdkClientIface interface {
+	Sessions() *sdkclient.SessionAPI
+}
+
+var (
+	styleSelected       = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("255"))
+	styleSelectedGutter = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("▌")
 )
 
 func (m *Model) rebuildMain() {
@@ -22,7 +33,15 @@ func (m *Model) rebuildMain() {
 	}
 	contentH := m.mainContentH()
 
+	if m.agentEditMode {
+		m.mainLines = m.renderAgentEditLines(mainW)
+		m.mainScroll = 0
+		return
+	}
+
 	switch m.nav {
+	case NavDashboard:
+		m.mainLines = m.buildDashboardLines()
 	case NavCluster:
 		m.mainLines = buildClusterLines(m.data)
 	case NavNamespaces:
@@ -33,10 +52,57 @@ func (m *Model) rebuildMain() {
 		m.mainLines = m.buildSessionTiles(mainW, contentH)
 	case NavAgents:
 		m.mainLines = buildAgentLines(m.data)
-	case NavStats:
-		m.mainLines = buildStatsLines(m.data)
 	}
+
+	if m.panelFocus && !m.detailMode {
+		m.applyPanelCursor()
+	}
+
 	m.mainScroll = 0
+}
+
+func navHeaderRows(nav NavSection) int {
+	switch nav {
+	case NavDashboard:
+		return 4
+	case NavCluster, NavNamespaces, NavProjects, NavAgents, NavSessions:
+		return 4
+	default:
+		return 2
+	}
+}
+
+func applyRowCursor(lines []string, row, mainW int) {
+	if row < 0 || row >= len(lines) {
+		return
+	}
+	line := lines[row]
+	if strings.HasPrefix(line, "  ") {
+		line = styleSelectedGutter + line[2:]
+	} else {
+		line = styleSelectedGutter + line
+	}
+	vis := lipgloss.Width(line)
+	if vis < mainW {
+		line = line + strings.Repeat(" ", mainW-vis)
+	}
+	lines[row] = styleSelected.Render(line)
+}
+
+func (m *Model) applyPanelCursor() {
+	row := m.panelRow + navHeaderRows(m.nav)
+	applyRowCursor(m.mainLines, row, m.width-navW-2)
+}
+
+func (m *Model) applyDetailCursor(headerLines int) {
+	row := m.detailRow + headerLines
+	if row < 0 || row >= len(m.detailLines) {
+		return
+	}
+	rebuilt := make([]string, len(m.detailLines))
+	copy(rebuilt, m.detailLines)
+	applyRowCursor(rebuilt, row, m.width-navW-2)
+	m.detailLines = rebuilt
 }
 
 func col(s string, w int) string {
@@ -45,6 +111,72 @@ func col(s string, w int) string {
 		return string(r[:w-1]) + " "
 	}
 	return s + strings.Repeat(" ", w-len(r))
+}
+
+func (m *Model) buildDashboardLines() []string {
+	lines := []string{
+		styleBold.Render("  System Controls"),
+		"",
+		styleBold.Render("  ── Port Forwards ───────────────────────"),
+		"",
+	}
+
+	for i, pf := range m.portForwards {
+		var statusIcon, statusLabel string
+		if pf.Running {
+			statusIcon = styleGreen.Render("●")
+			statusLabel = styleGreen.Render("running")
+		} else {
+			statusIcon = styleRed.Render("○")
+			statusLabel = styleDim.Render("stopped")
+		}
+		pidStr := ""
+		if pf.Running && pf.PID > 0 {
+			pidStr = styleDim.Render(fmt.Sprintf("  pid %d", pf.PID))
+		}
+		toggle := styleDim.Render("[Enter/Space to toggle]")
+		if m.panelFocus && m.panelRow == i {
+			if pf.Running {
+				toggle = styleRed.Render("[Enter/Space: stop]")
+			} else {
+				toggle = styleGreen.Render("[Enter/Space: start]")
+			}
+		}
+		line := "  " + statusIcon + "  " +
+			styleBlue.Render(col(pf.Label, 12)) +
+			styleDim.Render(fmt.Sprintf("localhost:%-6d → %s:%d", pf.LocalPort, pf.SvcName, pf.SvcPort)) +
+			"  " + statusLabel + pidStr + "  " + toggle
+		lines = append(lines, line)
+	}
+
+	lines = append(lines, "",
+		styleBold.Render("  ── Login ───────────────────────────────"),
+		"",
+	)
+
+	loginRow := len(m.portForwards)
+	if m.loginStatus.LoggedIn {
+		loginLine := "  " + styleGreen.Render("●") + "  " +
+			styleGreen.Render(col("Logged in", 12)) +
+			styleDim.Render("user: "+m.loginStatus.User+"  ctx: "+m.loginStatus.Server+"  ns: "+m.loginStatus.Namespace)
+		lines = append(lines, loginLine)
+	} else {
+		toggle := styleDim.Render("[Enter/Space: refresh login status]")
+		if m.panelFocus && m.panelRow == loginRow {
+			toggle = styleBlue.Render("[Enter/Space: check login]")
+		}
+		loginLine := "  " + styleRed.Render("○") + "  " +
+			styleDim.Render(col("Not logged in", 14)) + "  " + toggle
+		lines = append(lines, loginLine)
+	}
+
+	lines = append(lines, "",
+		styleBold.Render("  ── Platform Stats ──────────────────────"),
+		"",
+	)
+	lines = append(lines, buildStatsLines(m.data)[1:]...)
+
+	return lines
 }
 
 func buildClusterLines(d DashData) []string {
@@ -72,7 +204,7 @@ func buildClusterLines(d DashData) []string {
 		case p.Status == "Terminating":
 			statusStyle = styleOrange
 		}
-		line := styleCyan.Render(col(p.Name, 42)) +
+		line := styleBlue.Render(col(p.Name, 42)) +
 			col(p.Ready, 8) +
 			statusStyle.Render(col(p.Status, 14)) +
 			styleDim.Render(col(p.Restarts, 10)) +
@@ -99,7 +231,7 @@ func buildNamespaceLines(d DashData) []string {
 	for _, ns := range d.Namespaces {
 		highlight := styleWhite
 		if strings.HasPrefix(ns.Name, "fleet-") || strings.HasPrefix(ns.Name, "ambient") {
-			highlight = styleCyan
+			highlight = styleBlue
 		}
 		statusStyle := styleGreen
 		if ns.Status != "Active" {
@@ -129,15 +261,12 @@ func buildProjectLines(d DashData) []string {
 		if p.CreatedAt != nil {
 			age = fmtAge(time.Since(*p.CreatedAt))
 		}
-		display := p.DisplayName
-		if display == "" {
-			display = p.Name
-		}
+		display := p.Name
 		statusStyle := styleGreen
 		if p.Status != "" && p.Status != "active" {
 			statusStyle = styleDim
 		}
-		line := styleCyan.Render(col(p.Name, 32)) +
+		line := styleBlue.Render(col(p.Name, 32)) +
 			col(display, 30) +
 			statusStyle.Render(col(p.Status, 12)) +
 			styleDim.Render(age)
@@ -157,19 +286,66 @@ func (m *Model) buildSessionTiles(w, totalH int) []string {
 		}
 	}
 
+	nameW := 38
+	header := []string{
+		"",
+		styleBold.Render(col("  PROJECT/SESSION", nameW)) + styleBold.Render("MESSAGE"),
+		styleDim.Render(strings.Repeat("─", w-2)),
+	}
+
+	msgColW := w - nameW - 4
+	if msgColW < 10 {
+		msgColW = 10
+	}
+
+	for _, sess := range sessions {
+		name := styleBlue.Render(sess.ProjectID) + styleDim.Render("/") + styleWhite.Render(sess.Name)
+		var msgCol string
+		if m.composeMode && m.composeSessionID == sess.ID {
+			msgCol = styleOrange.Render("▶ ") + m.composeInput.render()
+			if m.composeStatus != "" {
+				msgCol += "  " + m.composeStatus
+			}
+		} else {
+			msgs := m.sessionMsgs[sess.ID]
+			last := lastMessageSnippet(msgs, msgColW)
+			msgCol = styleDim.Render(last)
+		}
+		row := "  " + padStyled(name, nameW-2) + msgCol
+		header = append(header, row)
+	}
+	header = append(header, "", styleDim.Render("  ▼ live messages"), "")
+
 	n := len(sessions)
-	tileH := totalH / n
-	if tileH < 6 {
-		tileH = 6
+	tableRows := len(header)
+	remaining := totalH - tableRows
+	if remaining < 0 {
+		remaining = 0
+	}
+	tileH := remaining / n
+	const minTileH = 8
+	const maxTileH = 16
+	if tileH < minTileH {
+		tileH = minTileH
+	}
+	if tileH > maxTileH {
+		tileH = maxTileH
 	}
 	msgLines := tileH - 4
 
-	var lines []string
-	for _, sess := range sessions {
-		lines = append(lines, m.renderSessionTile(sess, w, msgLines)...)
-		lines = append(lines, "")
+	if m.sessionTileContent == nil {
+		m.sessionTileContent = make(map[string][2]int)
 	}
-	return lines
+	for _, sess := range sessions {
+		tile := m.renderSessionTile(sess, w, msgLines)
+		tileStart := len(header)
+		header = append(header, tile...)
+		header = append(header, "")
+		contentStart := tileStart + 3
+		contentEnd := tileStart + len(tile) - 1
+		m.sessionTileContent[sess.ID] = [2]int{contentStart, contentEnd}
+	}
+	return header
 }
 
 func (m *Model) renderSessionTile(sess sdktypes.Session, w, msgLines int) []string {
@@ -191,7 +367,7 @@ func (m *Model) renderSessionTile(sess sdktypes.Session, w, msgLines int) []stri
 	case "Failed", "failed", "Error":
 		phaseStyle = styleRed
 	case "Completed", "completed":
-		phaseStyle = styleCyan
+		phaseStyle = styleGreen
 	}
 
 	age := ""
@@ -204,7 +380,7 @@ func (m *Model) renderSessionTile(sess sdktypes.Session, w, msgLines int) []stri
 		idShort = idShort[:20] + "…"
 	}
 
-	titleParts := styleCyan.Render(sess.ProjectID) +
+	titleParts := styleBlue.Render(sess.ProjectID) +
 		styleDim.Render("/") +
 		styleWhite.Render(sess.Name) +
 		"  " + phaseStyle.Render(phase) +
@@ -236,7 +412,10 @@ func renderTileMessages(msgs []sdktypes.SessionMessage, w, maxLines int) []strin
 		if display == "" {
 			continue
 		}
-		ts := styleDim.Render(msg.CreatedAt.Format("15:04:05"))
+		ts := styleDim.Render("--:--:--")
+		if msg.CreatedAt != nil {
+			ts = styleDim.Render(msg.CreatedAt.Format("15:04:05"))
+		}
 		evStyle := eventTypeStyle(msg.EventType)
 		evShort := truncate(msg.EventType, 24)
 		line := ts + "  " + evStyle.Render(col(evShort, 26)) + truncate(display, w-42)
@@ -250,6 +429,16 @@ func renderTileMessages(msgs []sdktypes.SessionMessage, w, maxLines int) []strin
 	padded := make([]string, maxLines)
 	copy(padded[maxLines-len(rendered):], rendered)
 	return padded
+}
+
+func lastMessageSnippet(msgs []sdktypes.SessionMessage, maxW int) string {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		d := tileDisplayPayload(msgs[i])
+		if d != "" {
+			return truncate(d, maxW)
+		}
+	}
+	return ""
 }
 
 func tileDisplayPayload(msg sdktypes.SessionMessage) string {
@@ -312,7 +501,7 @@ func extractKVField(payload, field string) string {
 func eventTypeStyle(et string) lipgloss.Style {
 	switch {
 	case strings.HasPrefix(et, "TEXT_MESSAGE"):
-		return styleCyan
+		return styleBlue
 	case strings.HasPrefix(et, "TOOL_CALL"):
 		return styleOrange
 	case et == "RUN_FINISHED":
@@ -330,7 +519,7 @@ func buildAgentLines(d DashData) []string {
 	lines := []string{
 		styleBold.Render("  Agents") + styleDim.Render(fmt.Sprintf("  total: %d", len(d.Agents))),
 		"",
-		styleBold.Render(col("NAME", 24) + col("DISPLAY NAME", 24) + col("PROJECT", 22) + col("MODEL", 16) + "SESSION"),
+		styleBold.Render(col("NAME", 24) + col("OWNER", 27) + col("VERSION", 10) + "PROMPT"),
 		styleDim.Render(strings.Repeat("─", 100)),
 	}
 	if len(d.Agents) == 0 {
@@ -338,27 +527,13 @@ func buildAgentLines(d DashData) []string {
 		return lines
 	}
 	for _, a := range d.Agents {
-		display := a.DisplayName
-		if display == "" {
-			display = a.Name
+		prompt := a.Prompt
+		if len(prompt) > 30 {
+			prompt = prompt[:27] + "…"
 		}
-		model := a.LlmModel
-		if model == "" {
-			model = "—"
-		}
-		sess := styleDim.Render("—")
-		if a.CurrentSessionID != "" {
-			short := a.CurrentSessionID
-			if len(short) > 16 {
-				short = short[:16] + "…"
-			}
-			sess = styleGreen.Render(short)
-		}
-		line := styleCyan.Render(col(a.Name, 24)) +
-			col(display, 24) +
-			col(a.ProjectID, 22) +
-			styleDim.Render(col(model, 16)) +
-			sess
+		line := styleBlue.Render(col(a.Name, 24)) +
+			col(a.OwnerUserID, 27) +
+			styleDim.Render(prompt)
 		lines = append(lines, "  "+line)
 	}
 	return lines
@@ -396,8 +571,8 @@ func buildStatsLines(d DashData) []string {
 		styleDim.Render("  last refresh: " + age),
 		"",
 		styleBold.Render("  ── Cluster ─────────────────────────────"),
-		fmt.Sprintf("  Pods (ambient-code):  %s", styleCyan.Render(fmt.Sprintf("%d", len(d.Pods)))),
-		fmt.Sprintf("  Fleet namespaces:     %s", styleCyan.Render(fmt.Sprintf("%d", fleetNS))),
+		fmt.Sprintf("  Pods (ambient-code):  %s", styleBlue.Render(fmt.Sprintf("%d", len(d.Pods)))),
+		fmt.Sprintf("  Fleet namespaces:     %s", styleBlue.Render(fmt.Sprintf("%d", fleetNS))),
 		fmt.Sprintf("  Total namespaces:     %s", styleDim.Render(fmt.Sprintf("%d", len(d.Namespaces)))),
 	}
 
@@ -417,9 +592,9 @@ func buildStatsLines(d DashData) []string {
 
 	lines = append(lines, "",
 		styleBold.Render("  ── Platform Objects ────────────────────"),
-		fmt.Sprintf("  Projects:  %s", styleCyan.Render(fmt.Sprintf("%d", len(d.Projects)))),
-		fmt.Sprintf("  Sessions:  %s", styleCyan.Render(fmt.Sprintf("%d", len(d.Sessions)))),
-		fmt.Sprintf("  Agents:    %s", styleCyan.Render(fmt.Sprintf("%d", len(d.Agents)))),
+		fmt.Sprintf("  Projects:  %s", styleBlue.Render(fmt.Sprintf("%d", len(d.Projects)))),
+		fmt.Sprintf("  Sessions:  %s", styleBlue.Render(fmt.Sprintf("%d", len(d.Sessions)))),
+		fmt.Sprintf("  Agents:    %s", styleBlue.Render(fmt.Sprintf("%d", len(d.Agents)))),
 	)
 
 	if len(sessionsByPhase) > 0 {
@@ -435,7 +610,7 @@ func buildStatsLines(d DashData) []string {
 			case "Failed", "failed":
 				phaseStyle = styleRed
 			case "Completed", "completed":
-				phaseStyle = styleCyan
+				phaseStyle = styleGreen
 			}
 			lines = append(lines, fmt.Sprintf("  %-20s %s", phase, phaseStyle.Render(fmt.Sprintf("%d", count))))
 		}
@@ -445,6 +620,279 @@ func buildStatsLines(d DashData) []string {
 		lines = append(lines, "", styleRed.Render("  ⚠ fetch errors: "+d.Err))
 	}
 
+	return lines
+}
+
+func fetchPodLogs(namespace, podName string) []string {
+	out, err := exec.Command("kubectl", "logs", "--namespace", namespace, podName, "--tail=200", "--all-containers=true").Output()
+	if err != nil {
+		out2, _ := exec.Command("kubectl", "logs", "--namespace", namespace, podName, "--tail=200").Output()
+		if len(out2) == 0 {
+			return []string{styleRed.Render("error fetching logs: " + err.Error())}
+		}
+		out = out2
+	}
+	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+	return append([]string(nil), lines...)
+}
+
+func fetchNamespacePodsDetail(namespace string) detailReadyMsg {
+	out, err := exec.Command("kubectl", "get", "pods", "--namespace", namespace,
+		"--no-headers", "-o", "custom-columns=NAME:.metadata.name,READY:.status.containerStatuses[*].ready,STATUS:.status.phase,RESTARTS:.status.containerStatuses[*].restartCount,AGE:.metadata.creationTimestamp").Output()
+	title := "Pods in namespace: " + namespace
+	header := styleBold.Render(col("NAME", 52) + col("READY", 8) + col("STATUS", 14) + col("RESTARTS", 10) + "AGE")
+	const headerLines = 2
+	lines := []string{header, styleDim.Render(strings.Repeat("─", 110))}
+	var items []detailItem
+	if err != nil {
+		lines = append(lines, styleRed.Render("  error: "+err.Error()))
+		return detailReadyMsg{title: title, lines: lines}
+	}
+	for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
+		if l == "" {
+			continue
+		}
+		fields := strings.Fields(l)
+		if len(fields) > 0 {
+			items = append(items, detailItem{namespace: namespace, name: fields[0]})
+		}
+		lines = append(lines, "  "+l)
+	}
+	if len(items) == 0 {
+		lines = append(lines, styleDim.Render("  no pods"))
+		return detailReadyMsg{title: title, lines: lines}
+	}
+	return detailReadyMsg{
+		title:       title,
+		lines:       lines,
+		selectable:  true,
+		items:       items,
+		headerLines: headerLines,
+	}
+}
+
+func resolveSessionPod(sess sdktypes.Session) (namespace, podName string) {
+	ns := sess.KubeNamespace
+	if ns == "" {
+		ns = sess.ProjectID
+	}
+	if ns == "" {
+		return "", ""
+	}
+
+	if sess.KubeCrName != "" {
+		candidate := sess.KubeCrName + "-runner"
+		out, err := exec.Command("kubectl", "get", "pod", candidate, "--namespace", ns, "--no-headers", "-o", "name").Output()
+		if err == nil && strings.TrimSpace(string(out)) != "" {
+			return ns, candidate
+		}
+		out, err = exec.Command("kubectl", "get", "pod", sess.KubeCrName, "--namespace", ns, "--no-headers", "-o", "name").Output()
+		if err == nil && strings.TrimSpace(string(out)) != "" {
+			return ns, sess.KubeCrName
+		}
+	}
+
+	if sess.ID != "" {
+		labelSel := "ambient-code.io/session-id=" + sess.ID
+		out, err := exec.Command("kubectl", "get", "pods", "--namespace", ns, "-l", labelSel, "--no-headers", "-o", "custom-columns=NAME:.metadata.name").Output()
+		if err == nil {
+			for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+				line = strings.TrimSpace(line)
+				if line != "" {
+					return ns, line
+				}
+			}
+		}
+	}
+
+	return "", ""
+}
+
+func fetchSessionSplitDetail(sess sdktypes.Session, msgs []sdktypes.SessionMessage) splitDetailReadyMsg {
+	title := "Session: " + sess.ProjectID + "/" + sess.Name
+
+	phase := sess.Phase
+	if phase == "" {
+		phase = "unknown"
+	}
+	age := "—"
+	if sess.CreatedAt != nil {
+		age = fmtAge(time.Since(*sess.CreatedAt))
+	}
+
+	topLines := []string{
+		styleBold.Render("  Session Detail"),
+		"",
+		"  " + col("ID:", 16) + styleBlue.Render(sess.ID),
+		"  " + col("Name:", 16) + styleWhite.Render(sess.Name),
+		"  " + col("Project:", 16) + sess.ProjectID,
+		"  " + col("Phase:", 16) + phase,
+		"  " + col("Age:", 16) + age,
+		"  " + col("Model:", 16) + sess.LlmModel,
+		"",
+		styleBold.Render("  ── Messages ────────────────────────────────"),
+		"",
+	}
+	if len(msgs) == 0 {
+		topLines = append(topLines, styleDim.Render("  no messages"))
+	}
+	for _, msg := range msgs {
+		display := tileDisplayPayload(msg)
+		if display == "" {
+			continue
+		}
+		ts := styleDim.Render("--:--:--")
+		if msg.CreatedAt != nil {
+			ts = styleDim.Render(msg.CreatedAt.Format("15:04:05"))
+		}
+		evStyle := eventTypeStyle(msg.EventType)
+		seqStr := styleDim.Render(fmt.Sprintf("#%-4d", msg.Seq))
+		topLines = append(topLines, "  "+seqStr+"  "+ts+"  "+evStyle.Render(col(msg.EventType, 22))+"  "+display)
+	}
+
+	var bottomLines []string
+	podNS, podName := resolveSessionPod(sess)
+	if podNS != "" && podName != "" {
+		bottomLines = append(bottomLines,
+			styleBold.Render("  ── Pod Logs: "+podNS+"/"+podName+" ────────────────"),
+			"",
+		)
+		bottomLines = append(bottomLines, fetchPodLogs(podNS, podName)...)
+	} else {
+		bottomLines = []string{
+			styleBold.Render("  ── Pod Logs ────────────────────────────────"),
+			"",
+			styleDim.Render("  no pod info available"),
+		}
+	}
+
+	return splitDetailReadyMsg{
+		title:       title,
+		topLines:    topLines,
+		bottomLines: bottomLines,
+	}
+}
+
+func fetchProjectSessionsDetail(ctx context.Context, client sdkClientIface, proj sdktypes.Project) detailReadyMsg {
+	title := "Project: " + proj.Name
+	const headerLines = 2
+	lines := []string{
+		styleBold.Render(col("NAME", 30) + col("PHASE", 14) + col("MODEL", 22) + "AGE"),
+		styleDim.Render(strings.Repeat("─", 100)),
+	}
+	sessionList, err := client.Sessions().List(ctx, nil)
+	if err != nil {
+		return detailReadyMsg{title: title, lines: append(lines, styleRed.Render("  error: "+err.Error()))}
+	}
+	var items []detailItem
+	for _, sess := range sessionList.Items {
+		if sess.ProjectID != proj.ID {
+			continue
+		}
+		phase := sess.Phase
+		if phase == "" {
+			phase = "unknown"
+		}
+		phaseStyle := styleDim
+		switch phase {
+		case "Running", "running":
+			phaseStyle = styleGreen
+		case "Pending", "Creating":
+			phaseStyle = styleYellow
+		case "Failed", "Error":
+			phaseStyle = styleRed
+		case "Completed":
+			phaseStyle = styleGreen
+		}
+		age := "—"
+		if sess.CreatedAt != nil {
+			age = fmtAge(time.Since(*sess.CreatedAt))
+		}
+		line := styleBlue.Render(col(sess.Name, 30)) +
+			phaseStyle.Render(col(phase, 14)) +
+			styleDim.Render(col(sess.LlmModel, 22)) +
+			styleDim.Render(age)
+		lines = append(lines, "  "+line)
+		items = append(items, detailItem{kind: "session", id: sess.ID, name: sess.Name, namespace: proj.ID})
+	}
+	if len(items) == 0 {
+		lines = append(lines, styleDim.Render("  no sessions"))
+		return detailReadyMsg{title: title, lines: lines}
+	}
+	return detailReadyMsg{
+		title:       title,
+		lines:       lines,
+		selectable:  true,
+		items:       items,
+		headerLines: headerLines,
+	}
+}
+
+func renderAgentDetail(agent sdktypes.Agent) []string {
+	return []string{
+		styleBold.Render("  Agent Detail"),
+		"",
+		"  " + col("ID:", 20) + styleBlue.Render(agent.ID),
+		"  " + col("Name:", 20) + styleWhite.Render(agent.Name),
+		"  " + col("Owner:", 20) + agent.OwnerUserID,
+		"",
+		styleBold.Render("  ── Prompt ──────────────────────────────────"),
+		"",
+		"  " + styleDim.Render(agent.Prompt),
+	}
+}
+
+func (m *Model) renderAgentEditLines(mainW int) []string {
+	agent := m.agentEditAgent
+	runes := []rune(m.agentEditPrompt)
+	cur := m.agentEditCursor
+	if cur > len(runes) {
+		cur = len(runes)
+	}
+
+	before := string(runes[:cur])
+	cursorCh := "█"
+	after := ""
+	if cur < len(runes) {
+		cursorCh = string(runes[cur : cur+1])
+		after = string(runes[cur+1:])
+	}
+
+	dirtyMark := ""
+	if m.agentEditDirty {
+		dirtyMark = " " + styleOrange.Render("●")
+	}
+
+	lines := []string{
+		styleBold.Render("  ✎ Edit Agent") + dirtyMark,
+		"",
+		"  " + col("ID:", 20) + styleBlue.Render(agent.ID),
+		"  " + col("Name:", 20) + styleWhite.Render(agent.Name),
+		"  " + col("Owner:", 20) + agent.OwnerUserID,
+		"",
+		styleOrange.Render("  ── Prompt (editing) ────────────────────────"),
+		"",
+	}
+
+	promptW := mainW - 4
+	if promptW < 20 {
+		promptW = 20
+	}
+	fullPrompt := before + styleBold.Render(cursorCh) + after
+	var promptLines []string
+	remaining := fullPrompt
+	for len([]rune(remaining)) > 0 {
+		if lipgloss.Width(remaining) <= promptW {
+			promptLines = append(promptLines, "  "+remaining)
+			break
+		}
+		promptLines = append(promptLines, "  "+string([]rune(remaining)[:promptW]))
+		remaining = string([]rune(remaining)[promptW:])
+	}
+	if len(promptLines) == 0 {
+		promptLines = []string{"  " + styleBold.Render("█")}
+	}
+	lines = append(lines, promptLines...)
 	return lines
 }
 
