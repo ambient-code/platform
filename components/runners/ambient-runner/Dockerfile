@@ -43,6 +43,9 @@ RUN pip3 install --break-system-packages --no-cache-dir '/app/ambient-runner[all
 RUN npm install -g @google/gemini-cli@${GEMINI_CLI_VERSION} && \
     npm cache clean --force
 
+# Install CodeRabbit CLI (official install script, binary for current arch)
+RUN curl -fsSL https://cli.coderabbit.ai/install.sh | CODERABBIT_INSTALL_DIR=/usr/local/bin sh
+
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1

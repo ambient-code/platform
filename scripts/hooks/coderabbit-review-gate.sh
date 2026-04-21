@@ -34,7 +34,7 @@ fi
 # Require CodeRabbit CLI
 if ! command -v coderabbit &>/dev/null; then
     echo "Review Gate: CodeRabbit CLI not found — cannot enforce review gate" >&2
-    echo "Install: npm install -g coderabbit" >&2
+    echo "Install: curl -fsSL https://cli.coderabbit.ai/install.sh | sh" >&2
     exit 2
 fi
 
