@@ -258,6 +258,11 @@ func ValidateGerritToken(ctx context.Context, gerritURL, authMethod, username, h
 // TestGerritConnection handles POST /api/auth/gerrit/test
 // Tests Gerrit credentials without saving them
 func TestGerritConnection(c *gin.Context) {
+	if !FeatureEnabledForRequest(c, "gerrit.enabled") {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		return
+	}
+
 	var req struct {
 		URL               string `json:"url" binding:"required"`
 		AuthMethod        string `json:"authMethod" binding:"required"`
