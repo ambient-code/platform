@@ -24,8 +24,8 @@ func TestGetProjects_List(t *testing.T) {
 		srv.RespondJSON(t, w, http.StatusOK, &types.ProjectList{
 			ListMeta: types.ListMeta{Total: 2},
 			Items: []types.Project{
-				{ObjectReference: types.ObjectReference{ID: "p1", CreatedAt: makeTime("2026-01-01T00:00:00Z")}, Name: "alpha", DisplayName: "Alpha"},
-				{ObjectReference: types.ObjectReference{ID: "p2", CreatedAt: makeTime("2026-01-02T00:00:00Z")}, Name: "beta", DisplayName: "Beta"},
+				{ObjectReference: types.ObjectReference{ID: "p1", CreatedAt: makeTime("2026-01-01T00:00:00Z")}, Name: "alpha"},
+				{ObjectReference: types.ObjectReference{ID: "p2", CreatedAt: makeTime("2026-01-02T00:00:00Z")}, Name: "beta"},
 			},
 		})
 	})
@@ -49,7 +49,6 @@ func TestGetProjects_Single(t *testing.T) {
 		srv.RespondJSON(t, w, http.StatusOK, &types.Project{
 			ObjectReference: types.ObjectReference{ID: "p1"},
 			Name:            "alpha",
-			DisplayName:     "Alpha Project",
 		})
 	})
 
@@ -162,7 +161,6 @@ func TestGetAgents_List(t *testing.T) {
 				{
 					ObjectReference: types.ObjectReference{ID: "a1", CreatedAt: makeTime("2026-01-01T00:00:00Z")},
 					Name:            "overlord",
-					DisplayName:     "Overlord",
 					ProjectID:       testhelper.TestProject,
 				},
 			},

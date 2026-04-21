@@ -11,19 +11,21 @@ import (
 
 func TestStart_Success(t *testing.T) {
 	srv := testhelper.NewServer(t)
-	srv.Handle("/api/ambient/v1/sessions/s1/start", func(w http.ResponseWriter, r *http.Request) {
+	srv.Handle("/api/ambient/v1/projects/proj-1/agents/pa-1/start", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Errorf("expected POST, got %s", r.Method)
 		}
-		srv.RespondJSON(t, w, http.StatusOK, &types.Session{
-			ObjectReference: types.ObjectReference{ID: "s1"},
-			Name:            "my-session",
-			Phase:           "running",
+		srv.RespondJSON(t, w, http.StatusCreated, &types.StartResponse{
+			Session: &types.Session{
+				ObjectReference: types.ObjectReference{ID: "s1"},
+				Name:            "my-session",
+				Phase:           "running",
+			},
 		})
 	})
 
 	testhelper.Configure(t, srv.URL)
-	result := testhelper.Run(t, Cmd, "s1")
+	result := testhelper.Run(t, Cmd, "pa-1", "--project-id", "proj-1")
 	if result.Err != nil {
 		t.Fatalf("unexpected error: %v\nstdout: %s\nstderr: %s", result.Err, result.Stdout, result.Stderr)
 	}
@@ -37,20 +39,20 @@ func TestStart_Success(t *testing.T) {
 
 func TestStart_NotFound(t *testing.T) {
 	srv := testhelper.NewServer(t)
-	srv.Handle("/api/ambient/v1/sessions/missing/start", func(w http.ResponseWriter, r *http.Request) {
+	srv.Handle("/api/ambient/v1/projects/proj-1/agents/missing/start", func(w http.ResponseWriter, r *http.Request) {
 		srv.RespondJSON(t, w, http.StatusNotFound, &types.APIError{
 			Code:   "not_found",
-			Reason: "session not found",
+			Reason: "project-agent not found",
 		})
 	})
 
 	testhelper.Configure(t, srv.URL)
-	result := testhelper.Run(t, Cmd, "missing")
+	result := testhelper.Run(t, Cmd, "missing", "--project-id", "proj-1")
 	if result.Err == nil {
-		t.Fatal("expected error for missing session")
+		t.Fatal("expected error for missing project-agent")
 	}
-	if !strings.Contains(result.Err.Error(), "start session") {
-		t.Errorf("expected 'start session' in error, got: %v", result.Err)
+	if !strings.Contains(result.Err.Error(), "start agent") {
+		t.Errorf("expected 'start agent' in error, got: %v", result.Err)
 	}
 }
 
@@ -59,21 +61,35 @@ func TestStart_RequiresArg(t *testing.T) {
 	testhelper.Configure(t, srv.URL)
 	result := testhelper.Run(t, Cmd)
 	if result.Err == nil {
-		t.Fatal("expected error for missing session ID argument")
+		t.Fatal("expected error for missing project-agent ID argument")
+	}
+}
+
+func TestStart_RequiresProjectID(t *testing.T) {
+	srv := testhelper.NewServer(t)
+	testhelper.Configure(t, srv.URL)
+	result := testhelper.Run(t, Cmd, "pa-1")
+	if result.Err == nil {
+		t.Fatal("expected error for missing --project-id")
+	}
+	if !strings.Contains(result.Err.Error(), "--project-id is required") {
+		t.Errorf("expected '--project-id is required', got: %v", result.Err)
 	}
 }
 
 func TestStart_OutputContainsID(t *testing.T) {
 	srv := testhelper.NewServer(t)
-	srv.Handle("/api/ambient/v1/sessions/abc-123/start", func(w http.ResponseWriter, r *http.Request) {
-		srv.RespondJSON(t, w, http.StatusOK, &types.Session{
-			ObjectReference: types.ObjectReference{ID: "abc-123"},
-			Phase:           "pending",
+	srv.Handle("/api/ambient/v1/projects/proj-1/agents/pa-abc/start", func(w http.ResponseWriter, r *http.Request) {
+		srv.RespondJSON(t, w, http.StatusCreated, &types.StartResponse{
+			Session: &types.Session{
+				ObjectReference: types.ObjectReference{ID: "abc-123"},
+				Phase:           "pending",
+			},
 		})
 	})
 
 	testhelper.Configure(t, srv.URL)
-	result := testhelper.Run(t, Cmd, "abc-123")
+	result := testhelper.Run(t, Cmd, "pa-abc", "--project-id", "proj-1")
 	if result.Err != nil {
 		t.Fatalf("unexpected error: %v", result.Err)
 	}

@@ -18,7 +18,6 @@ func TestCreateProject_Success(t *testing.T) {
 		srv.RespondJSON(t, w, http.StatusCreated, &types.Project{
 			ObjectReference: types.ObjectReference{ID: "p-new"},
 			Name:            "my-project",
-			DisplayName:     "My Project",
 		})
 	})
 
@@ -65,7 +64,7 @@ func TestCreateProject_JSON(t *testing.T) {
 
 func TestCreateAgent_Success(t *testing.T) {
 	srv := testhelper.NewServer(t)
-	srv.Handle("/api/ambient/v1/projects/"+testhelper.TestProject+"/agents", func(w http.ResponseWriter, r *http.Request) {
+	srv.Handle("/api/ambient/v1/projects/my-project/agents", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Errorf("expected POST, got %s", r.Method)
 		}
@@ -80,10 +79,7 @@ func TestCreateAgent_Success(t *testing.T) {
 	result := testhelper.Run(t, Cmd, "agent",
 		"--name", "overlord",
 		"--project-id", "my-project",
-		"--owner-user-id", "user-1",
 		"--prompt", "You coordinate the fleet",
-		"--repo-url", "https://github.com/org/repo",
-		"--model", "sonnet",
 	)
 	if result.Err != nil {
 		t.Fatalf("unexpected error: %v\nstdout: %s\nstderr: %s", result.Err, result.Stdout, result.Stderr)
@@ -96,7 +92,7 @@ func TestCreateAgent_Success(t *testing.T) {
 func TestCreateAgent_MissingName(t *testing.T) {
 	srv := testhelper.NewServer(t)
 	testhelper.Configure(t, srv.URL)
-	result := testhelper.Run(t, Cmd, "agent", "--project-id", "p1", "--owner-user-id", "u1")
+	result := testhelper.Run(t, Cmd, "agent", "--project-id", "p1")
 	if result.Err == nil {
 		t.Fatal("expected error for missing --name")
 	}
@@ -105,27 +101,15 @@ func TestCreateAgent_MissingName(t *testing.T) {
 	}
 }
 
-func TestCreateAgent_MissingProjectID(t *testing.T) {
+func TestCreateAgent_ProjectIDRequired(t *testing.T) {
 	srv := testhelper.NewServer(t)
 	testhelper.Configure(t, srv.URL)
-	result := testhelper.Run(t, Cmd, "agent", "--name", "x", "--owner-user-id", "u1")
+	result := testhelper.Run(t, Cmd, "agent", "--name", "x")
 	if result.Err == nil {
 		t.Fatal("expected error for missing --project-id")
 	}
 	if !strings.Contains(result.Err.Error(), "--project-id is required") {
 		t.Errorf("expected '--project-id is required', got: %v", result.Err)
-	}
-}
-
-func TestCreateAgent_MissingOwnerUserID(t *testing.T) {
-	srv := testhelper.NewServer(t)
-	testhelper.Configure(t, srv.URL)
-	result := testhelper.Run(t, Cmd, "agent", "--name", "x", "--project-id", "p1")
-	if result.Err == nil {
-		t.Fatal("expected error for missing --owner-user-id")
-	}
-	if !strings.Contains(result.Err.Error(), "--owner-user-id is required") {
-		t.Errorf("expected '--owner-user-id is required', got: %v", result.Err)
 	}
 }
 
@@ -178,7 +162,6 @@ func TestCreateRole_Success(t *testing.T) {
 		srv.RespondJSON(t, w, http.StatusCreated, &types.Role{
 			ObjectReference: types.ObjectReference{ID: "r-new"},
 			Name:            "agent:runner",
-			DisplayName:     "Agent Runner",
 		})
 	})
 
