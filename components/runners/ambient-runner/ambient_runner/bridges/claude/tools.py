@@ -100,8 +100,7 @@ def create_refresh_credentials_tool(context_ref, sdk_tool_decorator):
             diagnostics = _check_mcp_auth_after_refresh()
 
             parts = [
-                f"Credentials refreshed successfully. "
-                f"Active integrations: {summary}.",
+                f"Credentials refreshed successfully. Active integrations: {summary}.",
             ]
             if diagnostics:
                 parts.append(f"MCP diagnostics: {diagnostics}")

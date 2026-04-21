@@ -123,16 +123,6 @@ func inferParentPath(pathSegment string) string {
 	return strings.Join(parts[:len(parts)-1], "/")
 }
 
-func leafSegment(pathSegment string) string {
-	parts := strings.Split(pathSegment, "/")
-	for i := len(parts) - 1; i >= 0; i-- {
-		if !strings.Contains(parts[i], "{") {
-			return parts[i]
-		}
-	}
-	return pathSegment
-}
-
 type openAPIDoc struct {
 	Paths      map[string]interface{} `yaml:"paths"`
 	Components struct {

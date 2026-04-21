@@ -4,16 +4,16 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**Id** | Pointer to **string** |  | [optional] 
-**Kind** | Pointer to **string** |  | [optional] 
-**Href** | Pointer to **string** |  | [optional] 
-**CreatedAt** | Pointer to **time.Time** |  | [optional] 
-**UpdatedAt** | Pointer to **time.Time** |  | [optional] 
-**AgentId** | **string** | Recipient — the agent address | 
-**FromAgentId** | Pointer to **string** | Sender Agent id — null if sent by a human | [optional] 
-**FromName** | Pointer to **string** | Denormalized sender display name | [optional] 
-**Body** | **string** |  | 
-**Read** | Pointer to **bool** | false &#x3D; unread; drained at session start | [optional] [readonly] 
+**Id** | Pointer to **string** |  | [optional]
+**Kind** | Pointer to **string** |  | [optional]
+**Href** | Pointer to **string** |  | [optional]
+**CreatedAt** | Pointer to **time.Time** |  | [optional]
+**UpdatedAt** | Pointer to **time.Time** |  | [optional]
+**AgentId** | **string** | Recipient — the agent address |
+**FromAgentId** | Pointer to **string** | Sender Agent id — null if sent by a human | [optional]
+**FromName** | Pointer to **string** | Denormalized sender display name | [optional]
+**Body** | **string** |  |
+**Read** | Pointer to **bool** | false &#x3D; unread; drained at session start | [optional] [readonly]
 
 ## Methods
 
@@ -276,5 +276,3 @@ HasRead returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
-
-

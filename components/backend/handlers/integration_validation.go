@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"time"
@@ -226,4 +227,30 @@ func TestGitLabConnection(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"valid": true, "message": "GitLab connection successful"})
+}
+
+// TestCodeRabbitConnection handles POST /api/auth/coderabbit/test
+func TestCodeRabbitConnection(c *gin.Context) {
+	var req struct {
+		APIKey string `json:"apiKey" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	valid, err := ValidateCodeRabbitAPIKey(c.Request.Context(), req.APIKey)
+	if err != nil {
+		log.Printf("CodeRabbit API key validation failed: %v", err)
+		c.JSON(http.StatusOK, gin.H{"valid": false, "error": "Failed to validate API key with CodeRabbit"})
+		return
+	}
+
+	if !valid {
+		c.JSON(http.StatusOK, gin.H{"valid": false, "error": "Invalid API key"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"valid": true, "message": "CodeRabbit connection successful"})
 }

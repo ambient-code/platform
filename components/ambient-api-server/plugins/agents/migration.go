@@ -45,12 +45,12 @@ func agentSchemaExpansionMigration() *gormigrate.Migration {
 	type Agent struct {
 		db.Model
 		ProjectId            string
-		ParentAgentId        *string  `gorm:"index"`
+		ParentAgentId        *string `gorm:"index"`
 		OwnerUserId          *string
 		Name                 string
 		DisplayName          *string
 		Description          *string
-		Prompt               *string  `gorm:"type:text"`
+		Prompt               *string `gorm:"type:text"`
 		RepoUrl              *string
 		WorkflowId           *string
 		LlmModel             *string

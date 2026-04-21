@@ -18,6 +18,7 @@ export function IntegrationsPanel() {
   const githubConfigured = integrationsStatus?.github?.active != null;
   const gitlabConfigured = integrationsStatus?.gitlab?.connected ?? false;
   const jiraConfigured = integrationsStatus?.jira?.connected ?? false;
+  const coderabbitConfigured = integrationsStatus?.coderabbit?.connected ?? false;
   const googleConfigured = integrationsStatus?.google?.connected ?? false;
 
   const integrations = [
@@ -47,6 +48,15 @@ export function IntegrationsPanel() {
       name: "Jira",
       configured: jiraConfigured,
       configuredMessage: "Authenticated. Issue and project access enabled.",
+    },
+    {
+      key: "coderabbit",
+      name: "CodeRabbit",
+      configured: true,
+      configuredMessage:
+        coderabbitConfigured
+          ? "Active. API key configured for private repos."
+          : "Active for public repositories. No configuration needed.",
     },
   ].sort((a, b) => a.name.localeCompare(b.name));
 
@@ -132,4 +142,3 @@ function IntegrationCard({
     </div>
   );
 }
-

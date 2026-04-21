@@ -4,11 +4,11 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**AgentId** | Pointer to **string** |  | [optional] 
-**AgentName** | Pointer to **string** |  | [optional] 
-**SessionPhase** | Pointer to **string** |  | [optional] 
-**InboxUnreadCount** | Pointer to **int32** |  | [optional] 
-**Summary** | Pointer to **string** |  | [optional] 
+**AgentId** | Pointer to **string** |  | [optional]
+**AgentName** | Pointer to **string** |  | [optional]
+**SessionPhase** | Pointer to **string** |  | [optional]
+**InboxUnreadCount** | Pointer to **int32** |  | [optional]
+**Summary** | Pointer to **string** |  | [optional]
 
 ## Methods
 
@@ -156,5 +156,3 @@ HasSummary returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
-
-
