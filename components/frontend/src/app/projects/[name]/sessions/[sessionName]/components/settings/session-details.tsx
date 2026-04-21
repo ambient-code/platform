@@ -51,6 +51,11 @@ export function SessionDetails({ session, onEditName }: SessionDetailsProps) {
             {session.metadata.name}
           </span>
         </Row>
+        <Row label="Author">
+          <span className="text-sm text-muted-foreground">
+            {session.spec.userContext?.displayName || session.spec.userContext?.userId || "—"}
+          </span>
+        </Row>
         <Row label="Model">
           <span className="text-sm text-muted-foreground truncate max-w-[200px]">
             {model}

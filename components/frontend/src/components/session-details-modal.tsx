@@ -74,6 +74,15 @@ export function SessionDetailsModal({
               </Badge>
             </div>
 
+            {session.spec.userContext?.displayName && (
+              <div className="flex items-start gap-3">
+                <span className="font-semibold text-foreground/80 min-w-[100px]">Author:</span>
+                <span className="text-foreground">
+                  {session.spec.userContext.displayName}
+                </span>
+              </div>
+            )}
+
             <div className="flex items-start gap-3">
               <span className="font-semibold text-foreground/80 min-w-[100px]">Model:</span>
               <span className="text-foreground">{session.spec.llmSettings.model}</span>
