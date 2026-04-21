@@ -20,6 +20,7 @@ BRIDGE_REGISTRY: dict[str, tuple[str, str]] = {
     "claude-agent-sdk": ("ambient_runner.bridges.claude", "ClaudeBridge"),
     "gemini-cli": ("ambient_runner.bridges.gemini_cli", "GeminiCLIBridge"),
     "langgraph": ("ambient_runner.bridges.langgraph", "LangGraphBridge"),
+    "cursor-cli": ("ambient_runner.bridges.cursor_cli", "CursorCLIBridge"),
 }
 
 

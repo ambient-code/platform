@@ -43,6 +43,9 @@ jobs:
           echo "uv=$(parse UV_VERSION)" >> "$GITHUB_OUTPUT"
           echo "pre_commit=$(parse PRE_COMMIT_VERSION)" >> "$GITHUB_OUTPUT"
           echo "gemini_cli=$(parse GEMINI_CLI_VERSION)" >> "$GITHUB_OUTPUT"
+          # Cursor CLI: ARG is documentation-only (installer fetches latest).
+          # Parsed here for visibility in the PR summary table.
+          echo "cursor_cli=$(parse CURSOR_CLI_VERSION)" >> "$GITHUB_OUTPUT"
 
       # ── Fetch latest upstream versions ────────────────────────────────
 
@@ -102,6 +105,11 @@ jobs:
             "https://registry.npmjs.org/@google/gemini-cli/latest" \
             '.version' &
           pids+=($!); names+=("gemini-cli")
+          # Cursor CLI: no package registry — pass through the current pinned value.
+          # The installer (cursor.com/install) fetches "latest" automatically; automated
+          # version bumps are not yet possible. Update CURSOR_CLI_VERSION manually once
+          # Cursor publishes versioned binary releases.
+          echo "cursor_cli=${{ steps.current.outputs.cursor_cli }}" >> "$GITHUB_OUTPUT"
 
           failed=false
           for i in "${!pids[@]}"; do
@@ -129,6 +137,8 @@ jobs:
           LAT_PC: ${{ steps.latest.outputs.pre_commit }}
           CUR_GEM: ${{ steps.current.outputs.gemini_cli }}
           LAT_GEM: ${{ steps.latest.outputs.gemini_cli }}
+          CUR_CURSOR: ${{ steps.current.outputs.cursor_cli }}
+          LAT_CURSOR: ${{ steps.latest.outputs.cursor_cli }}
         run: |
           needs_update=false
           updates=""
@@ -162,6 +172,10 @@ jobs:
           check_tool uv "$CUR_UV" "$LAT_UV"
           check_tool pc "$CUR_PC" "$LAT_PC"
           check_tool gem "$CUR_GEM" "$LAT_GEM"
+          # Cursor CLI: latest always equals current (pass-through) — check_tool
+          # will always emit cursor=false. Included for future use when Cursor
+          # publishes a queryable version registry.
+          check_tool cursor "$CUR_CURSOR" "$LAT_CURSOR"
 
           echo "any=$needs_update" >> "$GITHUB_OUTPUT"
           echo "updates=$updates" >> "$GITHUB_OUTPUT"
@@ -184,12 +198,15 @@ jobs:
           LAT_PC: ${{ steps.latest.outputs.pre_commit }}
           CUR_GEM: ${{ steps.current.outputs.gemini_cli }}
           LAT_GEM: ${{ steps.latest.outputs.gemini_cli }}
+          CUR_CURSOR: ${{ steps.current.outputs.cursor_cli }}
+          LAT_CURSOR: ${{ steps.latest.outputs.cursor_cli }}
           UPD_BASE: ${{ steps.diff.outputs.base }}
           UPD_GH: ${{ steps.diff.outputs.gh }}
           UPD_GLAB: ${{ steps.diff.outputs.glab }}
           UPD_UV: ${{ steps.diff.outputs.uv }}
           UPD_PC: ${{ steps.diff.outputs.pc }}
           UPD_GEM: ${{ steps.diff.outputs.gem }}
+          UPD_CURSOR: ${{ steps.diff.outputs.cursor }}
         run: |
           # Build sed expressions for all components that need updating
           SED_ARGS=()
@@ -199,12 +216,17 @@ jobs:
           [ "$UPD_UV" = "true" ] && SED_ARGS+=(-e "s/ARG UV_VERSION=${CUR_UV}/ARG UV_VERSION=${LAT_UV}/")
           [ "$UPD_PC" = "true" ] && SED_ARGS+=(-e "s/ARG PRE_COMMIT_VERSION=${CUR_PC}/ARG PRE_COMMIT_VERSION=${LAT_PC}/")
           [ "$UPD_GEM" = "true" ] && SED_ARGS+=(-e "s/ARG GEMINI_CLI_VERSION=${CUR_GEM}/ARG GEMINI_CLI_VERSION=${LAT_GEM}/")
+          # Cursor CLI: UPD_CURSOR will always be false (pass-through); included for
+          # future use when Cursor publishes a queryable release registry.
+          [ "$UPD_CURSOR" = "true" ] && SED_ARGS+=(-e "s/ARG CURSOR_CLI_VERSION=${CUR_CURSOR}/ARG CURSOR_CLI_VERSION=${LAT_CURSOR}/")
 
           if [ ${#SED_ARGS[@]} -gt 0 ]; then
             sed -i "${SED_ARGS[@]}" "$DOCKERFILE"
           fi
 
-          # Sanity check: all ARGs still present and non-empty
+          # Sanity check: all version-controlled ARGs still present and non-empty.
+          # CURSOR_CLI_VERSION is intentionally excluded — it is a documentation-only
+          # placeholder and does not control what the installer fetches.
           for arg in GH_VERSION GLAB_VERSION UV_VERSION PRE_COMMIT_VERSION GEMINI_CLI_VERSION; do
             if ! grep -qP "ARG ${arg}=\S+" "$DOCKERFILE"; then
               echo "ERROR: ${arg} missing or empty after update"
@@ -247,6 +269,7 @@ jobs:
           LAT_PC: ${{ steps.latest.outputs.pre_commit }}
           CUR_GEM: ${{ steps.current.outputs.gemini_cli }}
           LAT_GEM: ${{ steps.latest.outputs.gemini_cli }}
+          CUR_CURSOR: ${{ steps.current.outputs.cursor_cli }}
           UPD_BASE: ${{ steps.diff.outputs.base }}
           UPD_GH: ${{ steps.diff.outputs.gh }}
           UPD_GLAB: ${{ steps.diff.outputs.glab }}
@@ -270,6 +293,7 @@ jobs:
           [ "$UPD_UV" = "true" ] && CHANGED="${CHANGED}uv "
           [ "$UPD_PC" = "true" ] && CHANGED="${CHANGED}pre-commit "
           [ "$UPD_GEM" = "true" ] && CHANGED="${CHANGED}gemini-cli "
+          # cursor-cli is never updated automatically (pass-through); omit from title
           CHANGED=$(echo "$CHANGED" | xargs | tr ' ' ', ')
 
           git commit -m "chore(runner): update ${CHANGED}
@@ -293,6 +317,7 @@ jobs:
           | uv | $(status "$UPD_UV" "$CUR_UV" "$LAT_UV") |
           | pre-commit | $(status "$UPD_PC" "$CUR_PC" "$LAT_PC") |
           | gemini-cli | $(status "$UPD_GEM" "$CUR_GEM" "$LAT_GEM") |
+          | cursor-cli | \`${CUR_CURSOR}\` (installer fetches latest — no auto-bump) |
 
           ### Components not version-pinned (updated with base image)
 
@@ -333,6 +358,7 @@ jobs:
           LAT_PC: ${{ steps.latest.outputs.pre_commit }}
           CUR_GEM: ${{ steps.current.outputs.gemini_cli }}
           LAT_GEM: ${{ steps.latest.outputs.gemini_cli }}
+          CUR_CURSOR: ${{ steps.current.outputs.cursor_cli }}
           ANY_UPDATE: ${{ steps.diff.outputs.any }}
           PR_EXISTS: ${{ steps.existing_pr.outputs.pr_exists || 'false' }}
         run: |
@@ -349,6 +375,7 @@ jobs:
             echo "| uv | \`${CUR_UV}\` | \`${LAT_UV}\` | $(icon "$CUR_UV" "$LAT_UV") |"
             echo "| pre-commit | \`${CUR_PC}\` | \`${LAT_PC}\` | $(icon "$CUR_PC" "$LAT_PC") |"
             echo "| gemini-cli | \`${CUR_GEM}\` | \`${LAT_GEM}\` | $(icon "$CUR_GEM" "$LAT_GEM") |"
+            echo "| cursor-cli | \`${CUR_CURSOR}\` | (installer fetches latest) | ℹ️ |"
             echo ""
             if [ "$ANY_UPDATE" = "true" ]; then
               if [ "$PR_EXISTS" = "true" ]; then

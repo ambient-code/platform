@@ -3,7 +3,8 @@
   "defaultModel": "claude-sonnet-4-6",
   "providerDefaults": {
     "anthropic": "claude-sonnet-4-6",
-    "google": "gemini-2.5-flash"
+    "google": "gemini-2.5-flash",
+    "cursor": "claude-sonnet-4-6"
   },
   "models": [
     {
@@ -141,6 +142,38 @@
       "provider": "google",
       "available": true,
       "featureGated": true
+    },
+    {
+      "id": "cursor:claude-sonnet-4-6",
+      "label": "Claude Sonnet 4.6 (via Cursor)",
+      "vertexId": "",
+      "provider": "cursor",
+      "available": true,
+      "featureGated": false
+    },
+    {
+      "id": "cursor:claude-opus-4-6",
+      "label": "Claude Opus 4.6 (via Cursor)",
+      "vertexId": "",
+      "provider": "cursor",
+      "available": true,
+      "featureGated": true
+    },
+    {
+      "id": "cursor:gpt-5",
+      "label": "GPT-5 (via Cursor)",
+      "vertexId": "",
+      "provider": "cursor",
+      "available": false,
+      "featureGated": true
+    },
+    {
+      "id": "cursor:composer",
+      "label": "Composer 1 (Cursor)",
+      "vertexId": "",
+      "provider": "cursor",
+      "available": true,
+      "featureGated": false
     }
   ]
 }

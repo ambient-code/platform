@@ -66,5 +66,34 @@ data:
           "vertexSupported": true
         },
         "featureGate": "runner.gemini-cli.enabled"
+      },
+      {
+        "id": "cursor-cli",
+        "displayName": "Cursor CLI",
+        "description": "Cursor coding agent with multi-model support and built-in file, bash, and search tools",
+        "framework": "cursor-cli",
+        "provider": "cursor",
+        "container": {
+          "image": "quay.io/ambient_code/vteam_claude_runner:latest",
+          "port": 8001,
+          "env": {
+            "RUNNER_TYPE": "cursor-cli",
+            "RUNNER_STATE_DIR": ".cursor"
+          }
+        },
+        "sandbox": {
+          "stateDir": ".cursor",
+          "stateSyncImage": "quay.io/ambient_code/vteam_state_sync:latest",
+          "persistence": "s3",
+          "workspaceSize": "10Gi",
+          "terminationGracePeriod": 60,
+          "seed": {"cloneRepos": true, "hydrateState": true}
+        },
+        "auth": {
+          "requiredSecretKeys": ["CURSOR_API_KEY"],
+          "secretKeyLogic": "any",
+          "vertexSupported": false
+        },
+        "featureGate": "runner.cursor-cli.enabled"
       }
     ]

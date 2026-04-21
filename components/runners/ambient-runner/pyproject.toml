@@ -53,7 +53,7 @@ asyncio_mode = "auto"
 
 [tool.setuptools]
 py-modules = ["main"]
-packages = ["ag_ui_claude_sdk", "ag_ui_gemini_cli", "ambient_runner", "ambient_runner.endpoints", "ambient_runner.middleware", "ambient_runner.platform", "ambient_runner.bridges", "ambient_runner.bridges.claude", "ambient_runner.bridges.langgraph", "ambient_runner.bridges.gemini_cli"]
+packages = ["ag_ui_claude_sdk", "ag_ui_gemini_cli", "ag_ui_cursor_cli", "ambient_runner", "ambient_runner.endpoints", "ambient_runner.middleware", "ambient_runner.platform", "ambient_runner.bridges", "ambient_runner.bridges.claude", "ambient_runner.bridges.langgraph", "ambient_runner.bridges.gemini_cli", "ambient_runner.bridges.cursor_cli"]
 
 [build-system]
 requires = ["setuptools>=61.0"]
