@@ -684,7 +684,9 @@ objects:
           - --openshift-delegate-urls={"/api":{"resource":"namespaces","verb":"get","name":"ambient-code","namespace":"ambient-code"},"/federate":{"resource":"namespaces","verb":"get","name":"ambient-code","namespace":"ambient-code"}}
           - --tls-cert=/etc/tls/private/tls.crt
           - --tls-key=/etc/tls/private/tls.key
-          - --cookie-secret-file=/var/run/secrets/kubernetes.io/serviceaccount/token
+          - --cookie-secret-file=/etc/oauth-cookie/cookie_secret
+          - --pass-access-token
+          - --scope=user:full
           - --upstream-timeout=5m
           - --skip-auth-regex=^/metrics
           image: ${OAUTH_PROXY_IMAGE_NAME}:${OAUTH_PROXY_IMAGE_TAG}
@@ -723,11 +725,16 @@ objects:
           volumeMounts:
           - mountPath: /etc/tls/private
             name: frontend-proxy-tls
+          - mountPath: /etc/oauth-cookie
+            name: oauth-cookie-secret
         serviceAccountName: frontend
         volumes:
         - name: frontend-proxy-tls
           secret:
             secretName: frontend-proxy-tls
+        - name: oauth-cookie-secret
+          secret:
+            secretName: stage-cookie-secret
 - apiVersion: apps/v1
   kind: Deployment
   metadata:
