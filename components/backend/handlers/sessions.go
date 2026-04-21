@@ -1799,8 +1799,7 @@ func SwitchModel(c *gin.Context) {
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(httpReq)
+	resp, err := newRunnerClient(30 * time.Second).Do(httpReq)
 	if err != nil {
 		log.Printf("Failed to proxy model switch to runner for session %s: %v", sessionName, err)
 		// Revert the CR update on the server-returned object
@@ -1978,8 +1977,7 @@ func SelectWorkflow(c *gin.Context) {
 				}
 			}
 
-			client := &http.Client{Timeout: 120 * time.Second}
-			resp, err := client.Do(httpReq)
+			resp, err := newRunnerClient(120 * time.Second).Do(httpReq)
 			if err != nil {
 				log.Printf("Failed to call runner to clone workflow: %v", err)
 			} else {
@@ -2120,8 +2118,7 @@ func AddRepo(c *gin.Context) {
 			}
 		}
 
-		client := &http.Client{Timeout: 120 * time.Second} // Allow time for clone
-		resp, err := client.Do(httpReq)
+		resp, err := newRunnerClient(120 * time.Second).Do(httpReq) // Allow time for clone
 		if err != nil {
 			log.Printf("Failed to call runner to clone repo: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to clone repository (runner not reachable)"})
@@ -2275,7 +2272,9 @@ func RemoveRepo(c *gin.Context) {
 		runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/repos/remove", sessionName, project)
 		runnerReq := map[string]string{"name": repoName}
 		reqBody, _ := json.Marshal(runnerReq)
-		resp, err := http.Post(runnerURL, "application/json", bytes.NewReader(reqBody))
+		removeReq, _ := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, runnerURL, bytes.NewReader(reqBody))
+		removeReq.Header.Set("Content-Type", "application/json")
+		resp, err := newRunnerClient(30 * time.Second).Do(removeReq)
 		if err != nil {
 			log.Printf("Warning: failed to call runner /repos/remove: %v", err)
 		} else {
@@ -2342,6 +2341,56 @@ func getRunnerServiceName(session string) string {
 	return fmt.Sprintf("session-%s", session)
 }
 
+// getRunnerAGUIToken retrieves the per-session AGUI authentication token from the runner secret.
+// Uses the backend service account (K8sClientMw) because users may not have Secret read access.
+// Returns empty string if the secret or token is unavailable — callers treat this as "no auth".
+func getRunnerAGUIToken(ctx context.Context, sessionName, namespace string) string {
+	if K8sClientMw == nil {
+		return ""
+	}
+	sec, err := K8sClientMw.CoreV1().Secrets(namespace).Get(ctx, fmt.Sprintf("ambient-runner-token-%s", sessionName), v1.GetOptions{})
+	if err != nil || sec.Data == nil {
+		return ""
+	}
+	return string(sec.Data["agui-token"])
+}
+
+// runnerTransport is an http.RoundTripper that automatically adds the per-session
+// X-Ambient-Session-Token header to every request directed at a runner pod.
+// It extracts session name and namespace from the Kubernetes DNS hostname
+// (session-{name}.{namespace}.svc.cluster.local) so callers need no extra plumbing.
+type runnerTransport struct{ base http.RoundTripper }
+
+func (t *runnerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	host := req.URL.Hostname()
+	if strings.HasSuffix(host, ".svc.cluster.local") {
+		parts := strings.SplitN(host, ".", 3)
+		if len(parts) >= 2 && strings.HasPrefix(parts[0], "session-") {
+			sessionName := strings.TrimPrefix(parts[0], "session-")
+			namespace := parts[1]
+			if token := getRunnerAGUIToken(req.Context(), sessionName, namespace); token != "" {
+				req = req.Clone(req.Context())
+				req.Header.Set("X-Ambient-Session-Token", token)
+			}
+		}
+	}
+	base := t.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return base.RoundTrip(req)
+}
+
+// newRunnerClient returns an http.Client configured with the runner authentication transport.
+// All requests to runner AG-UI endpoints (*.svc.cluster.local:8001) will have the session
+// token injected automatically. Pass timeout 0 for no timeout (matches http.DefaultClient).
+func newRunnerClient(timeout time.Duration) *http.Client {
+	return &http.Client{Timeout: timeout, Transport: &runnerTransport{}}
+}
+
+// runnerDefaultClient is a shared runner client with no timeout (use for streaming/long operations).
+var runnerDefaultClient = newRunnerClient(0)
+
 // GetWorkflowMetadata retrieves the workflow metadata for an agentic session
 // GET /api/projects/:projectName/agentic-sessions/:sessionName/workflow/metadata
 func GetWorkflowMetadata(c *gin.Context) {
@@ -2385,8 +2434,7 @@ func GetWorkflowMetadata(c *gin.Context) {
 	if strings.TrimSpace(token) != "" {
 		req.Header.Set("Authorization", token)
 	}
-	client := &http.Client{Timeout: 4 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := newRunnerClient(4 * time.Second).Do(req)
 	if err != nil {
 		log.Printf("GetWorkflowMetadata: runner content request failed: %v", err)
 		// Return empty metadata on error
@@ -3086,8 +3134,7 @@ func ListSessionWorkspace(c *gin.Context) {
 	if strings.TrimSpace(token) != "" {
 		req.Header.Set("Authorization", token)
 	}
-	client := &http.Client{Timeout: 4 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := newRunnerClient(4 * time.Second).Do(req)
 	if err != nil {
 		log.Printf("ListSessionWorkspace: runner content request failed: %v", err)
 		// Soften error to 200 with empty list so UI doesn't spam
@@ -3163,8 +3210,7 @@ func GetSessionWorkspaceFile(c *gin.Context) {
 	if strings.TrimSpace(token) != "" {
 		req.Header.Set("Authorization", token)
 	}
-	client := &http.Client{Timeout: 4 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := newRunnerClient(4 * time.Second).Do(req)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
@@ -3336,8 +3382,7 @@ func PutSessionWorkspaceFile(c *gin.Context) {
 		req.Header.Set("Authorization", token)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 4 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := newRunnerClient(4 * time.Second).Do(req)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
@@ -3473,8 +3518,7 @@ func DeleteSessionWorkspaceFile(c *gin.Context) {
 		req.Header.Set("Authorization", token)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 4 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := newRunnerClient(4 * time.Second).Do(req)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
@@ -3649,7 +3693,7 @@ func PushSessionRepo(c *gin.Context) {
 	}
 
 	log.Printf("pushSessionRepo: proxy push project=%s session=%s repoIndex=%d repoPath=%s endpoint=%s", project, session, body.RepoIndex, resolvedRepoPath, endpoint+"/content/github/push")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := runnerDefaultClient.Do(req)
 	if err != nil {
 		// Log actual error for debugging, but return generic message to avoid leaking internal details
 		log.Printf("Bad gateway error: %v", err)
@@ -3733,7 +3777,7 @@ func AbandonSessionRepo(c *gin.Context) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	log.Printf("abandonSessionRepo: proxy abandon project=%s session=%s repoIndex=%d repoPath=%s", project, session, body.RepoIndex, repoPath)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := runnerDefaultClient.Do(req)
 	if err != nil {
 		// Log actual error for debugging, but return generic message to avoid leaking internal details
 		log.Printf("Bad gateway error: %v", err)
@@ -3790,7 +3834,7 @@ func DiffSessionRepo(c *gin.Context) {
 	if v := c.GetHeader("X-Forwarded-Access-Token"); v != "" {
 		req.Header.Set("X-Forwarded-Access-Token", v)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := runnerDefaultClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"files": gin.H{
@@ -3864,8 +3908,7 @@ func GetReposStatus(c *gin.Context) {
 	// NOTE: Do NOT forward Authorization header to runner (matches pattern of AddWorkflow, AddRepository, RemoveRepo)
 	// Runner is treated as a trusted backend service; RBAC enforcement happens in backend
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := newRunnerClient(5 * time.Second).Do(req)
 	if err != nil {
 		log.Printf("GetReposStatus: runner not reachable: %v", err)
 		// Return empty repos list instead of error for better UX
@@ -3945,7 +3988,7 @@ func GetGitStatus(c *gin.Context) {
 		}
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := runnerDefaultClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
@@ -4057,7 +4100,7 @@ func ConfigureGitRemote(c *gin.Context) {
 		log.Printf("ConfigureGitRemote: unknown provider detected, proceeding without authentication")
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := runnerDefaultClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
@@ -4182,7 +4225,7 @@ func SynchronizeGit(c *gin.Context) {
 		}
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := runnerDefaultClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
@@ -4251,7 +4294,7 @@ func GetGitMergeStatus(c *gin.Context) {
 		}
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := runnerDefaultClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
@@ -4343,7 +4386,7 @@ func GitPullSession(c *gin.Context) {
 		}
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := runnerDefaultClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
@@ -4440,7 +4483,7 @@ func GitPushSession(c *gin.Context) {
 		}
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := runnerDefaultClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
@@ -4510,7 +4553,7 @@ func GitCreateBranchSession(c *gin.Context) {
 		req.Header.Set("Authorization", v)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := runnerDefaultClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return
@@ -4561,7 +4604,7 @@ func GitListBranchesSession(c *gin.Context) {
 		req.Header.Set("Authorization", v)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := runnerDefaultClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "runner unavailable"})
 		return

@@ -72,6 +72,10 @@ rules:
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get", "create", "delete", "update"]
+# NetworkPolicies (isolate runner pods — allow ingress only from backend namespace)
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies"]
+  verbs: ["get", "create", "update", "patch"]
 # MLflow Experiment CRs (operator must hold these to grant them in session Roles)
 - apiGroups: ["mlflow.kubeflow.org"]
   resources: ["experiments"]
