@@ -342,6 +342,7 @@ func extractFields(schemaMap map[string]interface{}) ([]Field, []string, error) 
 			propType, _ := propMap["type"].(string)
 			propFormat, _ := propMap["format"].(string)
 			readOnly, _ := propMap["readOnly"].(bool)
+			nullable, _ := propMap["nullable"].(bool)
 
 			isRequired := false
 			for _, r := range requiredFields {
@@ -351,6 +352,8 @@ func extractFields(schemaMap map[string]interface{}) ([]Field, []string, error) 
 				}
 			}
 
+			goType, goBaseType := toGoTypeNullable(propType, propFormat, nullable)
+
 			f := Field{
 				Name:       propName,
 				GoName:     toGoName(propName),
@@ -358,11 +361,13 @@ func extractFields(schemaMap map[string]interface{}) ([]Field, []string, error) 
 				TSName:     toCamelCase(propName),
 				Type:       propType,
 				Format:     propFormat,
-				GoType:     toGoType(propType, propFormat),
-				PythonType: toPythonType(propType, propFormat),
+				GoType:     goType,
+				GoBaseType: goBaseType,
+				PythonType: toPythonTypeNullable(propType, propFormat, nullable),
 				TSType:     toTSType(propType, propFormat),
 				Required:   isRequired,
 				ReadOnly:   readOnly,
+				Nullable:   nullable,
 				JSONTag:    jsonTag(propName, isRequired),
 			}
 
@@ -397,6 +402,9 @@ func extractPatchFields(schemaMap map[string]interface{}) ([]Field, []string, er
 
 		propType, _ := propMap["type"].(string)
 		propFormat, _ := propMap["format"].(string)
+		nullable, _ := propMap["nullable"].(bool)
+
+		goType, goBaseType := toGoTypeNullable(propType, propFormat, nullable)
 
 		f := Field{
 			Name:       propName,
@@ -405,10 +413,12 @@ func extractPatchFields(schemaMap map[string]interface{}) ([]Field, []string, er
 			TSName:     toCamelCase(propName),
 			Type:       propType,
 			Format:     propFormat,
-			GoType:     toGoType(propType, propFormat),
-			PythonType: toPythonType(propType, propFormat),
+			GoType:     goType,
+			GoBaseType: goBaseType,
+			PythonType: toPythonTypeNullable(propType, propFormat, nullable),
 			TSType:     toTSType(propType, propFormat),
 			Required:   false,
+			Nullable:   nullable,
 			JSONTag:    jsonTag(propName, false),
 		}
 

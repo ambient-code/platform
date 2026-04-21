@@ -240,7 +240,8 @@ func (w *SessionWatcher) convertSession(session *ambient_v1.Session) *types.Sess
 		result.Repos = *session.Repos
 	}
 	if session.Timeout != nil {
-		result.Timeout = int(*session.Timeout)
+		t := int(*session.Timeout)
+		result.Timeout = &t
 	}
 	if session.LlmModel != nil {
 		result.LlmModel = *session.LlmModel

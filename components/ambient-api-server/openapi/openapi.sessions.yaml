@@ -420,6 +420,13 @@ components:
               type: string
             timeout:
               type: integer
+              minimum: 0
+              nullable: true
+            inactivity_timeout:
+              type: integer
+              minimum: 0
+              nullable: true
+              description: Seconds of inactivity before auto-stopping. 0 disables.
             llm_model:
               type: string
             llm_temperature:
@@ -514,6 +521,13 @@ components:
           type: string
         timeout:
           type: integer
+          minimum: 0
+          nullable: true
+        inactivity_timeout:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: Seconds of inactivity before auto-stopping. 0 disables.
         llm_model:
           type: string
         llm_temperature:

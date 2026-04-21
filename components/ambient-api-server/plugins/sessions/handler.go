@@ -116,6 +116,9 @@ func (h sessionHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			if patch.Timeout != nil {
 				found.Timeout = patch.Timeout
 			}
+			if patch.InactivityTimeout != nil {
+				found.InactivityTimeout = patch.InactivityTimeout
+			}
 			if patch.LlmModel != nil {
 				found.LlmModel = patch.LlmModel
 			}

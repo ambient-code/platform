@@ -20,6 +20,7 @@ func ConvertSession(session openapi.Session) *Session {
 	c.WorkflowId = session.WorkflowId
 	c.Repos = session.Repos
 	c.Timeout = session.Timeout
+	c.InactivityTimeout = session.InactivityTimeout
 	c.LlmModel = session.LlmModel
 	c.LlmTemperature = session.LlmTemperature
 	c.LlmMaxTokens = session.LlmMaxTokens
@@ -58,6 +59,7 @@ func PresentSession(session *Session) openapi.Session {
 		WorkflowId:           session.WorkflowId,
 		Repos:                session.Repos,
 		Timeout:              session.Timeout,
+		InactivityTimeout:    session.InactivityTimeout,
 		LlmModel:             session.LlmModel,
 		LlmTemperature:       session.LlmTemperature,
 		LlmMaxTokens:         session.LlmMaxTokens,

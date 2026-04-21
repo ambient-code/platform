@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
@@ -18,6 +19,7 @@ type Session struct {
 
 	Repos                *string  `json:"repos"`
 	Timeout              *int32   `json:"timeout"`
+	InactivityTimeout    *int32   `json:"inactivity_timeout"`
 	LlmModel             *string  `json:"llm_model"`
 	LlmTemperature       *float64 `json:"llm_temperature"`
 	LlmMaxTokens         *int32   `json:"llm_max_tokens"`
@@ -74,6 +76,16 @@ func (d *Session) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
+func (d *Session) BeforeSave(tx *gorm.DB) error {
+	if d.Timeout != nil && *d.Timeout < 0 {
+		return fmt.Errorf("timeout must be greater than or equal to 0")
+	}
+	if d.InactivityTimeout != nil && *d.InactivityTimeout < 0 {
+		return fmt.Errorf("inactivity_timeout must be greater than or equal to 0")
+	}
+	return nil
+}
+
 type SessionPatchRequest struct {
 	Name                 *string  `json:"name,omitempty"`
 	RepoUrl              *string  `json:"repo_url,omitempty"`
@@ -82,6 +94,7 @@ type SessionPatchRequest struct {
 	WorkflowId           *string  `json:"workflow_id,omitempty"`
 	Repos                *string  `json:"repos,omitempty"`
 	Timeout              *int32   `json:"timeout,omitempty"`
+	InactivityTimeout    *int32   `json:"inactivity_timeout,omitempty"`
 	LlmModel             *string  `json:"llm_model,omitempty"`
 	LlmTemperature       *float64 `json:"llm_temperature,omitempty"`
 	LlmMaxTokens         *int32   `json:"llm_max_tokens,omitempty"`

@@ -27,6 +27,7 @@ type SessionPatchRequest struct {
 	WorkflowId           *string  `json:"workflow_id,omitempty"`
 	Repos                *string  `json:"repos,omitempty"`
 	Timeout              *int32   `json:"timeout,omitempty"`
+	InactivityTimeout    *int32   `json:"inactivity_timeout,omitempty"`
 	LlmModel             *string  `json:"llm_model,omitempty"`
 	LlmTemperature       *float64 `json:"llm_temperature,omitempty"`
 	LlmMaxTokens         *int32   `json:"llm_max_tokens,omitempty"`
@@ -277,6 +278,38 @@ func (o *SessionPatchRequest) HasTimeout() bool {
 // SetTimeout gets a reference to the given int32 and assigns it to the Timeout field.
 func (o *SessionPatchRequest) SetTimeout(v int32) {
 	o.Timeout = &v
+}
+
+// GetInactivityTimeout returns the InactivityTimeout field value if set, zero value otherwise.
+func (o *SessionPatchRequest) GetInactivityTimeout() int32 {
+	if o == nil || IsNil(o.InactivityTimeout) {
+		var ret int32
+		return ret
+	}
+	return *o.InactivityTimeout
+}
+
+// GetInactivityTimeoutOk returns a tuple with the InactivityTimeout field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *SessionPatchRequest) GetInactivityTimeoutOk() (*int32, bool) {
+	if o == nil || IsNil(o.InactivityTimeout) {
+		return nil, false
+	}
+	return o.InactivityTimeout, true
+}
+
+// HasInactivityTimeout returns a boolean if a field has been set.
+func (o *SessionPatchRequest) HasInactivityTimeout() bool {
+	if o != nil && !IsNil(o.InactivityTimeout) {
+		return true
+	}
+
+	return false
+}
+
+// SetInactivityTimeout gets a reference to the given int32 and assigns it to the InactivityTimeout field.
+func (o *SessionPatchRequest) SetInactivityTimeout(v int32) {
+	o.InactivityTimeout = &v
 }
 
 // GetLlmModel returns the LlmModel field value if set, zero value otherwise.
@@ -597,6 +630,9 @@ func (o SessionPatchRequest) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.Timeout) {
 		toSerialize["timeout"] = o.Timeout
+	}
+	if !IsNil(o.InactivityTimeout) {
+		toSerialize["inactivity_timeout"] = o.InactivityTimeout
 	}
 	if !IsNil(o.LlmModel) {
 		toSerialize["llm_model"] = o.LlmModel

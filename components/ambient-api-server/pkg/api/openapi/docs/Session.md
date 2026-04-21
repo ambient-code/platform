@@ -17,6 +17,7 @@ Name | Type | Description | Notes
 **WorkflowId** | Pointer to **string** |  | [optional]
 **Repos** | Pointer to **string** |  | [optional]
 **Timeout** | Pointer to **int32** |  | [optional]
+**InactivityTimeout** | Pointer to **int32** | Seconds of inactivity before auto-stopping. 0 disables. | [optional]
 **LlmModel** | Pointer to **string** |  | [optional]
 **LlmTemperature** | Pointer to **float64** |  | [optional]
 **LlmMaxTokens** | Pointer to **int32** |  | [optional]

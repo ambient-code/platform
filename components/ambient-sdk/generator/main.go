@@ -498,7 +498,7 @@ func loadTemplate(path string) (*template.Template, error) {
 			return string(r)
 		},
 		"goName":        toGoName,
-		"pythonDefault": func(f Field) string { return pythonDefault(f.Type, f.Format) },
+		"pythonDefault": func(f Field) string { return pythonDefault(f.Type, f.Format, f.Nullable) },
 		"isDateTime":    isDateTimeField,
 		"isWritable":    func(f Field) bool { return !f.ReadOnly },
 		"camelCase":     toCamelCase,

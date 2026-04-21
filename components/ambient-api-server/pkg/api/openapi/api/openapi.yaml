@@ -3142,6 +3142,9 @@ components:
             type: string
           timeout:
             type: integer
+          inactivity_timeout:
+            description: Seconds of inactivity before auto-stopping. 0 disables.
+            type: integer
           llm_model:
             type: string
           llm_temperature:
@@ -3217,6 +3220,7 @@ components:
         annotations: annotations
         reconciled_workflow: reconciled_workflow
         timeout: 5
+        inactivity_timeout: 0
         environment_variables: environment_variables
         kube_cr_uid: kube_cr_uid
         triggered_by_user_id: triggered_by_user_id
@@ -3344,6 +3348,7 @@ components:
         assigned_user_id: assigned_user_id
         llm_max_tokens: 1
         timeout: 0
+        inactivity_timeout: 0
         labels: labels
         environment_variables: environment_variables
         bot_account_name: bot_account_name
@@ -3365,6 +3370,9 @@ components:
         repos:
           type: string
         timeout:
+          type: integer
+        inactivity_timeout:
+          description: Seconds of inactivity before auto-stopping. 0 disables.
           type: integer
         llm_model:
           type: string

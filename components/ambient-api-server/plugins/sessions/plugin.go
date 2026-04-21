@@ -143,4 +143,5 @@ func init() {
 	db.RegisterMigration(sessionMessagesMigration())
 	db.RegisterMigration(schemaExpansionMigration())
 	db.RegisterMigration(agentIDMigration())
+	db.RegisterMigration(inactivityTimeoutMigration())
 }

@@ -30,10 +30,12 @@ type Field struct {
 	Type       string
 	Format     string
 	GoType     string
+	GoBaseType string
 	PythonType string
 	TSType     string
 	Required   bool
 	ReadOnly   bool
+	Nullable   bool
 	JSONTag    string
 }
 
@@ -95,6 +97,14 @@ func toGoType(openAPIType, format string) string {
 	}
 }
 
+func toGoTypeNullable(openAPIType, format string, nullable bool) (goType, goBaseType string) {
+	base := toGoType(openAPIType, format)
+	if nullable && !strings.HasPrefix(base, "*") {
+		return "*" + base, base
+	}
+	return base, base
+}
+
 func toPythonType(openAPIType, format string) string {
 	switch openAPIType {
 	case "string":
@@ -113,7 +123,18 @@ func toPythonType(openAPIType, format string) string {
 	}
 }
 
-func pythonDefault(openAPIType, format string) string {
+func toPythonTypeNullable(openAPIType, format string, nullable bool) string {
+	base := toPythonType(openAPIType, format)
+	if nullable && base != "Optional[datetime]" {
+		return "Optional[" + base + "]"
+	}
+	return base
+}
+
+func pythonDefault(openAPIType, format string, nullable bool) string {
+	if nullable {
+		return "None"
+	}
 	switch openAPIType {
 	case "string":
 		if format == "date-time" {

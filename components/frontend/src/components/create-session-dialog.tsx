@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Link from "next/link";
-import { AlertCircle, AlertTriangle, CheckCircle2, ChevronsUpDown, FileUp, Loader2, X } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, ChevronsUpDown, FileUp, Info, Loader2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useFlag } from "@/lib/feature-flags";
 
@@ -40,6 +40,13 @@ import {
 import type { CreateAgenticSessionRequest } from "@/types/agentic-session";
 import type { WorkflowSelection } from "@/types/workflow";
 import { useCreateSession } from "@/services/queries/use-sessions";
+import { INACTIVITY_TIMEOUT_TOOLTIP } from "@/lib/constants";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useRunnerTypes } from "@/services/queries/use-runner-types";
 import {
   AgentOptionsFields,
@@ -64,6 +71,14 @@ const formSchema = z.object({
   temperature: z.number().min(0).max(2),
   maxTokens: z.number().min(100).max(8000),
   timeout: z.number().min(60).max(1800),
+  inactivityTimeout: z
+    .string()
+    .trim()
+    .refine((value) => {
+      if (value === "") return true;
+      return /^\d+$/.test(value) && Number.isInteger(Number(value));
+    }, "Inactivity timeout must be a whole number of seconds")
+    .optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -118,6 +133,7 @@ export function CreateSessionDialog({
       temperature: 0.7,
       maxTokens: 4000,
       timeout: 300,
+      inactivityTimeout: "",
     },
   });
 
@@ -208,6 +224,10 @@ export function CreateSessionDialog({
       if (!agentOptionsValid) return;
     }
 
+    const inactivityTimeoutStr = values.inactivityTimeout?.trim() ?? "";
+    const parsedInactivityTimeout =
+      inactivityTimeoutStr === "" ? undefined : Number(inactivityTimeoutStr);
+
     const request: CreateAgenticSessionRequest = {
       runnerType: values.runnerType,
       llmSettings: {
@@ -216,6 +236,7 @@ export function CreateSessionDialog({
         maxTokens: values.maxTokens,
       },
       timeout: values.timeout,
+      ...(parsedInactivityTimeout !== undefined ? { inactivityTimeout: parsedInactivityTimeout } : {}),
     };
     const trimmedName = values.displayName?.trim();
     if (trimmedName) {
@@ -528,6 +549,44 @@ export function CreateSessionDialog({
                         )}
                       </SelectContent>
                     </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Inactivity Timeout */}
+              <FormField
+                control={form.control}
+                name="inactivityTimeout"
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="flex items-center gap-1.5">
+                      <FormLabel>Inactivity Timeout (seconds)</FormLabel>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger type="button" aria-label="Inactivity timeout help">
+                            <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs">
+                            <p>{INACTIVITY_TIMEOUT_TOOLTIP}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                    <FormControl>
+                      <Input
+                        className="max-w-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        {...field}
+                        type="number"
+                        min={0}
+                        step={1}
+                        placeholder="Leave empty for project default"
+                        disabled={createSessionMutation.isPending}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      Set to 0 to disable. Leave empty to use the project or platform default (24h).
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}

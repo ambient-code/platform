@@ -33,25 +33,26 @@ Valid resource types:
 }
 
 var createArgs struct {
-	name         string
-	prompt       string
-	repoURL      string
-	model        string
-	maxTokens    int
-	temperature  float64
-	timeout      int
-	displayName  string
-	description  string
-	outputFormat string
-	projectID    string
-	agentID      string
-	agentVersion int
-	ownerUserID  string
-	permissions  string
-	userID       string
-	roleID       string
-	scope        string
-	scopeID      string
+	name              string
+	prompt            string
+	repoURL           string
+	model             string
+	maxTokens         int
+	temperature       float64
+	timeout           int
+	inactivityTimeout int
+	displayName       string
+	description       string
+	outputFormat      string
+	projectID         string
+	agentID           string
+	agentVersion      int
+	ownerUserID       string
+	permissions       string
+	userID            string
+	roleID            string
+	scope             string
+	scopeID           string
 }
 
 func init() {
@@ -62,6 +63,7 @@ func init() {
 	Cmd.Flags().IntVar(&createArgs.maxTokens, "max-tokens", 0, "LLM max tokens")
 	Cmd.Flags().Float64Var(&createArgs.temperature, "temperature", 0, "LLM temperature")
 	Cmd.Flags().IntVar(&createArgs.timeout, "timeout", 0, "Session timeout in seconds")
+	Cmd.Flags().IntVar(&createArgs.inactivityTimeout, "inactivity-timeout", -1, "Inactivity timeout in seconds (0 disables auto-stop)")
 	Cmd.Flags().StringVar(&createArgs.displayName, "display-name", "", "Display name")
 	Cmd.Flags().StringVar(&createArgs.description, "description", "", "Description")
 	Cmd.Flags().StringVarP(&createArgs.outputFormat, "output", "o", "", "Output format: json")
@@ -165,6 +167,12 @@ func createSession(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 	if cmd.Flags().Changed("timeout") {
 		builder = builder.Timeout(createArgs.timeout)
 	}
+	if cmd.Flags().Changed("inactivity-timeout") {
+		if createArgs.inactivityTimeout < 0 {
+			return fmt.Errorf("--inactivity-timeout must be >= 0 (0 disables auto-stop)")
+		}
+		builder = builder.InactivityTimeout(createArgs.inactivityTimeout)
+	}
 
 	session, err := builder.Build()
 	if err != nil {
@@ -184,7 +192,7 @@ func createSession(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 }
 
 func createProject(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
-	warnUnusedFlags(cmd, "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout", "project-id", "owner-user-id", "permissions", "user-id", "role-id", "scope", "scope-id", "recipient-agent-id", "body")
+	warnUnusedFlags(cmd, "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout", "inactivity-timeout", "project-id", "owner-user-id", "permissions", "user-id", "role-id", "scope", "scope-id", "recipient-agent-id", "body")
 
 	if createArgs.name == "" {
 		return fmt.Errorf("--name is required")
@@ -218,7 +226,7 @@ func createProject(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 }
 
 func createAgent(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
-	warnUnusedFlags(cmd, "repo-url", "model", "max-tokens", "temperature", "timeout", "display-name", "description", "owner-user-id", "permissions", "user-id", "role-id", "scope", "scope-id")
+	warnUnusedFlags(cmd, "repo-url", "model", "max-tokens", "temperature", "timeout", "inactivity-timeout", "display-name", "description", "owner-user-id", "permissions", "user-id", "role-id", "scope", "scope-id")
 
 	if createArgs.projectID == "" {
 		return fmt.Errorf("--project-id is required")
@@ -249,7 +257,7 @@ func createAgent(cmd *cobra.Command, ctx context.Context, client *sdkclient.Clie
 }
 
 func createRole(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
-	warnUnusedFlags(cmd, "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout", "project-id", "owner-user-id", "user-id", "role-id", "scope", "scope-id", "recipient-agent-id", "body")
+	warnUnusedFlags(cmd, "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout", "inactivity-timeout", "project-id", "owner-user-id", "user-id", "role-id", "scope", "scope-id", "recipient-agent-id", "body")
 
 	if createArgs.name == "" {
 		return fmt.Errorf("--name is required")
@@ -281,7 +289,7 @@ func createRole(cmd *cobra.Command, ctx context.Context, client *sdkclient.Clien
 }
 
 func createRoleBinding(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
-	warnUnusedFlags(cmd, "name", "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout", "display-name", "description", "project-id", "owner-user-id", "permissions", "recipient-agent-id", "body")
+	warnUnusedFlags(cmd, "name", "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout", "inactivity-timeout", "display-name", "description", "project-id", "owner-user-id", "permissions", "recipient-agent-id", "body")
 
 	if createArgs.userID == "" {
 		return fmt.Errorf("--user-id is required")

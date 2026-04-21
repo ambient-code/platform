@@ -130,6 +130,18 @@ func agentIDMigration() *gormigrate.Migration {
 	}
 }
 
+func inactivityTimeoutMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202604210001",
+		Migrate: func(tx *gorm.DB) error {
+			return tx.Exec(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS inactivity_timeout INTEGER`).Error
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return tx.Exec(`ALTER TABLE sessions DROP COLUMN IF EXISTS inactivity_timeout`).Error
+		},
+	}
+}
+
 func schemaExpansionMigration() *gormigrate.Migration {
 	migrateStatements := []string{
 		`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS repos TEXT`,
