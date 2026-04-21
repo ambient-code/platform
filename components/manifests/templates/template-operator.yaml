@@ -1232,7 +1232,7 @@ objects:
   data:
     ANTHROPIC_VERTEX_PROJECT_ID: ambient-code-platform
     CLOUD_ML_REGION: global
-    GOOGLE_APPLICATION_CREDENTIALS: /app/vertex/ambient-code-key.json
+    GOOGLE_APPLICATION_CREDENTIALS: /app/vertex/itpc-gcp-hcm-pe-eng.json
     USE_VERTEX: '1'
   kind: ConfigMap
   metadata:
