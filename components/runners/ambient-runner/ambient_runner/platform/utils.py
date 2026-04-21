@@ -23,20 +23,73 @@ _TRUTHY_VALUES = frozenset({"1", "true", "yes"})
 # Kubelet automatically refreshes this file when the Secret is updated.
 _BOT_TOKEN_FILE = Path("/var/run/secrets/ambient/bot-token")
 
+# K8s SA token mounted in every pod by the kubelet.
+_SA_TOKEN_FILE = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
+
+# In-process cache for the token fetched from the CP token endpoint.
+# Set once at startup by _grpc_client.py after a successful CP token fetch.
+_cp_fetched_token: str = ""
+
+
+def get_sa_token() -> str:
+    """Return the Kubernetes ServiceAccount token mounted in the pod.
+
+    This is a long-lived K8s-managed token that authenticates to the K8s API
+    as system:serviceaccount:<namespace>:<sa-name>. The backend's
+    enforceCredentialRBAC classifies this as isBotToken=true, which grants
+    access to the session owner's credentials without an owner-match check.
+    """
+    try:
+        if _SA_TOKEN_FILE.exists():
+            return _SA_TOKEN_FILE.read_text().strip()
+    except OSError:
+        pass
+    return ""
+
+
+def set_bot_token(token: str) -> None:
+    """Store a token fetched from the CP token endpoint for use by get_bot_token()."""
+    global _cp_fetched_token
+    _cp_fetched_token = token.strip()
+
 
 def get_bot_token() -> str:
-    """Return the current BOT_TOKEN, preferring the file mount over env var.
+    """Return the current BOT_TOKEN.
 
-    The operator mounts the runner-token Secret as a file so kubelet refreshes
-    it automatically when the token is rotated. Falls back to the BOT_TOKEN
-    env var for backward-compatibility with local / non-Kubernetes runs.
+    Priority:
+    1. Token fetched from CP token endpoint (set via set_bot_token()).
+    2. File mount at _BOT_TOKEN_FILE (kubelet-refreshed Secret).
+    3. BOT_TOKEN env var (local / non-Kubernetes fallback).
     """
+    if _cp_fetched_token:
+        return _cp_fetched_token
     try:
         if _BOT_TOKEN_FILE.exists():
             return _BOT_TOKEN_FILE.read_text().strip()
     except OSError:
         pass
     return (os.getenv("BOT_TOKEN") or "").strip()
+
+
+def refresh_bot_token() -> str:
+    """Fetch a fresh token from the CP token endpoint and update the in-process cache.
+
+    Returns the new token, or the current cached token if the CP endpoint is not
+    configured (local dev mode). Raises RuntimeError if the CP fetch fails.
+    """
+    cp_token_url = os.getenv("AMBIENT_CP_TOKEN_URL", "")
+    if not cp_token_url:
+        return get_bot_token()
+
+    public_key_pem = os.getenv("AMBIENT_CP_TOKEN_PUBLIC_KEY", "")
+    session_id = os.getenv("SESSION_ID", "")
+    if not public_key_pem or not session_id:
+        logger.warning("refresh_bot_token: CP env vars incomplete, skipping refresh")
+        return get_bot_token()
+
+    from ambient_runner._grpc_client import _fetch_token_from_cp
+
+    return _fetch_token_from_cp(cp_token_url, public_key_pem, session_id)
 
 
 def is_env_truthy(value: str) -> bool:

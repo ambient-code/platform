@@ -123,7 +123,7 @@ describe('Documentation Screenshots', () => {
 
 function setTheme(theme: 'light' | 'dark'): void {
   const label = theme === 'dark' ? 'Switch to dark theme' : 'Switch to light theme'
-  cy.get('button[aria-label="Toggle theme"]').first().click({ force: true })
+  cy.get('button[aria-label="Toggle theme"]', { timeout: 10000 }).first().should('be.visible').click({ force: true })
   // 10 s timeout: slow CI environments can take > 5 s for Radix to mount the dropdown content
   cy.get(`[aria-label="${label}"]`, { timeout: 10000 }).first().click({ force: true })
   if (theme === 'dark') {

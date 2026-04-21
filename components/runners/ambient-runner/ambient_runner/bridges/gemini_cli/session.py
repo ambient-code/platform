@@ -152,9 +152,6 @@ class GeminiSessionWorker:
             stderr=asyncio.subprocess.PIPE,
             cwd=self._cwd,
             env=env,
-            limit=10
-            * 1024
-            * 1024,  # 10 MB — default 64 KB is too small for large MCP tool responses
         )
 
         # Start concurrent stderr streaming

@@ -87,7 +87,15 @@ def _redact_event(event: BaseEvent, secret_values: list[tuple[str, str]]) -> Bas
     Only processes event types that carry user-visible text. All other events
     pass through unchanged (zero cost).
     """
-    if isinstance(event, (TextMessageContentEvent, TextMessageChunkEvent, ToolCallArgsEvent, ToolCallChunkEvent)):
+    if isinstance(
+        event,
+        (
+            TextMessageContentEvent,
+            TextMessageChunkEvent,
+            ToolCallArgsEvent,
+            ToolCallChunkEvent,
+        ),
+    ):
         redacted = _redact_text(event.delta, secret_values)
         if redacted != event.delta:
             return event.model_copy(update={"delta": redacted})

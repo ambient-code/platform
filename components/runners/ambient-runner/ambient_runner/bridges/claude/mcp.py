@@ -63,6 +63,15 @@ def build_mcp_servers(
 
     mcp_servers = load_mcp_config(context, cwd_path) or {}
 
+    # Ambient MCP sidecar (SSE transport, injected when annotation ambient-code.io/mcp-sidecar=true)
+    ambient_mcp_url = os.getenv("AMBIENT_MCP_URL", "").strip()
+    if ambient_mcp_url:
+        mcp_servers["ambient"] = {
+            "type": "sse",
+            "url": f"{ambient_mcp_url.rstrip('/')}/sse",
+        }
+        logger.info("Added ambient MCP sidecar server (SSE): %s", ambient_mcp_url)
+
     # Session control tools
     refresh_creds_tool = create_refresh_credentials_tool(context, sdk_tool)
     session_server = create_sdk_mcp_server(

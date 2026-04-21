@@ -1,0 +1,43 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: ambient-api-server
+  namespace: ambient-code--runtime-int
+  labels:
+    app: ambient-api-server
+    component: api
+    shard: internal
+  annotations:
+    haproxy.router.openshift.io/timeout: 10m
+    haproxy.router.openshift.io/timeout-tunnel: 10m
+spec:
+  to:
+    kind: Service
+    name: ambient-api-server
+  port:
+    targetPort: api
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: ambient-api-server-grpc
+  namespace: ambient-code--runtime-int
+  labels:
+    app: ambient-api-server
+    component: grpc
+    shard: internal
+  annotations:
+    haproxy.router.openshift.io/timeout: 10m
+    haproxy.router.openshift.io/timeout-tunnel: 10m
+spec:
+  to:
+    kind: Service
+    name: ambient-api-server
+  port:
+    targetPort: grpc
+  tls:
+    termination: reencrypt
+    insecureEdgeTerminationPolicy: Redirect

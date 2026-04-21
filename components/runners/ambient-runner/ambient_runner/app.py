@@ -120,6 +120,42 @@ def create_ambient_app(
         if is_resume:
             logger.info("IS_RESUME=true — this is a resumed session")
 
+        # Eager gRPC listener setup (duck-typed: any bridge that exposes
+        # start_grpc_listener + _active_streams qualifies).
+        # Requires both AMBIENT_GRPC_ENABLED=true and AMBIENT_GRPC_URL to be set.
+        # Must complete before INITIAL_PROMPT is dispatched so the listener
+        # is subscribed before PushSessionMessage fires.
+        #
+        # OPERATOR COMPATIBILITY: The existing Operator never injects AMBIENT_GRPC_ENABLED
+        # or AMBIENT_GRPC_URL into Job pods. This entire block is a strict no-op for
+        # operator-created sessions. No existing Operator/Runner behavior is changed.
+        grpc_enabled = os.getenv("AMBIENT_GRPC_ENABLED", "").strip().lower() == "true"
+        grpc_url = os.getenv("AMBIENT_GRPC_URL", "").strip()
+        grpc_active = False
+        if grpc_enabled and grpc_url and hasattr(bridge, "start_grpc_listener"):
+            await bridge.start_grpc_listener(grpc_url)
+            listener = getattr(bridge, "_grpc_listener", None)
+            if listener is not None:
+                try:
+                    await asyncio.wait_for(listener.ready.wait(), timeout=10.0)
+                    grpc_active = True
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "gRPC listener did not become ready within 10s: session=%s",
+                        session_id,
+                    )
+            logger.info(
+                "gRPC listener ready for session %s — proceeding to INITIAL_PROMPT",
+                session_id,
+            )
+            # Pre-register the SSE queue for session_id so the queue exists
+            # in active_streams before PushSessionMessage fires the first turn.
+            # This closes the race between listener.ready and the first event fan-out.
+            active_streams = getattr(bridge, "_active_streams", None)
+            if active_streams is not None and session_id not in active_streams:
+                active_streams[session_id] = asyncio.Queue()
+                logger.info("Pre-registered SSE queue for session=%s", session_id)
+
         # Auto-execute prompts when present (skipped only for resumes,
         # where the conversation is continued rather than re-started).
         if not is_resume:
@@ -152,7 +188,9 @@ def create_ambient_app(
                     f"Auto-executing combined prompt ({len(combined_prompt)} chars)"
                 )
                 task = asyncio.create_task(
-                    _auto_execute_initial_prompt(combined_prompt, session_id)
+                    _auto_execute_initial_prompt(
+                        combined_prompt, session_id, grpc_url if grpc_active else ""
+                    )
                 )
                 task.add_done_callback(_log_auto_exec_failure)
         else:
@@ -231,6 +269,7 @@ def add_ambient_endpoints(
         logger.info("AG-UI token authentication enabled")
 
     # Core endpoints (always registered)
+    from ambient_runner.endpoints.events import router as events_router
     from ambient_runner.endpoints.health import router as health_router
     from ambient_runner.endpoints.interrupt import router as interrupt_router
     from ambient_runner.endpoints.run import router as run_router
@@ -238,6 +277,7 @@ def add_ambient_endpoints(
     app.include_router(run_router)
     app.include_router(interrupt_router)
     app.include_router(health_router)
+    app.include_router(events_router)
 
     from ambient_runner.endpoints.model import router as model_router
 
@@ -344,17 +384,103 @@ _AUTO_PROMPT_INITIAL_DELAY = 2.0
 _AUTO_PROMPT_MAX_DELAY = 30.0
 
 
-async def _auto_execute_initial_prompt(prompt: str, session_id: str) -> None:
-    """Auto-execute INITIAL_PROMPT on session startup with retry backoff.
+async def _auto_execute_initial_prompt(
+    prompt: str, session_id: str, grpc_url: str = ""
+) -> None:
+    """Auto-execute INITIAL_PROMPT on session startup.
 
-    The runner pod may be ready before the K8s Service DNS propagates,
-    so the first few attempts can fail with "runner not available".
-    Retries with exponential backoff until the backend accepts the request.
+    When AMBIENT_GRPC_URL is set, pushes the initial prompt as a DB Message
+    via PushSessionMessage so the GRPCSessionListener picks it up and triggers
+    the run directly. The prompt is then observable to API consumers and
+    visible in the frontend session history.
+
+    When AMBIENT_GRPC_URL is not set, falls back to the original HTTP POST
+    path with exponential-backoff retry (for DNS propagation races).
     """
     delay_seconds = float(os.getenv("INITIAL_PROMPT_DELAY_SECONDS", "2"))
     logger.info(f"Waiting {delay_seconds}s before auto-executing INITIAL_PROMPT...")
     await asyncio.sleep(delay_seconds)
 
+    if grpc_url:
+        # gRPC mode: the initial prompt was already stored in the DB when the session
+        # was created via the HTTP API (acpctl create session). The GRPCSessionListener's
+        # WatchSessionMessages stream will deliver it to the runner automatically.
+        # Pushing here would use the SA token which cannot push event_type=user,
+        # causing a harmless but noisy PERMISSION_DENIED warning. Skip it.
+        logger.debug(
+            "gRPC mode: skipping INITIAL_PROMPT push — message already in DB via session creation: session=%s",
+            session_id,
+        )
+    else:
+        await _push_initial_prompt_via_http(prompt, session_id)
+
+
+async def _push_initial_prompt_via_grpc(prompt: str, session_id: str) -> None:
+    """Push INITIAL_PROMPT as a PushSessionMessage so it is durable in DB.
+
+    The gRPC push is synchronous (blocking I/O) and is offloaded to a thread
+    pool so it does not block the asyncio event loop.
+    """
+    import json as _json
+
+    from ambient_runner._grpc_client import AmbientGRPCClient
+
+    def _do_push() -> None:
+        client = AmbientGRPCClient.from_env()
+        try:
+            payload = {
+                "threadId": session_id,
+                "runId": str(uuid.uuid4()),
+                "messages": [
+                    {
+                        "id": str(uuid.uuid4()),
+                        "role": "user",
+                        "content": prompt,
+                        "metadata": {
+                            "hidden": True,
+                            "autoSent": True,
+                            "source": "runner_initial_prompt",
+                        },
+                    }
+                ],
+            }
+            result = client.session_messages.push(
+                session_id,
+                event_type="user",
+                payload=_json.dumps(payload),
+            )
+            if result is not None:
+                logger.info(
+                    "INITIAL_PROMPT pushed via gRPC: session=%s seq=%d",
+                    session_id,
+                    result.seq,
+                )
+            else:
+                logger.warning(
+                    "INITIAL_PROMPT gRPC push returned None (push may have failed): session=%s",
+                    session_id,
+                )
+        finally:
+            client.close()
+
+    try:
+        await asyncio.get_running_loop().run_in_executor(None, _do_push)
+    except Exception as exc:
+        logger.error(
+            "INITIAL_PROMPT gRPC push failed: session=%s error=%s",
+            session_id,
+            exc,
+            exc_info=True,
+        )
+
+
+async def _push_initial_prompt_via_http(prompt: str, session_id: str) -> None:
+    """POST INITIAL_PROMPT to the backend AG-UI run endpoint with retry backoff.
+
+    The runner pod may be ready before K8s Service DNS propagates, so the
+    first few attempts can fail with "runner not available". Retries with
+    exponential backoff until the backend accepts the request.
+    """
     backend_url = os.getenv("BACKEND_API_URL", "").rstrip("/")
     project_name = (
         os.getenv("PROJECT_NAME", "").strip()

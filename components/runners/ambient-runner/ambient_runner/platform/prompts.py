@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 # Prompt constants
 # ---------------------------------------------------------------------------
 
+DEFAULT_AGENT_PREAMBLE = os.getenv(
+    "AGENT_PREAMBLE", "You are a helpful AI agent. Be kind."
+)
+
 WORKSPACE_STRUCTURE_HEADER = "# Workspace Structure\n\n"
 
 WORKSPACE_FIXED_PATHS_PROMPT = (
@@ -66,15 +70,6 @@ GIT_PUSH_STEPS = (
     "4. Create a pull request using `gh pr create` targeting the default branch\n\n"
     "**IMPORTANT**: NEVER push directly to `main` or `master`. Always work on "
     "the feature branch (`{branch}`). If push fails, do NOT fall back to main.\n\n"
-)
-
-GIT_SAFETY_INSTRUCTIONS = (
-    "## Git Safety\n\n"
-    "**NEVER embed tokens or credentials in commands** — use environment "
-    "variables (`$GITHUB_TOKEN`, `$GITLAB_TOKEN`) instead of inline PATs.\n\n"
-    "**When a git operation fails**: stop, diagnose, report the error to the "
-    "user, and wait. Do NOT autonomously escalate to force pushes, API "
-    "workarounds, or more aggressive retry variants.\n\n"
 )
 
 RUBRIC_EVALUATION_HEADER = "## Rubric Evaluation\n\n"
@@ -223,9 +218,6 @@ def build_workspace_context_prompt(
                 repo_name = repo.get("name", "unknown")
                 prompt += f"- **repos/{repo_name}/**\n"
             prompt += GIT_PUSH_STEPS.format(branch=push_branch)
-
-    if repos_cfg:
-        prompt += GIT_SAFETY_INSTRUCTIONS
 
     # Human-in-the-loop instructions
     prompt += HUMAN_INPUT_INSTRUCTIONS

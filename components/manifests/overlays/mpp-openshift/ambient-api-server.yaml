@@ -1,0 +1,182 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ambient-api-server-auth
+  namespace: ambient-code--runtime-int
+  labels:
+    app: ambient-api-server
+    component: auth
+data:
+  jwks.json: |
+    {"keys":[{"use":"sig","kty":"RSA","kid":"GWqMSQVJjDoKaU8TnH_LmZeII2wGWYez6x_Oa63hXMM","alg":"RS256","n":"5NBKTJAC7kLcQBWWT0eBuaAI-4lqO2hl3S2Oc37kwXqHowA-2XSGT5g5oW-Y3jtg5m9XUdnTdEoyIEfbcs9mkmDm-IT3fvCWgiDWvopTd9C5WxhcM0XcjqdVSshFzDK2V1ZLmic2pLZS743hfGb1FDezF9A-KNycE41_2IwisPDNJbjsxH6oabOkva4QtA_K9ivREq6gBQtZSIr_hoQLcafL6paVAuPW1wVreBENBqiYkM69iSq3pU6Svqb51WhMADCIcxUsEINTW-0hg91WOYdSJ0r1UpEc6nGxb56Jlw-5h_nFInNUorXeTezgSXcpaHz1EpQQe4vo68EWhf3I6w","e":"AQAB"},{"use":"sig","kty":"RSA","kid":"1milNqdanuBP4v4UolwNIJwbHgxj1BrgmGLdBDWpQDc","alg":"RS256","n":"lvJPPx7OqsIDUnQQtOHUw26qqvL-XjhgSxYWvONhPgIqc5f-dvkBqH9mo_5WkUZcEcvC12FuUvJlYs1mHB4Zy7FwHY00HgD2v3Qa7AuhnnX6EIhGsqL1bxEae5OeRKe5mcEpBBIaXsbbWhrxTxksZqOeYGwJfI9FK8TFFD8C9LJTAAT_CpvU9ieKvYj0rvvvELEk8-DzsjnHabd7extSRUwqtb7xMx4DcMwRi1Axt_dp7g3EyOV1aUZXeNjncE5ot1m3r0t6LtnDk9Sb94EN1YfaVtE5LzK7zD46e05nQIUguURNC8xMUzIFkkoKNv7-wEDw5AhmnbWw9960ObUcAw","e":"AQAB"},{"use":"sig","kty":"RSA","kid":"jtx9LVV86TSy7P5AsXEGe6yAWUCIdnAVEsK1S3PRE90","alg":"RS256","n":"32_0wd-rJldZn63xz7rHHrgjo-Y7A6GYN-hlBGF5EPlheR18A_jQmjHHxSzFKWx1Kgm0hV8nGNCjvXsuQ2hzDDLHYnXe1w7S9JhEQTxIV87FWod9OuGefddfCXUarI14_AvtjgrQG_0BTCpSG0IS5rojvxjvr5NeJuPu9msIbMl5xeYST63r1U6F46KGYcdAMYw21z59rT-s4d0c7FJIIu2llrlPj1m4N8FUEmf9GBCjXA_ys7ZmYLkue35WtzSSRYXZZy3czYtffsW1yeRVlWthIZ182qEzt6T00gZPlHjKNPrgPNQ9b5hA_ZC3SEWE2KU-Y_4QH4aTSsbAoRTtJbVdfb7k5Osvq2Vuu6TjDElZuZXAYu3gu5EtXp-xBWIX-Lvs_wW_5qL2h7zcv127vl4NocUz0kSl3m-t53u1JMrcxBsucQRn1CEzsph9oUABVBEP8ugviA8BbRIFfvx9cX-mSk6DYxn-deX4IOrLJqoekvoIIL0Z9wxVnp681xgLZVXG2JvOIc46ZXORGqol4m69OPbmxdrXdMNY8Hbnf4IycS99axN0rG3ZmnVLBR17b2Rl7cIS-E-1vQ8XKcH89SX8Mj9kwnmr4P6biK3T6Iyhv9CY2sZFpy6XrXGrL9eGRR_lRildgq6wCjcGAAYdTzUHgKAC3f3KT1_aTEBw9Ks","e":"AQAB"}]}
+  acl.yml: |
+    - claim: email
+      pattern: ^.*@(redhat\.com|ambient\.code)$
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ambient-api-server
+  namespace: ambient-code--runtime-int
+  labels:
+    app: ambient-api-server
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-api-server
+  namespace: ambient-code--runtime-int
+  labels:
+    app: ambient-api-server
+    component: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ambient-api-server
+      component: api
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: ambient-api-server
+        component: api
+    spec:
+      serviceAccountName: ambient-api-server
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: migration
+          image: quay.io/ambient_code/vteam_api_server:latest
+          imagePullPolicy: Always
+          command:
+            - /usr/local/bin/ambient-api-server
+            - migrate
+            - --db-host-file=/secrets/db/db.host
+            - --db-port-file=/secrets/db/db.port
+            - --db-user-file=/secrets/db/db.user
+            - --db-password-file=/secrets/db/db.password
+            - --db-name-file=/secrets/db/db.name
+            - --alsologtostderr
+            - -v=4
+          volumeMounts:
+            - name: db-secrets
+              mountPath: /secrets/db
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+      containers:
+        - name: api-server
+          image: quay.io/ambient_code/vteam_api_server:latest
+          imagePullPolicy: Always
+          env:
+            - name: AMBIENT_ENV
+              value: production
+            - name: GRPC_SERVICE_ACCOUNT
+              value: "service-account-ocm-ams-service"
+          ports:
+            - name: api
+              containerPort: 8000
+              protocol: TCP
+            - name: metrics
+              containerPort: 4433
+              protocol: TCP
+            - name: health
+              containerPort: 4434
+              protocol: TCP
+            - name: grpc
+              containerPort: 9000
+              protocol: TCP
+          volumeMounts:
+            - name: db-secrets
+              mountPath: /secrets/db
+            - name: app-secrets
+              mountPath: /secrets/service
+            - name: auth-config
+              mountPath: /configs/authentication
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /api/ambient
+              port: 8000
+              scheme: HTTP
+            initialDelaySeconds: 15
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 4434
+              scheme: HTTP
+              httpHeaders:
+                - name: User-Agent
+                  value: Probe
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: db-secrets
+          secret:
+            secretName: ambient-api-server-db
+        - name: app-secrets
+          secret:
+            secretName: ambient-api-server
+        - name: auth-config
+          configMap:
+            name: ambient-api-server-auth
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ambient-api-server
+  namespace: ambient-code--runtime-int
+  labels:
+    app: ambient-api-server
+    component: api
+spec:
+  selector:
+    app: ambient-api-server
+    component: api
+  ports:
+    - name: api
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+    - name: grpc
+      port: 9000
+      targetPort: 9000
+      protocol: TCP
+    - name: metrics
+      port: 4433
+      targetPort: 4433
+      protocol: TCP
+    - name: health
+      port: 4434
+      targetPort: 4434
+      protocol: TCP
