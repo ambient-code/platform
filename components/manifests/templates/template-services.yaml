@@ -247,7 +247,7 @@ objects:
           - -v=4
           env:
           - name: AMBIENT_ENV
-            value: stage
+            value: production
           image: ${IMAGE_AMBIENT_API_SERVER}:${IMAGE_TAG}
           imagePullPolicy: Always
           livenessProbe:
