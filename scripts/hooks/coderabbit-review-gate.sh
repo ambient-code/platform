@@ -24,8 +24,8 @@ fi
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 BASE_BRANCH="main"
 
-# Skip if no changed files
-CHANGED_FILES=$(git diff "$BASE_BRANCH"...HEAD --name-only 2>/dev/null || git diff HEAD~1 --name-only)
+# Skip if no changed files (gracefully handle shallow CI clones where HEAD~1 or base may not exist)
+CHANGED_FILES=$(git diff "$BASE_BRANCH"...HEAD --name-only 2>/dev/null || git diff HEAD~1 --name-only 2>/dev/null || true)
 if [ -z "$CHANGED_FILES" ]; then
     echo "Review Gate: no changed files, allowing PR creation" >&2
     exit 0
@@ -34,7 +34,7 @@ fi
 # Require CodeRabbit CLI
 if ! command -v coderabbit &>/dev/null; then
     echo "Review Gate: CodeRabbit CLI not found — cannot enforce review gate" >&2
-    echo "Install: npm install -g coderabbit" >&2
+    echo "Install: curl -fsSL https://cli.coderabbit.ai/install.sh | sh" >&2
     exit 2
 fi
 

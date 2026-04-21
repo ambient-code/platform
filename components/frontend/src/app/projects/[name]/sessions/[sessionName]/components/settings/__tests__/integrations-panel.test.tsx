@@ -7,6 +7,7 @@ type IntegrationsData = {
   gitlab: { connected: boolean };
   jira: { connected: boolean };
   google: { connected: boolean };
+  coderabbit?: { connected: boolean };
 } | null;
 
 const mockUseIntegrationsStatus = vi.fn((): { data: IntegrationsData; isPending: boolean } => ({
@@ -36,13 +37,14 @@ describe('IntegrationsPanel', () => {
     expect(skeletons.length).toBeGreaterThan(0);
   });
 
-  it('renders integration cards (GitHub, GitLab, Google Workspace, Jira)', () => {
+  it('renders integration cards (GitHub, GitLab, Google Workspace, Jira, CodeRabbit)', () => {
     mockUseIntegrationsStatus.mockReturnValue({
       data: {
         github: { active: null },
         gitlab: { connected: false },
         jira: { connected: false },
         google: { connected: false },
+        coderabbit: { connected: false },
       },
       isPending: false,
     });
@@ -51,6 +53,7 @@ describe('IntegrationsPanel', () => {
     expect(screen.getByText('GitLab')).toBeDefined();
     expect(screen.getByText('Google Workspace')).toBeDefined();
     expect(screen.getByText('Jira')).toBeDefined();
+    expect(screen.getByText('CodeRabbit')).toBeDefined();
   });
 
   it('shows connected status for configured integrations', () => {
@@ -60,11 +63,12 @@ describe('IntegrationsPanel', () => {
         gitlab: { connected: true },
         jira: { connected: true },
         google: { connected: false },
+        coderabbit: { connected: false },
       },
       isPending: false,
     });
     render(<IntegrationsPanel />);
-    // 3 out of 4 configured: badge should show 3/4
-    expect(screen.getByText('3/4')).toBeDefined();
+    // GitHub + GitLab + Jira + CodeRabbit (always active) = 4 out of 5
+    expect(screen.getByText('4/5')).toBeDefined();
   });
 });

@@ -9,6 +9,7 @@ a pre-flight auth check that logs status without emitting events.
 import json
 import logging
 import os
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -118,6 +119,19 @@ def build_mcp_servers(
             "acp_stop_session, acp_send_message, acp_get_session_status, "
             "acp_restart_session, acp_list_workflows, acp_get_api_reference"
         )
+
+    # Gerrit MCP server (only if credentials are configured)
+    gerrit_config = os.environ.get("GERRIT_CONFIG_PATH", "")
+    if gerrit_config and Path(gerrit_config).exists():
+        mcp_servers["gerrit"] = {
+            "command": "/opt/gerrit-mcp-server/.venv/bin/python",
+            "args": ["/opt/gerrit-mcp-server/gerrit_mcp_server/main.py", "stdio"],
+            "env": {
+                "PYTHONPATH": "/opt/gerrit-mcp-server/",
+                "GERRIT_CONFIG_PATH": gerrit_config,
+            },
+        }
+        logger.info("Added Gerrit MCP server (credentials configured)")
 
     return mcp_servers
 
@@ -264,6 +278,12 @@ def check_mcp_authentication(server_name: str) -> tuple[bool | None, str | None]
 
         return False, "Jira not configured - connect on Integrations page"
 
+    if server_name == "gerrit":
+        config_path = os.environ.get("GERRIT_CONFIG_PATH", "")
+        if config_path and Path(config_path).exists():
+            return True, "Gerrit credentials configured"
+        return False, "Gerrit not configured - connect on Integrations page"
+
     # Generic fallback: check if MCP_{SERVER_NAME}_* env vars are populated
     sanitized = server_name.upper().replace("-", "_")
     prefix = f"MCP_{sanitized}_"
@@ -272,3 +292,68 @@ def check_mcp_authentication(server_name: str) -> tuple[bool | None, str | None]
         return True, f"MCP credentials configured for {server_name}"
 
     return None, None
+
+
+# ---------------------------------------------------------------------------
+# Gerrit MCP config generation
+# ---------------------------------------------------------------------------
+
+
+def generate_gerrit_config(instances: list[dict]) -> None:
+    """Generate Gerrit MCP server configuration from credential instances."""
+    config_dir = Path("/tmp/gerrit-mcp")
+    config_file = config_dir / "gerrit_config.json"
+    gitcookies_file = config_dir / ".gitcookies"
+
+    # Clean up stale config
+    if config_dir.exists():
+        shutil.rmtree(config_dir)
+
+    if not instances:
+        os.environ.pop("GERRIT_CONFIG_PATH", None)
+        return
+
+    config_dir.mkdir(parents=True, exist_ok=True)
+
+    gerrit_hosts = []
+    gitcookies_lines = []
+
+    for inst in instances:
+        host_entry = {
+            "name": inst.get("instanceName", ""),
+            "external_url": inst.get("url", ""),
+        }
+
+        auth_method = inst.get("authMethod", "")
+        if auth_method == "http_basic":
+            host_entry["authentication"] = {
+                "type": "http_basic",
+                "username": inst.get("username", ""),
+                "auth_token": inst.get("httpToken", ""),
+            }
+        elif auth_method == "git_cookies":
+            host_entry["authentication"] = {
+                "type": "git_cookies",
+                "gitcookies_path": str(gitcookies_file),
+            }
+            content = inst.get("gitcookiesContent", "")
+            if content:
+                gitcookies_lines.append(content.strip())
+
+        gerrit_hosts.append(host_entry)
+
+    # Write combined .gitcookies if any instances use git_cookies auth
+    if gitcookies_lines:
+        gitcookies_file.write_text("\n".join(gitcookies_lines) + "\n")
+        gitcookies_file.chmod(0o600)
+
+    config = {
+        "gerrit_hosts": gerrit_hosts,
+        "default_gerrit_base_url": instances[0].get("url", "") if instances else "",
+    }
+
+    config_file.write_text(json.dumps(config, indent=2))
+    config_file.chmod(0o600)
+
+    os.environ["GERRIT_CONFIG_PATH"] = str(config_file)
+    logger.info(f"Generated Gerrit config with {len(gerrit_hosts)} host(s)")

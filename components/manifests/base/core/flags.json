@@ -49,6 +49,16 @@
           "value": "workspace"
         }
       ]
+    },
+    {
+      "name": "gerrit.enabled",
+      "description": "Enable Gerrit integration connector for code review workflows",
+      "tags": [
+        {
+          "type": "scope",
+          "value": "workspace"
+        }
+      ]
     }
   ]
 }

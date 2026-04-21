@@ -791,18 +791,26 @@ class TestGhWrapper:
         import ambient_runner.platform.auth as _auth_mod
 
         _auth_mod._gh_wrapper_installed = False
-        wrapper = Path(_GH_WRAPPER_PATH)
-        wrapper.unlink(missing_ok=True)
-        wrapper_dir = Path(_GH_WRAPPER_DIR)
-        if wrapper_dir.exists() and not any(wrapper_dir.iterdir()):
-            wrapper_dir.rmdir()
+        # Read the current module-level paths (not the stale import-time values)
+        wrapper_path = _auth_mod._GH_WRAPPER_PATH
+        wrapper_dir_path = _auth_mod._GH_WRAPPER_DIR
+        if wrapper_path:
+            wrapper = Path(wrapper_path)
+            if wrapper.is_file():
+                wrapper.unlink(missing_ok=True)
+        if wrapper_dir_path:
+            wrapper_dir = Path(wrapper_dir_path)
+            if wrapper_dir.exists() and not any(wrapper_dir.iterdir()):
+                wrapper_dir.rmdir()
 
     def test_install_creates_executable_wrapper(self):
         """install_gh_wrapper creates an executable script at _GH_WRAPPER_PATH."""
+        import ambient_runner.platform.auth as _auth_mod
+
         self._cleanup()
         try:
             install_gh_wrapper()
-            wrapper = Path(_GH_WRAPPER_PATH)
+            wrapper = Path(_auth_mod._GH_WRAPPER_PATH)
             assert wrapper.exists(), "Wrapper script should be created"
             assert os.access(str(wrapper), os.X_OK), "Wrapper should be executable"
             content = wrapper.read_text()
@@ -813,17 +821,21 @@ class TestGhWrapper:
 
     def test_install_prepends_to_path(self):
         """install_gh_wrapper prepends the wrapper dir to PATH."""
+        import ambient_runner.platform.auth as _auth_mod
+
         self._cleanup()
         original_path = os.environ.get("PATH", "")
         try:
-            # Remove wrapper dir from PATH if present
-            parts = [p for p in original_path.split(":") if p != _GH_WRAPPER_DIR]
+            # Remove wrapper dir from PATH if present (use current module value)
+            current_dir = _auth_mod._GH_WRAPPER_DIR
+            parts = [p for p in original_path.split(":") if p != current_dir]
             os.environ["PATH"] = ":".join(parts)
 
             install_gh_wrapper()
 
+            current_dir = _auth_mod._GH_WRAPPER_DIR
             current_path = os.environ.get("PATH", "")
-            assert current_path.startswith(_GH_WRAPPER_DIR + ":"), (
+            assert current_path.startswith(current_dir + ":"), (
                 "Wrapper dir should be first in PATH"
             )
         finally:
@@ -832,17 +844,21 @@ class TestGhWrapper:
 
     def test_install_is_idempotent(self):
         """Calling install_gh_wrapper twice does not duplicate PATH entries."""
+        import ambient_runner.platform.auth as _auth_mod
+
         self._cleanup()
         original_path = os.environ.get("PATH", "")
         try:
-            parts = [p for p in original_path.split(":") if p != _GH_WRAPPER_DIR]
+            current_dir = _auth_mod._GH_WRAPPER_DIR
+            parts = [p for p in original_path.split(":") if p != current_dir]
             os.environ["PATH"] = ":".join(parts)
 
             install_gh_wrapper()
             install_gh_wrapper()  # second call should be a no-op
 
+            current_dir = _auth_mod._GH_WRAPPER_DIR
             current_path = os.environ.get("PATH", "")
-            count = current_path.split(":").count(_GH_WRAPPER_DIR)
+            count = current_path.split(":").count(current_dir)
             assert count == 1, f"Wrapper dir should appear once in PATH, got {count}"
         finally:
             os.environ["PATH"] = original_path
@@ -868,7 +884,9 @@ class TestGhWrapper:
                 ctx = _make_context()
                 await populate_runtime_credentials(ctx)
 
-            wrapper = Path(_GH_WRAPPER_PATH)
+            import ambient_runner.platform.auth as _auth_mod
+
+            wrapper = Path(_auth_mod._GH_WRAPPER_PATH)
             assert wrapper.exists(), (
                 "populate_runtime_credentials should install gh wrapper"
             )
