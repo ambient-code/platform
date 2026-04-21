@@ -146,6 +146,11 @@ func ssrfSafeTransport() *http.Transport {
 }
 
 func ConnectGerrit(c *gin.Context) {
+	if !FeatureEnabledForRequest(c, "gerrit.enabled") {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		return
+	}
+
 	reqK8s, _ := GetK8sClientsForRequest(c)
 	if reqK8s == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
@@ -253,6 +258,11 @@ func ConnectGerrit(c *gin.Context) {
 }
 
 func GetGerritStatus(c *gin.Context) {
+	if !FeatureEnabledForRequest(c, "gerrit.enabled") {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		return
+	}
+
 	reqK8s, _ := GetK8sClientsForRequest(c)
 	if reqK8s == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
@@ -297,6 +307,11 @@ func GetGerritStatus(c *gin.Context) {
 }
 
 func DisconnectGerrit(c *gin.Context) {
+	if !FeatureEnabledForRequest(c, "gerrit.enabled") {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		return
+	}
+
 	reqK8s, _ := GetK8sClientsForRequest(c)
 	if reqK8s == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
@@ -326,6 +341,11 @@ func DisconnectGerrit(c *gin.Context) {
 }
 
 func ListGerritInstances(c *gin.Context) {
+	if !FeatureEnabledForRequest(c, "gerrit.enabled") {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		return
+	}
+
 	reqK8s, _ := GetK8sClientsForRequest(c)
 	if reqK8s == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
@@ -356,6 +376,7 @@ func ListGerritInstances(c *gin.Context) {
 			"instanceName": inst.InstanceName,
 			"url":          inst.URL,
 			"authMethod":   inst.AuthMethod,
+			"connected":    true,
 			"updatedAt":    inst.UpdatedAt.Format(time.RFC3339),
 		}
 		result = append(result, entry)

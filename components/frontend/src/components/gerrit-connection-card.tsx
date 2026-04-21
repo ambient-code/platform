@@ -19,15 +19,6 @@ import {
 import type { GerritAuthMethod, GerritInstanceStatus } from '@/services/api/gerrit-auth'
 
 type Props = {
-  status?: {
-    connected: boolean
-    instances?: Array<{
-      instanceName: string
-      url: string
-      authMethod: string
-      connected: boolean
-    }>
-  }
   onRefresh?: () => void
 }
 
@@ -95,6 +86,14 @@ export function GerritConnectionCard({ onRefresh }: Props) {
   const handleTest = () => {
     if (!url) {
       toast.error('Please enter a Gerrit URL')
+      return
+    }
+    if (authMethod === 'http_basic' && (!username || !httpToken)) {
+      toast.error('Please enter username and HTTP token')
+      return
+    }
+    if (authMethod === 'git_cookies' && !gitcookiesContent) {
+      toast.error('Please enter gitcookies content')
       return
     }
 
