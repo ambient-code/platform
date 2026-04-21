@@ -50,8 +50,8 @@ jobs:
         env:
           PACKAGE_ARG: ${{ inputs.package || 'all' }}
         run: |
-          python scripts/sdk-version-bump.py --check-only --package "$PACKAGE_ARG"
-          EXIT_CODE=$?
+          EXIT_CODE=0
+          python scripts/sdk-version-bump.py --check-only --package "$PACKAGE_ARG" || EXIT_CODE=$?
 
           if [ "$EXIT_CODE" -eq 2 ]; then
             echo "updates_available=true" >> "$GITHUB_OUTPUT"
