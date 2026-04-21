@@ -45,7 +45,7 @@ jobs:
           node-version: '20'
 
       - name: Install CodeRabbit CLI
-        run: npm install -g coderabbit
+        run: curl -fsSL https://cli.coderabbit.ai/install.sh | CODERABBIT_INSTALL_DIR=/usr/local/bin sh
 
       - name: Verify CLI installed
         run: |

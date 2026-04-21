@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -196,6 +197,103 @@ func TestJiraConnection(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"valid": true, "message": "Jira connection successful"})
+}
+
+// validateGerritTokenFn is a package-level var for test mockability
+var validateGerritTokenFn = ValidateGerritToken
+
+// ValidateGerritToken checks if Gerrit credentials are valid by calling /a/accounts/self
+func ValidateGerritToken(ctx context.Context, gerritURL, authMethod, username, httpToken, gitcookiesContent string) (bool, error) {
+	if gerritURL == "" {
+		return false, fmt.Errorf("missing Gerrit URL")
+	}
+
+	apiURL := fmt.Sprintf("%s/a/accounts/self", strings.TrimSuffix(gerritURL, "/"))
+
+	client := &http.Client{
+		Timeout:   15 * time.Second,
+		Transport: ssrfSafeTransport(),
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	if err != nil {
+		return false, fmt.Errorf("failed to create request")
+	}
+
+	switch authMethod {
+	case gerritAuthHTTPBasic:
+		if username == "" || httpToken == "" {
+			return false, fmt.Errorf("missing username or HTTP token")
+		}
+		req.SetBasicAuth(username, httpToken)
+	case gerritAuthGitCookies:
+		if gitcookiesContent == "" {
+			return false, fmt.Errorf("missing gitcookies content")
+		}
+		cookie, err := parseGitcookies(gerritURL, gitcookiesContent)
+		if err != nil {
+			return false, fmt.Errorf("failed to parse gitcookies: %w", err)
+		}
+		req.Header.Set("Cookie", cookie)
+	default:
+		return false, fmt.Errorf("unsupported auth method: %s", authMethod)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("request failed: %w", networkError(err))
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		return true, nil
+	}
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return false, nil
+	}
+
+	return false, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+}
+
+// TestGerritConnection handles POST /api/auth/gerrit/test
+// Tests Gerrit credentials without saving them
+func TestGerritConnection(c *gin.Context) {
+	if !FeatureEnabledForRequest(c, "gerrit.enabled") {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		return
+	}
+
+	var req struct {
+		URL               string `json:"url" binding:"required"`
+		AuthMethod        string `json:"authMethod" binding:"required"`
+		Username          string `json:"username"`
+		HTTPToken         string `json:"httpToken"`
+		GitcookiesContent string `json:"gitcookiesContent"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate URL (SSRF protection)
+	if err := validateGerritURL(req.URL); err != nil {
+		c.JSON(http.StatusOK, gin.H{"valid": false, "error": fmt.Sprintf("Invalid URL: %s", err.Error())})
+		return
+	}
+
+	valid, err := validateGerritTokenFn(c.Request.Context(), req.URL, req.AuthMethod, req.Username, req.HTTPToken, req.GitcookiesContent)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"valid": false, "error": err.Error()})
+		return
+	}
+
+	if !valid {
+		c.JSON(http.StatusOK, gin.H{"valid": false, "error": "Invalid credentials"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"valid": true, "message": "Gerrit connection successful"})
 }
 
 // TestGitLabConnection handles POST /api/auth/gitlab/test

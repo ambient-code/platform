@@ -380,6 +380,56 @@ func GetCodeRabbitCredentialsForSession(c *gin.Context) {
 	})
 }
 
+// GetGerritCredentialsForSession handles GET /api/projects/:project/agentic-sessions/:session/credentials/gerrit
+// Returns all Gerrit instance credentials for the session's user
+func GetGerritCredentialsForSession(c *gin.Context) {
+	project := c.Param("projectName")
+	session := c.Param("sessionName")
+
+	reqK8s, reqDyn := GetK8sClientsForRequest(c)
+	if reqK8s == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or missing token"})
+		return
+	}
+
+	effectiveUserID, ok := enforceCredentialRBAC(c, reqK8s, reqDyn, project, session)
+	if !ok {
+		return
+	}
+
+	// Get all Gerrit instances for the user
+	instances, err := listGerritCredentials(c.Request.Context(), effectiveUserID)
+	if err != nil {
+		log.Printf("Failed to get Gerrit credentials for user %s: %v", effectiveUserID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get Gerrit credentials"})
+		return
+	}
+
+	if len(instances) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Gerrit credentials not configured"})
+		return
+	}
+
+	result := make([]gin.H, 0, len(instances))
+	for _, inst := range instances {
+		entry := gin.H{
+			"instanceName": inst.InstanceName,
+			"url":          inst.URL,
+			"authMethod":   inst.AuthMethod,
+		}
+		switch inst.AuthMethod {
+		case gerritAuthHTTPBasic:
+			entry["username"] = inst.Username
+			entry["httpToken"] = inst.HTTPToken
+		case gerritAuthGitCookies:
+			entry["gitcookiesContent"] = inst.GitcookiesContent
+		}
+		result = append(result, entry)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"instances": result})
+}
+
 // refreshGoogleAccessToken refreshes a Google OAuth access token using the refresh token
 func refreshGoogleAccessToken(ctx context.Context, oldCreds *GoogleOAuthCredentials) (*GoogleOAuthCredentials, error) {
 	if oldCreds.RefreshToken == "" {
