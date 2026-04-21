@@ -34,6 +34,14 @@ export async function GET(
     responseHeaders['Content-Disposition'] = 'inline'
   }
 
+  // For HTML and SVG files served on the same origin, add a strict CSP to prevent script execution.
+  // The sandbox directive combined with script-src 'none' blocks all active content regardless of
+  // the file's own markup, protecting the parent app from stored XSS via workspace files.
+  const scriptBlockedExts = new Set(['html', 'htm', 'svg'])
+  if (scriptBlockedExts.has(ext)) {
+    responseHeaders['Content-Security-Policy'] = "sandbox; script-src 'none'"
+  }
+
   return new Response(buf, { status: resp.status, headers: responseHeaders })
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -75,6 +75,27 @@ function NumberedCodeBlock({ content, className }: { content: string; className?
   );
 }
 
+/**
+ * Renders an SVG string safely as an <img> via a blob URL, blocking all script execution.
+ * The blob URL is revoked on unmount to avoid memory leaks.
+ */
+function SvgBlobImage({ content, fileName }: { content: string; fileName: string }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const blob = new Blob([content], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    setBlobUrl(url);
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [content]);
+
+  if (!blobUrl) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={blobUrl} alt={fileName} className="max-w-full max-h-full object-contain rounded" />;
+}
+
 /** Renders file content with type-specific viewers (image, PDF, HTML, markdown, binary, text). */
 export function FileContentViewer({ fileName, content, fileUrl, fileSize: fileSizeProp, onDownload }: FileContentViewerProps) {
   const [imageError, setImageError] = useState(false);
@@ -99,7 +120,7 @@ export function FileContentViewer({ fileName, content, fileUrl, fileSize: fileSi
             // eslint-disable-next-line @next/next/no-img-element
             <img src={fileUrl} alt={fileName} className="max-w-full max-h-full object-contain rounded" onError={() => setImageError(true)} />
           ) : fileInfo.mimeType === 'image/svg+xml' ? (
-            <div className="max-w-full overflow-auto" dangerouslySetInnerHTML={{ __html: content }} />
+            <SvgBlobImage content={content} fileName={fileName} />
           ) : (
             <div className="text-center text-sm text-muted-foreground">
               <FileWarning className="h-8 w-8 mx-auto mb-2 opacity-50" />
@@ -169,7 +190,7 @@ export function FileContentViewer({ fileName, content, fileUrl, fileSize: fileSi
                 {...(fileUrl ? { src: fileUrl } : { srcDoc: content })}
                 className="w-full h-full bg-white"
                 title={fileName}
-                sandbox="allow-scripts allow-same-origin"
+                sandbox="allow-scripts"
               />
             </div>
           </TabsContent>
