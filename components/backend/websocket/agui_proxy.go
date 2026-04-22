@@ -588,7 +588,7 @@ func HandleAGUIInterrupt(c *gin.Context) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	resp, err := runnerShortClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
@@ -653,7 +653,7 @@ func HandleAGUIFeedback(c *gin.Context) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	resp, err := runnerShortClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusAccepted, gin.H{"error": "Runner unavailable — feedback not recorded", "status": "failed"})
 		return
@@ -711,7 +711,7 @@ func HandleCapabilities(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"framework": "unknown"})
 		return
 	}
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	resp, err := runnerShortClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"framework":         "unknown",
@@ -759,7 +759,7 @@ func HandleMCPStatus(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"servers": []interface{}{}, "totalCount": 0})
 		return
 	}
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	resp, err := runnerShortClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"servers": []interface{}{}, "totalCount": 0})
 		return
@@ -783,13 +783,30 @@ func HandleMCPStatus(c *gin.Context) {
 
 // runnerHTTPClient is a shared HTTP client for long-lived SSE connections
 // to runner pods.  Reusing the transport avoids per-call socket churn and
-// background goroutine growth under load.
+// background goroutine growth under load.  Wrapped with handlers.NewRunnerTransport
+// so every request to a *.svc.cluster.local runner pod automatically receives the
+// per-session X-Ambient-Session-Token header.
 var runnerHTTPClient = &http.Client{
 	Timeout: 0, // No overall timeout — SSE streams are long-lived
-	Transport: &http.Transport{
+	Transport: handlers.NewRunnerTransport(&http.Transport{
 		IdleConnTimeout:       5 * time.Minute,  // Close idle connections after 5 min
 		ResponseHeaderTimeout: 30 * time.Second, // Fail fast if runner doesn't respond to headers
-	},
+	}),
+}
+
+// runnerShortClient is a timeout-bounded HTTP client for one-shot runner requests
+// (interrupt, feedback, capabilities, mcp-status, tasks).  Uses the same
+// session-token transport as runnerHTTPClient.
+var runnerShortClient = &http.Client{
+	Timeout:   10 * time.Second,
+	Transport: handlers.NewRunnerTransport(nil),
+}
+
+// runnerMediumClient is like runnerShortClient but with a 30s timeout for
+// larger payloads (e.g. task output transcripts).
+var runnerMediumClient = &http.Client{
+	Timeout:   30 * time.Second,
+	Transport: handlers.NewRunnerTransport(nil),
 }
 
 // connectToRunner POSTs to the runner with retry and exponential backoff.
@@ -1253,7 +1270,7 @@ func HandleTaskStop(c *gin.Context) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	resp, err := runnerShortClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
@@ -1296,7 +1313,7 @@ func HandleTaskOutput(c *gin.Context) {
 		return
 	}
 
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	resp, err := runnerMediumClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
@@ -1334,7 +1351,7 @@ func HandleTaskList(c *gin.Context) {
 		return
 	}
 
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	resp, err := runnerShortClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
