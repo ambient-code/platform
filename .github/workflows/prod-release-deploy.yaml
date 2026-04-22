@@ -18,7 +18,7 @@ on:
         type: boolean
         default: true
       components:
-        description: 'Components to build (comma-separated: frontend,backend,operator,ambient-runner,state-sync,public-api,ambient-api-server) - leave empty for all'
+        description: 'Components to build (comma-separated: frontend,backend,operator,ambient-runner,state-sync,public-api,ambient-api-server,ambient-control-plane,ambient-mcp) - leave empty for all'
         required: false
         type: string
         default: ''
@@ -236,7 +236,9 @@ jobs:
             {"name":"ambient-runner","context":"./components/runners/ambient-runner","image":"quay.io/ambient_code/vteam_claude_runner","dockerfile":"./components/runners/ambient-runner/Dockerfile"},
             {"name":"state-sync","context":"./components/runners/state-sync","image":"quay.io/ambient_code/vteam_state_sync","dockerfile":"./components/runners/state-sync/Dockerfile"},
             {"name":"public-api","context":"./components/public-api","image":"quay.io/ambient_code/vteam_public_api","dockerfile":"./components/public-api/Dockerfile"},
-            {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/vteam_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"}
+            {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/vteam_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"},
+            {"name":"ambient-control-plane","context":"./components/ambient-control-plane","image":"quay.io/ambient_code/vteam_control_plane","dockerfile":"./components/ambient-control-plane/Dockerfile"},
+            {"name":"ambient-mcp","context":"./components/ambient-mcp","image":"quay.io/ambient_code/vteam_mcp","dockerfile":"./components/ambient-mcp/Dockerfile"}
           ]'
 
           FORCE_ALL="${{ github.event.inputs.force_build_all }}"
@@ -621,7 +623,9 @@ jobs:
             ["operator"]="agentic-operator:agentic-operator"
             ["public-api"]="public-api:public-api"
             ["ambient-api-server"]="ambient-api-server:ambient-api-server"
+            ["ambient-control-plane"]="ambient-control-plane:ambient-control-plane"
           )
+
 
           for comp_image in \
             "frontend:quay.io/ambient_code/vteam_frontend" \
@@ -630,7 +634,9 @@ jobs:
             "ambient-runner:quay.io/ambient_code/vteam_claude_runner" \
             "state-sync:quay.io/ambient_code/vteam_state_sync" \
             "public-api:quay.io/ambient_code/vteam_public_api" \
-            "ambient-api-server:quay.io/ambient_code/vteam_api_server"; do
+            "ambient-api-server:quay.io/ambient_code/vteam_api_server" \
+            "ambient-control-plane:quay.io/ambient_code/vteam_control_plane" \
+            "ambient-mcp:quay.io/ambient_code/vteam_mcp"; do
             COMP="${comp_image%%:*}"
             IMAGE="${comp_image#*:}"
 
