@@ -686,6 +686,7 @@ objects:
           - --tls-key=/etc/tls/private/tls.key
           - --cookie-secret-file=/etc/oauth-cookie/cookie_secret
           - --pass-access-token
+          - --scope=user:full
           - --upstream-timeout=5m
           - --skip-auth-regex=^/metrics
           image: ${OAUTH_PROXY_IMAGE_NAME}:${OAUTH_PROXY_IMAGE_TAG}
