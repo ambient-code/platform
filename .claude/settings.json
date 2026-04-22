@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "scripts/hooks/pr-review-gate.sh"
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && bash scripts/hooks/pr-review-gate.sh"
           }
         ]
       },
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/claude-hooks/convention-guard.sh"
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && bash scripts/claude-hooks/convention-guard.sh"
           }
         ]
       }
@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/claude-hooks/auto-format.sh"
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && bash scripts/claude-hooks/auto-format.sh"
           }
         ]
       },
@@ -45,7 +45,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/claude-hooks/stop-review.sh"
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && bash scripts/claude-hooks/stop-review.sh"
           }
         ]
       }
