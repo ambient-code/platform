@@ -83,6 +83,33 @@ Google Drive integration allows the agent to access files stored in your Google 
 3. Sign in with your Google account and grant the requested Drive permissions.
 4. You will be redirected back to the platform once authorization is complete.
 
+## Gerrit
+
+Gerrit integration enables the agent to interact with Gerrit code review instances — clone repositories, push changes, and work with change requests.
+
+### Setup
+
+1. Navigate to **Integrations > Gerrit**.
+2. Enter your **Gerrit instance URL** (e.g., `https://gerrit.example.com`).
+3. Enter the **username** for your Gerrit account.
+4. Generate an [HTTP password](https://gerrit-review.googlesource.com/Documentation/user-upload.html#http) from your Gerrit account settings and paste it into the **HTTP Password** field.
+5. Click **Connect**.
+
+The platform validates the credentials by connecting to the Gerrit instance before saving.
+
+## CodeRabbit
+
+CodeRabbit provides AI-powered code review. Public repositories get free reviews automatically via the GitHub App. Private repositories require an API key.
+
+### Setup
+
+1. Navigate to **Integrations > CodeRabbit**.
+2. Expand **Private repository access**.
+3. Generate an Agentic API key from [app.coderabbit.ai/settings/api-keys](https://app.coderabbit.ai/settings/api-keys) (log in with GitHub, not email).
+4. Paste the key and click **Save Key**.
+
+The key is injected into sessions as `CODERABBIT_API_KEY` automatically. For full details including the PR review gate and local development usage, see [CodeRabbit Integration](../features/coderabbit/).
+
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |

@@ -69,6 +69,15 @@ Based on the established integration pattern (Jira, CodeRabbit, Google Drive), g
 |------|---------|
 | `components/manifests/base/core/flags.json` | Add `integration.{provider}.enabled` |
 
+### Documentation
+
+| File | Purpose | Template |
+|------|---------|----------|
+| `docs/src/content/docs/concepts/integrations.md` | Add setup section | Follow Jira or CodeRabbit sections |
+| `docs/astro.config.mjs` | Add sidebar entry if new page | Only for complex integrations |
+
+Add a section to the integrations page with: what the integration enables, numbered setup steps, and prerequisites. Complex integrations (like CodeRabbit) get their own page under `docs/src/content/docs/features/`.
+
 ### Checklist
 
 After scaffolding, verify:
@@ -80,6 +89,8 @@ After scaffolding, verify:
 - [ ] Feature flag gates the integration card
 - [ ] Tests mock the feature flag hook
 - [ ] Runner credential fetch is added to `populate_runtime_credentials()`
+- [ ] Integration documented on the integrations page
+- [ ] Troubleshooting table updated with common failure modes
 
 ## Endpoint Scaffold
 

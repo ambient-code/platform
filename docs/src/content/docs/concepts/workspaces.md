@@ -116,17 +116,6 @@ The available roles match the workspace sharing roles:
 | **Edit** | Everything in View, plus create sessions, send messages, and manage repos. |
 | **Admin** | Everything in Edit, plus manage workspace settings, secrets, and sharing. |
 
-Choose a token lifetime based on your use case:
-
-| Lifetime | Seconds | Typical use case |
-|----------|---------|------------------|
-| 1 day | 86,400 | Short-lived CI jobs or one-time scripts |
-| 7 days | 604,800 | Weekly pipeline runs |
-| 30 days | 2,592,000 | Monthly rotation schedules |
-| 90 days | 7,776,000 | General-purpose automation (default) |
-| 1 year | 31,536,000 | Long-running integrations |
-| No expiration | -- | Persistent service keys that you rotate manually |
-
 1. Click **Create Key**.
 
 ### Copying the key

@@ -1,6 +1,7 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import rehypeMermaid from 'rehype-mermaid';
+import starlightLlmsTxt from 'starlight-llms-txt';
 
 const isNetlify = !!process.env.NETLIFY;
 
@@ -11,6 +12,9 @@ export default defineConfig({
   base: isNetlify ? '/' : '/platform/',
   integrations: [
     starlight({
+      plugins: [
+        starlightLlmsTxt({ projectName: 'Ambient Code Platform' }),
+      ],
       title: 'Ambient Code Platform',
       favicon: '/favicon.ico',
       description:
@@ -89,6 +93,8 @@ export default defineConfig({
           label: 'Development',
           items: [
             { slug: 'development' },
+            { slug: 'development/harness' },
+            { slug: 'development/review-gate' },
           ],
         },
       ],
