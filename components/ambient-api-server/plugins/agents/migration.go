@@ -42,32 +42,30 @@ func migration() *gormigrate.Migration {
 }
 
 func agentSchemaExpansionMigration() *gormigrate.Migration {
-	type Agent struct {
-		db.Model
-		ProjectId            string
-		ParentAgentId        *string `gorm:"index"`
-		OwnerUserId          *string
-		Name                 string
-		DisplayName          *string
-		Description          *string
-		Prompt               *string `gorm:"type:text"`
-		RepoUrl              *string
-		WorkflowId           *string
-		LlmModel             *string
-		LlmTemperature       *float64
-		LlmMaxTokens         *int32
-		BotAccountName       *string
-		ResourceOverrides    *string
-		EnvironmentVariables *string
-		Labels               *string
-		Annotations          *string
-		CurrentSessionId     *string
-	}
-
 	return &gormigrate.Migration{
 		ID: "202604181000",
 		Migrate: func(tx *gorm.DB) error {
-			return tx.AutoMigrate(&Agent{})
+			stmts := []string{
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS parent_agent_id TEXT`,
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS owner_user_id TEXT`,
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS display_name TEXT`,
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS description TEXT`,
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS repo_url TEXT`,
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS workflow_id TEXT`,
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS llm_model TEXT`,
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS llm_temperature DOUBLE PRECISION`,
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS llm_max_tokens INTEGER`,
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS bot_account_name TEXT`,
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS resource_overrides TEXT`,
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS environment_variables TEXT`,
+				`CREATE INDEX IF NOT EXISTS idx_agents_parent_agent_id ON agents(parent_agent_id)`,
+			}
+			for _, s := range stmts {
+				if err := tx.Exec(s).Error; err != nil {
+					return err
+				}
+			}
+			return nil
 		},
 		Rollback: func(tx *gorm.DB) error {
 			cols := []string{
