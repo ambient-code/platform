@@ -12,6 +12,8 @@ on:
       - 'components/frontend/**'
       - 'components/public-api/**'
       - 'components/ambient-api-server/**'
+      - 'components/ambient-control-plane/**'
+      - 'components/ambient-mcp/**'
   pull_request:
     branches: [main, alpha]
     paths:
@@ -23,10 +25,12 @@ on:
       - 'components/frontend/**'
       - 'components/public-api/**'
       - 'components/ambient-api-server/**'
+      - 'components/ambient-control-plane/**'
+      - 'components/ambient-mcp/**'
   workflow_dispatch:
     inputs:
       components:
-        description: 'Components to build (comma-separated: frontend,backend,operator,ambient-runner,state-sync,public-api,ambient-api-server) - leave empty for all'
+        description: 'Components to build (comma-separated: frontend,backend,operator,ambient-runner,state-sync,public-api,ambient-api-server,ambient-control-plane,ambient-mcp) - leave empty for all'
         required: false
         type: string
         default: ''
@@ -54,7 +58,9 @@ jobs:
             {"name":"ambient-runner","context":"./components/runners/ambient-runner","image":"quay.io/ambient_code/vteam_claude_runner","dockerfile":"./components/runners/ambient-runner/Dockerfile"},
             {"name":"state-sync","context":"./components/runners/state-sync","image":"quay.io/ambient_code/vteam_state_sync","dockerfile":"./components/runners/state-sync/Dockerfile"},
             {"name":"public-api","context":"./components/public-api","image":"quay.io/ambient_code/vteam_public_api","dockerfile":"./components/public-api/Dockerfile"},
-            {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/vteam_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"}
+            {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/vteam_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"},
+            {"name":"ambient-control-plane","context":"./components/ambient-control-plane","image":"quay.io/ambient_code/vteam_control_plane","dockerfile":"./components/ambient-control-plane/Dockerfile"},
+            {"name":"ambient-mcp","context":"./components/ambient-mcp","image":"quay.io/ambient_code/vteam_mcp","dockerfile":"./components/ambient-mcp/Dockerfile"}
           ]'
 
           SELECTED="${{ github.event.inputs.components }}"
@@ -376,6 +382,8 @@ jobs:
           kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/vteam_control_plane:latest=quay.io/ambient_code/vteam_control_plane:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/vteam_mcp:latest=quay.io/ambient_code/vteam_mcp:${{ github.sha }}
 
       - name: Validate kustomization
         working-directory: components/manifests/overlays/production
@@ -451,6 +459,8 @@ jobs:
           kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/vteam_control_plane:latest=quay.io/ambient_code/vteam_control_plane:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/vteam_mcp:latest=quay.io/ambient_code/vteam_mcp:${{ github.sha }}
 
       - name: Validate kustomization
         working-directory: components/manifests/overlays/production

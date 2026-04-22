@@ -2381,11 +2381,18 @@ func (t *runnerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return base.RoundTrip(req)
 }
 
+// NewRunnerTransport wraps base with the session-token injection layer.
+// Requests to *.svc.cluster.local runner pods will have X-Ambient-Session-Token
+// injected automatically. If base is nil, http.DefaultTransport is used.
+func NewRunnerTransport(base http.RoundTripper) http.RoundTripper {
+	return &runnerTransport{base: base}
+}
+
 // newRunnerClient returns an http.Client configured with the runner authentication transport.
 // All requests to runner AG-UI endpoints (*.svc.cluster.local:8001) will have the session
 // token injected automatically. Pass timeout 0 for no timeout (matches http.DefaultClient).
 func newRunnerClient(timeout time.Duration) *http.Client {
-	return &http.Client{Timeout: timeout, Transport: &runnerTransport{}}
+	return &http.Client{Timeout: timeout, Transport: NewRunnerTransport(nil)}
 }
 
 // runnerDefaultClient is a shared runner client with no timeout (use for streaming/long operations).
