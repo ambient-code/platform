@@ -105,16 +105,17 @@ func seedBuiltInRoles(tx *gorm.DB) error {
 		if err != nil {
 			return err
 		}
-		row := roleRow{
-			ID:          api.NewID(),
-			Name:        r.name,
-			DisplayName: r.displayName,
-			Description: r.description,
-			Permissions: string(permsJSON),
-			BuiltIn:     true,
-		}
+		var row roleRow
 		if err := tx.Table("roles").
 			Where("name = ?", r.name).
+			Attrs(roleRow{
+				ID:          api.NewID(),
+				Name:        r.name,
+				DisplayName: r.displayName,
+				Description: r.description,
+				Permissions: string(permsJSON),
+				BuiltIn:     true,
+			}).
 			FirstOrCreate(&row).Error; err != nil {
 			return err
 		}
