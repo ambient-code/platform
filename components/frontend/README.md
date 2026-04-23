@@ -94,6 +94,10 @@ In production, put an OAuth/ingress proxy in front of the app to set these heade
   - Used by server-side API routes to reach the backend.
 - `FEEDBACK_URL` (optional)
   - URL for the feedback link in the masthead. If not set, the link will not appear.
+- `GITHUB_APP_SLUG` (required for GitHub integration)
+  - The slug of the GitHub App (e.g. `ambient-code`). Without this, the Connect button on the Integrations page is disabled.
+- `GITHUB_CALLBACK_URL` (optional)
+  - Explicit callback URL for GitHub App OAuth. Used when multiple clusters share one GitHub App. Falls back to `<current origin>/integrations/github/setup`. Must be registered as a callback URL in the GitHub App settings.
 - Optional dev helpers: `OC_USER`, `OC_EMAIL`, `OC_TOKEN`, `ENABLE_OC_WHOAMI=1`
 
 You can also put these in a `.env.local` file in this folder:
