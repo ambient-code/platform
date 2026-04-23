@@ -347,14 +347,14 @@ var _ = Describe("Display Name Handler", Label(test_constants.LabelUnit, test_co
 			It("Should detect Vertex AI enabled configuration", func() {
 				os.Setenv("USE_VERTEX", "1")
 				os.Setenv("ANTHROPIC_VERTEX_PROJECT_ID", "test-gcp-project")
-				os.Setenv("CLOUD_ML_REGION", "us-east5")
+				os.Setenv("CLOUD_ML_REGION", "global")
 
 				// This tests the environment detection logic
 				// We can't easily test the full getAnthropicClient without real credentials
 				// but we can verify the environment variables are read correctly
 				Expect(os.Getenv("USE_VERTEX")).To(Equal("1"))
 				Expect(os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID")).To(Equal("test-gcp-project"))
-				Expect(os.Getenv("CLOUD_ML_REGION")).To(Equal("us-east5"))
+				Expect(os.Getenv("CLOUD_ML_REGION")).To(Equal("global"))
 			})
 
 			It("Should handle missing Vertex configuration gracefully", func() {

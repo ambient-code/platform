@@ -67,7 +67,7 @@ func Load() (*ControlPlaneConfig, error) {
 		AnthropicAPIKey:       os.Getenv("ANTHROPIC_API_KEY"),
 		VertexEnabled:         os.Getenv("USE_VERTEX") == "1" || os.Getenv("USE_VERTEX") == "true",
 		VertexProjectID:       os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID"),
-		VertexRegion:          envOrDefault("CLOUD_ML_REGION", "us-east5"),
+		VertexRegion:          envOrDefault("CLOUD_ML_REGION", "global"),
 		VertexCredentialsPath: envOrDefault("GOOGLE_APPLICATION_CREDENTIALS", "/app/vertex/ambient-code-key.json"),
 		VertexSecretName:      envOrDefault("VERTEX_SECRET_NAME", "ambient-vertex"),
 		VertexSecretNamespace: envOrDefault("VERTEX_SECRET_NAMESPACE", "ambient-code"),
