@@ -69,7 +69,7 @@ spec:
             - name: ANTHROPIC_VERTEX_PROJECT_ID
               value: "ambient-code-platform"
             - name: CLOUD_ML_REGION
-              value: "us-east5"
+              value: "global"
             - name: GOOGLE_APPLICATION_CREDENTIALS
               value: "/app/vertex/ambient-code-key.json"
             - name: VERTEX_SECRET_NAME
