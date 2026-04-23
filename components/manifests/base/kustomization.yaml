@@ -9,6 +9,7 @@ resources:
 - rbac
 - platform
 - ambient-control-plane-service.yml
+- ambient-control-plane-token-svc.yaml
 
 # Default images (can be overridden by overlays)
 images:
