@@ -12,8 +12,6 @@ from urllib.error import HTTPError
 import pytest
 
 from ambient_runner.platform.auth import (
-    _GH_WRAPPER_DIR,
-    _GH_WRAPPER_PATH,
     _GITHUB_TOKEN_FILE,
     _GITLAB_TOKEN_FILE,
     _fetch_credential,
