@@ -60,7 +60,7 @@ describe('SharingSection', () => {
 
   it('renders permissions table with data', () => {
     render(<SharingSection projectName="test-project" />);
-    expect(screen.getByText('Sharing')).toBeDefined();
+    expect(screen.getByText('Pair Prompting')).toBeDefined();
     expect(screen.getByText('developers')).toBeDefined();
     expect(screen.getByText('alice')).toBeDefined();
   });
@@ -87,7 +87,7 @@ describe('SharingSection', () => {
     render(<SharingSection projectName="test-project" />);
     fireEvent.click(screen.getByText('Grant Permission'));
 
-    const nameInput = screen.getByPlaceholderText('Enter group name');
+    const nameInput = screen.getByPlaceholderText('e.g., platform-team');
     fireEvent.change(nameInput, { target: { value: 'new-team' } });
 
     // Click the Grant Permission button in the dialog footer
@@ -150,5 +150,6 @@ describe('SharingSection', () => {
 
     render(<SharingSection projectName="test-project" />);
     expect(screen.getByText('No users or groups have access yet')).toBeDefined();
+    expect(screen.queryByText('Grant First Permission')).toBeNull();
   });
 });
