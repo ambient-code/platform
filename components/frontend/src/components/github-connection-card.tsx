@@ -42,7 +42,7 @@ export function GitHubConnectionCard({ appSlug, githubCallbackUrl, showManageBut
 
   const handleConnect = () => {
     if (!appSlug) return
-    const callbackUrl = githubCallbackUrl || `${window.location.origin}/integrations/github/setup`
+    const callbackUrl = githubCallbackUrl || `${window.location.origin}/api/auth/github/user/callback`
     const url = `https://github.com/apps/${appSlug}/installations/new?redirect_uri=${encodeURIComponent(callbackUrl)}`
     window.location.href = url
   }
