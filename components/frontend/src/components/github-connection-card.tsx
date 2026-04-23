@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 
 type Props = {
   appSlug?: string
+  githubCallbackUrl?: string
   showManageButton?: boolean
   status?: {
     installed: boolean
@@ -27,7 +28,7 @@ type Props = {
   onRefresh?: () => void
 }
 
-export function GitHubConnectionCard({ appSlug, showManageButton = true, status, onRefresh }: Props) {
+export function GitHubConnectionCard({ appSlug, githubCallbackUrl, showManageButton = true, status, onRefresh }: Props) {
   const disconnectMutation = useDisconnectGitHub()
   const savePATMutation = useSaveGitHubPAT()
   const deletePATMutation = useDeleteGitHubPAT()
@@ -41,10 +42,8 @@ export function GitHubConnectionCard({ appSlug, showManageButton = true, status,
 
   const handleConnect = () => {
     if (!appSlug) return
-    // Let GitHub use the Callback URL configured in the App settings
-    // rather than overriding with redirect_uri (which GitHub ignores
-    // unless it matches a configured callback URL)
-    const url = `https://github.com/apps/${appSlug}/installations/new`
+    const callbackUrl = githubCallbackUrl || `${window.location.origin}/integrations/github/setup`
+    const url = `https://github.com/apps/${appSlug}/installations/new?redirect_uri=${encodeURIComponent(callbackUrl)}`
     window.location.href = url
   }
 
