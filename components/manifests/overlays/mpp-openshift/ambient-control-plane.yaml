@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-control-plane
+  namespace: ambient-code--runtime-int
+  labels:
+    app: ambient-control-plane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ambient-control-plane
+  template:
+    metadata:
+      labels:
+        app: ambient-control-plane
+    spec:
+      serviceAccountName: ambient-control-plane
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ambient-control-plane
+          image: quay.io/ambient_code/vteam_control_plane:latest
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: AMBIENT_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ambient-control-plane-token
+                  key: token
+            - name: AMBIENT_API_SERVER_URL
+              value: "http://ambient-api-server.ambient-code--runtime-int.svc:8000"
+            - name: AMBIENT_GRPC_SERVER_ADDR
+              value: "ambient-api-server.ambient-code--runtime-int.svc:9000"
+            - name: AMBIENT_GRPC_USE_TLS
+              value: "false"
+            - name: MODE
+              value: "kube"
+            - name: PLATFORM_MODE
+              value: "mpp"
+            - name: MPP_CONFIG_NAMESPACE
+              value: "ambient-code--config"
+            - name: LOG_LEVEL
+              value: "info"
+            - name: RUNNER_IMAGE
+              value: "quay.io/ambient_code/vteam_claude_runner:latest"
+            - name: OIDC_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ambient-api-server
+                  key: clientId
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ambient-api-server
+                  key: clientSecret
+            - name: PROJECT_KUBE_TOKEN_FILE
+              value: "/var/run/secrets/project-kube/token"
+            - name: USE_VERTEX
+              value: "1"
+            - name: ANTHROPIC_VERTEX_PROJECT_ID
+              value: "ambient-code-platform"
+            - name: CLOUD_ML_REGION
+              value: "us-east5"
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: "/app/vertex/ambient-code-key.json"
+            - name: VERTEX_SECRET_NAME
+              value: "ambient-vertex"
+            - name: VERTEX_SECRET_NAMESPACE
+              value: "ambient-code--runtime-int"
+            - name: CP_RUNTIME_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: CP_TOKEN_URL
+              value: "http://ambient-control-plane.ambient-code--ambient-s0.svc:8080/token"
+            - name: MCP_IMAGE
+              value: "quay.io/ambient_code/vteam_mcp:latest"
+          volumeMounts:
+            - name: project-kube-token
+              mountPath: /var/run/secrets/project-kube
+              readOnly: true
+            - name: vertex-credentials
+              mountPath: /app/vertex
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+      volumes:
+        - name: project-kube-token
+          secret:
+            secretName: ambient-control-plane-token
+        - name: vertex-credentials
+          secret:
+            secretName: ambient-vertex
+      restartPolicy: Always

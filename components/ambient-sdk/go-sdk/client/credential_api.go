@@ -70,6 +70,14 @@ func (a *CredentialAPI) Delete(ctx context.Context, id string) error {
 	return a.client.do(ctx, http.MethodDelete, a.basePath()+"/"+url.PathEscape(id), nil, http.StatusNoContent, nil)
 }
 
+func (a *CredentialAPI) GetToken(ctx context.Context, id string) (*types.CredentialTokenResponse, error) {
+	var result types.CredentialTokenResponse
+	if err := a.client.do(ctx, http.MethodGet, a.basePath()+"/"+url.PathEscape(id)+"/token", nil, http.StatusOK, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 func (a *CredentialAPI) ListAll(ctx context.Context, opts *types.ListOptions) *Iterator[types.Credential] {
 	return NewIterator(func(page int) (*types.CredentialList, error) {
 		o := *opts

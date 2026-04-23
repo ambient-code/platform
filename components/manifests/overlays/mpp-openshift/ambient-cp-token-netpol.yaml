@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-runner-token-fetch
+  namespace: ambient-code--runtime-int
+  labels:
+    app: ambient-control-plane
+spec:
+  podSelector:
+    matchLabels:
+      app: ambient-control-plane
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          tenant.paas.redhat.com/tenant: ambient-code
+    ports:
+    - protocol: TCP
+      port: 8080
+  policyTypes:
+  - Ingress

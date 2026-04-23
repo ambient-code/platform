@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta http-equiv="X-Compatible" content="IE=edge" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        <title>Ambient SDK Explorer</title>
+        <link href="css/styles.css" rel="stylesheet" />
+        <link href="css/luna-theme.css" rel="stylesheet" />
+        <script src="https://use.fontawesome.com/releases/v6.3.0/js/all.js" crossorigin="anonymous"></script>
+        <style>
+            body.sb-nav-fixed { padding-top: 56px; margin-top: 0 !important; }
+            #layoutSidenav_content main { margin-top: 0 !important; padding-top: 0 !important; }
+            #layoutSidenav { display: block !important; width: 100% !important; }
+            #layoutSidenav_nav { display: none !important; width: 0 !important; }
+            #layoutSidenav_content {
+                margin-left: 0 !important;
+                padding-left: 0 !important;
+                width: 100% !important;
+                min-width: 0 !important;
+            }
+            .sb-nav-fixed #layoutSidenav #layoutSidenav_content { margin-left: 0 !important; padding-left: 0 !important; top: 0 !important; }
+            body.sb-sidenav-toggled #layoutSidenav_content { margin-left: 0 !important; padding-left: 0 !important; }
+            .container-fluid { max-width: 100% !important; padding-left: 1.5rem !important; padding-right: 1.5rem !important; }
+
+            .bc-bar {
+                background: var(--luna-surface); border-bottom: 1px solid var(--luna-border);
+                padding: .5rem 1.5rem; display: flex; align-items: center; gap: .5rem;
+                flex-wrap: wrap; font-size: .88rem;
+            }
+            .bc-sep { color: var(--luna-muted); margin: 0 .15rem; user-select: none; }
+            .bc-item { color: var(--luna-accent); text-decoration: none; cursor: pointer; }
+            .bc-item:hover { text-decoration: underline; }
+            .bc-current { color: var(--luna-text, #e2e8f0); font-weight: 600; }
+
+            .resource-card, .project-card, .pa-card, .session-card {
+                background: var(--luna-surface); border: 1px solid var(--luna-border);
+                border-radius: .5rem; padding: 1rem 1.25rem;
+                transition: border-color .15s, box-shadow .15s;
+            }
+            .project-card:hover, .pa-card:hover, .session-card:hover {
+                border-color: var(--luna-accent); box-shadow: 0 0 0 1px rgba(245,166,35,.2); cursor: pointer;
+            }
+            .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; }
+
+            .sdk-call {
+                border-radius: .4rem; padding: .6rem 1rem;
+                font-family: monospace; font-size: .8rem;
+                background: rgba(0,0,0,.25); border: 1px solid rgba(245,166,35,.2);
+                white-space: pre-wrap; word-break: break-word; margin-bottom: .75rem;
+            }
+            .sdk-label {
+                font-size: .65rem; text-transform: uppercase; letter-spacing: .08em;
+                color: var(--luna-accent); margin-bottom: .3rem;
+            }
+            .sdk-call code { color: #a6e3a1; }
+
+            .cli-call {
+                border-radius: .4rem; padding: .6rem 1rem;
+                font-family: monospace; font-size: .8rem;
+                background: rgba(0,0,0,.2); border: 1px solid rgba(100,149,237,.18);
+                white-space: pre-wrap; word-break: break-word; margin-bottom: .75rem;
+            }
+            .cli-label {
+                font-size: .65rem; text-transform: uppercase; letter-spacing: .08em;
+                color: #6495ed; margin-bottom: .3rem;
+            }
+            .cli-call code { color: #89b4fa; }
+
+            .msg-thread { display: flex; flex-direction: column; gap: .75rem; padding: 1rem; }
+            .msg-bubble { border-radius: .5rem; padding: .65rem 1rem; max-width: 90%; word-break: break-word; }
+            .msg-bubble.user      { background: rgba(245,166,35,.12); border: 1px solid rgba(245,166,35,.3); align-self: flex-end; }
+            .msg-bubble.assistant { background: rgba(52,152,219,.1);  border: 1px solid rgba(52,152,219,.3); align-self: flex-start; }
+            .msg-bubble.tool_use  { background: rgba(139,92,246,.1);  border: 1px solid rgba(139,92,246,.3); align-self: flex-start; font-family: monospace; font-size: .82rem; }
+            .msg-bubble.system    { background: rgba(46,204,113,.08); border: 1px solid rgba(46,204,113,.2); align-self: flex-start; }
+            .msg-bubble.other     { background: var(--luna-surface);  border: 1px solid var(--luna-border);  align-self: flex-start; }
+            .msg-seq { font-size: .7rem; color: var(--luna-muted); margin-bottom: .25rem; }
+
+            .prompt-pill { font-size: .78rem; color: var(--luna-muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+            .prompt-context { background: rgba(0,0,0,.2); border-left: 3px solid var(--luna-accent); padding: .6rem 1rem; border-radius: 0 .375rem .375rem 0; font-size: .85rem; color: var(--luna-muted); }
+            .stat-chip { display: inline-flex; align-items: center; gap: .3rem; font-size: .75rem; color: var(--luna-muted); }
+            .scope-header { font-size: .72rem; text-transform: uppercase; letter-spacing: .1em; color: var(--luna-muted); margin-bottom: .5rem; }
+            .result-box {
+                background: rgba(0,0,0,.3); border: 1px solid var(--luna-border);
+                border-radius: .375rem; padding: .6rem .85rem;
+                font-family: monospace; font-size: .78rem; color: #a6e3a1;
+                max-height: 200px; overflow-y: auto; white-space: pre-wrap; margin-top: .5rem;
+            }
+
+            /* ── Annotation system ────────────────────────────────────────── */
+            .ann-ready   { display:inline-flex;align-items:center;gap:.25rem;font-size:.7rem;padding:.15rem .5rem;border-radius:2rem;background:rgba(46,204,113,.15);border:1px solid rgba(46,204,113,.4);color:#2ecc71; }
+            .ann-blocked { display:inline-flex;align-items:center;gap:.25rem;font-size:.7rem;padding:.15rem .5rem;border-radius:2rem;background:rgba(231,76,60,.15);border:1px solid rgba(231,76,60,.4);color:#e74c3c; }
+            .ann-idle    { display:inline-flex;align-items:center;gap:.25rem;font-size:.7rem;padding:.15rem .5rem;border-radius:2rem;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:var(--luna-muted); }
+            .ann-task    { display:block;font-size:.7rem;padding:.15rem .5rem;border-radius:.25rem;margin-top:.25rem;background:rgba(52,152,219,.1);border:1px solid rgba(52,152,219,.25);color:#74b9e8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+            .ann-pr-link { font-size:.7rem;color:#6495ed;text-decoration:none; }
+            .ann-pr-link:hover { text-decoration:underline; }
+            .ann-section { background:rgba(0,0,0,.15);border:1px solid var(--luna-border);border-radius:.4rem;overflow:hidden; }
+            .roster-wrap { overflow-x:auto;margin-bottom:1.25rem; }
+            .roster-table { width:100%;border-collapse:collapse;font-size:.8rem; }
+            .roster-table th { color:var(--luna-muted);font-size:.67rem;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--luna-border);padding:.35rem .75rem;white-space:nowrap; }
+            .roster-table td { padding:.4rem .75rem;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle; }
+            .roster-table tr:last-child td { border-bottom:none; }
+            .roster-table tr:hover td { background:rgba(255,255,255,.025); }
+            .roster-task-cell { max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--luna-muted);font-size:.75rem; }
+            .ann-panel-row { display:grid;grid-template-columns:minmax(150px,40%) 1fr auto;gap:.5rem;align-items:start;padding:.45rem .75rem;border-bottom:1px solid rgba(255,255,255,.04); }
+            .ann-panel-row:last-child { border-bottom:none; }
+            .ann-panel-row:hover { background:rgba(255,255,255,.02); }
+            .ann-k { font-family:monospace;font-size:.72rem;color:var(--luna-accent);word-break:break-all;padding-top:.1rem; }
+            .ann-v { font-family:monospace;font-size:.72rem;color:var(--luna-text);white-space:pre-wrap;word-break:break-all;max-height:60px;overflow:auto; }
+            .fleet-summary { border-left:3px solid var(--luna-accent);padding:.55rem 1rem .55rem .85rem;background:rgba(245,166,35,.05);border-radius:0 .375rem .375rem 0;margin-bottom:1rem; }
+        </style>
+    </head>
+    <body class="sb-nav-fixed">
+
+        <!-- Topnav -->
+        <nav class="sb-topnav navbar navbar-expand navbar-dark bg-dark">
+            <a class="navbar-brand ps-3" href="/v2/" onclick="navProjects();return false;">Ambient SDK</a>
+            <div class="ms-auto d-flex align-items-center gap-2 me-3">
+                <span id="sdkDot" style="width:9px;height:9px;border-radius:50%;display:inline-block;background:#374151;"></span>
+                <small class="text-muted" id="sdkLabel">not connected</small>
+                <a class="nav-link px-2" href="#" onclick="openConfig(event)" title="Connection settings"><i class="fas fa-plug fa-fw"></i></a>
+                <a class="nav-link px-2" href="#" onclick="refreshAll(event)" title="Refresh"><i class="fas fa-sync-alt fa-fw"></i></a>
+            </div>
+        </nav>
+
+        <div id="layoutSidenav">
+            <div id="layoutSidenav_nav"></div>
+
+            <!-- Main content -->
+            <div id="layoutSidenav_content">
+                <!-- Breadcrumb bar -->
+                <div class="bc-bar" id="bcBar"><span class="bc-current">All Projects</span></div>
+                <main>
+                    <div class="container-fluid pt-3">
+                        <div id="notConnectedBanner" class="alert mb-4" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);color:#f5a623;">
+                            <i class="fas fa-plug me-2"></i>No Ambient API connection configured.
+                            <a href="#" onclick="openConfig(event)" style="color:#f5a623;font-weight:600;"> Configure connection →</a>
+                        </div>
+                        <div id="mainPanel"></div>
+                    </div>
+                </main>
+                <footer class="py-4 bg-light mt-auto">
+                    <div class="container-fluid">
+                        <div class="d-flex align-items-center justify-content-between small">
+                            <div class="text-muted">Ambient SDK Explorer</div>
+                            <div id="lastUpdated" class="text-muted"></div>
+                        </div>
+                    </div>
+                </footer>
+            </div>
+        </div>
+
+        <!-- ══ MODALS ══ -->
+
+        <!-- Config -->
+        <div class="modal fade" id="configModal" tabindex="-1">
+            <div class="modal-dialog"><div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><i class="fas fa-plug me-2"></i>Ambient API Connection</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="sdk-call mb-3"><div class="sdk-label">TypeScript SDK</div><code>new AmbientClient({ baseUrl, token })</code></div>
+                    <div class="mb-3"><label class="form-label">API URL</label><input type="text" class="form-control font-monospace" id="cfgUrl" placeholder="https://api.ambient.example.com" /></div>
+                    <div class="mb-3"><label class="form-label">Token</label><input type="password" class="form-control font-monospace" id="cfgToken" placeholder="sha256~..." /></div>
+                    <div id="cfgError" class="alert alert-danger d-none"></div>
+                </div>
+                <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" onclick="saveConfig()"><i class="fas fa-plug me-1"></i>Connect</button></div>
+            </div></div>
+        </div>
+
+        <!-- New Project -->
+        <div class="modal fade" id="newProjectModal" tabindex="-1">
+            <div class="modal-dialog modal-lg"><div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><i class="fas fa-plus-circle me-2 text-success"></i>New Project</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="sdk-call mb-3"><div class="sdk-label">SDK — projects.create()</div><code>await client.projects.create({ name, description?, prompt? })</code></div>
+                    <div class="mb-3"><label class="form-label">Name <span class="text-danger">*</span></label><input type="text" class="form-control font-monospace" id="npName" placeholder="my-project" /></div>
+                    <div class="mb-3"><label class="form-label">Description</label><input type="text" class="form-control" id="npDescription" /></div>
+                    <div class="mb-3"><label class="form-label">Project Prompt <small class="text-muted">— shared context for all agents in this project</small></label><textarea class="form-control" id="npPrompt" rows="3"></textarea></div>
+                    <div id="npError" class="alert alert-danger d-none"></div>
+                </div>
+                <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-success" onclick="createProject()"><i class="fas fa-plus me-1"></i>Create</button></div>
+            </div></div>
+        </div>
+
+        <!-- Edit Project -->
+        <div class="modal fade" id="editProjectModal" tabindex="-1">
+            <div class="modal-dialog modal-lg"><div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><i class="fas fa-edit me-2 text-info"></i>Edit Project</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="sdk-call mb-3"><div class="sdk-label">SDK — projects.update() / delete()</div><code>await client.projects.update(id, { description?, prompt? })\nawait client.projects.delete(id)</code></div>
+                    <input type="hidden" id="epId" />
+                    <div class="mb-3"><label class="form-label">Name</label><input type="text" class="form-control font-monospace" id="epName" readonly /></div>
+                    <div class="mb-3"><label class="form-label">Description</label><input type="text" class="form-control" id="epDescription" /></div>
+                    <div class="mb-3"><label class="form-label">Project Prompt</label><textarea class="form-control" id="epPrompt" rows="3"></textarea></div>
+                    <div class="mb-3"><label class="form-label">Status</label><input type="text" class="form-control" id="epStatus" /></div>
+                    <div id="epError" class="alert alert-danger d-none"></div>
+                </div>
+                <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-danger me-auto" onclick="deleteProject()"><i class="fas fa-trash me-1"></i>Delete</button><button class="btn btn-primary" onclick="saveProject()"><i class="fas fa-save me-1"></i>Save</button></div>
+            </div></div>
+        </div>
+
+        <!-- New ProjectAgent -->
+        <div class="modal fade" id="newPaModal" tabindex="-1">
+            <div class="modal-dialog modal-lg"><div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><i class="fas fa-plus-circle me-2 text-success"></i>New Agent</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="sdk-call mb-3"><div class="sdk-label">SDK — projectAgents.create()</div><code>await client.projectAgents.create({ name, project_id, prompt?, annotations?, labels? })</code></div>
+                    <input type="hidden" id="npaProjectId" />
+                    <div id="npaProjectContext" class="prompt-context mb-3" style="display:none"></div>
+                    <div class="mb-3"><label class="form-label">Name <span class="text-danger">*</span></label><input type="text" class="form-control font-monospace" id="npaName" placeholder="backend-engineer" /></div>
+                    <div class="mb-3"><label class="form-label">System Prompt <small class="text-muted">— who this agent is and what it does</small></label><textarea class="form-control" id="npaPrompt" rows="5" placeholder="You are a backend engineer specializing in Go APIs…"></textarea></div>
+                    <div id="npaError" class="alert alert-danger d-none"></div>
+                </div>
+                <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-success" onclick="createPa()"><i class="fas fa-plus me-1"></i>Create Agent</button></div>
+            </div></div>
+        </div>
+
+        <!-- Edit ProjectAgent -->
+        <div class="modal fade" id="editPaModal" tabindex="-1">
+            <div class="modal-dialog modal-lg"><div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><i class="fas fa-edit me-2 text-info"></i>Edit Agent</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="sdk-call mb-3"><div class="sdk-label">SDK — projectAgents.update() / delete()</div><code>await client.projectAgents.update(id, { prompt?, name? })\nawait client.projectAgents.delete(id)</code></div>
+                    <input type="hidden" id="epaId" />
+                    <div class="mb-3"><label class="form-label">Name</label><input type="text" class="form-control font-monospace" id="epaName" readonly /></div>
+                    <div class="mb-3"><label class="form-label">System Prompt</label><textarea class="form-control" id="epaPrompt" rows="5"></textarea></div>
+                    <div id="epaError" class="alert alert-danger d-none"></div>
+                </div>
+                <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-danger me-auto" onclick="deletePa()"><i class="fas fa-trash me-1"></i>Delete</button><button class="btn btn-primary" onclick="savePa()"><i class="fas fa-save me-1"></i>Save</button></div>
+            </div></div>
+        </div>
+
+        <!-- New Session -->
+        <div class="modal fade" id="newSessionModal" tabindex="-1">
+            <div class="modal-dialog modal-lg"><div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><i class="fas fa-fire me-2 text-warning"></i>New Session</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="sdk-call mb-3"><div class="sdk-label">SDK — sessions.create() + sessions.start()</div><code>const s = await client.sessions.create({ name, prompt?, agent_id?, llm_model? });\nawait client.sessions.start(s.id);</code></div>
+                    <input type="hidden" id="nsAgentId" />
+                    <div id="nsAgentContext" class="prompt-context mb-3" style="display:none"></div>
+                    <div class="mb-3"><label class="form-label">Session Name <span class="text-danger">*</span></label><input type="text" class="form-control font-monospace" id="nsName" placeholder="my-session-01" /></div>
+                    <div class="mb-3"><label class="form-label">Task Prompt <small class="text-muted">— what this session should do</small></label><textarea class="form-control" id="nsPrompt" rows="5" placeholder="Implement the session messages feature…"></textarea></div>
+                    <div class="mb-3"><label class="form-label">LLM Model <small class="text-muted">— optional</small></label><input type="text" class="form-control font-monospace" id="nsModel" placeholder="claude-sonnet-4-20250514" /></div>
+                    <div id="nsError" class="alert alert-danger d-none"></div>
+                </div>
+                <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-warning" onclick="createSession()"><i class="fas fa-fire me-1"></i>Start Session</button></div>
+            </div></div>
+        </div>
+
+        <!-- Stop Session -->
+        <div class="modal fade" id="stopSessionModal" tabindex="-1">
+            <div class="modal-dialog"><div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><i class="fas fa-stop me-2 text-danger"></i>Stop Session</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="sdk-call mb-3"><div class="sdk-label">SDK — sessions.stop()</div><code>await client.sessions.stop(sessionId)</code></div>
+                    <p>Stop <strong id="stopSessionName"></strong>?</p>
+                </div>
+                <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-danger" onclick="confirmStop()"><i class="fas fa-stop me-1"></i>Stop</button></div>
+            </div></div>
+        </div>
+
+        <!-- Edit Annotation -->
+        <div class="modal fade" id="editAnnotationModal" tabindex="-1">
+            <div class="modal-dialog modal-lg"><div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><i class="fas fa-tag me-2"></i>Edit Annotation</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="sdk-call mb-3"><div class="sdk-label">SDK — patch annotations</div><code id="eannSdkSnippet"></code></div>
+                    <input type="hidden" id="eannResourceType" />
+                    <input type="hidden" id="eannProjectId" />
+                    <input type="hidden" id="eannAgentId" />
+                    <div class="mb-3"><label class="form-label">Key <small class="text-muted">— reverse-DNS prefix convention (e.g. ambient.io/ready, work.ambient.io/current-task)</small></label><input type="text" class="form-control font-monospace" id="eannKey" placeholder="ambient.io/ready" /></div>
+                    <div class="mb-3"><label class="form-label">Value <small class="text-muted">— string, JSON array, JSON object, or multi-line prose. Empty string deletes the key.</small></label><textarea class="form-control font-monospace" id="eannValue" rows="6" placeholder='"true" or ["item1","item2"] or {"status":"active"}'></textarea></div>
+                    <div id="eannError" class="alert alert-danger d-none"></div>
+                </div>
+                <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" onclick="saveAnnotation()"><i class="fas fa-save me-1"></i>Save</button></div>
+            </div></div>
+        </div>
+
+        <!-- Toast -->
+        <div class="position-fixed bottom-0 end-0 p-3" style="z-index:1100">
+            <div id="liveToast" class="toast align-items-center text-white border-0" role="alert">
+                <div class="d-flex"><div class="toast-body" id="toastBody">Done.</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>
+            </div>
+        </div>
+
+        <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" crossorigin="anonymous"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+        <script src="js/ambient-sdk.js"></script>
+        <script>
+// ══ STATE ══════════════════════════════════════════════════════════════════
+var client       = null;
+var allProjects  = [];
+var allPas       = {};   // projectId → ProjectAgent[]
+var allSessions  = {};   // paId → Session[]
+var navState     = null; // null | {type:'project',id} | {type:'pa',projectId,paId} | {type:'session',id}
+var stopTarget   = null;
+
+// ══ BOOT ═══════════════════════════════════════════════════════════════════
+$(function() {
+    localStorage.removeItem('sb|sidebar-toggle');
+    document.body.classList.remove('sb-sidenav-toggled');
+    navState = urlToState(location.pathname);
+    history.replaceState(navState, '', location.pathname);
+    renderPanel();
+    var cfg = loadConfig();
+    if (cfg.url && cfg.token) initClient(cfg.url, cfg.token, '');
+});
+
+// ══ SDK INIT ═══════════════════════════════════════════════════════════════
+async function initClient(url, token, project) {
+    try {
+        client = new AmbientSDK.AmbientClient({ baseUrl: url, token: token, project: project });
+        await client.projects.list({ page: 1, size: 1 });
+        setSdkDot(true);
+        $('#notConnectedBanner').hide();
+        await loadAll();
+        return true;
+    } catch(e) {
+        setSdkDot(false);
+        client = null;
+        return e.message || String(e);
+    }
+}
+
+// ══ CONFIG ══════════════════════════════════════════════════════════════════
+function loadConfig() {
+    return { url: localStorage.getItem('ambient_url')||'', token: localStorage.getItem('ambient_token')||'' };
+}
+function storeConfig(url, token) {
+    localStorage.setItem('ambient_url', url);
+    localStorage.setItem('ambient_token', token);
+}
+
+// ══ DATA LOADING ════════════════════════════════════════════════════════════
+async function loadAll() {
+    if (!client) return;
+    try {
+        allProjects = await collectAll(client.projects);
+
+        allPas = {};
+        await Promise.all(allProjects.map(async function(p) {
+            var result = await client.projectAgents.listByProject(p.id);
+            allPas[p.id] = result.items || [];
+        }));
+
+        allSessions = {};
+        try {
+            var allSessionsList = await collectAll(client.sessions);
+            allSessionsList.forEach(function(s) {
+                if (s.agent_id) {
+                    if (!allSessions[s.agent_id]) allSessions[s.agent_id] = [];
+                    allSessions[s.agent_id].push(s);
+                }
+            });
+        } catch(e) {}
+
+        renderPanel();
+        $('#lastUpdated').text('Updated ' + new Date().toLocaleTimeString());
+    } catch(e) {
+        showToast('Load failed: ' + (e.message || e), 'danger');
+    }
+}
+
+async function collectAll(api) {
+    var items = [];
+    var gen = api.listAll();
+    while (true) {
+        var r = await gen.next();
+        if (r.done) break;
+        items.push(r.value);
+    }
+    return items;
+}
+
+async function loadMessages(sessionId) {
+    if (!client) return [];
+    try {
+        var result = await client.sessionMessages.list({ size: 200 });
+        return (result.items || []).filter(function(m) { return m.session_id === sessionId; }).slice().sort(function(a, b) { return a.seq - b.seq; });
+    } catch(e) { return []; }
+}
+
+// ══ NAVIGATION ══════════════════════════════════════════════════════════════
+function navigate(state, pushHistory) {
+    navState = state;
+    if (pushHistory !== false) history.pushState(state, '', stateToUrl(state));
+    renderPanel();
+}
+function stateToUrl(state) {
+    if (!state) return '/v2/';
+    if (state.type === 'project') {
+        var p = allProjects.find(function(x) { return x.id === state.id; });
+        return '/v2/projects/' + (p ? p.name : state.id);
+    }
+    if (state.type === 'pa') {
+        var p2 = allProjects.find(function(x) { return x.id === state.projectId; });
+        var pas = allPas[state.projectId] || [];
+        var pa = pas.find(function(x) { return x.id === state.paId; });
+        return '/v2/projects/' + (p2 ? p2.name : state.projectId) + '/agents/' + (pa ? pa.name : state.paId);
+    }
+    if (state.type === 'session') {
+        return '/v2/sessions/' + state.id;
+    }
+    return '/v2/';
+}
+function urlToState(pathname) {
+    var p = pathname.replace(/^\/v2/, '').replace(/\/$/, '') || '/';
+    if (p === '/' || p === '') return null;
+    var m;
+    m = p.match(/^\/sessions\/([^/]+)$/);
+    if (m) return { type: 'session', id: m[1] };
+    m = p.match(/^\/projects\/([^/]+)\/agents\/([^/]+)$/);
+    if (m) return { type: 'pa', projectId: resolveProjectId(m[1]), paId: m[2] };
+    m = p.match(/^\/projects\/([^/]+)$/);
+    if (m) return { type: 'project', id: resolveProjectId(m[1]) };
+    return null;
+}
+function resolveProjectId(nameOrId) {
+    var byName = allProjects.find(function(p) { return p.name === nameOrId; });
+    if (byName) return byName.id;
+    var byId = allProjects.find(function(p) { return p.id === nameOrId; });
+    if (byId) return byId.id;
+    return nameOrId;
+}
+window.addEventListener('popstate', function(e) { navigate(e.state || urlToState(location.pathname), false); });
+
+function navProjects()              { navigate(null); }
+function navProject(id)             { navigate({ type: 'project', id: id }); }
+function navPa(projectId, paId)     { navigate({ type: 'pa', projectId: projectId, paId: paId }); }
+function navSession(id)             { navigate({ type: 'session', id: id }); }
+
+// ══ BREADCRUMB ══════════════════════════════════════════════════════════════
+function renderBreadcrumb() {
+    var bar = $('#bcBar');
+    bar.empty();
+    var sep = '<span class="bc-sep"><i class="fas fa-chevron-right" style="font-size:.65rem"></i></span>';
+    if (!navState) {
+        bar.append('<span class="bc-current"><i class="fas fa-layer-group me-1"></i>All Projects</span>');
+        return;
+    }
+    bar.append('<a class="bc-item" href="#" onclick="navProjects();return false;"><i class="fas fa-layer-group me-1"></i>All Projects</a>');
+    if (navState.type === 'project') {
+        var p = allProjects.find(function(x) { return x.id === navState.id; }) || { name: navState.id };
+        bar.append(sep + '<span class="bc-current"><i class="fas fa-folder-open me-1"></i>' + escHtml(p.name) + '</span>');
+    } else if (navState.type === 'pa') {
+        var proj = allProjects.find(function(x) { return x.id === navState.projectId; }) || { name: navState.projectId, id: navState.projectId };
+        var pa = (allPas[navState.projectId] || []).find(function(x) { return x.id === navState.paId; });
+        bar.append(sep + '<a class="bc-item" href="#" onclick="navProject(\'' + proj.id + '\');return false;"><i class="fas fa-folder-open me-1"></i>' + escHtml(proj.name) + '</a>');
+        bar.append(sep + '<span class="bc-current"><i class="fas fa-robot me-1"></i>' + escHtml(pa ? pa.name : navState.paId) + '</span>');
+    } else if (navState.type === 'session') {
+        var s = findSession(navState.id);
+        var paForS = findPaForSession(navState.id);
+        var projForS = paForS ? findProjectForPa(paForS.id) : null;
+        if (projForS) bar.append(sep + '<a class="bc-item" href="#" onclick="navProject(\'' + projForS.id + '\');return false;"><i class="fas fa-folder-open me-1"></i>' + escHtml(projForS.name) + '</a>');
+        if (paForS)   bar.append(sep + '<a class="bc-item" href="#" onclick="navPa(\'' + (projForS ? projForS.id : '') + '\',\'' + paForS.id + '\');return false;"><i class="fas fa-robot me-1"></i>' + escHtml(paForS.name) + '</a>');
+        bar.append(sep + '<span class="bc-current"><i class="fas fa-terminal me-1"></i>' + escHtml(s ? s.name : navState.id) + '</span>');
+    }
+}
+
+// ══ MAIN PANEL ROUTER ═══════════════════════════════════════════════════════
+function renderPanel() {
+    renderBreadcrumb();
+    if (!navState)                        renderProjectsPanel();
+    else if (navState.type === 'project') renderProjectPanel(navState.id);
+    else if (navState.type === 'pa')      renderPaPanel(navState.projectId, navState.paId);
+    else if (navState.type === 'session') renderSessionPanel(navState.id);
+}
+
+
+// ══ ALL PROJECTS PANEL ══════════════════════════════════════════════════════
+function renderProjectsPanel() {
+    var html = '<div class="d-flex align-items-center justify-content-between mb-3">' +
+        '<div><h5 class="mb-0"><i class="fas fa-layer-group me-2"></i>Projects</h5>' +
+        '<small class="text-muted">Each project scopes its own agents and sessions</small></div>' +
+        '<button class="btn btn-sm btn-primary" onclick="openModal(\'newProjectModal\')"><i class="fas fa-plus me-1"></i>New Project</button>' +
+        '</div>';
+
+    html += '<div class="sdk-call mb-4"><div class="sdk-label">SDK — projects.listAll()</div>' +
+        '<code>for await (const project of client.projects.listAll()) {\n  // project: { id, name, description, prompt, status }\n}</code></div>';
+
+    if (allProjects.length === 0) {
+        html += '<div class="text-muted text-center py-5"><i class="fas fa-folder-open fa-3x mb-3 d-block" style="opacity:.2"></i>' +
+            (client ? 'No projects yet. Create one to get started.' : 'Connect to Ambient API first.') + '</div>';
+    } else {
+        html += '<div class="card-grid">';
+        allProjects.forEach(function(p) {
+            var pas = allPas[p.id] || [];
+            var sessionCount = pas.reduce(function(n, pa) { return n + (allSessions[pa.id] || []).length; }, 0);
+            var runningCount = pas.reduce(function(n, pa) { return n + (allSessions[pa.id] || []).filter(function(s) { return s.phase === 'running'; }).length; }, 0);
+            html += '<div class="project-card" onclick="navProject(\'' + p.id + '\')">' +
+                '<div class="d-flex align-items-start justify-content-between mb-2">' +
+                '<div><strong class="font-monospace">' + escHtml(p.name) + '</strong>' +
+                (p.description ? '<div class="text-muted" style="font-size:.75rem">' + escHtml(p.description) + '</div>' : '') + '</div>' +
+                '<button class="btn btn-outline-secondary btn-sm" onclick="event.stopPropagation();openEditProject(\'' + p.id + '\')"><i class="fas fa-edit"></i></button>' +
+                '</div>' +
+                (p.prompt ? '<div class="prompt-pill mb-2">' + escHtml(p.prompt.slice(0, 100)) + (p.prompt.length > 100 ? '…' : '') + '</div>' : '') +
+                '<div class="d-flex gap-3 mt-2">' +
+                '<span class="stat-chip"><i class="fas fa-robot"></i> ' + pas.length + ' agent' + (pas.length !== 1 ? 's' : '') + '</span>' +
+                '<span class="stat-chip"><i class="fas fa-terminal"></i> ' + sessionCount + ' session' + (sessionCount !== 1 ? 's' : '') + '</span>' +
+                (runningCount ? '<span class="stat-chip" style="color:var(--luna-success)"><i class="fas fa-circle-check"></i> ' + runningCount + ' running</span>' : '') +
+                '</div>' +
+                '<div class="sdk-call mt-2" style="margin-bottom:.35rem"><div class="sdk-label">projects.get()</div><code>client.projects.get("' + escHtml(p.id) + '")</code></div>' +
+                '<div class="cli-call" style="margin-bottom:0"><div class="cli-label">acpctl</div><code>acpctl get project ' + escHtml(p.id) + '</code></div>' +
+                '</div>';
+        });
+        html += '</div>';
+    }
+    $('#mainPanel').html(html);
+}
+
+// ══ PROJECT PANEL ════════════════════════════════════════════════════════════
+function renderProjectPanel(projectId) {
+    var p = allProjects.find(function(x) { return x.id === projectId; }) || { name: projectId, id: projectId };
+    var pas = allPas[projectId] || [];
+
+    var html = '<div class="d-flex align-items-center justify-content-between mb-3">' +
+        '<div><h5 class="mb-0"><i class="fas fa-folder-open me-2"></i>' + escHtml(p.name) + '</h5>' +
+        (p.description ? '<div class="text-muted small mt-1">' + escHtml(p.description) + '</div>' : '') + '</div>' +
+        '<div class="d-flex gap-2">' +
+        '<button class="btn btn-sm btn-outline-secondary" onclick="openEditProject(\'' + p.id + '\')"><i class="fas fa-edit me-1"></i>Edit</button>' +
+        '<button class="btn btn-sm btn-primary" onclick="openNewPa(\'' + p.id + '\',' + JSON.stringify(p.prompt || '') + ')"><i class="fas fa-plus me-1"></i>New Agent</button>' +
+        '</div></div>';
+
+    if (p.prompt) html += '<div class="prompt-context mb-3"><span class="scope-header d-block mb-1">Project Prompt</span>' + escHtml(p.prompt) + '</div>';
+
+    html += renderFleetSummary(p);
+    html += renderFleetRoster(p);
+
+    html += '<div class="sdk-call mb-4"><div class="sdk-label">SDK — projectAgents.listAll()</div>' +
+        '<code>for await (const agent of client.projectAgents.listAll()) {\n' +
+        '  // agent: { id, name, project_id, prompt, current_session_id, annotations, labels }\n}</code></div>';
+
+    if (pas.length === 0) {
+        html += '<div class="text-muted text-center py-5"><i class="fas fa-robot fa-3x mb-3 d-block" style="opacity:.2"></i>No agents yet. Create one to get started.</div>';
+    } else {
+        html += '<div class="scope-header">Agents</div><div class="card-grid">';
+        pas.forEach(function(pa) {
+            var sessions = allSessions[pa.id] || [];
+            var running = sessions.filter(function(s) { return s.phase === 'running'; }).length;
+            html += '<div class="pa-card" onclick="navPa(\'' + p.id + '\',\'' + pa.id + '\')">' +
+                '<div class="d-flex align-items-start justify-content-between mb-2">' +
+                '<div><strong class="font-monospace">' + escHtml(pa.name) + '</strong>' +
+                '<div class="text-muted" style="font-size:.72rem">' + escHtml(pa.id ? pa.id.slice(0, 8) : '') + '</div></div>' +
+                '<button class="btn btn-outline-secondary btn-sm" onclick="event.stopPropagation();openEditPa(\'' + pa.id + '\')"><i class="fas fa-edit"></i></button>' +
+                '</div>' +
+                (pa.prompt ? '<div class="prompt-pill mb-2" title="' + escHtml(pa.prompt) + '">' + escHtml(pa.prompt.slice(0, 100)) + (pa.prompt.length > 100 ? '…' : '') + '</div>' : '<div class="text-muted small fst-italic">no prompt defined</div>') +
+                '<div class="d-flex gap-3 mt-2">' +
+                '<span class="stat-chip"><i class="fas fa-terminal"></i> ' + sessions.length + ' session' + (sessions.length !== 1 ? 's' : '') + '</span>' +
+                (running ? '<span class="stat-chip" style="color:var(--luna-success)"><i class="fas fa-circle-check"></i> ' + running + ' running</span>' : '') +
+                '</div>' +
+                agentAnnotationBadges(pa) +
+                '<div class="sdk-call mt-2" style="margin-bottom:.35rem"><div class="sdk-label">projectAgents.get()</div><code>client.projectAgents.get("' + escHtml(pa.id) + '")</code></div>' +
+                '<div class="cli-call" style="margin-bottom:0"><div class="cli-label">acpctl</div><code>acpctl get agent ' + escHtml(pa.name) + '</code></div>' +
+                '</div>';
+        });
+        html += '</div>';
+    }
+    html += renderAnnotationsPanel(p, 'project', p.id, '');
+    $('#mainPanel').html(html);
+}
+
+// ══ PROJECT AGENT PANEL ══════════════════════════════════════════════════════
+function renderPaPanel(projectId, paId) {
+    var p = allProjects.find(function(x) { return x.id === projectId; }) || { name: projectId, id: projectId };
+    var pa = (allPas[projectId] || []).find(function(x) { return x.id === paId; }) || { id: paId, name: paId };
+    var sessions = allSessions[paId] || [];
+
+    var html = '<div class="d-flex align-items-start justify-content-between mb-3">' +
+        '<div><h5 class="mb-0"><i class="fas fa-robot me-2"></i>' + escHtml(pa.name) + '</h5>' +
+        '<div class="text-muted small mt-1">in project <em>' + escHtml(p.name) + '</em> · ' + escHtml(pa.id ? pa.id.slice(0, 8) : '') + '</div></div>' +
+        '<div class="d-flex gap-2">' +
+        '<button class="btn btn-sm btn-outline-secondary" onclick="openEditPa(\'' + pa.id + '\')"><i class="fas fa-edit me-1"></i>Edit</button>' +
+        '<button class="btn btn-sm btn-warning" onclick="openNewSession(\'' + pa.id + '\',\'' + escHtml(pa.name) + '\',\'' + escHtml(pa.prompt || '') + '\')"><i class="fas fa-fire me-1"></i>New Session</button>' +
+        '</div></div>';
+
+    if (pa.prompt) html += '<div class="prompt-context mb-3"><span class="scope-header d-block mb-1">Agent Prompt</span>' + escHtml(pa.prompt) + '</div>';
+
+    html += renderAgentAnnotationStatus(pa, p.id);
+    html += renderAnnotationsPanel(pa, 'agent', p.id, pa.id);
+
+    html += '<div class="sdk-call mb-4"><div class="sdk-label">SDK — sessions.create() + sessions.start()</div>' +
+        '<code>// Create and start a session for this agent\nconst s = await client.sessions.create({\n' +
+        '  name: "my-session",\n  agent_id: "' + escHtml(pa.id) + '",\n  prompt: "your task…"\n});\nawait client.sessions.start(s.id);</code></div>';
+
+    if (sessions.length === 0) {
+        html += '<div class="text-muted text-center py-5"><i class="fas fa-terminal fa-3x mb-3 d-block" style="opacity:.2"></i>No sessions yet. Start one with the button above.</div>';
+    } else {
+        html += '<div class="scope-header">Sessions</div><div class="card-grid">';
+        sessions.slice().sort(function(a, b) { return (b.start_time || '').localeCompare(a.start_time || ''); }).forEach(function(s) {
+            html += '<div class="session-card" onclick="navSession(\'' + s.id + '\')">' +
+                '<div class="d-flex align-items-start justify-content-between mb-2">' +
+                '<div><strong>' + escHtml(s.name) + '</strong>' +
+                '<div class="font-monospace text-muted" style="font-size:.75rem">' + escHtml(s.id ? s.id.slice(0, 8) : '') + '</div></div>' +
+                '<div class="d-flex gap-1">' + phaseBadge(s.phase) +
+                ((s.phase === 'running' || s.phase === 'pending') ? '<button class="btn btn-danger btn-sm ms-1" onclick="event.stopPropagation();openStop(\'' + s.id + '\',\'' + escHtml(s.name) + '\')"><i class="fas fa-stop"></i></button>' : '') +
+                '</div></div>' +
+                (s.prompt ? '<div class="prompt-pill mb-2" title="' + escHtml(s.prompt) + '">' + escHtml(s.prompt.slice(0, 80)) + (s.prompt.length > 80 ? '…' : '') + '</div>' : '') +
+                (s.start_time ? '<div class="stat-chip"><i class="fas fa-clock"></i> ' + timeAgo(s.start_time) + '</div>' : '') +
+                '</div>';
+        });
+        html += '</div>';
+    }
+    $('#mainPanel').html(html);
+}
+
+// ══ SESSION PANEL ════════════════════════════════════════════════════════════
+async function renderSessionPanel(sessionId) {
+    var s = findSession(sessionId) || { name: sessionId, id: sessionId };
+    var pa = findPaForSession(sessionId);
+
+    var html = '<div class="d-flex align-items-start justify-content-between mb-3">' +
+        '<div><h5 class="mb-0"><i class="fas fa-terminal me-2"></i>' + escHtml(s.name) + '</h5>' +
+        '<div class="d-flex gap-2 mt-1">' + phaseBadge(s.phase) +
+        (pa ? '<span class="stat-chip"><i class="fas fa-robot me-1"></i>' + escHtml(pa.name) + '</span>' : '') +
+        (s.start_time ? '<span class="stat-chip"><i class="fas fa-clock me-1"></i>' + timeAgo(s.start_time) + '</span>' : '') +
+        '</div></div>' +
+        '<div class="d-flex gap-2">' +
+        ((s.phase === 'running' || s.phase === 'pending') ? '<button class="btn btn-sm btn-danger" onclick="openStop(\'' + s.id + '\',\'' + escHtml(s.name) + '\')"><i class="fas fa-stop me-1"></i>Stop</button>' : '') +
+        '</div></div>';
+
+    if (s.prompt) html += '<div class="prompt-context mb-3"><span class="scope-header d-block mb-1">Task Prompt</span>' + escHtml(s.prompt) + '</div>';
+
+    html += '<div class="sdk-call mb-4"><div class="sdk-label">SDK — sessionMessages.list()</div>' +
+        '<code>// Paginated\nconst { items } = await client.sessionMessages.list({ search: "session_id:' + escHtml(sessionId) + '", size: 200 });\n' +
+        '// All pages via AsyncGenerator\nfor await (const msg of client.sessionMessages.listAll()) {\n  console.log(msg.seq, msg.event_type, msg.payload);\n}</code></div>';
+
+    html += '<div class="card mb-0">' +
+        '<div class="card-header fw-bold d-flex align-items-center justify-content-between">' +
+        '<span><i class="fas fa-comments me-1"></i>Messages</span>' +
+        '<button class="btn btn-sm btn-outline-secondary" onclick="reloadMessages(\'' + sessionId + '\')"><i class="fas fa-sync-alt"></i></button>' +
+        '</div>' +
+        '<div id="msgThread" class="msg-thread" style="min-height:200px;max-height:60vh;overflow-y:auto;">Loading…</div>' +
+        '</div>';
+
+    $('#mainPanel').html(html);
+    await reloadMessages(sessionId);
+}
+
+async function reloadMessages(sessionId) {
+    var thread = $('#msgThread');
+    thread.html('<div class="text-muted text-center py-3"><i class="fas fa-spinner fa-spin"></i></div>');
+    var msgs = await loadMessages(sessionId);
+    if (msgs.length === 0) { thread.html('<div class="text-muted text-center py-4">No messages yet.</div>'); return; }
+    var html = '';
+    msgs.forEach(function(m) {
+        var evType = (m.event_type || 'other').toLowerCase();
+        var bubbleClass = ['user', 'assistant', 'tool_use', 'system'].indexOf(evType) >= 0 ? evType : 'other';
+        var payload = m.payload || '';
+        html += '<div class="msg-bubble ' + bubbleClass + '">' +
+            '<div class="msg-seq">#' + m.seq + ' · ' + escHtml(m.event_type || '—') + '</div>' +
+            '<div>' + escHtml(payload.slice(0, 500)) + (payload.length > 500 ? '\n…' : '') + '</div>' +
+            '</div>';
+    });
+    thread.html(html);
+    thread.scrollTop(thread[0].scrollHeight);
+}
+
+// ══ PROJECT CRUD ══════════════════════════════════════════════════════════════
+async function createProject() {
+    var name = $('#npName').val().trim();
+    if (!name) { $('#npError').removeClass('d-none').text('Name is required.'); return; }
+    if (!client) { $('#npError').removeClass('d-none').text('Not connected. Configure the Ambient API connection first.'); return; }
+    try {
+        var data = { name: name };
+        var d = $('#npDescription').val().trim(); if (d) data.description = d;
+        var pr = $('#npPrompt').val().trim(); if (pr) data.prompt = pr;
+        var proj = await client.projects.create(data);
+        hideModal('newProjectModal'); showToast('Project created', 'success');
+        await loadAll(); navProject(proj.id);
+    } catch(e) { $('#npError').removeClass('d-none').text(e.message || String(e)); }
+}
+function openEditProject(id) {
+    var p = allProjects.find(function(x) { return x.id === id; }); if (!p) return;
+    $('#epId').val(p.id); $('#epName').val(p.name); $('#epDescription').val(p.description || '');
+    $('#epPrompt').val(p.prompt || ''); $('#epStatus').val(p.status || '');
+    $('#epError').addClass('d-none').text(''); openModal('editProjectModal');
+}
+async function saveProject() {
+    var id = $('#epId').val();
+    try {
+        await client.projects.update(id, { description: $('#epDescription').val().trim(), prompt: $('#epPrompt').val().trim(), status: $('#epStatus').val().trim() });
+        hideModal('editProjectModal'); showToast('Project updated', 'success'); await loadAll();
+    } catch(e) { $('#epError').removeClass('d-none').text(e.message || String(e)); }
+}
+async function deleteProject() {
+    var id = $('#epId').val();
+    try { await client.projects.delete(id); hideModal('editProjectModal'); showToast('Project deleted', 'success'); navProjects(); await loadAll(); }
+    catch(e) { $('#epError').removeClass('d-none').text(e.message || String(e)); }
+}
+
+// ══ PROJECT AGENT CRUD ═══════════════════════════════════════════════════════
+function openNewPa(projectId, projectPrompt) {
+    $('#npaProjectId').val(projectId); $('#npaName,#npaPrompt').val('');
+    if (projectPrompt) {
+        $('#npaProjectContext').show().html('<span class="scope-header d-block mb-1">Project Prompt</span>' + escHtml(projectPrompt.slice(0, 200)) + (projectPrompt.length > 200 ? '…' : ''));
+    } else { $('#npaProjectContext').hide(); }
+    $('#npaError').addClass('d-none').text(''); openModal('newPaModal');
+}
+async function createPa() {
+    var projectId = $('#npaProjectId').val();
+    var name = $('#npaName').val().trim();
+    if (!name) { $('#npaError').removeClass('d-none').text('Name is required.'); return; }
+    if (!client) { $('#npaError').removeClass('d-none').text('Not connected.'); return; }
+    try {
+        var data = { name: name, project_id: projectId };
+        var pr = $('#npaPrompt').val().trim(); if (pr) data.prompt = pr;
+        var pa = await client.projectAgents.createInProject(projectId, data);
+        hideModal('newPaModal'); showToast('Agent created', 'success');
+        await loadAll(); navPa(projectId, pa.id);
+    } catch(e) { $('#npaError').removeClass('d-none').text(e.message || String(e)); }
+}
+function openEditPa(paId) {
+    var pa = findPaById(paId); if (!pa) return;
+    $('#epaId').val(pa.id); $('#epaName').val(pa.name); $('#epaPrompt').val(pa.prompt || '');
+    $('#epaError').addClass('d-none').text(''); openModal('editPaModal');
+}
+async function savePa() {
+    var id = $('#epaId').val();
+    try {
+        var pa = findPaById(id);
+        var proj = pa ? findProjectForPa(id) : null;
+        await client.projectAgents.updateInProject(proj ? proj.id : '', id, { prompt: $('#epaPrompt').val().trim() });
+        hideModal('editPaModal'); showToast('Agent updated', 'success'); await loadAll(); renderPanel();
+    } catch(e) { $('#epaError').removeClass('d-none').text(e.message || String(e)); }
+}
+async function deletePa() {
+    var id = $('#epaId').val();
+    var pa = findPaById(id);
+    var projectId = pa ? findProjectForPa(id) : null;
+    try {
+        var proj2 = findProjectForPa(id);
+        await client.projectAgents.deleteInProject(proj2 ? proj2.id : '', id);
+        hideModal('editPaModal'); showToast('Agent deleted', 'success');
+        await loadAll();
+        if (projectId) navProject(projectId.id); else navProjects();
+    } catch(e) { $('#epaError').removeClass('d-none').text(e.message || String(e)); }
+}
+
+// ══ SESSION CRUD ══════════════════════════════════════════════════════════════
+function openNewSession(agentId, agentName, agentPrompt) {
+    $('#nsAgentId').val(agentId); $('#nsName,#nsPrompt,#nsModel').val('');
+    if (agentPrompt) {
+        $('#nsAgentContext').show().html('<span class="scope-header d-block mb-1">Agent Prompt</span>' + escHtml(agentPrompt.slice(0, 200)) + (agentPrompt.length > 200 ? '…' : ''));
+    } else { $('#nsAgentContext').hide(); }
+    $('#nsError').addClass('d-none').text(''); openModal('newSessionModal');
+}
+async function createSession() {
+    var agentId = $('#nsAgentId').val();
+    var name = $('#nsName').val().trim();
+    if (!name) { $('#nsError').removeClass('d-none').text('Session name is required.'); return; }
+    if (!client) { $('#nsError').removeClass('d-none').text('Not connected.'); return; }
+    try {
+        var data = { name: name, agent_id: agentId };
+        var pr = $('#nsPrompt').val().trim(); if (pr) data.prompt = pr;
+        var m = $('#nsModel').val().trim(); if (m) data.llm_model = m;
+        var s = await client.sessions.create(data);
+        await client.sessions.start(s.id);
+        hideModal('newSessionModal'); showToast('Session started', 'success');
+        await loadAll(); navSession(s.id);
+    } catch(e) { $('#nsError').removeClass('d-none').text(e.message || String(e)); }
+}
+function openStop(id, name) { stopTarget = id; $('#stopSessionName').text(name); openModal('stopSessionModal'); }
+async function confirmStop() {
+    if (!stopTarget || !client) return;
+    hideModal('stopSessionModal');
+    try { await client.sessions.stop(stopTarget); showToast('Session stopped', 'success'); await loadAll(); renderPanel(); }
+    catch(e) { showToast('Stop failed: ' + (e.message || e), 'danger'); }
+    stopTarget = null;
+}
+
+// ══ ANNOTATION SYSTEM ══════════════════════════════════════════════════════════
+function tryParseJson(str) {
+    try { return JSON.parse(str); } catch(e) { return null; }
+}
+function getAnn(resource, key) {
+    return (resource && resource.annotations && resource.annotations[key]) || '';
+}
+
+function agentAnnotationBadges(pa) {
+    var ann = pa.annotations || {};
+    var ready   = ann['ambient.io/ready'];
+    var blocked = ann['ambient.io/blocked'];
+    var blocker = ann['ambient.io/blocker'];
+    var task    = ann['work.ambient.io/current-task'];
+    var prUrl   = ann['work.ambient.io/pr-url'];
+    var prStatus = ann['work.ambient.io/pr-status'];
+    if (!ready && !blocked && !task && !prUrl) return '';
+    var html = '<div class="mt-2">';
+    if (blocked === 'true') {
+        html += '<span class="ann-blocked"><i class="fas fa-ban"></i>blocked</span>';
+        if (blocker) html += '<div style="font-size:.68rem;color:#e74c3c;margin-top:.2rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(blocker.slice(0,80)) + '</div>';
+    } else if (ready === 'true') {
+        html += '<span class="ann-ready"><i class="fas fa-check"></i>ready</span>';
+    } else if (ready === 'false') {
+        html += '<span class="ann-idle"><i class="fas fa-minus"></i>idle</span>';
+    }
+    if (task) html += '<div class="ann-task"><i class="fas fa-tasks me-1"></i>' + escHtml(task.slice(0,72)) + (task.length > 72 ? '…' : '') + '</div>';
+    if (prUrl) html += '<div class="mt-1"><a class="ann-pr-link" href="' + escHtml(prUrl) + '" target="_blank" onclick="event.stopPropagation()"><i class="fas fa-code-pull-request me-1"></i>' + escHtml(prStatus || 'PR') + '</a></div>';
+    html += '</div>';
+    return html;
+}
+
+function renderFleetSummary(project) {
+    var summaryStr = getAnn(project, 'ambient.io/summary');
+    if (!summaryStr) return '';
+    var obj = tryParseJson(summaryStr);
+    var narrative = obj ? (obj.narrative || summaryStr) : summaryStr;
+    var chips = '';
+    if (obj) {
+        if (obj.ready_count   !== undefined) chips += '<span class="stat-chip me-3" style="color:var(--luna-success)"><i class="fas fa-check-circle"></i> ' + obj.ready_count + ' ready</span>';
+        if (obj.blocked_count && obj.blocked_count > 0) chips += '<span class="stat-chip me-3" style="color:#e74c3c"><i class="fas fa-ban"></i> ' + obj.blocked_count + ' blocked</span>';
+        if (obj.active_count  !== undefined) chips += '<span class="stat-chip" style="color:var(--luna-accent)"><i class="fas fa-bolt"></i> ' + obj.active_count + ' active</span>';
+    }
+    return '<div class="fleet-summary">' +
+        '<div class="scope-header mb-1" style="font-size:.65rem">Fleet Summary <span class="text-muted" style="text-transform:none;letter-spacing:0">· ambient.io/summary</span></div>' +
+        (chips ? '<div class="d-flex flex-wrap mb-1">' + chips + '</div>' : '') +
+        '<div style="font-size:.82rem">' + escHtml(narrative) + '</div>' +
+        '</div>';
+}
+
+function renderFleetRoster(project) {
+    var rosterStr = getAnn(project, 'ambient.io/agent-roster');
+    if (!rosterStr) return '';
+    var roster = tryParseJson(rosterStr);
+    if (!Array.isArray(roster) || roster.length === 0) return '';
+    var html = '<div class="scope-header mb-2"><i class="fas fa-users me-1"></i>Fleet Roster ' +
+        '<small class="text-muted" style="text-transform:none;font-size:.65rem;letter-spacing:0">· ambient.io/agent-roster</small></div>';
+    html += '<div class="ann-section roster-wrap mb-4"><table class="roster-table">';
+    html += '<thead><tr><th>Agent</th><th>Status</th><th>Current Task</th><th>PR</th><th>Last Seen</th></tr></thead><tbody>';
+    roster.forEach(function(e) {
+        var statusHtml = '';
+        if (e.blocked === 'true' || e.blocked === true) {
+            statusHtml = '<span class="ann-blocked"><i class="fas fa-ban"></i>blocked</span>';
+            if (e.blocker) statusHtml += '<div style="font-size:.68rem;color:#e74c3c;margin-top:.15rem;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(String(e.blocker).slice(0,60)) + '</div>';
+        } else if (e.ready === 'true' || e.ready === true) {
+            statusHtml = '<span class="ann-ready"><i class="fas fa-check"></i>ready</span>';
+        } else {
+            statusHtml = '<span class="ann-idle"><i class="fas fa-minus"></i>idle</span>';
+        }
+        var task = e['current-task'] || e.current_task || '';
+        var prUrl = e['pr-url'] || e.pr_url || '';
+        var prSt  = e['pr-status'] || e.pr_status || '';
+        var seen  = e['last-seen'] || e.last_seen || '';
+        html += '<tr>' +
+            '<td><span class="font-monospace fw-semibold">' + escHtml(e.name || e.id || '?') + '</span></td>' +
+            '<td>' + statusHtml + '</td>' +
+            '<td class="roster-task-cell" title="' + escHtml(task) + '">' + escHtml(task.slice(0,60)) + (task.length > 60 ? '…' : '') + '</td>' +
+            '<td>' + (prUrl ? '<a class="ann-pr-link" href="' + escHtml(prUrl) + '" target="_blank"><i class="fas fa-code-pull-request me-1"></i>' + escHtml(prSt || 'PR') + '</a>' : '<span class="text-muted">—</span>') + '</td>' +
+            '<td class="text-muted" style="font-size:.72rem">' + (seen ? timeAgo(seen) : '—') + '</td>' +
+            '</tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+}
+
+function renderAnnotationsPanel(resource, resourceType, projectId, agentId) {
+    var annotations = (resource && resource.annotations) || {};
+    var keys = Object.keys(annotations).sort();
+    var html = '<details class="mb-3"><summary style="cursor:pointer;font-size:.78rem;color:var(--luna-muted);user-select:none;padding:.35rem 0">' +
+        '<i class="fas fa-tags me-1"></i>Annotations ' +
+        '<span class="badge ms-1" style="background:rgba(255,255,255,.1);color:var(--luna-muted);font-size:.65rem">' + keys.length + '</span></summary>';
+    html += '<div class="ann-section mt-2">';
+    if (keys.length > 0) {
+        html += '<div class="sdk-call mb-0" style="border-radius:0;border-left:none;border-right:none;border-top:none"><div class="sdk-label">SDK — patch annotations</div><code>' +
+            (resourceType === 'agent'
+                ? 'await client.projectAgents.updateInProject(projectId, agentId,\n  { annotations: { "key": "value" } })'
+                : 'await client.projects.update(projectId,\n  { annotations: { "key": "value" } })') +
+            '</code></div>';
+        keys.forEach(function(k) {
+            var v = String(annotations[k] || '');
+            var parsed = tryParseJson(v);
+            var displayVal = (parsed !== null && typeof parsed === 'object') ? JSON.stringify(parsed, null, 2) : v;
+            html += '<div class="ann-panel-row">' +
+                '<div class="ann-k">' + escHtml(k) + '</div>' +
+                '<div class="ann-v">' + escHtml(displayVal.slice(0,300)) + (displayVal.length > 300 ? '\n…' : '') + '</div>' +
+                '<button class="btn btn-outline-secondary" style="padding:.15rem .4rem;font-size:.7rem" ' +
+                'onclick="openEditAnnotation(' + JSON.stringify(resourceType) + ',' + JSON.stringify(projectId||'') + ',' + JSON.stringify(agentId||'') + ',' + JSON.stringify(k) + ',' + JSON.stringify(v) + ')"><i class="fas fa-pencil"></i></button>' +
+                '</div>';
+        });
+    } else {
+        html += '<div class="text-muted text-center py-3" style="font-size:.8rem"><i class="fas fa-tags me-1" style="opacity:.4"></i>No annotations yet</div>';
+    }
+    html += '<div class="p-2" style="border-top:1px solid rgba(255,255,255,.06)">' +
+        '<button class="btn btn-outline-secondary btn-sm" style="font-size:.72rem" ' +
+        'onclick="openEditAnnotation(' + JSON.stringify(resourceType) + ',' + JSON.stringify(projectId||'') + ',' + JSON.stringify(agentId||'') + ',\'\',\'\')">' +
+        '<i class="fas fa-plus me-1"></i>Add annotation</button></div>';
+    html += '</div></details>';
+    return html;
+}
+
+function renderAgentAnnotationStatus(pa, projectId) {
+    var ann = pa.annotations || {};
+    var ready    = ann['ambient.io/ready'];
+    var blocked  = ann['ambient.io/blocked'];
+    var blocker  = ann['ambient.io/blocker'];
+    var task     = ann['work.ambient.io/current-task'];
+    var nextStr  = ann['work.ambient.io/next-tasks'];
+    var prUrl    = ann['work.ambient.io/pr-url'];
+    var prStatus = ann['work.ambient.io/pr-status'];
+    if (!ready && !blocked && !task && !prUrl && !nextStr) return '';
+    var html = '<div class="resource-card mb-3">';
+    html += '<div class="scope-header mb-2">Agent State <small class="text-muted" style="text-transform:none;font-size:.65rem;letter-spacing:0">· live annotations</small></div>';
+    html += '<div class="d-flex flex-wrap align-items-center gap-2 mb-2">';
+    if (blocked === 'true') {
+        html += '<span class="ann-blocked"><i class="fas fa-ban"></i>blocked</span>';
+        if (blocker) html += '<span style="font-size:.78rem;color:#e74c3c">' + escHtml(blocker.slice(0,120)) + '</span>';
+    } else if (ready === 'true') {
+        html += '<span class="ann-ready"><i class="fas fa-check"></i>ready</span>';
+    } else if (ready === 'false') {
+        html += '<span class="ann-idle"><i class="fas fa-minus"></i>idle</span>';
+    }
+    if (prUrl) html += '<a class="ann-pr-link" href="' + escHtml(prUrl) + '" target="_blank"><i class="fas fa-code-pull-request me-1"></i>' + escHtml(prStatus || 'PR open') + '</a>';
+    html += '</div>';
+    if (task) html += '<div class="mb-2"><div class="scope-header" style="font-size:.65rem">Current Task</div><div class="ann-task" style="max-width:none;white-space:normal;text-overflow:unset"><i class="fas fa-tasks me-1"></i>' + escHtml(task) + '</div></div>';
+    var nextTasks = tryParseJson(nextStr);
+    if (Array.isArray(nextTasks) && nextTasks.length > 0) {
+        html += '<div><div class="scope-header" style="font-size:.65rem">Queued (' + nextTasks.length + ')</div><ul style="margin:0;padding-left:1.2rem;font-size:.75rem;color:var(--luna-muted)">';
+        nextTasks.slice(0,3).forEach(function(t) { html += '<li>' + escHtml(String(t).slice(0,80)) + '</li>'; });
+        if (nextTasks.length > 3) html += '<li style="list-style:none">+ ' + (nextTasks.length-3) + ' more</li>';
+        html += '</ul></div>';
+    }
+    html += '</div>';
+    return html;
+}
+
+function openEditAnnotation(resourceType, projectId, agentId, key, value) {
+    $('#eannResourceType').val(resourceType);
+    $('#eannProjectId').val(projectId);
+    $('#eannAgentId').val(agentId);
+    $('#eannKey').val(key).prop('readonly', key !== '');
+    $('#eannValue').val(value);
+    $('#eannError').addClass('d-none').text('');
+    var sdk = resourceType === 'agent'
+        ? 'await client.projectAgents.updateInProject(projectId, agentId,\n  { annotations: { "' + (key||'key') + '": "value" } })'
+        : 'await client.projects.update(projectId,\n  { annotations: { "' + (key||'key') + '": "value" } })';
+    $('#eannSdkSnippet').text(sdk);
+    openModal('editAnnotationModal');
+}
+
+async function saveAnnotation() {
+    var resourceType = $('#eannResourceType').val();
+    var projectId    = $('#eannProjectId').val();
+    var agentId      = $('#eannAgentId').val();
+    var key          = $('#eannKey').val().trim();
+    var value        = $('#eannValue').val();
+    if (!key) { $('#eannError').removeClass('d-none').text('Key is required.'); return; }
+    if (!client) { $('#eannError').removeClass('d-none').text('Not connected.'); return; }
+    try {
+        var patch = { annotations: {} };
+        patch.annotations[key] = value;
+        if (resourceType === 'agent') {
+            await client.projectAgents.updateInProject(projectId, agentId, patch);
+        } else {
+            await client.projects.update(projectId, patch);
+        }
+        hideModal('editAnnotationModal');
+        showToast('Annotation saved', 'success');
+        await loadAll();
+        renderPanel();
+    } catch(e) { $('#eannError').removeClass('d-none').text(e.message || String(e)); }
+}
+
+// ══ CONFIG MODAL ══════════════════════════════════════════════════════════════
+function openConfig(e) {
+    if (e) e.preventDefault();
+    var cfg = loadConfig(); $('#cfgUrl').val(cfg.url); $('#cfgToken').val(cfg.token);
+    $('#cfgError').addClass('d-none').text(''); openModal('configModal');
+}
+async function saveConfig() {
+    var url = $('#cfgUrl').val().trim(), token = $('#cfgToken').val().trim();
+    if (!url || !token) { $('#cfgError').removeClass('d-none').text('All fields required.'); return; }
+    storeConfig(url, token);
+    var r = await initClient(url, token, '');
+    if (r === true) { hideModal('configModal'); showToast('Connected', 'success'); }
+    else { $('#cfgError').removeClass('d-none').text(r); }
+}
+
+// ══ REFRESH ══════════════════════════════════════════════════════════════════
+async function refreshAll(e) {
+    if (e) e.preventDefault();
+    await loadAll();
+}
+
+// ══ LOOKUP HELPERS ════════════════════════════════════════════════════════════
+function findSession(id) {
+    for (var paId in allSessions) {
+        var s = allSessions[paId].find(function(x) { return x.id === id; });
+        if (s) return s;
+    }
+    return null;
+}
+function findPaById(paId) {
+    for (var projectId in allPas) {
+        var pa = allPas[projectId].find(function(x) { return x.id === paId; });
+        if (pa) return pa;
+    }
+    return null;
+}
+function findPaForSession(sessionId) {
+    var s = findSession(sessionId);
+    if (!s || !s.agent_id) return null;
+    return findPaById(s.agent_id);
+}
+function findProjectForPa(paId) {
+    for (var projectId in allPas) {
+        if (allPas[projectId].find(function(x) { return x.id === paId; })) {
+            return allProjects.find(function(p) { return p.id === projectId; }) || null;
+        }
+    }
+    return null;
+}
+
+// ══ HELPERS ══════════════════════════════════════════════════════════════════
+function escHtml(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function phaseBadge(phase) {
+    var map = { running: 'success', pending: 'warning', starting: 'warning', completed: 'secondary', failed: 'danger' };
+    return '<span class="badge bg-' + (map[phase] || 'secondary') + '">' + escHtml(phase || 'unknown') + '</span>';
+}
+function timeAgo(iso) {
+    var s = Math.floor((Date.now() - new Date(iso)) / 1000);
+    if (s < 60) return s + 's ago'; if (s < 3600) return Math.floor(s / 60) + 'm ago';
+    if (s < 86400) return Math.floor(s / 3600) + 'h ago'; return Math.floor(s / 86400) + 'd ago';
+}
+function openModal(id) { new bootstrap.Modal(document.getElementById(id)).show(); }
+function hideModal(id) { var m = bootstrap.Modal.getInstance(document.getElementById(id)); if (m) m.hide(); }
+function setSdkDot(ok) {
+    var dot = document.getElementById('sdkDot'), lbl = document.getElementById('sdkLabel');
+    if (ok) { dot.style.background = 'var(--luna-success)'; dot.style.boxShadow = '0 0 6px var(--luna-success)'; lbl.textContent = 'connected'; }
+    else     { dot.style.background = '#374151'; dot.style.boxShadow = 'none'; lbl.textContent = 'not connected'; }
+}
+function showToast(msg, type) {
+    var el = document.getElementById('liveToast');
+    el.className = 'toast align-items-center text-white border-0 bg-' + (type || 'primary');
+    document.getElementById('toastBody').textContent = msg;
+    new bootstrap.Toast(el, { delay: 3000 }).show();
+}
+        </script>
+    </body>
+</html>

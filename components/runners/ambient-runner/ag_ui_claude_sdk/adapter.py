@@ -605,6 +605,7 @@ class ClaudeAgentAdapter:
             TaskProgressMessage,
             TaskNotificationMessage,
         )
+
         if isinstance(message, TaskStartedMessage):
             return self._emit_task_started(message)
         elif isinstance(message, TaskProgressMessage):
@@ -631,6 +632,7 @@ class ClaudeAgentAdapter:
                         sid = val.get("session_id", "")
                         if sid:
                             from pathlib import Path
+
                             base = Path.home() / ".claude" / "projects"
                             if base.exists():
                                 expected = f"agent-{agent_id}.jsonl"
@@ -668,7 +670,9 @@ class ClaudeAgentAdapter:
         existing = self._task_registry.get(message.task_id, {})
         existing.update(progress_value)
         self._task_registry[message.task_id] = existing
-        return CustomEvent(type=EventType.CUSTOM, name="task:progress", value=progress_value)
+        return CustomEvent(
+            type=EventType.CUSTOM, name="task:progress", value=progress_value
+        )
 
     def _emit_task_notification(self, message: Any) -> "CustomEvent":
         usage = getattr(message, "usage", None)
@@ -685,7 +689,9 @@ class ClaudeAgentAdapter:
         self._task_registry[message.task_id] = existing
         if output_file:
             self._task_outputs[message.task_id] = output_file
-        return CustomEvent(type=EventType.CUSTOM, name="task:completed", value=notification_value)
+        return CustomEvent(
+            type=EventType.CUSTOM, name="task:completed", value=notification_value
+        )
 
     async def _stream_claude_sdk(
         self,
@@ -1160,7 +1166,10 @@ class ClaudeAgentAdapter:
                             ):
                                 yield event
 
-                elif isinstance(message, (TaskStartedMessage, TaskProgressMessage, TaskNotificationMessage)):
+                elif isinstance(
+                    message,
+                    (TaskStartedMessage, TaskProgressMessage, TaskNotificationMessage),
+                ):
                     yield self._emit_task_event(message)
 
                 elif isinstance(message, SystemMessage):
@@ -1361,4 +1370,3 @@ class ClaudeAgentAdapter:
         # Re-raise to let run() emit RunErrorEvent
         if stream_error is not None:
             raise stream_error
-

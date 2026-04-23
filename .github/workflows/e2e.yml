@@ -177,7 +177,7 @@ jobs:
       if: needs.detect-changes.outputs.claude-runner == 'true'
       uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
       with:
-        context: components/runners
+        context: components/runners/ambient-runner
         file: components/runners/ambient-runner/Dockerfile
         load: true
         tags: quay.io/ambient_code/vteam_claude_runner:e2e-test

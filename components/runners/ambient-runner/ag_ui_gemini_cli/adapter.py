@@ -446,10 +446,14 @@ class GeminiCLIAdapter:
             if reasoning_open and reasoning_message_id:
                 try:
                     yield ReasoningMessageEndEvent(
-                        threadId=thread_id, runId=run_id, messageId=reasoning_message_id,
+                        threadId=thread_id,
+                        runId=run_id,
+                        messageId=reasoning_message_id,
                     )
                     yield ReasoningEndEvent(
-                        threadId=thread_id, runId=run_id, messageId=reasoning_message_id,
+                        threadId=thread_id,
+                        runId=run_id,
+                        messageId=reasoning_message_id,
                     )
                 except Exception:
                     pass
@@ -477,10 +481,14 @@ class GeminiCLIAdapter:
             if reasoning_open and reasoning_message_id:
                 try:
                     yield ReasoningMessageEndEvent(
-                        threadId=thread_id, runId=run_id, messageId=reasoning_message_id,
+                        threadId=thread_id,
+                        runId=run_id,
+                        messageId=reasoning_message_id,
                     )
                     yield ReasoningEndEvent(
-                        threadId=thread_id, runId=run_id, messageId=reasoning_message_id,
+                        threadId=thread_id,
+                        runId=run_id,
+                        messageId=reasoning_message_id,
                     )
                 except Exception:
                     pass

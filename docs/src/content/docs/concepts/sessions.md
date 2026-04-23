@@ -19,7 +19,8 @@ Click **New Session** inside a workspace. The creation dialog lets you configure
 | **Model** | Which AI model to use. Available models: Claude Sonnet 4.5, Claude Opus 4.5, Claude Haiku 4.5, Gemini 2.5 Flash (generally available); Claude Opus 4.6, Claude Sonnet 4.6, Gemini 2.5 Pro (feature-gated, visible only when enabled for your workspace). | Claude Sonnet 4.5 |
 | **Temperature** | Controls response randomness (0 = deterministic, 2 = highly creative). | 0.7 |
 | **Max tokens** | Maximum output length per response. The UI enforces a range of 100--8,000, but the platform API accepts other values. | 4,000 |
-| **Timeout** | Hard limit on total session duration. The UI enforces a range of 60--1,800 seconds, but the platform API accepts other values. A separate `inactivityTimeout` field controls how long a session can remain idle before the platform auto-stops it; if omitted, it falls back to the project-level setting and then to a 24-hour default. | 300 seconds |
+| **Timeout** | Hard limit on total session duration. The UI enforces a range of 60--1,800 seconds, but the platform API accepts other values. | 300 seconds |
+| **Inactivity timeout** | How long a session can remain idle before the platform automatically stops it. See [Inactivity timeout (idler)](#inactivity-timeout-idler) below for full details. Set to `0` to disable. | Inherited from project settings, then platform default (24 hours) |
 
 After the session is created, you can attach repositories and select a workflow from the session sidebar. See [Context & Artifacts](../context-and-artifacts/) and [Workflows](../workflows/) for details.
 
@@ -46,9 +47,39 @@ Pending --> Creating --> Running --> Completed
 | **Creating** | The platform is provisioning the container, cloning repositories, and injecting secrets. |
 | **Running** | The agent is active and ready to accept messages. |
 | **Stopping** | A stop was requested; the agent is finishing its current turn and saving state. |
-| **Stopped** | The session was stopped manually. It can be continued later. |
+| **Stopped** | The session was stopped manually or by the [inactivity idler](#inactivity-timeout-idler). It can be continued later. |
 | **Completed** | The agent finished its work and exited on its own. |
 | **Failed** | Something went wrong -- check the session events for details. |
+
+### Inactivity timeout (idler)
+
+The platform includes a background controller (the **idler**) that automatically stops sessions that have been idle for too long. This prevents abandoned sessions from consuming cluster resources indefinitely.
+
+#### How it works
+
+While a session is **Running**, the platform tracks its `lastActivityTime`. The idler periodically checks whether the elapsed time since the last activity exceeds the session's configured inactivity timeout. If it does, the idler triggers a graceful stop: it sets the session's desired phase to `Stopped` and records the stop reason as `inactivity`. The session's state — including local git branches and uncommitted changes — is preserved in a backup so you can resume later.
+
+A session stopped by the idler behaves the same as a manually stopped session. You can **Resume** it at any time.
+
+#### Configuration hierarchy
+
+The inactivity timeout is resolved in this order:
+
+1. **Session-level** — set `spec.inactivityTimeout` on the session (in seconds). This takes highest priority.
+2. **Project-level** — if the session does not specify a value, the platform checks the `ProjectSettings` for the namespace (`spec.inactivityTimeoutSeconds`).
+3. **Platform default** — if neither is set, the platform uses a default of **86,400 seconds (24 hours)**. This default can be overridden by the `DEFAULT_INACTIVITY_TIMEOUT` environment variable on the operator.
+
+Setting the inactivity timeout to `0` at any level disables the auto-stop behavior for that scope.
+
+#### Verifying the idler is working
+
+You can check the operator logs to see which sessions have been stopped due to inactivity:
+
+```sh
+kubectl logs -l app=ambient-code-operator -n <namespace> | grep '[Inactivity]'
+```
+
+Each entry corresponds to a session that was automatically stopped by the idler.
 
 ## The chat interface
 

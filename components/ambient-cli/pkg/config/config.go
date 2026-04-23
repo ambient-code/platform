@@ -13,6 +13,9 @@ import (
 type Config struct {
 	APIUrl            string `json:"api_url,omitempty"`
 	AccessToken       string `json:"access_token,omitempty"`
+	RefreshToken      string `json:"refresh_token,omitempty"`
+	IssuerURL         string `json:"issuer_url,omitempty"`
+	ClientID          string `json:"client_id,omitempty"`
 	Project           string `json:"project,omitempty"`
 	Pager             string `json:"pager,omitempty"`            // TODO: Wire pager support into output commands (e.g. pipe through less)
 	RequestTimeout    int    `json:"request_timeout,omitempty"`  // Request timeout in seconds
@@ -107,6 +110,41 @@ func (c *Config) GetToken() string {
 		return env
 	}
 	return c.AccessToken
+}
+
+func (c *Config) GetTokenWithRefresh() (string, error) {
+	if env := os.Getenv("AMBIENT_TOKEN"); env != "" {
+		return env, nil
+	}
+
+	if c.AccessToken == "" {
+		return "", nil
+	}
+
+	expired, err := IsTokenExpired(c.AccessToken)
+	if err != nil || !expired {
+		return c.AccessToken, nil
+	}
+
+	if c.RefreshToken == "" || c.IssuerURL == "" || c.ClientID == "" {
+		return c.AccessToken, nil
+	}
+
+	newAccess, newRefresh, refreshErr := RefreshAccessToken(c.IssuerURL, c.ClientID, c.RefreshToken)
+	if refreshErr != nil {
+		return c.AccessToken, nil
+	}
+
+	c.AccessToken = newAccess
+	if newRefresh != "" {
+		c.RefreshToken = newRefresh
+	}
+
+	if saveErr := Save(c); saveErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to persist refreshed token: %v\n", saveErr)
+	}
+
+	return c.AccessToken, nil
 }
 
 // GetRequestTimeout returns the request timeout duration with fallback to default

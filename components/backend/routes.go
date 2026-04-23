@@ -99,6 +99,8 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.GET("/agentic-sessions/:sessionName/credentials/google", handlers.GetGoogleCredentialsForSession)
 			projectGroup.GET("/agentic-sessions/:sessionName/credentials/jira", handlers.GetJiraCredentialsForSession)
 			projectGroup.GET("/agentic-sessions/:sessionName/credentials/gitlab", handlers.GetGitLabTokenForSession)
+			projectGroup.GET("/agentic-sessions/:sessionName/credentials/coderabbit", handlers.GetCodeRabbitCredentialsForSession)
+			projectGroup.GET("/agentic-sessions/:sessionName/credentials/gerrit", handlers.GetGerritCredentialsForSession)
 			projectGroup.GET("/agentic-sessions/:sessionName/credentials/mcp/:serverName", handlers.GetMCPCredentialsForSession)
 
 			// Session export
@@ -173,11 +175,24 @@ func registerRoutes(r *gin.Engine) {
 		api.DELETE("/auth/jira/disconnect", handlers.DisconnectJira)
 		api.POST("/auth/jira/test", handlers.TestJiraConnection)
 
+		// Cluster-level Gerrit (user-scoped, multi-instance)
+		api.POST("/auth/gerrit/connect", handlers.ConnectGerrit)
+		api.POST("/auth/gerrit/test", handlers.TestGerritConnection)
+		api.GET("/auth/gerrit/instances", handlers.ListGerritInstances)
+		api.GET("/auth/gerrit/:instanceName/status", handlers.GetGerritStatus)
+		api.DELETE("/auth/gerrit/:instanceName/disconnect", handlers.DisconnectGerrit)
+
 		// Cluster-level GitLab (user-scoped)
 		api.POST("/auth/gitlab/connect", handlers.ConnectGitLabGlobal)
 		api.GET("/auth/gitlab/status", handlers.GetGitLabStatusGlobal)
 		api.DELETE("/auth/gitlab/disconnect", handlers.DisconnectGitLabGlobal)
 		api.POST("/auth/gitlab/test", handlers.TestGitLabConnection)
+
+		// Cluster-level CodeRabbit (user-scoped)
+		api.POST("/auth/coderabbit/connect", handlers.ConnectCodeRabbit)
+		api.GET("/auth/coderabbit/status", handlers.GetCodeRabbitStatus)
+		api.DELETE("/auth/coderabbit/disconnect", handlers.DisconnectCodeRabbit)
+		api.POST("/auth/coderabbit/test", handlers.TestCodeRabbitConnection)
 
 		// Generic MCP server credentials (user-scoped)
 		api.POST("/auth/mcp/:serverName/connect", handlers.ConnectMCPServer)

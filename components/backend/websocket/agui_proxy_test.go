@@ -1,14 +1,133 @@
 package websocket
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"ambient-code-backend/handlers"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
 // Note: isActivityEvent was removed — all non-empty event types now reset
 // the inactivity timer. The inline check `eventType != ""` in
 // persistStreamedEvent handles this directly.
+
+// --- runnerHTTPClient session token tests ---
+
+func TestRunnerHTTPClient_UsesSessionTokenTransport(t *testing.T) {
+	transport := runnerHTTPClient.Transport
+	if transport == nil {
+		t.Fatal("runnerHTTPClient.Transport is nil — must use handlers.NewRunnerTransport to inject X-Ambient-Session-Token")
+	}
+
+	typeName := fmt.Sprintf("%T", transport)
+	if typeName == "*http.Transport" {
+		t.Errorf(
+			"runnerHTTPClient.Transport is a plain *http.Transport — must wrap with handlers.NewRunnerTransport "+
+				"so X-Ambient-Session-Token is injected on runner requests (got %s)", typeName,
+		)
+	}
+}
+
+func TestConnectToRunner_SendsSessionToken(t *testing.T) {
+	const expectedToken = "test-agui-token-value"
+	const sessionName = "tok-session"
+	const namespace = "tok-project"
+
+	fakeClient := k8sfake.NewSimpleClientset(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("ambient-runner-token-%s", sessionName),
+			Namespace: namespace,
+		},
+		Data: map[string][]byte{
+			"agui-token": []byte(expectedToken),
+		},
+	})
+
+	oldClient := handlers.K8sClientMw
+	handlers.K8sClientMw = fakeClient
+	defer func() { handlers.K8sClientMw = oldClient }()
+
+	var receivedToken string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedToken = r.Header.Get("X-Ambient-Session-Token")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	runnerURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:8001/", sessionName, namespace)
+
+	oldHTTPClient := runnerHTTPClient
+	defer func() { runnerHTTPClient = oldHTTPClient }()
+
+	runnerHTTPClient = &http.Client{
+		Transport: handlers.NewRunnerTransport(&rewriteHostTransport{
+			realURL: ts.URL,
+		}),
+	}
+
+	resp, err := connectToRunner(runnerURL, []byte(`{}`), "", "", "")
+	if err != nil {
+		t.Fatalf("connectToRunner failed: %v", err)
+	}
+	resp.Body.Close()
+
+	if receivedToken != expectedToken {
+		t.Errorf("Expected X-Ambient-Session-Token=%q, got %q", expectedToken, receivedToken)
+	}
+}
+
+func TestConnectToRunner_NoTokenWhenSecretMissing(t *testing.T) {
+	fakeClient := k8sfake.NewSimpleClientset()
+
+	oldClient := handlers.K8sClientMw
+	handlers.K8sClientMw = fakeClient
+	defer func() { handlers.K8sClientMw = oldClient }()
+
+	var receivedToken string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedToken = r.Header.Get("X-Ambient-Session-Token")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	runnerURL := "http://session-no-secret.no-project.svc.cluster.local:8001/"
+
+	oldHTTPClient := runnerHTTPClient
+	defer func() { runnerHTTPClient = oldHTTPClient }()
+
+	runnerHTTPClient = &http.Client{
+		Transport: handlers.NewRunnerTransport(&rewriteHostTransport{
+			realURL: ts.URL,
+		}),
+	}
+
+	resp, err := connectToRunner(runnerURL, []byte(`{}`), "", "", "")
+	if err != nil {
+		t.Fatalf("connectToRunner failed: %v", err)
+	}
+	resp.Body.Close()
+
+	if receivedToken != "" {
+		t.Errorf("Expected no X-Ambient-Session-Token when secret missing, got %q", receivedToken)
+	}
+}
+
+type rewriteHostTransport struct {
+	realURL string
+}
+
+func (t *rewriteHostTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	rewritten := req.Clone(req.Context())
+	rewritten.URL.Scheme = "http"
+	rewritten.URL.Host = t.realURL[len("http://"):]
+	return http.DefaultTransport.RoundTrip(rewritten)
+}
 
 // --- getRunnerEndpoint tests ---
 

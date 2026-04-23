@@ -66,4 +66,24 @@ describe('SessionDetails', () => {
     const buttons = screen.queryAllByRole('button');
     expect(buttons.length).toBe(0);
   });
+
+  it('renders author display name when userContext is present', () => {
+    const session = makeSession();
+    session.spec.userContext = { userId: 'user-1', displayName: 'Alice Smith', groups: [] };
+    render(<SessionDetails session={session} />);
+    expect(screen.getByText('Alice Smith')).toBeDefined();
+  });
+
+  it('falls back to userId when displayName is absent', () => {
+    const session = makeSession();
+    session.spec.userContext = { userId: 'user-1', displayName: '', groups: [] };
+    render(<SessionDetails session={session} />);
+    expect(screen.getByText('user-1')).toBeDefined();
+  });
+
+  it('renders dash when userContext is absent', () => {
+    const session = makeSession();
+    render(<SessionDetails session={session} />);
+    expect(screen.getByText('—')).toBeDefined();
+  });
 });

@@ -17,7 +17,7 @@ from urllib import request as _urllib_request
 from urllib.parse import urlparse
 
 from ambient_runner.platform.context import RunnerContext
-from ambient_runner.platform.utils import get_bot_token
+from ambient_runner.platform.utils import get_bot_token, refresh_bot_token
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,7 @@ _GOOGLE_WORKSPACE_CREDS_FILE = Path(
 # time), so updating os.environ mid-run would not reach it without these files.
 _GITHUB_TOKEN_FILE = Path("/tmp/.ambient_github_token")
 _GITLAB_TOKEN_FILE = Path("/tmp/.ambient_gitlab_token")
+_KUBECONFIG_FILE = Path("/tmp/.ambient_kubeconfig")
 
 
 # ---------------------------------------------------------------------------
@@ -103,23 +104,33 @@ def sanitize_user_context(user_id: str, user_name: str) -> tuple[str, str]:
 async def _fetch_credential(context: RunnerContext, credential_type: str) -> dict:
     """Fetch credentials from backend API at runtime."""
     base = os.getenv("BACKEND_API_URL", "").rstrip("/")
-    project = os.getenv("PROJECT_NAME") or os.getenv("AGENTIC_SESSION_NAMESPACE", "")
-    project = project.strip()
-    session_id = context.session_id
 
-    if not base or not project or not session_id:
+    if not base:
         logger.warning(
-            f"Cannot fetch {credential_type} credentials: missing environment "
-            f"variables (base={base}, project={project}, session={session_id})"
+            f"Cannot fetch {credential_type} credentials: BACKEND_API_URL not set"
         )
         return {}
 
-    url = f"{base}/projects/{project}/agentic-sessions/{session_id}/credentials/{credential_type}"
+    credential_ids = _json.loads(os.getenv("CREDENTIAL_IDS", "{}"))
+    credential_id = credential_ids.get(credential_type)
+    if not credential_id:
+        logger.debug(f"No credential_id for provider {credential_type}; skipping fetch")
+        return {}
+
+    project_id = os.getenv("PROJECT_NAME", "")
+    if not project_id:
+        logger.warning("Cannot fetch credentials: PROJECT_NAME not set")
+        return {}
+
+    url = (
+        f"{base}/api/ambient/v1/projects/{project_id}/credentials/{credential_id}/token"
+    )
 
     # Reject non-cluster URLs to prevent token exfiltration via user-overridden env vars
     parsed = urlparse(base)
     if parsed.hostname and not (
         parsed.hostname.endswith(".svc.cluster.local")
+        or parsed.hostname.endswith(".svc")
         or parsed.hostname == "localhost"
         or parsed.hostname == "127.0.0.1"
     ):
@@ -144,6 +155,7 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
         bot = get_bot_token()
         if bot:
             req.add_header("Authorization", f"Bearer {bot}")
+            logger.debug(f"Using CP OIDC token for {credential_type} credentials")
 
     loop = asyncio.get_running_loop()
 
@@ -179,17 +191,48 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
                         f"and BOT_TOKEN fallback also failed"
                     ) from fallback_err
             if e.code in (401, 403):
-                logger.warning(
-                    f"{credential_type} credential fetch failed with HTTP {e.code}: {e}"
-                )
-                raise PermissionError(
-                    f"{credential_type} authentication failed with HTTP {e.code}"
-                ) from e
+                # BOT_TOKEN may have expired — refresh from CP endpoint and retry once.
+                return _retry_with_fresh_bot_token(e.code)
             logger.warning(f"{credential_type} credential fetch failed: {e}")
             return ""
         except Exception as e:
             logger.warning(f"{credential_type} credential fetch failed: {e}")
             return ""
+
+    def _retry_with_fresh_bot_token(original_code: int):
+        logger.info(
+            f"{credential_type} got {original_code} with cached BOT_TOKEN — refreshing from CP endpoint and retrying"
+        )
+        try:
+            fresh_bot = refresh_bot_token()
+        except Exception as refresh_err:
+            logger.warning(f"{credential_type} CP token refresh failed: {refresh_err}")
+            raise PermissionError(
+                f"{credential_type} authentication failed with HTTP {original_code}"
+            ) from refresh_err
+        retry_req = _urllib_request.Request(url, method="GET")
+        if fresh_bot:
+            retry_req.add_header("Authorization", f"Bearer {fresh_bot}")
+        if context.current_user_id:
+            retry_req.add_header("X-Runner-Current-User", context.current_user_id)
+        try:
+            with _urllib_request.urlopen(retry_req, timeout=10) as resp:
+                logger.info(f"{credential_type} retry with fresh BOT_TOKEN succeeded")
+                return resp.read().decode("utf-8", errors="replace")
+        except _urllib_request.HTTPError as retry_err:
+            logger.warning(
+                f"{credential_type} retry with fresh BOT_TOKEN failed: {retry_err}"
+            )
+            raise PermissionError(
+                f"{credential_type} authentication failed with HTTP {retry_err.code}"
+            ) from retry_err
+        except Exception as retry_err:
+            logger.warning(
+                f"{credential_type} retry with fresh BOT_TOKEN failed: {retry_err}"
+            )
+            raise PermissionError(
+                f"{credential_type} authentication failed with HTTP {original_code}"
+            ) from retry_err
 
     resp_text = await loop.run_in_executor(None, _do_req)
     if not resp_text:
@@ -278,10 +321,43 @@ async def fetch_gitlab_credentials(context: RunnerContext) -> dict:
     return data
 
 
+async def fetch_gerrit_credentials(context: RunnerContext) -> list[dict]:
+    """Fetch Gerrit credentials from backend API.
+
+    Returns list of instance dicts with: instanceName, url, authMethod,
+    username, httpToken, gitcookiesContent (depending on auth method).
+    """
+    data = await _fetch_credential(context, "gerrit")
+    # The endpoint returns a list (multiple instances), not a single dict
+    if isinstance(data, list):
+        logger.info(f"Fetched {len(data)} Gerrit instance(s)")
+        return data
+    # If single instance returned (shouldn't happen but handle gracefully)
+    if isinstance(data, dict) and data:
+        logger.info("Fetched 1 Gerrit instance")
+        return [data]
+    return []
+
+
 async def fetch_gitlab_token(context: RunnerContext) -> str:
     """Fetch GitLab token from backend API."""
     data = await fetch_gitlab_credentials(context)
     return data.get("token", "")
+
+
+async def fetch_coderabbit_credentials(context: RunnerContext) -> dict:
+    """Fetch CodeRabbit credentials from backend API.
+
+    Returns dict with: apiKey
+    """
+    data = await _fetch_credential(context, "coderabbit")
+    if data.get("apiKey"):
+        logger.info("Using CodeRabbit credentials from backend")
+    return data
+
+
+async def fetch_kubeconfig_credential(context: RunnerContext) -> dict:
+    return await _fetch_credential(context, "kubeconfig")
 
 
 async def fetch_token_for_url(context: RunnerContext, url: str) -> str:
@@ -306,11 +382,22 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     logger.info("Fetching fresh credentials from backend API...")
 
     # Fetch all credentials concurrently
-    google_creds, jira_creds, gitlab_creds, github_creds = await asyncio.gather(
+    (
+        google_creds,
+        jira_creds,
+        gitlab_creds,
+        github_creds,
+        coderabbit_creds,
+        gerrit_creds,
+        kubeconfig_creds,
+    ) = await asyncio.gather(
         fetch_google_credentials(context),
         fetch_jira_credentials(context),
         fetch_gitlab_credentials(context),
         fetch_github_credentials(context),
+        fetch_coderabbit_credentials(context),
+        fetch_gerrit_credentials(context),
+        fetch_kubeconfig_credential(context),
         return_exceptions=True,
     )
 
@@ -324,28 +411,18 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         logger.warning(f"Failed to refresh Google credentials: {google_creds}")
         if isinstance(google_creds, PermissionError):
             auth_failures.append(str(google_creds))
-    elif google_creds.get("accessToken"):
+    elif google_creds.get("token"):
         try:
-            creds_dir = _GOOGLE_WORKSPACE_CREDS_FILE.parent
-            creds_dir.mkdir(parents=True, exist_ok=True)
-
-            # The refresh token is written to disk because workspace-mcp
-            # runs as a child process and cannot call back to the platform
-            # backend to obtain fresh access tokens on its own.
-            creds_data = {
-                "token": google_creds.get("accessToken"),
-                "refresh_token": google_creds.get("refreshToken", ""),
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "client_id": os.getenv("GOOGLE_OAUTH_CLIENT_ID", ""),
-                "client_secret": os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", ""),
-                "scopes": google_creds.get("scopes", []),
-                "expiry": google_creds.get("expiresAt", ""),
-            }
-
-            with open(_GOOGLE_WORKSPACE_CREDS_FILE, "w") as f:
-                _json.dump(creds_data, f, indent=2)
-            _GOOGLE_WORKSPACE_CREDS_FILE.chmod(0o600)
-            logger.info("Updated Google credentials file for workspace-mcp")
+            sa_json = google_creds["token"]
+            gac_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+            if gac_path:
+                creds_path = Path(gac_path)
+            else:
+                creds_path = _GOOGLE_WORKSPACE_CREDS_FILE
+            creds_path.parent.mkdir(parents=True, exist_ok=True)
+            creds_path.write_text(sa_json)
+            creds_path.chmod(0o600)
+            logger.info(f"Updated Google service account credentials at {creds_path}")
 
             user_email = google_creds.get("email", "")
             if user_email and user_email != _PLACEHOLDER_EMAIL:
@@ -358,9 +435,9 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         logger.warning(f"Failed to refresh Jira credentials: {jira_creds}")
         if isinstance(jira_creds, PermissionError):
             auth_failures.append(str(jira_creds))
-    elif jira_creds.get("apiToken"):
+    elif jira_creds.get("token"):
         os.environ["JIRA_URL"] = jira_creds.get("url", "")
-        os.environ["JIRA_API_TOKEN"] = jira_creds.get("apiToken", "")
+        os.environ["JIRA_API_TOKEN"] = jira_creds.get("token", "")
         os.environ["JIRA_EMAIL"] = jira_creds.get("email", "")
         logger.info("Updated Jira credentials in environment")
 
@@ -404,6 +481,41 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         if github_creds.get("email"):
             git_user_email = github_creds["email"]
 
+    # CodeRabbit credentials
+    if isinstance(coderabbit_creds, Exception):
+        logger.warning(f"Failed to refresh CodeRabbit credentials: {coderabbit_creds}")
+        if isinstance(coderabbit_creds, PermissionError):
+            auth_failures.append(str(coderabbit_creds))
+    elif coderabbit_creds.get("apiKey"):
+        os.environ["CODERABBIT_API_KEY"] = coderabbit_creds["apiKey"]
+        logger.info("Updated CodeRabbit API key in environment")
+
+    # Gerrit credentials
+    if isinstance(gerrit_creds, Exception):
+        logger.warning(f"Failed to fetch Gerrit credentials: {gerrit_creds}")
+        if isinstance(gerrit_creds, PermissionError):
+            auth_failures.append(str(gerrit_creds))
+            from ambient_runner.bridges.claude.mcp import generate_gerrit_config
+
+            generate_gerrit_config([])
+    else:
+        from ambient_runner.bridges.claude.mcp import generate_gerrit_config
+
+        generate_gerrit_config(gerrit_creds)
+
+    if isinstance(kubeconfig_creds, Exception):
+        logger.warning(f"Failed to refresh kubeconfig credentials: {kubeconfig_creds}")
+        if isinstance(kubeconfig_creds, PermissionError):
+            auth_failures.append(str(kubeconfig_creds))
+    elif kubeconfig_creds.get("token"):
+        try:
+            _KUBECONFIG_FILE.write_text(kubeconfig_creds["token"])
+            _KUBECONFIG_FILE.chmod(0o600)
+            os.environ["KUBECONFIG"] = str(_KUBECONFIG_FILE)
+            logger.info(f"Written kubeconfig to {_KUBECONFIG_FILE}")
+        except OSError as e:
+            logger.warning(f"Failed to write kubeconfig file: {e}")
+
     # Configure git identity, credential helper, and gh CLI wrapper
     await configure_git_identity(git_user_name, git_user_email)
     install_git_credential_helper()
@@ -422,7 +534,7 @@ def clear_runtime_credentials() -> None:
     """Remove sensitive credentials from environment after turn completes.
 
     Clears fixed credential keys, dynamically-injected MCP_* env vars,
-    and Google Workspace credential files.
+    and token files. Google credential files are preserved (issue #1222).
     """
     cleared = []
     for key in [
@@ -432,6 +544,8 @@ def clear_runtime_credentials() -> None:
         "JIRA_URL",
         "JIRA_EMAIL",
         "USER_GOOGLE_EMAIL",
+        "CODERABBIT_API_KEY",
+        "KUBECONFIG",
     ]:
         if os.environ.pop(key, None) is not None:
             cleared.append(key)
@@ -448,20 +562,18 @@ def clear_runtime_credentials() -> None:
         cleared.append(key)
 
     # Remove token files used by the git credential helper.
-    for token_file in (_GITHUB_TOKEN_FILE, _GITLAB_TOKEN_FILE):
+    for token_file in (_GITHUB_TOKEN_FILE, _GITLAB_TOKEN_FILE, _KUBECONFIG_FILE):
         try:
             token_file.unlink(missing_ok=True)
             cleared.append(token_file.name)
         except OSError as e:
             logger.warning(f"Failed to remove token file {token_file}: {e}")
 
-    # NOTE: Google Workspace credential file is intentionally NOT deleted here.
-    # The workspace-mcp process runs as a long-lived child process of the Claude
-    # CLI and reads credentials from this file. Deleting it between turns causes
-    # workspace-mcp to lose its credentials and fall back to initiating a new
-    # OAuth flow (with an inaccessible localhost:8000 callback URL).
-    # The file is overwritten with fresh credentials at the start of each run
-    # by populate_runtime_credentials(), so staleness is not a concern.
+    # NOTE: Google credential files (_GOOGLE_WORKSPACE_CREDS_FILE and
+    # GOOGLE_APPLICATION_CREDENTIALS) are intentionally NOT deleted here.
+    # The workspace-mcp process reads credentials from these files; deleting
+    # them between turns causes it to fall back to an inaccessible localhost
+    # OAuth flow (issue #1222).
 
     if cleared:
         logger.info(f"Cleared credentials: {', '.join(cleared)}")
@@ -529,15 +641,15 @@ async def populate_mcp_server_credentials(context: RunnerContext) -> None:
             logger.warning(f"Failed to fetch MCP credentials for {server_name}: {e}")
 
 
-_GH_WRAPPER_DIR = "/tmp/bin"
-_GH_WRAPPER_PATH = "/tmp/bin/gh"
+_GH_WRAPPER_DIR = ""  # Set at first install via tempfile.mkdtemp
+_GH_WRAPPER_PATH = ""  # Set at first install
 
 # Wrapper script for the gh CLI.  The `gh` CLI reads GITHUB_TOKEN from the
 # process environment, but the CLI subprocess's env is fixed at spawn time.
 # This wrapper reads the latest token from the token file (updated on every
 # credential refresh) and exports GH_TOKEN before calling the real `gh`,
 # ensuring mid-run refreshes are picked up.
-_GH_WRAPPER_SCRIPT = """\
+_GH_WRAPPER_SCRIPT_TEMPLATE = """\
 #!/bin/sh
 # Ambient gh CLI wrapper — reads fresh GitHub token from file.
 token=""
@@ -562,7 +674,7 @@ if [ -z "$real_gh" ]; then
     exit 1
 fi
 exec "$real_gh" "$@"
-""".format(wrapper_dir=_GH_WRAPPER_DIR)
+"""
 
 _gh_wrapper_installed = False  # reset on every new process / deployment
 
@@ -669,26 +781,28 @@ def install_gh_wrapper() -> None:
     credential refresh.  This wrapper reads from the token file (updated on
     every refresh) and exports ``GH_TOKEN`` before exec-ing the real ``gh``.
     """
-    global _gh_wrapper_installed
+    global _gh_wrapper_installed, _GH_WRAPPER_DIR, _GH_WRAPPER_PATH
     if _gh_wrapper_installed:
         return
 
     import stat
+    import tempfile
 
     try:
-        wrapper_dir = Path(_GH_WRAPPER_DIR)
-        wrapper_dir.mkdir(parents=True, exist_ok=True)
+        wrapper_dir = tempfile.mkdtemp(prefix="ambient-gh-")
+        os.chmod(wrapper_dir, 0o700)
+        _GH_WRAPPER_DIR = wrapper_dir
+        _GH_WRAPPER_PATH = f"{wrapper_dir}/gh"
 
         wrapper_path = Path(_GH_WRAPPER_PATH)
-        wrapper_path.write_text(_GH_WRAPPER_SCRIPT)
-        wrapper_path.chmod(
-            stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH
-        )  # 755
+        wrapper_path.write_text(
+            _GH_WRAPPER_SCRIPT_TEMPLATE.format(wrapper_dir=_GH_WRAPPER_DIR)
+        )
+        wrapper_path.chmod(stat.S_IRWXU)  # 700
 
         # Prepend wrapper dir to PATH so it is found before the real gh.
         current_path = os.environ.get("PATH", "")
-        if _GH_WRAPPER_DIR not in current_path.split(":"):
-            os.environ["PATH"] = f"{_GH_WRAPPER_DIR}:{current_path}"
+        os.environ["PATH"] = f"{_GH_WRAPPER_DIR}:{current_path}"
 
         _gh_wrapper_installed = True
         logger.info("Installed gh CLI wrapper at %s", _GH_WRAPPER_PATH)

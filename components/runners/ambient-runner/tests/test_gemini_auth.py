@@ -1,6 +1,5 @@
 """Tests for Gemini CLI authentication setup."""
 
-
 import warnings
 
 import pytest

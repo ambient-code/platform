@@ -25,7 +25,7 @@ import (
 
 const grpcDefaultPort = "9000"
 
-var defaultOpenShiftPatterns = []string{"apps.rosa", "apps.ocp", "apps.openshift"}
+var defaultOpenShiftPatterns = []string{"apps.rosa", "apps.ocp", "apps.openshift", "paas.redhat.com"}
 
 // SessionWatcher provides real-time session events
 type SessionWatcher struct {

@@ -35,15 +35,6 @@ func migration() *gormigrate.Migration {
 }
 
 func seedBuiltInRoles(tx *gorm.DB) error {
-	type roleRow struct {
-		ID          string
-		Name        string
-		DisplayName string
-		Description string
-		Permissions string
-		BuiltIn     bool
-	}
-
 	builtInRoles := []struct {
 		name        string
 		displayName string
@@ -105,17 +96,10 @@ func seedBuiltInRoles(tx *gorm.DB) error {
 		if err != nil {
 			return err
 		}
-		row := roleRow{
-			ID:          api.NewID(),
-			Name:        r.name,
-			DisplayName: r.displayName,
-			Description: r.description,
-			Permissions: string(permsJSON),
-			BuiltIn:     true,
-		}
-		if err := tx.Table("roles").
-			Where("name = ?", r.name).
-			FirstOrCreate(&row).Error; err != nil {
+		if err := tx.Exec(
+			`INSERT INTO roles (id, name, display_name, description, permissions, built_in) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (name) DO NOTHING`,
+			api.NewID(), r.name, r.displayName, r.description, string(permsJSON), true,
+		).Error; err != nil {
 			return err
 		}
 	}

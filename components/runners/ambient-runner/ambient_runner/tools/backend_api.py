@@ -46,7 +46,9 @@ class BackendAPIClient:
         # when the Secret is rotated, but env vars are frozen at pod start).
         self._bot_token_override = bot_token
         # Expose self.bot_token for backward-compatibility with existing callers.
-        self.bot_token = (bot_token if bot_token is not None else get_bot_token()).strip()
+        self.bot_token = (
+            bot_token if bot_token is not None else get_bot_token()
+        ).strip()
 
         if not self.backend_url:
             raise ValueError("BACKEND_API_URL environment variable is required")

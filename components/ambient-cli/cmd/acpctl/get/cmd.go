@@ -33,15 +33,22 @@ var Cmd = &cobra.Command{
 Valid resource types:
   sessions            (aliases: session, sess)
   projects            (aliases: project, proj)
+  project-agents      (aliases: project-agent, pa)
   project-settings    (aliases: projectsettings, ps)
   users               (aliases: user, usr)
   agents              (aliases: agent)
   roles               (aliases: role)
   role-bindings       (aliases: role-binding, rb)
+  credentials         (aliases: credential, cred)
 `,
 	Args:    cobra.RangeArgs(1, 2),
 	RunE:    run,
-	Example: "  acpctl get sessions\n  acpctl get session my-session-id\n  acpctl get projects -o json\n  acpctl get agents\n  acpctl get sessions -w  # Watch for real-time session changes",
+	Example: "  acpctl get sessions\n  acpctl get session my-session-id\n  acpctl get projects -o json\n  acpctl get agents\n  acpctl get project-agents --project-id <id>\n  acpctl get sessions -w  # Watch for real-time session changes",
+}
+
+var projectAgentArgs struct {
+	projectID string
+	paID      string
 }
 
 func init() {
@@ -49,6 +56,8 @@ func init() {
 	Cmd.Flags().IntVar(&args.limit, "limit", 100, "Maximum number of items to return")
 	Cmd.Flags().BoolVarP(&args.watch, "watch", "w", false, "Watch for real-time changes (sessions only)")
 	Cmd.Flags().DurationVar(&args.watchTimeout, "watch-timeout", 30*time.Minute, "Timeout for watch mode (e.g. 1h, 10m)")
+	Cmd.Flags().StringVar(&projectAgentArgs.projectID, "project-id", "", "Project ID (required for project-agents)")
+	Cmd.Flags().StringVar(&projectAgentArgs.paID, "project-agent", "", "Filter sessions by project-agent ID (requires --project-id)")
 }
 
 func run(cmd *cobra.Command, cmdArgs []string) error {
@@ -96,21 +105,41 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 
 	switch resource {
 	case "sessions":
+		if projectAgentArgs.paID != "" {
+			if projectAgentArgs.projectID == "" {
+				return fmt.Errorf("--project-id is required when using --project-agent")
+			}
+			return getSessionsByAgent(ctx, client, printer, projectAgentArgs.projectID, projectAgentArgs.paID)
+		}
 		return getSessions(ctx, client, printer, name)
 	case "projects":
 		return getProjects(ctx, client, printer, name)
+	case "project-agents":
+		if projectAgentArgs.projectID == "" {
+			return fmt.Errorf("--project-id is required for project-agents")
+		}
+		return getAgentsByProject(ctx, client, printer, projectAgentArgs.projectID, name)
 	case "project-settings":
 		return getProjectSettings(ctx, client, printer, name)
 	case "users":
 		return getUsers(ctx, client, printer, name)
 	case "agents":
-		return getAgents(ctx, client, printer, name)
+		pid := projectAgentArgs.projectID
+		if pid == "" {
+			pid = cfg.GetProject()
+		}
+		if pid == "" {
+			return fmt.Errorf("no project set; use --project-id or run 'acpctl config set project <name>'")
+		}
+		return getAgentsByProject(ctx, client, printer, pid, name)
 	case "roles":
 		return getRoles(ctx, client, printer, name)
 	case "role-bindings":
 		return getRoleBindings(ctx, client, printer, name)
+	case "credentials":
+		return getCredentials(ctx, client, printer, name)
 	default:
-		return fmt.Errorf("unknown resource type: %s\nValid types: sessions, projects, project-settings, users, agents, roles, role-bindings", cmdArgs[0])
+		return fmt.Errorf("unknown resource type: %s\nValid types: sessions, projects, project-agents, project-settings, users, agents, roles, role-bindings, credentials", cmdArgs[0])
 	}
 }
 
@@ -120,6 +149,8 @@ func normalizeResource(r string) string {
 		return "sessions"
 	case "project", "projects", "proj":
 		return "projects"
+	case "project-agent", "project-agents", "pa":
+		return "project-agents"
 	case "project-settings", "projectsettings", "project-setting", "ps":
 		return "project-settings"
 	case "user", "users", "usr":
@@ -130,9 +161,72 @@ func normalizeResource(r string) string {
 		return "roles"
 	case "role-binding", "role-bindings", "rolebinding", "rolebindings", "rb":
 		return "role-bindings"
+	case "credential", "credentials", "cred", "creds":
+		return "credentials"
 	default:
 		return r
 	}
+}
+
+func getAgentsByProject(ctx context.Context, client *sdkclient.Client, printer *output.Printer, projectID, name string) error {
+	if name != "" {
+		pa, err := client.Agents().GetByProject(ctx, projectID, name)
+		if err != nil {
+			return fmt.Errorf("get agent %q: %w", name, err)
+		}
+		if printer.Format() == output.FormatJSON {
+			return printer.PrintJSON(pa)
+		}
+		return printAgentByProjectTable(printer, []sdktypes.Agent{*pa})
+	}
+
+	opts := sdktypes.NewListOptions().Size(args.limit).Build()
+	list, err := client.Agents().ListByProject(ctx, projectID, opts)
+	if err != nil {
+		return fmt.Errorf("list agents: %w", err)
+	}
+
+	if printer.Format() == output.FormatJSON {
+		return printer.PrintJSON(list)
+	}
+
+	return printAgentByProjectTable(printer, list.Items)
+}
+
+func printAgentByProjectTable(printer *output.Printer, pas []sdktypes.Agent) error {
+	columns := []output.Column{
+		{Name: "ID", Width: 27},
+		{Name: "NAME", Width: 24},
+		{Name: "PROJECT", Width: 27},
+		{Name: "SESSION", Width: 27},
+		{Name: "AGE", Width: 10},
+	}
+
+	table := output.NewTable(printer.Writer(), columns)
+	table.WriteHeaders()
+
+	for _, pa := range pas {
+		age := ""
+		if pa.CreatedAt != nil {
+			age = output.FormatAge(time.Since(*pa.CreatedAt))
+		}
+		table.WriteRow(pa.ID, pa.Name, pa.ProjectID, pa.CurrentSessionID, age)
+	}
+	return nil
+}
+
+func getSessionsByAgent(ctx context.Context, client *sdkclient.Client, printer *output.Printer, projectID, paID string) error {
+	opts := sdktypes.NewListOptions().Size(args.limit).Build()
+	list, err := client.Agents().Sessions(ctx, projectID, paID, opts)
+	if err != nil {
+		return fmt.Errorf("list sessions for agent %q: %w", paID, err)
+	}
+
+	if printer.Format() == output.FormatJSON {
+		return printer.PrintJSON(list)
+	}
+
+	return printSessionTable(printer, list.Items)
 }
 
 func getSessions(ctx context.Context, client *sdkclient.Client, printer *output.Printer, name string) error {
@@ -212,7 +306,6 @@ func printProjectTable(printer *output.Printer, projects []sdktypes.Project) err
 	columns := []output.Column{
 		{Name: "ID", Width: 27},
 		{Name: "NAME", Width: 30},
-		{Name: "DISPLAY NAME", Width: 30},
 		{Name: "STATUS", Width: 10},
 	}
 
@@ -220,7 +313,7 @@ func printProjectTable(printer *output.Printer, projects []sdktypes.Project) err
 	table.WriteHeaders()
 
 	for _, p := range projects {
-		table.WriteRow(p.ID, p.Name, p.DisplayName, p.Status)
+		table.WriteRow(p.ID, p.Name, p.Status)
 	}
 	return nil
 }
@@ -312,53 +405,6 @@ func printUserTable(printer *output.Printer, users []sdktypes.User) error {
 	return nil
 }
 
-func getAgents(ctx context.Context, client *sdkclient.Client, printer *output.Printer, name string) error {
-	if name != "" {
-		agent, err := client.Agents().Get(ctx, name)
-		if err != nil {
-			return fmt.Errorf("get agent %q: %w", name, err)
-		}
-		if printer.Format() == output.FormatJSON {
-			return printer.PrintJSON(agent)
-		}
-		return printAgentTable(printer, []sdktypes.Agent{*agent})
-	}
-
-	opts := sdktypes.NewListOptions().Size(args.limit).Build()
-	list, err := client.Agents().List(ctx, opts)
-	if err != nil {
-		return fmt.Errorf("list agents: %w", err)
-	}
-
-	if printer.Format() == output.FormatJSON {
-		return printer.PrintJSON(list)
-	}
-
-	return printAgentTable(printer, list.Items)
-}
-
-func printAgentTable(printer *output.Printer, agents []sdktypes.Agent) error {
-	columns := []output.Column{
-		{Name: "ID", Width: 27},
-		{Name: "NAME", Width: 30},
-		{Name: "PROJECT", Width: 20},
-		{Name: "MODEL", Width: 16},
-		{Name: "AGE", Width: 10},
-	}
-
-	table := output.NewTable(printer.Writer(), columns)
-	table.WriteHeaders()
-
-	for _, a := range agents {
-		age := ""
-		if a.CreatedAt != nil {
-			age = output.FormatAge(time.Since(*a.CreatedAt))
-		}
-		table.WriteRow(a.ID, a.Name, a.ProjectID, a.LlmModel, age)
-	}
-	return nil
-}
-
 func getRoles(ctx context.Context, client *sdkclient.Client, printer *output.Printer, name string) error {
 	if name != "" {
 		role, err := client.Roles().Get(ctx, name)
@@ -420,6 +466,48 @@ func getRoleBindings(ctx context.Context, client *sdkclient.Client, printer *out
 		return printer.PrintJSON(list)
 	}
 	return printRoleBindingTable(printer, list.Items)
+}
+
+func getCredentials(ctx context.Context, client *sdkclient.Client, printer *output.Printer, name string) error {
+	if name != "" {
+		cred, err := client.Credentials().Get(ctx, name)
+		if err != nil {
+			return fmt.Errorf("get credential %q: %w", name, err)
+		}
+		if printer.Format() == output.FormatJSON {
+			return printer.PrintJSON(cred)
+		}
+		return printCredentialTable(printer, []sdktypes.Credential{*cred})
+	}
+	opts := sdktypes.NewListOptions().Size(args.limit).Build()
+	list, err := client.Credentials().List(ctx, opts)
+	if err != nil {
+		return fmt.Errorf("list credentials: %w", err)
+	}
+	if printer.Format() == output.FormatJSON {
+		return printer.PrintJSON(list)
+	}
+	return printCredentialTable(printer, list.Items)
+}
+
+func printCredentialTable(printer *output.Printer, credentials []sdktypes.Credential) error {
+	columns := []output.Column{
+		{Name: "ID", Width: 27},
+		{Name: "NAME", Width: 24},
+		{Name: "PROVIDER", Width: 12},
+		{Name: "DESCRIPTION", Width: 32},
+		{Name: "AGE", Width: 10},
+	}
+	table := output.NewTable(printer.Writer(), columns)
+	table.WriteHeaders()
+	for _, c := range credentials {
+		age := ""
+		if c.CreatedAt != nil {
+			age = output.FormatAge(time.Since(*c.CreatedAt))
+		}
+		table.WriteRow(c.ID, c.Name, c.Provider, c.Description, age)
+	}
+	return nil
 }
 
 func printRoleBindingTable(printer *output.Printer, rbs []sdktypes.RoleBinding) error {

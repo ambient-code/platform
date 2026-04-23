@@ -17,8 +17,11 @@ import (
 	"ambient-code-operator/internal/models"
 	"ambient-code-operator/internal/types"
 
+	"github.com/google/uuid"
+
 	authnv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -1064,6 +1067,12 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 					{Name: "ARTIFACTS_DIR", Value: "artifacts"},
 					// AG-UI server port (must match containerPort and Service)
 					{Name: "AGUI_PORT", Value: fmt.Sprintf("%d", runnerPort)},
+					// Per-session bearer token that the runner uses to authenticate inbound AG-UI requests.
+					// The backend reads this from the same secret to add X-Ambient-Session-Token on all runner calls.
+					{Name: "AGUI_TOKEN", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: runnerTokenSecretName},
+						Key:                  "agui-token",
+					}}},
 					{Name: "GOOGLE_MCP_CREDENTIALS_DIR", Value: "/workspace/.google_workspace_mcp/credentials"},
 					{Name: "GOOGLE_OAUTH_CLIENT_ID", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_ID")},
 					{Name: "GOOGLE_OAUTH_CLIENT_SECRET", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET")},
@@ -1576,6 +1585,13 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		log.Printf("Failed to create AG-UI service for %s: %v", name, serr)
 	} else {
 		log.Printf("Created AG-UI service %s for AgenticSession %s", svcName, name)
+	}
+
+	// Ensure NetworkPolicy restricting runner pod ingress to backend-only (defense-in-depth).
+	// Even if the token-based auth is bypassed, this prevents pod-to-pod cross-session calls.
+	if err := ensureRunnerNetworkPolicy(sessionNamespace, appConfig.BackendNamespace); err != nil {
+		log.Printf("Warning: failed to ensure runner NetworkPolicy in %s: %v", sessionNamespace, err)
+		// Non-fatal: token auth is the primary control; NetworkPolicy is defense-in-depth.
 	}
 
 	// Pod created — controller-runtime reconciler will handle monitoring
@@ -2616,7 +2632,8 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 		},
 		Type: corev1.SecretTypeOpaque,
 		Data: map[string][]byte{
-			"k8s-token": []byte(k8sToken),
+			"k8s-token":  []byte(k8sToken),
+			"agui-token": []byte(uuid.New().String()),
 		},
 	}
 
@@ -2632,6 +2649,8 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 				secretCopy.Data = map[string][]byte{}
 			}
 			secretCopy.Data["k8s-token"] = []byte(k8sToken)
+			// Always rotate agui-token — the new runner pod will be created with the new value.
+			secretCopy.Data["agui-token"] = []byte(uuid.New().String())
 			if secretCopy.Annotations == nil {
 				secretCopy.Annotations = map[string]string{}
 			}
@@ -2660,6 +2679,63 @@ func regenerateRunnerToken(sessionNamespace, sessionName string, session *unstru
 	}
 
 	log.Printf("[TokenProvision] Successfully regenerated token for session %s/%s", sessionNamespace, sessionName)
+	return nil
+}
+
+// ensureRunnerNetworkPolicy creates (or updates) a per-namespace NetworkPolicy that restricts
+// ingress to runner pods (app=ambient-code-runner) to only the backend namespace.
+// This is defense-in-depth; the primary control is the per-session AGUI token.
+func ensureRunnerNetworkPolicy(projectNamespace, backendNamespace string) error {
+	npName := "runner-allow-backend-only"
+	tcp := corev1.ProtocolTCP
+	port8001 := intstr.FromInt32(8001)
+	np := &networkingv1.NetworkPolicy{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      npName,
+			Namespace: projectNamespace,
+			Labels:    map[string]string{"app": "ambient-code", "ambient-code.io/managed-by": "operator"},
+		},
+		Spec: networkingv1.NetworkPolicySpec{
+			// Select all runner pods in this namespace
+			PodSelector: v1.LabelSelector{
+				MatchLabels: map[string]string{"app": "ambient-code-runner"},
+			},
+			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress},
+			Ingress: []networkingv1.NetworkPolicyIngressRule{{
+				// Allow only pods from the backend namespace on port 8001
+				From: []networkingv1.NetworkPolicyPeer{{
+					NamespaceSelector: &v1.LabelSelector{
+						MatchLabels: map[string]string{
+							"kubernetes.io/metadata.name": backendNamespace,
+						},
+					},
+				}},
+				Ports: []networkingv1.NetworkPolicyPort{{
+					Protocol: &tcp,
+					Port:     &port8001,
+				}},
+			}},
+		},
+	}
+	_, err := config.K8sClient.NetworkingV1().NetworkPolicies(projectNamespace).Create(context.TODO(), np, v1.CreateOptions{})
+	if err != nil {
+		if !errors.IsAlreadyExists(err) {
+			return fmt.Errorf("create NetworkPolicy %s/%s: %w", projectNamespace, npName, err)
+		}
+		// Already exists — patch to ensure spec is up-to-date
+		existing, getErr := config.K8sClient.NetworkingV1().NetworkPolicies(projectNamespace).Get(context.TODO(), npName, v1.GetOptions{})
+		if getErr != nil {
+			return fmt.Errorf("get NetworkPolicy for update: %w", getErr)
+		}
+		updated := existing.DeepCopy()
+		updated.Spec = np.Spec
+		if _, pErr := config.K8sClient.NetworkingV1().NetworkPolicies(projectNamespace).Update(context.TODO(), updated, v1.UpdateOptions{}); pErr != nil {
+			return fmt.Errorf("update NetworkPolicy %s/%s: %w", projectNamespace, npName, pErr)
+		}
+		log.Printf("Updated runner NetworkPolicy in namespace %s", projectNamespace)
+	} else {
+		log.Printf("Created runner NetworkPolicy in namespace %s (backend=%s)", projectNamespace, backendNamespace)
+	}
 	return nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -193,4 +194,25 @@ func (a *SessionAPI) consumeSSE(
 		return fmt.Errorf("scanner: %w", err)
 	}
 	return nil
+}
+
+func (a *SessionAPI) StreamEvents(ctx context.Context, sessionID string) (io.ReadCloser, error) {
+	rawURL := a.client.baseURL + "/api/ambient/v1/sessions/" + url.PathEscape(sessionID) + "/events"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Authorization", "Bearer "+a.client.token)
+	req.Header.Set("X-Ambient-Project", a.client.project)
+
+	resp, err := a.client.streamingClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("connect to event stream: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("server returned %s", resp.Status)
+	}
+	return resp.Body, nil
 }

@@ -16,7 +16,6 @@ from ambient_runner.platform.auth import (
     _GH_WRAPPER_PATH,
     _GITHUB_TOKEN_FILE,
     _GITLAB_TOKEN_FILE,
-    _GOOGLE_WORKSPACE_CREDS_FILE,
     _fetch_credential,
     clear_runtime_credentials,
     install_gh_wrapper,
@@ -326,6 +325,7 @@ class TestFetchCredentialHeaders:
         _CredentialHandler.response_body = {"token": "gh-token-for-userB"}
         _CredentialHandler.captured_headers = {}
 
+        cred_id = "cred-github-001"
         try:
             with patch.dict(
                 os.environ,
@@ -333,6 +333,7 @@ class TestFetchCredentialHeaders:
                     "BACKEND_API_URL": f"http://127.0.0.1:{port}/api",
                     "PROJECT_NAME": "test-project",
                     "BOT_TOKEN": "fake-bot-token",
+                    "CREDENTIAL_IDS": json.dumps({"github": cred_id}),
                 },
             ):
                 ctx = _make_context(
@@ -368,6 +369,7 @@ class TestFetchCredentialHeaders:
         _CredentialHandler.response_body = {"token": "owner-token"}
         _CredentialHandler.captured_headers = {}
 
+        cred_id = "cred-github-002"
         try:
             with patch.dict(
                 os.environ,
@@ -375,6 +377,7 @@ class TestFetchCredentialHeaders:
                     "BACKEND_API_URL": f"http://127.0.0.1:{port}/api",
                     "PROJECT_NAME": "test-project",
                     "BOT_TOKEN": "fake-bot-token",
+                    "CREDENTIAL_IDS": json.dumps({"github": cred_id}),
                 },
             ):
                 ctx = _make_context()  # no current_user_id
@@ -395,6 +398,7 @@ class TestFetchCredentialHeaders:
             {
                 "BACKEND_API_URL": "http://127.0.0.1:1/api",
                 "PROJECT_NAME": "test-project",
+                "CREDENTIAL_IDS": json.dumps({"github": "cred-unreachable"}),
             },
         ):
             ctx = _make_context(current_user_id="user-123")
@@ -415,23 +419,25 @@ class TestCredentialLifecycle:
         server = HTTPServer(("127.0.0.1", 0), _CredentialHandler)
         port = server.server_address[1]
 
-        # We need to handle multiple requests (github, google, jira, gitlab)
+        # We need to handle multiple requests (github, google, jira, gitlab, coderabbit, gerrit, kubeconfig)
         call_count = [0]
         responses = {
-            "/github": {"token": "gh-tok"},
-            "/google": {},
-            "/jira": {
-                "apiToken": "jira-tok",
+            "cred-gh": {"token": "gh-tok"},
+            "cred-google": {},
+            "cred-jira": {
+                "token": "jira-tok",
                 "url": "https://jira.example.com",
                 "email": "j@example.com",
             },
-            "/gitlab": {"token": "gl-tok"},
+            "cred-gl": {"token": "gl-tok"},
+            "cred-coderabbit": {},
+            "cred-gerrit": [],
+            "cred-kubeconfig": {},
         }
 
         class MultiHandler(BaseHTTPRequestHandler):
             def do_GET(self):
                 call_count[0] += 1
-                # Extract credential type from URL path
                 for key, resp in responses.items():
                     if key in self.path:
                         self.send_response(200)
@@ -448,9 +454,21 @@ class TestCredentialLifecycle:
         server = HTTPServer(("127.0.0.1", 0), MultiHandler)
         port = server.server_address[1]
         thread = Thread(
-            target=lambda: [server.handle_request() for _ in range(4)], daemon=True
+            target=lambda: [server.handle_request() for _ in range(7)], daemon=True
         )
         thread.start()
+
+        credential_ids = json.dumps(
+            {
+                "github": "cred-gh",
+                "google": "cred-google",
+                "jira": "cred-jira",
+                "gitlab": "cred-gl",
+                "coderabbit": "cred-coderabbit",
+                "gerrit": "cred-gerrit",
+                "kubeconfig": "cred-kubeconfig",
+            }
+        )
 
         try:
             with patch.dict(
@@ -459,6 +477,7 @@ class TestCredentialLifecycle:
                     "BACKEND_API_URL": f"http://127.0.0.1:{port}/api",
                     "PROJECT_NAME": "test-project",
                     "BOT_TOKEN": "fake-bot",
+                    "CREDENTIAL_IDS": credential_ids,
                 },
             ):
                 ctx = _make_context(current_user_id="userB")
@@ -510,9 +529,9 @@ class TestFetchCredentialAuthFailures:
         monkeypatch.setenv("BACKEND_API_URL", "http://backend.svc.cluster.local/api")
         monkeypatch.setenv("PROJECT_NAME", "test-project")
         monkeypatch.setenv("BOT_TOKEN", "bot-token")
+        monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"github": "cred-gh-001"}))
 
         ctx = _make_context(session_id="sess-1")
-        # No caller token — uses BOT_TOKEN directly
 
         err = HTTPError(
             "http://backend.svc.cluster.local/api/...",
@@ -535,6 +554,7 @@ class TestFetchCredentialAuthFailures:
         monkeypatch.setenv("BACKEND_API_URL", "http://backend.svc.cluster.local/api")
         monkeypatch.setenv("PROJECT_NAME", "test-project")
         monkeypatch.setenv("BOT_TOKEN", "bot-token")
+        monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"google": "cred-google-001"}))
 
         ctx = _make_context(session_id="sess-1")
 
@@ -559,6 +579,7 @@ class TestFetchCredentialAuthFailures:
         monkeypatch.setenv("BACKEND_API_URL", "http://backend.svc.cluster.local/api")
         monkeypatch.setenv("PROJECT_NAME", "test-project")
         monkeypatch.setenv("BOT_TOKEN", "bot-token")
+        monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"github": "cred-gh-002"}))
 
         ctx = _make_context(session_id="sess-1", current_user_id="user@example.com")
         ctx.caller_token = "Bearer expired-caller-token"
@@ -578,6 +599,7 @@ class TestFetchCredentialAuthFailures:
         """_fetch_credential returns {} for non-auth HTTP errors (404, 500, etc.)."""
         monkeypatch.setenv("BACKEND_API_URL", "http://backend.svc.cluster.local/api")
         monkeypatch.setenv("PROJECT_NAME", "test-project")
+        monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"github": "cred-gh-003"}))
 
         ctx = _make_context(session_id="sess-1")
 
@@ -595,6 +617,7 @@ class TestFetchCredentialAuthFailures:
         monkeypatch.setenv("BACKEND_API_URL", "http://backend.svc.cluster.local/api")
         monkeypatch.setenv("PROJECT_NAME", "test-project")
         monkeypatch.setenv("BOT_TOKEN", "valid-bot-token")
+        monkeypatch.setenv("CREDENTIAL_IDS", json.dumps({"github": "cred-gh-004"}))
 
         ctx = _make_context(session_id="sess-1", current_user_id="user@example.com")
         ctx.caller_token = "Bearer expired-caller-token"
@@ -774,6 +797,85 @@ class TestRefreshCredentialsTool:
 
 
 # ---------------------------------------------------------------------------
+# _fetch_credential — CP OIDC token used when no caller token (regression)
+# ---------------------------------------------------------------------------
+
+
+class TestFetchCredentialBotToken:
+    @pytest.mark.asyncio
+    async def test_uses_bot_token_when_no_caller_token(self):
+        """_fetch_credential sends the CP OIDC token when caller_token is absent."""
+        server = HTTPServer(("127.0.0.1", 0), _CredentialHandler)
+        port = server.server_address[1]
+        thread = Thread(target=server.handle_request, daemon=True)
+        thread.start()
+
+        _CredentialHandler.response_body = {"token": "gh-tok-via-oidc"}
+        _CredentialHandler.captured_headers = {}
+
+        cp_oidc_token = "cp-oidc-jwt-token"
+
+        try:
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "BACKEND_API_URL": f"http://127.0.0.1:{port}/api",
+                        "PROJECT_NAME": "test-project",
+                        "CREDENTIAL_IDS": json.dumps({"github": "cred-gh-bot-test"}),
+                    },
+                ),
+                patch(
+                    "ambient_runner.platform.auth.get_bot_token",
+                    return_value=cp_oidc_token,
+                ),
+            ):
+                ctx = _make_context()
+                result = await _fetch_credential(ctx, "github")
+
+            assert result.get("token") == "gh-tok-via-oidc"
+            assert _CredentialHandler.captured_headers.get("Authorization") == (
+                f"Bearer {cp_oidc_token}"
+            )
+        finally:
+            server.server_close()
+            thread.join(timeout=2)
+
+    @pytest.mark.asyncio
+    async def test_bot_token_used_when_no_caller_token(self):
+        """CP OIDC token (get_bot_token) is used when caller_token is absent."""
+        called_with = {}
+
+        def fake_urlopen(req, timeout=None):
+            called_with["auth"] = req.get_header("Authorization")
+            mock_resp = MagicMock()
+            mock_resp.read.return_value = json.dumps({"token": "ok"}).encode()
+            mock_resp.__enter__ = lambda s: s
+            mock_resp.__exit__ = MagicMock(return_value=False)
+            return mock_resp
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "BACKEND_API_URL": "http://backend.svc.cluster.local/api",
+                    "PROJECT_NAME": "test-project",
+                    "CREDENTIAL_IDS": json.dumps({"github": "cred-gh-pref"}),
+                },
+            ),
+            patch("urllib.request.urlopen", side_effect=fake_urlopen),
+            patch(
+                "ambient_runner.platform.auth.get_bot_token",
+                return_value="cp-oidc-token",
+            ),
+        ):
+            ctx = _make_context()
+            await _fetch_credential(ctx, "github")
+
+        assert called_with.get("auth") == "Bearer cp-oidc-token"
+
+
+# ---------------------------------------------------------------------------
 # gh CLI wrapper — ensures gh picks up refreshed tokens (issue #1135)
 # ---------------------------------------------------------------------------
 
@@ -787,23 +889,33 @@ class TestGhWrapper:
     always uses the freshest token.
     """
 
+    @staticmethod
+    def _get_auth_mod():
+        import ambient_runner.platform.auth as _auth_mod
+        return _auth_mod
+
     def _cleanup(self):
         """Remove wrapper artifacts created during tests."""
-        import ambient_runner.platform.auth as _auth_mod
-
+        _auth_mod = self._get_auth_mod()
         _auth_mod._gh_wrapper_installed = False
-        wrapper = Path(_GH_WRAPPER_PATH)
-        wrapper.unlink(missing_ok=True)
-        wrapper_dir = Path(_GH_WRAPPER_DIR)
-        if wrapper_dir.exists() and not any(wrapper_dir.iterdir()):
-            wrapper_dir.rmdir()
+        wrapper_path = _auth_mod._GH_WRAPPER_PATH
+        wrapper_dir_path = _auth_mod._GH_WRAPPER_DIR
+        if wrapper_path:
+            wrapper = Path(wrapper_path)
+            if wrapper.is_file():
+                wrapper.unlink(missing_ok=True)
+        if wrapper_dir_path:
+            wrapper_dir = Path(wrapper_dir_path)
+            if wrapper_dir.exists() and not any(wrapper_dir.iterdir()):
+                wrapper_dir.rmdir()
 
     def test_install_creates_executable_wrapper(self):
         """install_gh_wrapper creates an executable script at _GH_WRAPPER_PATH."""
         self._cleanup()
         try:
+            _auth_mod = self._get_auth_mod()
             install_gh_wrapper()
-            wrapper = Path(_GH_WRAPPER_PATH)
+            wrapper = Path(_auth_mod._GH_WRAPPER_PATH)
             assert wrapper.exists(), "Wrapper script should be created"
             assert os.access(str(wrapper), os.X_OK), "Wrapper should be executable"
             content = wrapper.read_text()
@@ -815,16 +927,18 @@ class TestGhWrapper:
     def test_install_prepends_to_path(self):
         """install_gh_wrapper prepends the wrapper dir to PATH."""
         self._cleanup()
+        _auth_mod = self._get_auth_mod()
         original_path = os.environ.get("PATH", "")
         try:
-            # Remove wrapper dir from PATH if present
-            parts = [p for p in original_path.split(":") if p != _GH_WRAPPER_DIR]
+            current_dir = _auth_mod._GH_WRAPPER_DIR
+            parts = [p for p in original_path.split(":") if p != current_dir]
             os.environ["PATH"] = ":".join(parts)
 
             install_gh_wrapper()
 
+            current_dir = _auth_mod._GH_WRAPPER_DIR
             current_path = os.environ.get("PATH", "")
-            assert current_path.startswith(_GH_WRAPPER_DIR + ":"), (
+            assert current_path.startswith(current_dir + ":"), (
                 "Wrapper dir should be first in PATH"
             )
         finally:
@@ -834,16 +948,19 @@ class TestGhWrapper:
     def test_install_is_idempotent(self):
         """Calling install_gh_wrapper twice does not duplicate PATH entries."""
         self._cleanup()
+        _auth_mod = self._get_auth_mod()
         original_path = os.environ.get("PATH", "")
         try:
-            parts = [p for p in original_path.split(":") if p != _GH_WRAPPER_DIR]
+            current_dir = _auth_mod._GH_WRAPPER_DIR
+            parts = [p for p in original_path.split(":") if p != current_dir]
             os.environ["PATH"] = ":".join(parts)
 
             install_gh_wrapper()
             install_gh_wrapper()  # second call should be a no-op
 
+            current_dir = _auth_mod._GH_WRAPPER_DIR
             current_path = os.environ.get("PATH", "")
-            count = current_path.split(":").count(_GH_WRAPPER_DIR)
+            count = current_path.split(":").count(current_dir)
             assert count == 1, f"Wrapper dir should appear once in PATH, got {count}"
         finally:
             os.environ["PATH"] = original_path
@@ -854,6 +971,7 @@ class TestGhWrapper:
         """populate_runtime_credentials installs the gh wrapper."""
         self._cleanup()
         try:
+            _auth_mod = self._get_auth_mod()
             with patch("ambient_runner.platform.auth._fetch_credential") as mock_fetch:
 
                 async def _creds(ctx, ctype):
@@ -869,7 +987,7 @@ class TestGhWrapper:
                 ctx = _make_context()
                 await populate_runtime_credentials(ctx)
 
-            wrapper = Path(_GH_WRAPPER_PATH)
+            wrapper = Path(_auth_mod._GH_WRAPPER_PATH)
             assert wrapper.exists(), (
                 "populate_runtime_credentials should install gh wrapper"
             )

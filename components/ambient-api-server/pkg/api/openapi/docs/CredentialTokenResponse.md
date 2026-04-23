@@ -4,9 +4,9 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**CredentialId** | **string** | ID of the credential | 
-**Provider** | **string** | Provider type for this credential | 
-**Token** | **string** | Decrypted token value | 
+**CredentialId** | **string** | ID of the credential |
+**Provider** | **string** | Provider type for this credential |
+**Token** | **string** | Decrypted token value |
 
 ## Methods
 
@@ -89,5 +89,3 @@ SetToken sets Token field to given value.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
-
-

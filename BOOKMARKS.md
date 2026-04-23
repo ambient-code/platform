@@ -74,6 +74,7 @@ Convention documentation for each component. Loaded by review agents on demand.
 | [API Server Guide](components/ambient-api-server/CLAUDE.md) | rh-trex-ai REST API, plugin system, code generation |
 | [SDK Guide](components/ambient-sdk/CLAUDE.md) | Go + Python client libraries for the public API |
 | [CLI README](components/ambient-cli/README.md) | acpctl CLI for managing agentic sessions |
+| [CodeRabbit Integration](docs/src/content/docs/features/coderabbit.md) | Setup, review gate, session credentials, `.coderabbit.yaml` config |
 
 ## Development Environment
 

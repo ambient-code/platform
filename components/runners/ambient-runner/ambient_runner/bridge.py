@@ -227,6 +227,30 @@ class PlatformBridge(ABC):
         """
         return ""
 
+    async def inject_message(
+        self, session_id: str, event_type: str, payload: str
+    ) -> None:
+        """Inject an inbound session message into the active run.
+
+        Called by the run endpoint for each ``SessionMessage`` received via
+        ``WatchSessionMessages`` gRPC stream while a run is in progress.
+
+        Override in bridge subclasses to handle inbound messages — e.g. to
+        interrupt the current Claude turn and inject a new user message.
+
+        Default: no-op (inbound messages are silently dropped).
+
+        Args:
+            session_id: The session this message belongs to.
+            event_type: The message event type string.
+            payload: The raw JSON payload string.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support inject_message "
+            f"(session_id={session_id!r}, event_type={event_type!r}). "
+            "Override inject_message() in your bridge subclass to handle inbound messages."
+        )
+
     # ------------------------------------------------------------------
     # Properties (override to expose state to endpoints)
     # ------------------------------------------------------------------
