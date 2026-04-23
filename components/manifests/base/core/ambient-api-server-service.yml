@@ -32,6 +32,10 @@ spec:
         component: api
     spec:
       serviceAccountName: ambient-api-server
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         - name: migration
           image: quay.io/ambient_code/vteam_api_server:latest
@@ -55,6 +59,13 @@ spec:
             capabilities:
               drop:
                 - ALL
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
       containers:
         - name: api-server
           image: quay.io/ambient_code/vteam_api_server:latest

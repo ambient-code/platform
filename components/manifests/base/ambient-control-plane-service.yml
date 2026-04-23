@@ -55,12 +55,44 @@ spec:
           value: "kube"
         - name: LOG_LEVEL
           value: "info"
+        - name: RUNNER_IMAGE
+          value: "quay.io/ambient_code/vteam_claude_runner:latest"
+        - name: MCP_IMAGE
+          value: "quay.io/ambient_code/vteam_mcp:latest"
+        - name: USE_VERTEX
+          valueFrom:
+            configMapKeyRef:
+              name: operator-config
+              key: USE_VERTEX
+              optional: true
+        - name: CLOUD_ML_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: operator-config
+              key: CLOUD_ML_REGION
+              optional: true
+        - name: ANTHROPIC_VERTEX_PROJECT_ID
+          valueFrom:
+            configMapKeyRef:
+              name: operator-config
+              key: ANTHROPIC_VERTEX_PROJECT_ID
+              optional: true
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          valueFrom:
+            configMapKeyRef:
+              name: operator-config
+              key: GOOGLE_APPLICATION_CREDENTIALS
+              optional: true
         - name: CP_TOKEN_URL
           value: "http://ambient-control-plane.ambient-code.svc:8080/token"
         - name: CP_RUNTIME_NAMESPACE
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        volumeMounts:
+        - name: vertex-credentials
+          mountPath: /app/vertex
+          readOnly: true
         resources:
           requests:
             cpu: 50m
@@ -68,4 +100,9 @@ spec:
           limits:
             cpu: 200m
             memory: 256Mi
+      volumes:
+      - name: vertex-credentials
+        secret:
+          secretName: ambient-vertex
+          optional: true
       restartPolicy: Always
