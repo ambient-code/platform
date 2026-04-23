@@ -145,7 +145,7 @@ function runSetupStep(step: string): void {
       cy.wait(500)
       break
     case 'navigateToSharing':
-      cy.contains('Sharing', { timeout: 5000 }).click()
+      cy.contains('Pair Prompting', { timeout: 5000 }).click()
       cy.wait(500)
       break
     case 'waitForThemeToggle':
