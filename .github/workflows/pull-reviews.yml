@@ -15,7 +15,7 @@ jobs:
     with:
       s3_bucket: pull-reviews
       gcp_project_id: ambient-code-platform
-      gcp_region: us-east5
+      gcp_region: global
       gcp_workload_identity_provider: projects/888214980327/locations/global/workloadIdentityPools/github/providers/ambient-code-github-actions
     secrets:
       S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
