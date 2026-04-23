@@ -130,7 +130,7 @@ export function SessionsSidebar({
         href: `/projects/${projectName}/scheduled-sessions`,
       },
       {
-        label: "Sharing",
+        label: "Pair Prompting",
         icon: Share2,
         href: `/projects/${projectName}/permissions`,
       },

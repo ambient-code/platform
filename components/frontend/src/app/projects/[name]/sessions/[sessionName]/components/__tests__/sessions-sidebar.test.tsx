@@ -103,7 +103,7 @@ describe('SessionsSidebar', () => {
     render(<SessionsSidebar {...defaultProps} />);
     expect(screen.getByText('Sessions')).toBeDefined();
     expect(screen.getByText('Schedules')).toBeDefined();
-    expect(screen.getByText('Sharing')).toBeDefined();
+    expect(screen.getByText('Pair Prompting')).toBeDefined();
     expect(screen.getByText('Access Keys')).toBeDefined();
     expect(screen.getByText('Workspace Settings')).toBeDefined();
   });

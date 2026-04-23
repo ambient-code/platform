@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import { Users, User as UserIcon, Plus, Loader2, Trash2, Info } from 'lucide-react';
+import { Users, User as UserIcon, Plus, Loader2, Trash2, Info, HelpCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { DestructiveConfirmationDialog } from '@/components/confirmation-dialog';
 
 import { useProjectPermissions, useAddProjectPermission, useRemoveProjectPermission } from '@/services/queries';
@@ -49,6 +50,8 @@ export function SharingSection({ projectName }: SharingSectionProps) {
   const [toRevoke, setToRevoke] = useState<{ subjectType: SubjectType; subjectName: string; role: PermissionRole } | null>(null);
 
   const isAdmin = userRole === 'admin' || userRole === undefined;
+
+  const subjectPlaceholder = grantForm.subjectType === 'group' ? 'e.g., platform-team' : 'e.g., jdoe@example.com';
 
   const handleGrant = useCallback(() => {
     if (!grantForm.subjectName.trim()) {
@@ -113,16 +116,10 @@ export function SharingSection({ projectName }: SharingSectionProps) {
     () => (
       <div className="text-center py-8">
         <Users className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-        <p className="text-sm text-muted-foreground mb-4">No users or groups have access yet</p>
-        {isAdmin && (
-          <Button onClick={() => setShowGrantDialog(true)} size="sm">
-            <Plus className="w-4 h-4 mr-2" />
-            Grant First Permission
-          </Button>
-        )}
+        <p className="text-sm text-muted-foreground">No users or groups have access yet</p>
       </div>
     ),
-    [isAdmin]
+    []
   );
 
   return (
@@ -143,7 +140,7 @@ export function SharingSection({ projectName }: SharingSectionProps) {
           <div className="flex items-start justify-between">
             <div>
               <CardTitle>
-                Sharing
+                Pair Prompting
               </CardTitle>
               <CardDescription>Users and groups with access to this workspace and their roles</CardDescription>
             </div>
@@ -227,9 +224,9 @@ export function SharingSection({ projectName }: SharingSectionProps) {
         </CardContent>
       </Card>
 
-      {/* Grant Permission Dialog */}
       <Dialog open={showGrantDialog} onOpenChange={setShowGrantDialog}>
         <DialogContent>
+          <TooltipProvider>
           <DialogHeader>
             <DialogTitle>Grant Permission</DialogTitle>
             <DialogDescription>Add a user or group to this workspace with a role</DialogDescription>
@@ -251,14 +248,28 @@ export function SharingSection({ projectName }: SharingSectionProps) {
               </Tabs>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="subjectName">
-                {grantForm.subjectType === 'group' ? 'Group' : 'User'} Name
-              </Label>
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="subjectName">
+                  {grantForm.subjectType === 'group' ? 'Group' : 'User'} Name
+                </Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="max-w-xs">
+                    {grantForm.subjectType === 'group' ? (
+                      <p>Enter the LDAP or identity provider group name, e.g. <code className="text-xs bg-muted px-1 rounded">platform-team</code>, <code className="text-xs bg-muted px-1 rounded">ai-engineering</code></p>
+                    ) : (
+                      <p>Enter the username or email, e.g. <code className="text-xs bg-muted px-1 rounded">jdoe</code>, <code className="text-xs bg-muted px-1 rounded">jdoe@example.com</code></p>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
               {ldapEnabled ? (
                 <LDAPAutocomplete
                   id="subjectName"
                   mode={grantForm.subjectType}
-                  placeholder={`Enter ${grantForm.subjectType} name`}
+                  placeholder={subjectPlaceholder}
                   value={grantForm.subjectName}
                   onChange={(val) => setGrantForm((prev) => ({ ...prev, subjectName: val }))}
                   disabled={addPermissionMutation.isPending}
@@ -266,7 +277,7 @@ export function SharingSection({ projectName }: SharingSectionProps) {
               ) : (
                 <Input
                   id="subjectName"
-                  placeholder={`Enter ${grantForm.subjectType} name`}
+                  placeholder={subjectPlaceholder}
                   value={grantForm.subjectName}
                   onChange={(e) => setGrantForm((prev) => ({ ...prev, subjectName: e.target.value }))}
                   disabled={addPermissionMutation.isPending}
@@ -327,10 +338,10 @@ export function SharingSection({ projectName }: SharingSectionProps) {
               )}
             </Button>
           </DialogFooter>
+          </TooltipProvider>
         </DialogContent>
       </Dialog>
 
-      {/* Revoke Permission Dialog */}
       <DestructiveConfirmationDialog
         open={showRevokeDialog}
         onOpenChange={setShowRevokeDialog}
