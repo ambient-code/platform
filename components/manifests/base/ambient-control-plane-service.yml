@@ -35,6 +35,16 @@ spec:
             secretKeyRef:
               name: ambient-control-plane-token
               key: token
+        - name: OIDC_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: ambient-api-server
+              key: clientId
+        - name: OIDC_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: ambient-api-server
+              key: clientSecret
         - name: AMBIENT_API_SERVER_URL
           value: "https://ambient-api-server.ambient-code.svc:8000"
         - name: AMBIENT_GRPC_SERVER_ADDR
