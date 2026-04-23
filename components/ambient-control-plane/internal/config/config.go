@@ -55,7 +55,7 @@ func Load() (*ControlPlaneConfig, error) {
 		Mode:                  envOrDefault("MODE", "kube"),
 		PlatformMode:          envOrDefault("PLATFORM_MODE", "standard"),
 		MPPConfigNamespace:    envOrDefault("MPP_CONFIG_NAMESPACE", "ambient-code--config"),
-		CPRuntimeNamespace:    envOrDefault("CP_RUNTIME_NAMESPACE", "ambient-code--runtime-int"),
+		CPRuntimeNamespace:    envOrDefault("CP_RUNTIME_NAMESPACE", envOrDefault("NAMESPACE", "ambient-code")),
 		OIDCTokenURL:          envOrDefault("OIDC_TOKEN_URL", "https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token"),
 		OIDCClientID:          os.Getenv("OIDC_CLIENT_ID"),
 		OIDCClientSecret:      os.Getenv("OIDC_CLIENT_SECRET"),
