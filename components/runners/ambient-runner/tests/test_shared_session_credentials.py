@@ -408,6 +408,330 @@ class TestFetchCredentialHeaders:
 
 
 # ---------------------------------------------------------------------------
+# _fetch_credential — operator path fallback (regression for #1438)
+# ---------------------------------------------------------------------------
+
+
+class TestFetchCredentialOperatorPath:
+    """Without CREDENTIAL_IDS the runner must fall back to the session-scoped
+    backend URL used by operator-based deployments.
+
+    The alpha migration (1aa8b428) broke this by requiring CREDENTIAL_IDS and
+    silently returning {} when it was absent, leaving GITHUB_TOKEN empty.
+    """
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_session_url_without_credential_ids(self):
+        """_fetch_credential uses /projects/{p}/agentic-sessions/{s}/credentials/{type}
+        when CREDENTIAL_IDS is not set."""
+        captured = {}
+
+        class PathCapture(BaseHTTPRequestHandler):
+            def do_GET(self):
+                captured["path"] = self.path
+                captured["headers"] = dict(self.headers)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"token": "gh-tok-operator"}).encode())
+
+            def log_message(self, fmt, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), PathCapture)
+        port = server.server_address[1]
+        thread = Thread(target=server.handle_request, daemon=True)
+        thread.start()
+
+        try:
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "BACKEND_API_URL": f"http://127.0.0.1:{port}",
+                        "PROJECT_NAME": "my-project",
+                    },
+                    clear=False,
+                ),
+                patch(
+                    "ambient_runner.platform.auth.get_bot_token",
+                    return_value="bot-tok",
+                ),
+            ):
+                os.environ.pop("CREDENTIAL_IDS", None)
+                ctx = _make_context(session_id="sess-42")
+                result = await _fetch_credential(ctx, "github")
+
+            assert result.get("token") == "gh-tok-operator"
+            assert captured["path"] == (
+                "/projects/my-project/agentic-sessions/sess-42/credentials/github"
+            )
+        finally:
+            server.server_close()
+            thread.join(timeout=2)
+
+    @pytest.mark.asyncio
+    async def test_prefers_cp_path_when_credential_ids_present(self):
+        """_fetch_credential uses /api/ambient/v1/... when CREDENTIAL_IDS is set."""
+        captured = {}
+
+        class PathCapture(BaseHTTPRequestHandler):
+            def do_GET(self):
+                captured["path"] = self.path
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"token": "gh-tok-cp"}).encode())
+
+            def log_message(self, fmt, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), PathCapture)
+        port = server.server_address[1]
+        thread = Thread(target=server.handle_request, daemon=True)
+        thread.start()
+
+        try:
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "BACKEND_API_URL": f"http://127.0.0.1:{port}",
+                        "PROJECT_NAME": "my-project",
+                        "CREDENTIAL_IDS": json.dumps({"github": "cred-abc"}),
+                    },
+                ),
+                patch(
+                    "ambient_runner.platform.auth.get_bot_token",
+                    return_value="bot-tok",
+                ),
+            ):
+                ctx = _make_context(session_id="sess-42")
+                result = await _fetch_credential(ctx, "github")
+
+            assert result.get("token") == "gh-tok-cp"
+            assert captured["path"] == (
+                "/api/ambient/v1/projects/my-project/credentials/cred-abc/token"
+            )
+        finally:
+            server.server_close()
+            thread.join(timeout=2)
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_without_project_or_session(self):
+        """_fetch_credential returns {} when neither CP IDs nor session context exist."""
+        with patch.dict(
+            os.environ,
+            {"BACKEND_API_URL": "http://127.0.0.1:1"},
+            clear=False,
+        ):
+            os.environ.pop("CREDENTIAL_IDS", None)
+            os.environ.pop("PROJECT_NAME", None)
+            os.environ.pop("AGENTIC_SESSION_NAMESPACE", None)
+            ctx = _make_context(session_id="")
+            result = await _fetch_credential(ctx, "github")
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_operator_path_populates_github_token(self):
+        """Full round-trip: populate_runtime_credentials sets GITHUB_TOKEN via
+        the operator session-scoped path when CREDENTIAL_IDS is absent."""
+
+        class MultiHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                if "/credentials/github" in self.path:
+                    body = {
+                        "token": "gh-tok-from-backend",
+                        "userName": "dev",
+                        "email": "d@e.com",
+                    }
+                else:
+                    body = {}
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps(body).encode())
+
+            def log_message(self, fmt, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), MultiHandler)
+        port = server.server_address[1]
+        thread = Thread(
+            target=lambda: [server.handle_request() for _ in range(7)],
+            daemon=True,
+        )
+        thread.start()
+
+        try:
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "BACKEND_API_URL": f"http://127.0.0.1:{port}",
+                        "PROJECT_NAME": "test-project",
+                        "BOT_TOKEN": "fake-bot",
+                    },
+                    clear=False,
+                ),
+                patch(
+                    "ambient_runner.platform.auth.get_bot_token",
+                    return_value="bot-tok",
+                ),
+            ):
+                os.environ.pop("CREDENTIAL_IDS", None)
+                ctx = _make_context(session_id="my-session")
+
+                await populate_runtime_credentials(ctx)
+
+                assert os.environ.get("GITHUB_TOKEN") == "gh-tok-from-backend"
+
+                clear_runtime_credentials()
+                assert "GITHUB_TOKEN" not in os.environ
+        finally:
+            server.server_close()
+            thread.join(timeout=2)
+            os.environ.pop("GITHUB_TOKEN", None)
+            os.environ.pop("GIT_USER_NAME", None)
+            os.environ.pop("GIT_USER_EMAIL", None)
+
+
+class TestPopulateCredentialsResponseFormats:
+    """Backend (operator) and control-plane return different field names.
+    populate_runtime_credentials must handle both. Regression for #1438."""
+
+    @pytest.mark.asyncio
+    async def test_google_oauth_access_token_format(self):
+        """Backend returns accessToken/refreshToken — must write OAuth creds file."""
+
+        class GoogleHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                if "/credentials/google" in self.path:
+                    body = {
+                        "accessToken": "ya29.access",
+                        "refreshToken": "1//refresh",
+                        "email": "u@example.com",
+                        "scopes": ["drive"],
+                        "expiresAt": "2099-01-01T00:00:00Z",
+                    }
+                else:
+                    body = {}
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps(body).encode())
+
+            def log_message(self, fmt, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), GoogleHandler)
+        port = server.server_address[1]
+        thread = Thread(
+            target=lambda: [server.handle_request() for _ in range(7)],
+            daemon=True,
+        )
+        thread.start()
+
+        import tempfile
+
+        tmp_creds = Path(tempfile.mkdtemp()) / "credentials.json"
+
+        try:
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "BACKEND_API_URL": f"http://127.0.0.1:{port}",
+                        "PROJECT_NAME": "test-project",
+                        "BOT_TOKEN": "fake-bot",
+                    },
+                    clear=False,
+                ),
+                patch(
+                    "ambient_runner.platform.auth.get_bot_token",
+                    return_value="bot-tok",
+                ),
+                patch(
+                    "ambient_runner.platform.auth._GOOGLE_WORKSPACE_CREDS_FILE",
+                    tmp_creds,
+                ),
+            ):
+                os.environ.pop("CREDENTIAL_IDS", None)
+                ctx = _make_context(session_id="s1")
+                await populate_runtime_credentials(ctx)
+
+                assert tmp_creds.exists()
+                written = json.loads(tmp_creds.read_text())
+                assert written["token"] == "ya29.access"
+                assert written["refresh_token"] == "1//refresh"
+        finally:
+            server.server_close()
+            thread.join(timeout=2)
+            tmp_creds.unlink(missing_ok=True)
+            tmp_creds.parent.rmdir()
+            clear_runtime_credentials()
+
+    @pytest.mark.asyncio
+    async def test_jira_api_token_format(self):
+        """Backend returns apiToken — must set JIRA_API_TOKEN."""
+
+        class JiraHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                if "/credentials/jira" in self.path:
+                    body = {
+                        "apiToken": "jira-legacy-tok",
+                        "url": "https://jira.example.com",
+                        "email": "j@e.com",
+                    }
+                else:
+                    body = {}
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps(body).encode())
+
+            def log_message(self, fmt, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), JiraHandler)
+        port = server.server_address[1]
+        thread = Thread(
+            target=lambda: [server.handle_request() for _ in range(7)],
+            daemon=True,
+        )
+        thread.start()
+
+        try:
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "BACKEND_API_URL": f"http://127.0.0.1:{port}",
+                        "PROJECT_NAME": "test-project",
+                        "BOT_TOKEN": "fake-bot",
+                    },
+                    clear=False,
+                ),
+                patch(
+                    "ambient_runner.platform.auth.get_bot_token",
+                    return_value="bot-tok",
+                ),
+            ):
+                os.environ.pop("CREDENTIAL_IDS", None)
+                ctx = _make_context(session_id="s1")
+                await populate_runtime_credentials(ctx)
+
+                assert os.environ.get("JIRA_API_TOKEN") == "jira-legacy-tok"
+        finally:
+            server.server_close()
+            thread.join(timeout=2)
+            for key in ["JIRA_API_TOKEN", "JIRA_URL", "JIRA_EMAIL"]:
+                os.environ.pop(key, None)
+            clear_runtime_credentials()
+
+
+# ---------------------------------------------------------------------------
 # populate_runtime_credentials + clear round-trip
 # ---------------------------------------------------------------------------
 
@@ -892,6 +1216,7 @@ class TestGhWrapper:
     @staticmethod
     def _get_auth_mod():
         import ambient_runner.platform.auth as _auth_mod
+
         return _auth_mod
 
     def _cleanup(self):
