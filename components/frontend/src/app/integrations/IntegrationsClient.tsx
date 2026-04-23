@@ -10,9 +10,9 @@ import { PageHeader } from '@/components/page-header'
 import { useIntegrationsStatus } from '@/services/queries/use-integrations'
 import { Loader2 } from 'lucide-react'
 
-type Props = { appSlug?: string }
+type Props = { appSlug?: string; githubCallbackUrl?: string }
 
-export default function IntegrationsClient({ appSlug }: Props) {
+export default function IntegrationsClient({ appSlug, githubCallbackUrl }: Props) {
   const { data: integrations, isLoading, refetch } = useIntegrationsStatus()
 
   return (
@@ -38,6 +38,7 @@ export default function IntegrationsClient({ appSlug }: Props) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <GitHubConnectionCard
                 appSlug={appSlug}
+                githubCallbackUrl={githubCallbackUrl}
                 showManageButton={true}
                 status={integrations?.github}
                 onRefresh={refetch}
