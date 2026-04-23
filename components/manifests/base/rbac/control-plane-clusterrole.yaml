@@ -16,7 +16,7 @@ rules:
   verbs: ["get", "list", "watch", "create", "update", "patch"]
 # RoleBindings (reconcile group access from ProjectSettings)
 - apiGroups: ["rbac.authorization.k8s.io"]
-  resources: ["rolebindings"]
+  resources: ["roles", "rolebindings"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 # Session runner resources (provision/deprovision per-session workloads in project namespaces)
 - apiGroups: [""]
