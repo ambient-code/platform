@@ -205,7 +205,7 @@ make kind-up LOCAL_VERTEX=true GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-a
 ```bash
 make kind-up LOCAL_VERTEX=true \
     ANTHROPIC_VERTEX_PROJECT_ID=my-project \
-    CLOUD_ML_REGION=us-east5 \
+    CLOUD_ML_REGION=global \
     GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
 ```
 
