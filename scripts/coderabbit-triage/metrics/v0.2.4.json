@@ -1,0 +1,67 @@
+{
+  "release": "v0.2.4",
+  "date": "2026-04-22",
+  "prs_analyzed": 1,
+  "total_comments": 2,
+  "critical": 1,
+  "major": 1,
+  "by_component": {
+    "ci": {
+      "critical": 0,
+      "major": 1,
+      "total": 1
+    },
+    "api-server": {
+      "critical": 1,
+      "major": 0,
+      "total": 1
+    }
+  },
+  "top_patterns": [
+    {
+      "name": "Add NOT NULL constraint to `owner_user_id` column in migration.",
+      "count": 1,
+      "critical": 1,
+      "major": 0,
+      "impact_score": 4,
+      "components": [
+        "api-server"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3124615176,
+          "title": "Add NOT NULL constraint to `owner_user_id` column in migration.",
+          "path": "components/ambient-api-server/plugins/agents/migration.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1428#discussion_r3124615176",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Add `components/ambient-sdk/",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "ci"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3124615155,
+          "title": "Add `components/ambient-sdk/",
+          "path": ".github/workflows/components-build-deploy.yml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1428#discussion_r3124615155",
+          "ai_prompt": ""
+        }
+      ]
+    }
+  ],
+  "coverage_gaps": 2,
+  "pattern_categories": {
+    "error_handling": 1,
+    "security": 1
+  }
+}
