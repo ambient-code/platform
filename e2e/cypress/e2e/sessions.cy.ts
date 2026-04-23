@@ -149,9 +149,9 @@ describe('Ambient Session Management Tests', () => {
     it('should visit each workspace page via direct routes', () => {
       // Each workspace section now has its own route (no more ?section= params)
 
-      // Sharing page — covers sharing-section.tsx
+      // Pair Prompting page — covers sharing-section.tsx
       cy.visit(`/projects/${workspaceSlug}/permissions`)
-      cy.get('body', { timeout: 10000 }).should('contain.text', 'Sharing')
+      cy.get('body', { timeout: 10000 }).should('contain.text', 'Pair Prompting')
       cy.wait(500)
 
       // Access Keys page — covers keys page
@@ -484,7 +484,7 @@ describe('Ambient Session Management Tests', () => {
 
     it('should interact with sharing tab', () => {
       cy.visit(`/projects/${workspaceSlug}/permissions`)
-      cy.get('body', { timeout: 15000 }).should('contain.text', 'Sharing')
+      cy.get('body', { timeout: 15000 }).should('contain.text', 'Pair Prompting')
 
       // Look for "Grant Permission" button
       cy.get('body').then(($body) => {
@@ -1339,11 +1339,11 @@ describe('Ambient Session Management Tests', () => {
 
     it('should interact with sharing tab Grant Permission dialog', () => {
       cy.visit(`/projects/${workspaceSlug}/permissions`)
-      cy.get('body', { timeout: 15000 }).should('contain.text', 'Sharing')
+      cy.get('body', { timeout: 15000 }).should('contain.text', 'Pair Prompting')
 
-      // Look for "Grant Permission" or "Grant First Permission" button
+      // Look for "Grant Permission" button
       cy.get('body').then(($body) => {
-        const grantBtn = $body.find('button:contains("Grant Permission"), button:contains("Grant First Permission")')
+        const grantBtn = $body.find('button:contains("Grant Permission")')
         if (grantBtn.length) {
           cy.wrap(grantBtn.first()).click({ force: true })
           cy.wait(500)
@@ -1654,7 +1654,7 @@ describe('Ambient Session Management Tests', () => {
 
     it('should click Refresh button on sharing tab', () => {
       cy.visit(`/projects/${workspaceSlug}/permissions`)
-      cy.get('body', { timeout: 15000 }).should('contain.text', 'Sharing')
+      cy.get('body', { timeout: 15000 }).should('contain.text', 'Pair Prompting')
 
       cy.get('body').then(($body) => {
         if ($body.find('button:contains("Refresh")').length) {
