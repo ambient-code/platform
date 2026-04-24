@@ -10,10 +10,10 @@ import (
 
 // ASCII art branding rendered in the header.
 var brandLines = []string{
-	` _    __  __  `,
-	`/_\  |  \/  | `,
-	`/ _ \ | |\/| | `,
-	`/_/ \_\|_|  |_| `,
+	`   _    ___ ___ `,
+	`  /_\  / __| _ \`,
+	` / _ \| (__|  _/`,
+	`/_/ \_\\___|_|  `,
 }
 
 // View implements tea.Model. It renders the k9s-style full-screen layout.
