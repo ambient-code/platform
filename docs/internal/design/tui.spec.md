@@ -74,10 +74,10 @@ cmd/acpctl/ambient/
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│  Context: local [RW]                    <?> Help         _    __  __     │
-│  Server:  localhost:8000                <:> Command      /_\  |  \/  |   │
-│  User:    jsell                         <r> Rename      / _ \ | |\/| |   │
-│  Project: ambient-platform                             /_/ \_\|_|  |_|   │
+│  Context: local [RW]                    <?> Help        _    ___ ___     │
+│  Server:  localhost:8000                <:> Command     /_\  / __| _ \   │
+│  User:    jsell                         <r> Rename    / _ \| (__|  _/   │
+│  Project: ambient-platform                           /_/ \_\\___|_|     │
 │  ⟳ 3s                                                                   │
 ├──────────────────────────────────────────────────────────────────────────┤
 │  (command bar appears here on `:` or `/`, hidden by default)             │
