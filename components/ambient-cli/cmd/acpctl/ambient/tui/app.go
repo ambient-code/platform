@@ -150,14 +150,10 @@ func (m *AppModel) viewHeader() string {
 	return strings.Join(headerLines, "\n")
 }
 
-// viewCommandBar renders the command or filter input bar with completion hints.
+// viewCommandBar renders the command or filter input bar.
 func (m *AppModel) viewCommandBar() string {
 	if m.commandMode {
-		bar := "  " + m.commandInput.View()
-		if m.commandHint != "" {
-			bar += "\n  " + styleDim.Render(m.commandHint)
-		}
-		return bar
+		return "  " + m.commandInput.View()
 	}
 	if m.filterMode {
 		return "  " + m.filterInput.View()

@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/table"
@@ -64,7 +63,6 @@ type AppModel struct {
 	// Command mode
 	commandMode  bool
 	commandInput textinput.Model
-	commandHint  string // tab-completion suggestion shown below the input
 
 	// Filter mode
 	filterMode  bool
@@ -101,6 +99,7 @@ func NewAppModel(factory *connection.ClientFactory) (*AppModel, error) {
 	ci := textinput.New()
 	ci.Prompt = ":"
 	ci.CharLimit = 256
+	ci.ShowSuggestions = true
 
 	// Filter bar input.
 	fi := textinput.New()
@@ -389,7 +388,7 @@ func (m *AppModel) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
 		m.commandMode = false
-		m.commandHint = ""
+		m.commandInput.SetSuggestions(nil)
 		m.commandInput.Reset()
 		m.commandInput.Blur()
 		m.resizeTable()
@@ -398,31 +397,20 @@ func (m *AppModel) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		input := m.commandInput.Value()
 		m.commandMode = false
-		m.commandHint = ""
+		m.commandInput.SetSuggestions(nil)
 		m.commandInput.Reset()
 		m.commandInput.Blur()
 		m.resizeTable()
 		return m.executeCommand(input)
 
 	case tea.KeyTab:
-		// Tab completion.
-		partial := m.commandInput.Value()
-		contextNames := m.config.ContextNames()
-		var projectNames []string
-		for _, row := range m.projectTable.Rows() {
-			if len(row) > 0 {
-				projectNames = append(projectNames, row[0])
-			}
-		}
-		suggestions := TabComplete(partial, contextNames, projectNames)
-		if len(suggestions) == 1 {
-			m.commandInput.SetValue(suggestions[0])
-			m.commandInput.CursorEnd()
-			m.commandHint = ""
-		} else if len(suggestions) > 1 {
-			m.commandHint = strings.Join(suggestions, "  ")
-		}
-		return m, nil
+		// Accept the inline suggestion.
+		// bubbles/textinput handles Tab natively when ShowSuggestions is on,
+		// but we also update suggestions after acceptance.
+		var cmd tea.Cmd
+		m.commandInput, cmd = m.commandInput.Update(msg)
+		m.updateCommandHint()
+		return m, cmd
 
 	default:
 		// Delegate to textinput for character entry.
@@ -495,11 +483,11 @@ func (m *AppModel) executeCommand(input string) (tea.Model, tea.Cmd) {
 	}
 }
 
-// updateCommandHint refreshes the tab-completion hint based on current input.
+// updateCommandHint refreshes inline tab-completion suggestions.
 func (m *AppModel) updateCommandHint() {
 	partial := m.commandInput.Value()
 	if partial == "" {
-		m.commandHint = ""
+		m.commandInput.SetSuggestions(nil)
 		return
 	}
 	contextNames := m.config.ContextNames()
@@ -510,11 +498,7 @@ func (m *AppModel) updateCommandHint() {
 		}
 	}
 	suggestions := TabComplete(partial, contextNames, projectNames)
-	if len(suggestions) == 0 || (len(suggestions) == 1 && suggestions[0] == partial) {
-		m.commandHint = ""
-	} else {
-		m.commandHint = strings.Join(suggestions, "  ")
-	}
+	m.commandInput.SetSuggestions(suggestions)
 }
 
 // handleFilterKey processes keys while in filter mode.
@@ -555,6 +539,26 @@ func (m *AppModel) handleFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	default:
 		var cmd tea.Cmd
 		m.filterInput, cmd = m.filterInput.Update(msg)
+		// Apply filter live as user types.
+		m.applyLiveFilter()
 		return m, cmd
 	}
+}
+
+// applyLiveFilter updates the table filter on every keystroke.
+func (m *AppModel) applyLiveFilter() {
+	input := m.filterInput.Value()
+	if input == "" {
+		m.activeFilter = nil
+		m.projectTable.ClearFilter()
+		return
+	}
+	f, err := ParseFilter(input)
+	if err != nil {
+		return // don't apply invalid regex while typing
+	}
+	m.activeFilter = f
+	m.projectTable.SetFilter(func(cols []string) bool {
+		return f.MatchRow(cols)
+	})
 }
