@@ -110,9 +110,9 @@ func NewResourceTable(kind string, scope string, columns []table.Column, style T
 		Bold(true).
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderBottom(true).
-		BorderForeground(style.DimColor)
+		BorderForeground(style.BorderColor)
 	s.Selected = s.Selected.
-		Foreground(style.SelectedFg).
+		Foreground(lipgloss.Color("0")).
 		Background(style.SelectedBg).
 		Bold(true)
 	s.Cell = s.Cell.
