@@ -215,9 +215,37 @@ func (rt *ResourceTable) SetHeight(h int) {
 	rt.inner.SetHeight(h)
 }
 
-// SetWidth sets the total width available for the table.
+// SetWidth sets the total width available for the table and redistributes
+// column widths proportionally to fill the terminal.
 func (rt *ResourceTable) SetWidth(w int) {
 	rt.inner.SetWidth(w)
+
+	usable := w - 4 // 2 for border chars, 2 for padding
+	if usable < 10 || len(rt.columns) == 0 {
+		return
+	}
+
+	// Calculate total base width from column definitions.
+	totalBase := 0
+	for _, c := range rt.columns {
+		totalBase += c.Width
+	}
+	if totalBase == 0 {
+		return
+	}
+
+	// Distribute proportionally.
+	cols := rt.inner.Columns()
+	assigned := 0
+	for i := range cols {
+		if i == len(cols)-1 {
+			cols[i].Width = usable - assigned
+		} else {
+			cols[i].Width = rt.columns[i].Width * usable / totalBase
+			assigned += cols[i].Width
+		}
+	}
+	rt.inner.SetColumns(cols)
 }
 
 // Focus gives keyboard focus to the table.
@@ -273,9 +301,29 @@ func (rt *ResourceTable) Update(msg tea.Msg) (ResourceTable, tea.Cmd) {
 //
 // using box-drawing characters and the configured border color.
 func (rt *ResourceTable) View() string {
+	borderStyle := lipgloss.NewStyle().Foreground(rt.style.BorderColor)
+	w := rt.inner.Width()
+	if w < 4 {
+		w = 80
+	}
+
 	titleBar := rt.renderTitleBar()
 	tableView := rt.inner.View()
-	return titleBar + "\n" + tableView
+
+	// Wrap each table line with side borders.
+	tableLines := strings.Split(tableView, "\n")
+	var bordered []string
+	for _, line := range tableLines {
+		lineWidth := lipgloss.Width(line)
+		pad := max(w-lineWidth-2, 0) // 2 for side border chars
+		bordered = append(bordered,
+			borderStyle.Render("│")+" "+line+strings.Repeat(" ", pad)+borderStyle.Render("│"))
+	}
+
+	// Bottom border.
+	bottom := borderStyle.Render("└" + strings.Repeat("─", w-2) + "┘")
+
+	return titleBar + "\n" + strings.Join(bordered, "\n") + "\n" + bottom
 }
 
 // renderTitleBar produces the k9s-style title line with box-drawing characters.

@@ -105,11 +105,11 @@ func (m *AppModel) viewHeader() string {
 		refreshIndicator,
 	}
 
-	// Right side: key hints + branding.
+	// Right side: key hints + branding (column-aligned).
 	hintLines := []string{
-		styleDim.Render("<?> ") + styleWhite.Render("Help"),
-		styleDim.Render("<:> ") + styleWhite.Render("Command"),
-		styleDim.Render("</> ") + styleWhite.Render("Filter"),
+		styleDim.Render("<?>") + "  " + styleWhite.Render("Help   "),
+		styleDim.Render("<:>") + "  " + styleWhite.Render("Command"),
+		styleDim.Render("</>") + "  " + styleWhite.Render("Filter "),
 		"",
 		"",
 	}
@@ -150,13 +150,17 @@ func (m *AppModel) viewHeader() string {
 	return strings.Join(headerLines, "\n")
 }
 
-// viewCommandBar renders the command or filter input bar.
+// viewCommandBar renders the command or filter input bar with completion hints.
 func (m *AppModel) viewCommandBar() string {
 	if m.commandMode {
-		return "  " + styleBlue.Render(m.commandInput.View())
+		bar := "  " + m.commandInput.View()
+		if m.commandHint != "" {
+			bar += "\n  " + styleDim.Render(m.commandHint)
+		}
+		return bar
 	}
 	if m.filterMode {
-		return "  " + styleYellow.Render(m.filterInput.View())
+		return "  " + m.filterInput.View()
 	}
 	return ""
 }

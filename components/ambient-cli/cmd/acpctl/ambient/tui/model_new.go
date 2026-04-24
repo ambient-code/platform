@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/table"
@@ -63,6 +64,7 @@ type AppModel struct {
 	// Command mode
 	commandMode  bool
 	commandInput textinput.Model
+	commandHint  string // tab-completion suggestion shown below the input
 
 	// Filter mode
 	filterMode  bool
@@ -387,6 +389,7 @@ func (m *AppModel) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
 		m.commandMode = false
+		m.commandHint = ""
 		m.commandInput.Reset()
 		m.commandInput.Blur()
 		m.resizeTable()
@@ -395,6 +398,7 @@ func (m *AppModel) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		input := m.commandInput.Value()
 		m.commandMode = false
+		m.commandHint = ""
 		m.commandInput.Reset()
 		m.commandInput.Blur()
 		m.resizeTable()
@@ -404,7 +408,6 @@ func (m *AppModel) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Tab completion.
 		partial := m.commandInput.Value()
 		contextNames := m.config.ContextNames()
-		// Collect project names from table rows.
 		var projectNames []string
 		for _, row := range m.projectTable.Rows() {
 			if len(row) > 0 {
@@ -415,6 +418,9 @@ func (m *AppModel) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(suggestions) == 1 {
 			m.commandInput.SetValue(suggestions[0])
 			m.commandInput.CursorEnd()
+			m.commandHint = ""
+		} else if len(suggestions) > 1 {
+			m.commandHint = strings.Join(suggestions, "  ")
 		}
 		return m, nil
 
@@ -422,6 +428,8 @@ func (m *AppModel) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Delegate to textinput for character entry.
 		var cmd tea.Cmd
 		m.commandInput, cmd = m.commandInput.Update(msg)
+		// Update hint as user types.
+		m.updateCommandHint()
 		return m, cmd
 	}
 }
@@ -484,6 +492,28 @@ func (m *AppModel) executeCommand(input string) (tea.Model, tea.Cmd) {
 
 	default:
 		return m, m.setInfo("Unknown command: "+input)
+	}
+}
+
+// updateCommandHint refreshes the tab-completion hint based on current input.
+func (m *AppModel) updateCommandHint() {
+	partial := m.commandInput.Value()
+	if partial == "" {
+		m.commandHint = ""
+		return
+	}
+	contextNames := m.config.ContextNames()
+	var projectNames []string
+	for _, row := range m.projectTable.Rows() {
+		if len(row) > 0 {
+			projectNames = append(projectNames, row[0])
+		}
+	}
+	suggestions := TabComplete(partial, contextNames, projectNames)
+	if len(suggestions) == 0 || (len(suggestions) == 1 && suggestions[0] == partial) {
+		m.commandHint = ""
+	} else {
+		m.commandHint = strings.Join(suggestions, "  ")
 	}
 }
 
