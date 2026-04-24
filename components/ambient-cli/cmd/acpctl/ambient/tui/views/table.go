@@ -223,6 +223,23 @@ func (rt *ResourceTable) SetHeight(h int) {
 func (rt *ResourceTable) SetWidth(w int) {
 	rt.inner.SetWidth(w)
 
+	// Update selected row style to span full width.
+	s := table.DefaultStyles()
+	s.Header = s.Header.
+		Foreground(rt.style.HeaderColor).
+		Bold(true).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderBottom(true).
+		BorderForeground(rt.style.BorderColor)
+	s.Selected = s.Selected.
+		Foreground(lipgloss.Color("0")).
+		Background(rt.style.SelectedBg).
+		Bold(true).
+		Width(w - 4)
+	s.Cell = s.Cell.
+		Foreground(rt.style.HeaderColor)
+	rt.inner.SetStyles(s)
+
 	usable := w - 4 // 2 for border chars, 2 for padding
 	if usable < 10 || len(rt.columns) == 0 {
 		return
