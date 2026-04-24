@@ -59,7 +59,7 @@ func (a *AgentAPI) DeleteInProject(ctx context.Context, projectID, agentID strin
 	return a.client.do(ctx, http.MethodDelete, path, nil, http.StatusNoContent, nil)
 }
 
-func (a *AgentAPI) Start(ctx context.Context, projectID, agentID, prompt string) (*types.StartResponse, error) {
+func (a *AgentAPI) StartInProject(ctx context.Context, projectID, agentID, prompt string) (*types.StartResponse, error) {
 	req := types.StartRequest{Prompt: prompt}
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -67,7 +67,7 @@ func (a *AgentAPI) Start(ctx context.Context, projectID, agentID, prompt string)
 	}
 	var result types.StartResponse
 	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(agentID) + "/start"
-	if err := a.client.doMultiStatus(ctx, http.MethodPost, path, body, &result, http.StatusOK, http.StatusCreated); err != nil {
+	if err := a.client.do(ctx, http.MethodPost, path, body, http.StatusOK, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
