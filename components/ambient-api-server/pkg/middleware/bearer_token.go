@@ -11,7 +11,10 @@ import (
 	pkgserver "github.com/openshift-online/rh-trex-ai/pkg/server"
 )
 
-const ambientAPITokenEnv = "AMBIENT_API_TOKEN"
+const (
+	ambientAPITokenEnv    = "AMBIENT_API_TOKEN"
+	grpcServiceAccountEnv = "GRPC_SERVICE_ACCOUNT"
+)
 
 var httpBypassPaths = map[string]bool{
 	"/healthcheck": true,
@@ -21,13 +24,19 @@ var httpBypassPaths = map[string]bool{
 
 func init() {
 	token := os.Getenv(ambientAPITokenEnv)
-	if token == "" {
-		glog.Infof("Service token auth disabled: %s not set", ambientAPITokenEnv)
+	serviceAccount := os.Getenv(grpcServiceAccountEnv)
+	if token == "" && serviceAccount == "" {
+		glog.Infof("Service token auth disabled: neither %s nor %s set", ambientAPITokenEnv, grpcServiceAccountEnv)
 		return
 	}
-	glog.Infof("Service token auth enabled via %s (gRPC only)", ambientAPITokenEnv)
-	pkgserver.RegisterPreAuthGRPCUnaryInterceptor(bearerTokenGRPCUnaryInterceptor(token))
-	pkgserver.RegisterPreAuthGRPCStreamInterceptor(bearerTokenGRPCStreamInterceptor(token))
+	if token != "" {
+		glog.Infof("Service token auth enabled via %s (gRPC only)", ambientAPITokenEnv)
+	}
+	if serviceAccount != "" {
+		glog.Infof("OIDC service account username: %s", serviceAccount)
+	}
+	pkgserver.RegisterPreAuthGRPCUnaryInterceptor(bearerTokenGRPCUnaryInterceptor(token, serviceAccount))
+	pkgserver.RegisterPreAuthGRPCStreamInterceptor(bearerTokenGRPCStreamInterceptor(token, serviceAccount))
 }
 
 func extractBearerToken(header string) (string, error) {

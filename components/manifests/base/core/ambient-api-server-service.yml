@@ -104,6 +104,12 @@ spec:
           env:
             - name: AMBIENT_ENV
               value: development
+            - name: GRPC_SERVICE_ACCOUNT
+              valueFrom:
+                secretKeyRef:
+                  name: ambient-api-server
+                  key: clientId
+                  optional: true
           ports:
             - name: api
               containerPort: 8000
