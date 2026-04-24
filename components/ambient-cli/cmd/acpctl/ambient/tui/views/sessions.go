@@ -1,0 +1,73 @@
+package views
+
+import (
+	"time"
+
+	"github.com/charmbracelet/bubbles/table"
+
+	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+)
+
+// SessionColumns returns the column definitions for the session list view.
+// Column order matches the TUI spec: ID, AGENT, PROJECT, PHASE, TRIGGERED BY, STARTED, DURATION.
+func SessionColumns() []table.Column {
+	return []table.Column{
+		{Title: "ID", Width: 14},
+		{Title: "AGENT", Width: 15},
+		{Title: "PROJECT", Width: 15},
+		{Title: "PHASE", Width: 12},
+		{Title: "TRIGGERED BY", Width: 15},
+		{Title: "STARTED", Width: 10},
+		{Title: "DURATION", Width: 10},
+	}
+}
+
+// SessionRow converts an SDK Session into a table row suitable for the session
+// list view. The agentName parameter is the resolved display name for the
+// session's AgentID — the caller is responsible for resolving agent ID to name
+// (see Known N+1 Queries in the TUI spec). The now parameter is used to compute
+// the relative STARTED column and running duration.
+//
+// ID is shown in short form (first 12 characters). DURATION is computed as
+// CompletionTime - StartTime for completed sessions, now - StartTime for
+// running sessions, or empty for pending sessions.
+func SessionRow(s sdktypes.Session, agentName string, now time.Time) table.Row {
+	// Short ID: first 12 characters.
+	shortID := s.ID
+	if len(shortID) > 12 {
+		shortID = shortID[:12]
+	}
+
+	// STARTED: relative age since StartTime.
+	started := ""
+	if s.StartTime != nil {
+		started = FormatAge(now.Sub(*s.StartTime))
+	}
+
+	// DURATION: completed = CompletionTime - StartTime,
+	// running = now - StartTime, pending = empty.
+	duration := ""
+	if s.CompletionTime != nil && s.StartTime != nil {
+		duration = FormatAge(s.CompletionTime.Sub(*s.StartTime))
+	} else if s.StartTime != nil {
+		// Session is still running — show elapsed time.
+		duration = FormatAge(now.Sub(*s.StartTime))
+	}
+
+	return table.Row{
+		shortID,
+		agentName,
+		s.ProjectID,
+		s.Phase,
+		s.TriggeredByUserID,
+		started,
+		duration,
+	}
+}
+
+// NewSessionTable creates a ResourceTable configured for the session list view.
+// The scope parameter controls the title bar context — "all" for global view,
+// an agent name for agent-scoped view, etc.
+func NewSessionTable(scope string, style TableStyle) ResourceTable {
+	return NewResourceTable("sessions", scope, SessionColumns(), style)
+}

@@ -320,7 +320,7 @@ func (m *AppModel) handleNormalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		// Drill into selected project (Wave 0: just set info — no child views yet).
 		row := m.projectTable.SelectedRow()
-		if row != nil && len(row) > 0 {
+		if len(row) > 0 {
 			return m, m.setInfo("Selected project: "+row[0])
 		}
 		return m, nil

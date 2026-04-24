@@ -117,7 +117,7 @@ func (m *AppModel) viewHeader() string {
 
 	// Combine left, hints, and branding into header lines.
 	headerLines := make([]string, 5)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		left := ""
 		if i < len(leftLines) {
 			left = leftLines[i]
