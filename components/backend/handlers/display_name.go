@@ -141,14 +141,11 @@ func getAnthropicClient(ctx context.Context, projectName string) (anthropic.Clie
 	// Check if Vertex AI is enabled (cluster-wide setting)
 	if isVertexEnabled() {
 		// For Vertex AI, use the vertex package with Google Application Default Credentials
-		// Required env vars: GOOGLE_APPLICATION_CREDENTIALS, ANTHROPIC_VERTEX_PROJECT_ID, CLOUD_ML_REGION
 		region := os.Getenv("CLOUD_ML_REGION")
 		gcpProjectID := os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID")
 
-		// Default to us-east5 - claude-haiku-4-5 is not available in global region
-		// See: https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/claude
-		if region == "" || region == "global" {
-			region = "us-east5"
+		if region == "" {
+			region = "global"
 		}
 		if gcpProjectID == "" {
 			return anthropic.Client{}, false, fmt.Errorf("ANTHROPIC_VERTEX_PROJECT_ID is required when USE_VERTEX is enabled (check backend deployment env vars)")

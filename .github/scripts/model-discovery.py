@@ -12,7 +12,7 @@ up automatically because it matches the ``claude-`` prefix under the
 ``anthropic`` publisher.
 
 Required env vars:
-    GCP_REGION                 - GCP region (e.g. us-east5)
+    GCP_REGION                 - GCP region (e.g. global)
     GCP_PROJECT                - GCP project ID
 
 Optional env vars:

@@ -689,6 +689,7 @@ jobs:
         run: |
           oc set env deployment/frontend -n ambient-code -c frontend \
             GITHUB_APP_SLUG="ambient-code" \
+            GITHUB_CALLBACK_URL="https://ambient-code.apps.rosa.vteam-uat.0ksl.p3.openshiftapps.com/api/auth/github/user/callback" \
             FEEDBACK_URL="https://forms.gle/7XiWrvo6No922DUz6"
 
       - name: Update operator environment variables

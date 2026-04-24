@@ -726,14 +726,14 @@ acpctl session events <id>                   CLI          open
 | File | Change |
 |------|--------|
 | `runners/ambient_runner/platform/context.py` | Added `current_user_id`, `current_user_name`, `caller_token` fields + `set_current_user()` method to `RunnerContext` |
-| `overlays/mpp-openshift/ambient-control-plane.yaml` | Added `USE_VERTEX=1`, `ANTHROPIC_VERTEX_PROJECT_ID=ambient-code-platform`, `CLOUD_ML_REGION=us-east5`, `GOOGLE_APPLICATION_CREDENTIALS=/app/vertex/ambient-code-key.json`, `VERTEX_SECRET_NAME=ambient-vertex`, `VERTEX_SECRET_NAMESPACE=ambient-code--runtime-int`; added `vertex-credentials` volumeMount + volume from `ambient-vertex` secret |
+| `overlays/mpp-openshift/ambient-control-plane.yaml` | Added `USE_VERTEX=1`, `ANTHROPIC_VERTEX_PROJECT_ID=ambient-code-platform`, `CLOUD_ML_REGION=global`, `GOOGLE_APPLICATION_CREDENTIALS=/app/vertex/ambient-code-key.json`, `VERTEX_SECRET_NAME=ambient-vertex`, `VERTEX_SECRET_NAMESPACE=ambient-code--runtime-int`; added `vertex-credentials` volumeMount + volume from `ambient-vertex` secret |
 
 **Vertex invariants for MPP:**
 - Secret: `secret/ambient-vertex` in `ambient-code--runtime-int` — contains `ambient-code-key.json` (GCP SA key)
 - CP reads it via `nsKube()` (tenant SA) and copies to session namespace via `ensureVertexSecret()`
 - Runner pod mounts it at `/app/vertex/` — set `GOOGLE_APPLICATION_CREDENTIALS=/app/vertex/ambient-code-key.json`
 - `VERTEX_SECRET_NAMESPACE` must be `ambient-code--runtime-int` (not default `ambient-code`)
-- GCP project: `ambient-code-platform`, region: `us-east5`
+- GCP project: `ambient-code-platform`, region: `global`
 
 **acpctl session commands:**
 ```bash
