@@ -281,7 +281,7 @@ The `/events` endpoint (raw runner SSE) is not used. `/messages` is the durable,
  └────────────────────────────────────────────────────────────────────┘
 ```
 
-**Raw mode** (`r` to toggle): Shows raw AG-UI events as JSON lines — useful for debugging.
+**Raw mode** (`r` to toggle): Shows AG-UI events as formatted JSON lines — useful for debugging. "Raw" refers to the unaltered JSON schema/payload structure, not raw terminal bytes. Sanitization is mandatory in all modes: control sequences, ANSI escape codes, and unsafe terminal bytes are stripped from every field value before display, identical to conversation mode.
 
 #### Event Type Rendering
 
@@ -434,7 +434,7 @@ Examples:
 - `Viewing agents in project ambient-platform`
 - `Streaming messages for session 01HABC...`
 - `Switched to context staging`
-- `✗ disconnected — retrying in 5s` (persists)
+- `✗ disconnected — retrying (backoff: Xs)` (persists)
 
 ---
 
@@ -456,7 +456,7 @@ When a view is not visible (user has drilled into a child), its polling pauses. 
 
 | Scenario | Behavior |
 |----------|----------|
-| **API unreachable** | Status line: `✗ disconnected — retrying in 5s`. Tables show stale data. Header shows `(stale Ns)` with seconds since last successful fetch. No retry limit — the TUI keeps trying indefinitely with 5s backoff. |
+| **API unreachable** | Status line: `✗ disconnected — retrying (backoff: Xs)`. Tables show stale data. Header shows `(stale Ns)` with seconds since last successful fetch. Exponential backoff with jitter: start at 1s, double each attempt (1s, 2s, 4s, …), cap at 30s, reset to 1s on a successful fetch. Same algorithm as SSE stream disconnect. No retry limit — the TUI retries indefinitely. |
 | **401 Unauthorized** | Attempt to re-read token from `~/.config/ambient/config.json` (another session may have refreshed it). If still 401, status line: `✗ session expired — run 'acpctl login' in another terminal`. Stale data preserved. No modal, no forced exit. |
 | **403 Forbidden (resource)** | Inline in table: row shows `ACCESS DENIED` for the specific resource. |
 | **403 Forbidden (kind)** | Table-level message: `Insufficient permissions to list <kind>`. Distinct from empty results. |
@@ -523,7 +523,7 @@ Rules:
 - All other servers → hostname portion of the URL
 - If a context with the same name exists, `acpctl login` updates it (token, project) rather than creating a duplicate.
 - `acpctl login` sets `current_context` to the newly logged-in context.
-- `acpctl logout` removes the current context entry. If other contexts remain, `current_context` switches to the first remaining one.
+- `acpctl logout` removes the current context entry. If other contexts remain, `current_context` is set to the lexically first remaining context name (sorted ascending). This is a stable, deterministic selection — independent of insertion order or platform map iteration.
 
 In the TUI:
 - `:ctx` with no argument lists all contexts in a table (name, server, project, active indicator).
