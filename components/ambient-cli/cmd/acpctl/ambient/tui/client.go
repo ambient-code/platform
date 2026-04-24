@@ -49,6 +49,87 @@ type InboxMsg struct {
 }
 
 // ---------------------------------------------------------------------------
+// CRUD message types for mutating operations.
+// ---------------------------------------------------------------------------
+
+// StartAgentMsg carries the result of starting an agent.
+type StartAgentMsg struct {
+	Response *sdktypes.StartResponse
+	Err      error
+}
+
+// StopAgentMsg carries the result of stopping an agent's current session.
+// The SDK has no AgentAPI.Stop — stopping an agent means stopping its current
+// session via SessionAPI.Stop. The caller must resolve the agent's
+// current_session_id before calling StopAgent.
+type StopAgentMsg struct {
+	Session *sdktypes.Session
+	Err     error
+}
+
+// CreateAgentMsg carries the result of creating an agent.
+type CreateAgentMsg struct {
+	Agent *sdktypes.Agent
+	Err   error
+}
+
+// UpdateAgentMsg carries the result of patching an agent.
+type UpdateAgentMsg struct {
+	Agent *sdktypes.Agent
+	Err   error
+}
+
+// DeleteAgentMsg carries the result of deleting an agent.
+type DeleteAgentMsg struct {
+	Err error
+}
+
+// CreateProjectMsg carries the result of creating a project.
+type CreateProjectMsg struct {
+	Project *sdktypes.Project
+	Err     error
+}
+
+// DeleteProjectMsg carries the result of deleting a project.
+type DeleteProjectMsg struct {
+	Err error
+}
+
+// DeleteSessionMsg carries the result of deleting a session.
+type DeleteSessionMsg struct {
+	Err error
+}
+
+// SendMessageMsg carries the result of sending a message to a session.
+type SendMessageMsg struct {
+	Message *sdktypes.SessionMessage
+	Err     error
+}
+
+// SendInboxMsg carries the result of sending an inbox message to an agent.
+type SendInboxMsg struct {
+	Message *sdktypes.InboxMessage
+	Err     error
+}
+
+// MarkInboxReadMsg carries the result of marking an inbox message as read.
+type MarkInboxReadMsg struct {
+	Err error
+}
+
+// DeleteInboxMsg carries the result of deleting an inbox message.
+type DeleteInboxMsg struct {
+	Err error
+}
+
+// SessionMessageEvent carries a single session message received from an SSE
+// stream. Sent to the Bubbletea program via program.Send().
+type SessionMessageEvent struct {
+	Message *sdktypes.SessionMessage
+	Err     error
+}
+
+// ---------------------------------------------------------------------------
 // TUIClient wraps connection.ClientFactory and provides clean data-fetching
 // methods that return tea.Cmd functions for asynchronous execution inside the
 // Bubbletea runtime. Every method creates its own context with fetchTimeout
@@ -63,6 +144,10 @@ type InboxMsg struct {
 // asynchronously.
 type TUIClient struct {
 	factory *connection.ClientFactory
+
+	// watchMu protects watchCancel.
+	watchMu     sync.Mutex
+	watchCancel context.CancelFunc
 }
 
 // NewTUIClient creates a TUIClient from the given ClientFactory.
@@ -214,5 +299,330 @@ func (tc *TUIClient) FetchInbox(projectID, agentID string) tea.Cmd {
 			return InboxMsg{Err: err}
 		}
 		return InboxMsg{Messages: list.Items}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Agent CRUD
+// ---------------------------------------------------------------------------
+
+// StartAgent returns a tea.Cmd that starts an agent by calling
+// POST /projects/{projectID}/agents/{agentID}/start with the given prompt.
+func (tc *TUIClient) StartAgent(projectID, agentID, prompt string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject(projectID)
+		if err != nil {
+			return StartAgentMsg{Err: err}
+		}
+
+		resp, err := client.Agents().Start(ctx, projectID, agentID, prompt)
+		if err != nil {
+			return StartAgentMsg{Err: err}
+		}
+		return StartAgentMsg{Response: resp}
+	}
+}
+
+// StopAgent returns a tea.Cmd that stops an agent's current session.
+// The SDK has no AgentAPI.Stop method. Stopping an agent is done by stopping
+// its current session via SessionAPI.Stop. The caller must provide the
+// session ID (from agent.CurrentSessionID).
+func (tc *TUIClient) StopAgent(projectID, sessionID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject(projectID)
+		if err != nil {
+			return StopAgentMsg{Err: err}
+		}
+
+		session, err := client.Sessions().Stop(ctx, sessionID)
+		if err != nil {
+			return StopAgentMsg{Err: err}
+		}
+		return StopAgentMsg{Session: session}
+	}
+}
+
+// CreateAgent returns a tea.Cmd that creates a new agent in the given project.
+func (tc *TUIClient) CreateAgent(projectID, name, prompt string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject(projectID)
+		if err != nil {
+			return CreateAgentMsg{Err: err}
+		}
+
+		agent := &sdktypes.Agent{
+			Name:      name,
+			ProjectID: projectID,
+			Prompt:    prompt,
+		}
+
+		result, err := client.Agents().CreateInProject(ctx, projectID, agent)
+		if err != nil {
+			return CreateAgentMsg{Err: err}
+		}
+		return CreateAgentMsg{Agent: result}
+	}
+}
+
+// UpdateAgent returns a tea.Cmd that patches an agent with the given fields.
+func (tc *TUIClient) UpdateAgent(projectID, agentID string, patch map[string]any) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject(projectID)
+		if err != nil {
+			return UpdateAgentMsg{Err: err}
+		}
+
+		result, err := client.Agents().UpdateInProject(ctx, projectID, agentID, patch)
+		if err != nil {
+			return UpdateAgentMsg{Err: err}
+		}
+		return UpdateAgentMsg{Agent: result}
+	}
+}
+
+// DeleteAgent returns a tea.Cmd that deletes an agent from the given project.
+func (tc *TUIClient) DeleteAgent(projectID, agentID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject(projectID)
+		if err != nil {
+			return DeleteAgentMsg{Err: err}
+		}
+
+		err = client.Agents().DeleteInProject(ctx, projectID, agentID)
+		return DeleteAgentMsg{Err: err}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Project CRUD
+// ---------------------------------------------------------------------------
+
+// CreateProject returns a tea.Cmd that creates a new project.
+func (tc *TUIClient) CreateProject(name, description string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		// Projects are a global resource; any project-scoped client can
+		// create them. Use a minimal project name for the SDK constructor.
+		client, err := tc.factory.ForProject("_")
+		if err != nil {
+			return CreateProjectMsg{Err: err}
+		}
+
+		proj := &sdktypes.Project{
+			Name:        name,
+			Description: description,
+		}
+
+		result, err := client.Projects().Create(ctx, proj)
+		if err != nil {
+			return CreateProjectMsg{Err: err}
+		}
+		return CreateProjectMsg{Project: result}
+	}
+}
+
+// DeleteProject returns a tea.Cmd that deletes a project by ID.
+func (tc *TUIClient) DeleteProject(projectID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject("_")
+		if err != nil {
+			return DeleteProjectMsg{Err: err}
+		}
+
+		err = client.Projects().Delete(ctx, projectID)
+		return DeleteProjectMsg{Err: err}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Session operations
+// ---------------------------------------------------------------------------
+
+// DeleteSession returns a tea.Cmd that deletes a session by ID.
+func (tc *TUIClient) DeleteSession(projectID, sessionID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject(projectID)
+		if err != nil {
+			return DeleteSessionMsg{Err: err}
+		}
+
+		err = client.Sessions().Delete(ctx, sessionID)
+		return DeleteSessionMsg{Err: err}
+	}
+}
+
+// SendSessionMessage returns a tea.Cmd that sends a user message to a
+// session. This supports the "Send-While-Streaming" pattern: the call is
+// non-blocking and the message appears in the SSE stream when the server
+// echoes it back.
+func (tc *TUIClient) SendSessionMessage(projectID, sessionID, body string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject(projectID)
+		if err != nil {
+			return SendMessageMsg{Err: err}
+		}
+
+		msg, err := client.Sessions().PushMessage(ctx, sessionID, body)
+		if err != nil {
+			return SendMessageMsg{Err: err}
+		}
+		return SendMessageMsg{Message: msg}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Inbox operations
+// ---------------------------------------------------------------------------
+
+// SendInboxMessage returns a tea.Cmd that sends an inbox message to an agent.
+func (tc *TUIClient) SendInboxMessage(projectID, agentID, body string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject(projectID)
+		if err != nil {
+			return SendInboxMsg{Err: err}
+		}
+
+		msg := &sdktypes.InboxMessage{
+			AgentID: agentID,
+			Body:    body,
+		}
+
+		result, err := client.InboxMessages().Send(ctx, projectID, agentID, msg)
+		if err != nil {
+			return SendInboxMsg{Err: err}
+		}
+		return SendInboxMsg{Message: result}
+	}
+}
+
+// MarkInboxRead returns a tea.Cmd that marks an inbox message as read.
+func (tc *TUIClient) MarkInboxRead(projectID, agentID, msgID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject(projectID)
+		if err != nil {
+			return MarkInboxReadMsg{Err: err}
+		}
+
+		err = client.InboxMessages().MarkRead(ctx, projectID, agentID, msgID)
+		return MarkInboxReadMsg{Err: err}
+	}
+}
+
+// DeleteInboxMessage returns a tea.Cmd that deletes an inbox message.
+func (tc *TUIClient) DeleteInboxMessage(projectID, agentID, msgID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject(projectID)
+		if err != nil {
+			return DeleteInboxMsg{Err: err}
+		}
+
+		err = client.InboxMessages().DeleteMessage(ctx, projectID, agentID, msgID)
+		return DeleteInboxMsg{Err: err}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SSE streaming
+// ---------------------------------------------------------------------------
+
+// WatchSessionMessages returns a tea.Cmd that starts an SSE stream for
+// session messages. Messages are delivered to the Bubbletea program via
+// program.Send(SessionMessageEvent{...}).
+//
+// The SSE goroutine:
+//   - Connects to GET /sessions/{id}/messages via the SDK's WatchMessages.
+//   - Forwards each message as a SessionMessageEvent to the program.
+//   - Handles reconnection with exponential backoff (1s, 2s, 4s, max 30s)
+//     internally via the SDK's WatchMessages implementation.
+//   - Is cancellable via StopWatching().
+//
+// Only one watch can be active at a time. Calling WatchSessionMessages while
+// a previous watch is running cancels the old one first.
+func (tc *TUIClient) WatchSessionMessages(projectID, sessionID string, afterSeq int, program *tea.Program) tea.Cmd {
+	return func() tea.Msg {
+		// Cancel any previously active watch.
+		tc.StopWatching()
+
+		ctx, cancel := context.WithCancel(context.Background())
+
+		tc.watchMu.Lock()
+		tc.watchCancel = cancel
+		tc.watchMu.Unlock()
+
+		client, err := tc.factory.ForProject(projectID)
+		if err != nil {
+			cancel()
+			program.Send(SessionMessageEvent{Err: err})
+			return nil
+		}
+
+		// The SDK's WatchMessages handles SSE connection, parsing, and
+		// reconnection with exponential backoff (1s, 2s, 4s, max 30s).
+		// It returns a channel of *SessionMessage and a stop function.
+		msgs, _, sseErr := client.Sessions().WatchMessages(ctx, sessionID, afterSeq)
+		if sseErr != nil {
+			cancel()
+			program.Send(SessionMessageEvent{Err: sseErr})
+			return nil
+		}
+
+		// Forward messages from the SDK channel to the Bubbletea program.
+		// This goroutine exits when the channel closes (on context
+		// cancellation or stream end).
+		go func() {
+			defer cancel()
+			for msg := range msgs {
+				program.Send(SessionMessageEvent{Message: msg})
+			}
+		}()
+
+		return nil
+	}
+}
+
+// StopWatching cancels any active SSE watch goroutine started by
+// WatchSessionMessages.
+func (tc *TUIClient) StopWatching() {
+	tc.watchMu.Lock()
+	defer tc.watchMu.Unlock()
+
+	if tc.watchCancel != nil {
+		tc.watchCancel()
+		tc.watchCancel = nil
 	}
 }
