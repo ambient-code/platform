@@ -1,0 +1,676 @@
+# Ambient TUI Spec
+
+**Date:** 2026-04-24
+**Status:** Draft
+**Component:** `components/ambient-cli/cmd/acpctl/ambient/tui/`
+**Depends on:** `ambient-model.spec.md` (data model, API surface, RBAC)
+
+---
+
+## Overview
+
+The Ambient TUI is a full-screen terminal interface for operating the Ambient platform. It evolves the current Bubbletea-based dashboard into a k9s-inspired resource browser backed by the Ambient API (REST/gRPC), not the Kubernetes API.
+
+**Design intent:** k9s's interaction model — table-first resource browsing, command mode, filtering, drill-down, contextual hotkeys — applied to the Ambient data model. Not a k9s fork. Not a generic K8s browser. A purpose-built operator console for Ambient resources.
+
+**Data source:** Ambient API Server exclusively. No `kubectl` exec, no direct K8s API calls. The TUI is a pure API client — if the API Server doesn't expose it, the TUI doesn't show it.
+
+---
+
+## Principles
+
+| Principle | Rationale |
+|-----------|-----------|
+| API-only data path | CRDs are going away. The TUI must work against the Ambient API Server, not K8s. This also means the TUI works identically against local, staging, and production — no kubeconfig dependency. |
+| k9s keyboard vocabulary | Users already know `:` for command mode, `/` for filter, `d`/`e`/`l`/`y` for actions, `Esc` to back out. Don't invent new muscle memory. |
+| Resource-centric navigation | Every screen is a resource list or resource detail. The primary axis is: pick a resource kind → browse instances → drill into one. Same as k9s. |
+| Live by default | Tables auto-refresh (5s polling). Session messages stream in real time via SSE. No manual refresh button. |
+| Session interaction is first-class | k9s shows pods. Ambient's TUI shows sessions — including live message streaming, sending messages to agents, and watching agent output. This is the differentiator. |
+| Respect RBAC | The TUI shows only what the authenticated user can see. API 403s are rendered inline, not as crashes. |
+| Offline-safe auth | The TUI reuses `acpctl login` credentials from `~/.config/ambient/config.json`. No separate auth flow. |
+| Multi-context | Operators work across local, staging, and production. The TUI saves every server the user has logged into as a named context and supports instant switching — same as k9s with kubeconfig clusters. |
+| Sanitize all external content | Agent-produced output is rendered in the terminal. All content from the API is stripped of ANSI escape sequences, terminal control characters, and framework-specific tags before display. |
+
+---
+
+## Architecture
+
+### Framework
+
+**Bubbletea + bubbles + lipgloss** (Charmbracelet stack — same as today).
+
+The existing TUI's problem is not Bubbletea. It is that tables are hand-rendered as strings instead of using `bubbles/table`, and that data fetching shells out to `kubectl` instead of using the SDK. The framework stays. The internals are rewritten.
+
+Rationale:
+- `bubbles/table` provides column sorting, selection, scrolling, and keyboard navigation — the features the TUI currently lacks.
+- `bubbles/textinput` provides command bar and compose input with cursor management.
+- Bubbletea's Elm architecture (Model/Update/View) is better suited for the TUI's state-heavy navigation (command mode, filter mode, compose mode, detail mode, navigation stack) than tview's widget-callback model.
+- `teatest` provides programmatic test harness (send keystrokes, assert on output) — tview has no equivalent.
+- The dependency already exists in `go.mod`. No new terminal abstraction layer.
+- lipgloss styling carries forward directly from `view.go`.
+
+### Migration Strategy
+
+The rewrite is incremental, not blank-slate:
+
+1. **Extract reusable logic** from existing code into framework-agnostic packages before changing any rendering. Specifically:
+   - Session message streaming (`restartSessionPoll` pattern from `model.go`)
+   - Multi-project SDK fan-out (`fetchAll` from `fetch.go`)
+   - AG-UI event parsing (`tileDisplayPayload`, `extractKVField` from `dashboard.go`)
+   - Color palette (`view.go` lines 12-29)
+2. **Replace rendering** — swap hand-rendered string tables with `bubbles/table`, swap manual input handling with `bubbles/textinput`.
+3. **Remove kubectl/oc code** — delete all `exec.Command("kubectl", ...)` paths, pod/namespace views, port-forward management.
+
+### Package Layout
+
+```
+cmd/acpctl/ambient/
+├── cmd.go                    # entry point — unchanged command registration
+└── tui/
+    ├── app.go                # top-level bubbletea Program, global keybinds, layout
+    ├── config.go             # read acpctl config (multi-context: server, token, project per context)
+    ├── client.go             # Ambient API client (extracted from fetch.go, wraps Go SDK)
+    ├── events.go             # AG-UI event parsing (extracted from dashboard.go)
+    ├── sanitize.go           # strip ANSI escapes, control chars from agent output
+    ├── model.go              # root Model — navigation stack, view dispatch
+    ├── command.go            # command-mode parser, tab completion, dispatch
+    ├── filter.go             # filter-mode parser (regex, inverse, label)
+    ├── views/
+    │   ├── table.go          # base resource table (wraps bubbles/table, adds sorting + hotkeys)
+    │   ├── detail.go         # base detail view (key-value + YAML dump)
+    │   ├── projects.go       # project list + detail
+    │   ├── agents.go         # agent list + detail
+    │   ├── sessions.go       # session list + detail
+    │   ├── messages.go       # live session message stream + compose
+    │   └── inbox.go          # agent inbox list + compose
+    └── tui_test.go           # unit + teatest integration tests
+```
+
+### Data Flow
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│  Context: local [RW]                    <?> Help         _    __  __     │
+│  Server:  localhost:8000                <:> Command      /_\  |  \/  |   │
+│  User:    jsell                         <r> Rename      / _ \ | |\/| |   │
+│  Project: ambient-platform                             /_/ \_\|_|  |_|   │
+│  ⟳ 3s                                                                   │
+├──────────────────────────────────────────────────────────────────────────┤
+│  (command bar appears here on `:` or `/`, hidden by default)             │
+├───────────────────────── agents(ambient-platform)[12] ───────────────────┤
+│                                                                          │
+│              Resource Table / Detail View / Message Stream               │
+│              (fills remaining vertical space)                            │
+│                                                                          │
+├──────────────────────────────────────────────────────────────────────────┤
+│  <projects>  <agents>  <sessions>                                        │
+│                              Viewing agents in project ambient-platform  │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+Layout follows k9s conventions:
+1. **Header block** (top) — context, server, user, project on the left. ASCII branding on the right. Key hints alongside.
+2. **Command/filter bar** (below header) — hidden by default. Appears on `:` or `/`, disappears on `Esc` or command execution.
+3. **Resource view** (fills remaining space) — table title bar shows resource kind, scope, and count.
+4. **Breadcrumb trail** (bottom) — shows navigation path as `<kind>` segments. Current view is the rightmost.
+5. **Info line** (very bottom) — contextual description of what's being shown.
+
+```
+         │                        ▲
+         │  poll / SSE stream     │  tea.Msg
+         ▼                        │
+   ┌──────────┐            ┌──────────┐
+   │ API      │◄──REST────►│ client   │
+   │ Server   │◄──gRPC────►│ .go      │
+   └──────────┘            └──────────┘
+```
+
+All data fetching runs in `tea.Cmd` goroutines. The Bubbletea `Update` loop is never blocked by network calls. API responses arrive as `tea.Msg` values. Errors are displayed inline in the table (red status row) or as a flash message on the status line.
+
+Polling is skip-on-inflight: if the previous poll has not returned, the next tick is skipped. This prevents request stacking under slow API responses.
+
+---
+
+## Navigation Model
+
+### v1 Visual Hierarchy
+
+```
+:projects (root)
+└── Enter on project
+    └── :agents (project-scoped)
+        ├── Enter on agent
+        │   └── :sessions (agent-scoped)
+        │       └── Enter on session
+        │           └── :messages (live stream + compose)
+        └── i on agent
+            └── :inbox (agent-scoped)
+                └── m to compose
+```
+
+Five views. `:sessions` is also accessible globally (all sessions across all projects), same as k9s's `:pods` showing all pods.
+
+### Screen Stack
+
+Navigation is a stack. `Enter` pushes a child view. `Esc` pops back to the parent. The breadcrumb in the header shows the stack:
+
+```
+Projects > ambient-platform > Agents > be > Sessions > 01HABC > Messages
+Projects > ambient-platform > Agents > be > Inbox
+```
+
+### Command Mode
+
+`:` opens the command bar (bottom of screen). Tab-completion provides inline suggestions for resource kinds and project names.
+
+| Command | Aliases | Action |
+|---------|---------|--------|
+| `:projects` | `:proj` | Switch to project list (clears stack) |
+| `:agents` | `:ag` | Switch to agent list (current project) |
+| `:sessions` | `:se` | Switch to session list (global or scoped) |
+| `:inbox` | `:ib` | Switch to inbox (requires agent context) |
+| `:messages` | `:msg` | Switch to message stream (requires session context) |
+| `:aliases` | | List all available commands and aliases |
+| `:context` | `:ctx` | List all saved contexts |
+| `:context <name>` | `:ctx <name>` | Switch to a saved context (server + token + project) |
+| `:project <name>` | `:proj <name>` | Switch project within current context |
+| `:q` / `:quit` | | Exit |
+
+### Filter Mode
+
+`/` opens the filter bar. Supports:
+
+| Syntax | Behavior | Example |
+|--------|----------|---------|
+| `/term` | Regex match across all visible columns | `/be-agent` |
+| `/!term` | Inverse regex — hide matching rows | `/!completed` |
+| `/-l key=val` | Server-side label filter (`@>` containment) | `/-l env=prod` |
+
+`Esc` clears the active filter. Filter syntax follows k9s conventions.
+
+---
+
+## Resource Views
+
+### Project List
+
+| Column | Source | Notes |
+|--------|--------|-------|
+| NAME | `project.name` | |
+| DESCRIPTION | `project.description` | Truncated to fit column width |
+| STATUS | `project.status` | |
+| AGE | computed from `project.created_at` | Relative (3d, 2h, 5m) |
+
+AGENTS and SESSIONS counts are omitted from v1 — they require N+1 API fan-out queries. A future API aggregation endpoint can enable them.
+
+**Hotkeys:**
+
+| Key | Action | k9s equivalent |
+|-----|--------|----------------|
+| `Enter` | Drill into project → show agents | Enter |
+| `d` | Describe — show project detail (prompt, labels, annotations) | d (describe) |
+| `n` | New project (inline name + description prompt) | — |
+| `Ctrl-D` | Delete project (confirmation modal) | Ctrl-D |
+
+### Agent List
+
+Scoped to current project context.
+
+| Column | Source | Notes |
+|--------|--------|-------|
+| NAME | `agent.name` | |
+| PROMPT | `agent.prompt` | Truncated to 60 chars |
+| SESSION | `agent.current_session_id` | `<none>` if null. Short ID form. |
+| PHASE | current session phase | Colored. Requires secondary fetch — see Known N+1 Queries. |
+| AGE | computed from `agent.created_at` | Relative |
+
+INBOX unread count is omitted from the table — no count-only API. The inbox view (`i`) shows the full list.
+
+**Hotkeys:**
+
+| Key | Action | k9s equivalent |
+|-----|--------|----------------|
+| `Enter` | Drill into agent → show sessions for this agent | Enter |
+| `d` | Describe — show agent detail (full prompt, labels, annotations, current session) | d |
+| `e` | Edit agent prompt (inline text input, PATCHes on save) | e (edit) |
+| `s` | Start agent — opens prompt input, calls `POST /start` | — (Ambient-specific, k9s uses `s` for shell) |
+| `x` | Stop agent — calls session stop with confirmation | — |
+| `i` | Show inbox for this agent | — |
+| `m` | Send inbox message (opens compose input) | — |
+| `n` | New agent (inline name + prompt) | — |
+| `l` | Logs — if session is active, open live message stream | l (logs) |
+| `Ctrl-D` | Delete agent (confirmation modal) | Ctrl-D |
+| `y` | YAML — dump agent as YAML to screen | y |
+
+### Session List
+
+Accessible globally (`:sessions` — all sessions across all projects) or scoped when drilled in from an agent view.
+
+| Column | Source | Notes |
+|--------|--------|-------|
+| ID | `session.id` | Short form (first 12 chars) |
+| AGENT | agent name | Requires secondary fetch — see Known N+1 Queries. |
+| PROJECT | project name | |
+| PHASE | `session.phase` | Colored per Phase Colors table |
+| TRIGGERED BY | `session.triggered_by_user_id` | |
+| STARTED | `session.start_time` | Relative |
+| DURATION | `completion_time - start_time` | Running timer if still active |
+
+**Hotkeys:**
+
+| Key | Action | k9s equivalent |
+|-----|--------|----------------|
+| `Enter` | Drill into session → show live message stream | Enter |
+| `d` | Describe — show session detail (full metadata, prompt, conditions) | d |
+| `l` | Live message stream (same as Enter) | l |
+| `m` | Send message to session (`POST /sessions/{id}/messages`) | — |
+| `y` | YAML — dump session as YAML to screen | y |
+| `Ctrl-D` | Delete/cancel session (confirmation modal) | Ctrl-D |
+
+### Message Stream View
+
+
+#### Data Source
+
+The TUI connects to **`GET /sessions/{id}/messages`** (SSE). This single endpoint handles both replay and live delivery server-side: it loads all messages after a cursor via `AllBySessionIDAfterSeq`, subscribes to the pub/sub channel, replays the historical batch, then switches to live delivery — deduplicating by `msg.Seq`. The TUI does not need to coordinate two endpoints.
+
+The `/events` endpoint (raw runner SSE) is not used. `/messages` is the durable, replay-safe stream.
+
+#### Display Modes
+
+**Conversation mode** (default): Messages rendered as a chat transcript.
+
+```
+ ┌─ Session 01HABC... ─ Phase: running ─ Agent: be ─────────────────┐
+ │                                                                    │
+ │  [user]       Begin. Start with the gRPC handler.                  │
+ │  [assistant]  I'll start by implementing the WatchSessionMessages  │
+ │               handler. Let me read the existing code...            │
+ │  [tool_use]   Read plugins/sessions/handler.go (truncated)         │
+ │  [tool_result] ✓ 238 lines                                        │
+ │  [assistant]  I can see the handler structure. I'll add the watch  │
+ │               endpoint following the existing pattern...           │
+ │                                                                    │
+ │  ▌ streaming...                                                    │
+ ├────────────────────────────────────────────────────────────────────┤
+ │  > send message: _                                                 │
+ └────────────────────────────────────────────────────────────────────┘
+```
+
+**Raw mode** (`r` to toggle): Shows raw AG-UI events as JSON lines — useful for debugging.
+
+#### Event Type Rendering
+
+| Event type | Rendering |
+|------------|-----------|
+| `user` | Full text, white |
+| `assistant` | Full text, green. For streaming: accumulate `TEXT_MESSAGE_CONTENT` deltas into a growing line, re-render on each delta. Show `▌` cursor at end until `TEXT_MESSAGE_END`. |
+| `tool_use` | One-line summary: tool name + first arg, truncated to terminal width. Dim. |
+| `tool_result` | One-line summary: `✓` or `✗` + size. Dim. Expandable via `Enter` on the line (future). |
+| `system` | Full text, yellow |
+| `error` | Full text, red |
+
+#### Message Buffer
+
+The message stream maintains a ring buffer (default: 2000 messages). When full, oldest messages are evicted. The user can scroll back within the buffer. Messages older than the buffer are not recoverable without reconnecting with a lower `after_seq` — this is a known limitation.
+
+#### Send-While-Streaming
+
+Sending a message (`m` / `Enter`) while the agent is mid-response is permitted. The `POST /sessions/{id}/messages` call is non-blocking. The human turn appears in the stream when the server echoes it back via SSE, maintaining a single source of truth for message ordering. The compose input does not block or queue — the user types, hits Enter, and the message is sent immediately.
+
+**Hotkeys:**
+
+| Key | Action |
+|-----|--------|
+| `Esc` | Back to session list |
+| `r` | Toggle raw/conversation mode |
+| `m` / `Enter` | Focus message input — type and send a human turn |
+| `s` | Toggle autoscroll (on by default — view follows new messages; scrolling up disables it, `s` or `G` re-enables) |
+| `G` | Jump to bottom + re-enable autoscroll |
+| `g` | Jump to top (oldest in buffer) |
+| `j`/`k` or `↑`/`↓` | Scroll (disables autoscroll) |
+| `/` | Search within messages (regex) |
+| `c` | Copy selected message text to clipboard (via OSC 52) |
+
+### Inbox View
+
+Scoped to an agent. Accessible via `i` from the agent list or `:inbox` in command mode (requires agent context from navigation stack).
+
+| Column | Source | Notes |
+|--------|--------|-------|
+| ID | `inbox.id` | Short form |
+| FROM | `inbox.from_name` | `(human)` if null |
+| BODY | `inbox.body` | Truncated to fit column width |
+| READ | `inbox.read` | `✓` / `—` |
+| AGE | computed from `inbox.created_at` | Relative |
+
+**Hotkeys:**
+
+| Key | Action |
+|-----|--------|
+| `Enter` | View full message body in detail pane |
+| `m` | Compose new inbox message (opens text input) |
+| `r` | Mark selected message as read |
+| `Ctrl-D` | Delete message (confirmation) |
+| `Esc` | Back to agent list |
+
+---
+
+## Global Keybindings
+
+These work on every screen:
+
+| Key | Action | k9s equivalent |
+|-----|--------|----------------|
+| `:` | Command mode | `:` |
+| `/` | Filter mode | `/` |
+| `?` | Help overlay — show keybindings for current view | `?` |
+| `Esc` | Pop navigation stack / clear filter / close modal | `Esc` |
+| `q` | Quit (from root view) or pop (from child view) | `q` |
+| `Ctrl-C` | Quit immediately | `Ctrl-C` |
+| `c` | Copy selected row's ID to clipboard (OSC 52) | — |
+| Scroll wheel | Scroll up/down in tables and message stream | Scroll wheel |
+| `Shift-N` | Sort by name column | `Shift-N` |
+| `Shift-A` | Sort by age column | `Shift-A` |
+
+Column sorting uses k9s's Shift-key convention. Additional sort keys are defined per view where meaningful.
+
+---
+
+## Screen Layout
+
+Follows k9s layout conventions: header block at top, command bar on demand, resource table fills the middle, status hints at bottom.
+
+### Header Block (top, multi-line)
+
+```
+ Context: local [RW]                     <?> Help
+ Server:  localhost:8000                 <:> Command
+ User:    jsell                          <r> Rename
+ Project: ambient-platform
+ ⟳ 3s
+```
+
+Left side — context metadata (k9s style, stacked key-value):
+- **Context** name + read/write indicator
+- **Server** URL
+- **User** (from `whoami`)
+- **Project** (current project context)
+- **Refresh indicator** — seconds since last successful fetch. Shows `(stale)` if >15s.
+
+Right side — ASCII art branding + top-level key hints.
+
+### Command/Filter Bar
+
+Hidden by default. Appears when the user presses `:` (command mode) or `/` (filter mode). Renders between the header and the resource table:
+
+```
+┌───────────────────────────────────────────────────────────────────┐
+│ :sessions                                                         │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+Disappears on `Esc` or after command execution, returning the space to the resource table.
+
+### Resource Table Title
+
+The table has a title bar showing resource kind, scope, and count — matching k9s's `contexts(all)[12]` convention:
+
+```
+┌──────────────────────── agents(ambient-platform)[12] ─────────────┐
+│ NAME↑           PROMPT                    SESSION    PHASE    AGE  │
+```
+
+Scope shown in parentheses:
+- `sessions(all)[47]` — global view
+- `sessions(be)[3]` — scoped to agent `be`
+- `inbox(be)[5]` — scoped to agent `be`
+
+### Breadcrumb Trail (bottom)
+
+```
+ <projects>  <agents>  <sessions>
+```
+
+Shows the navigation stack as `<kind>` segments, matching k9s's bottom breadcrumb. Each segment represents a level in the drill-down. The current (rightmost) view is the active one. Clicking/selecting a parent segment is not supported (keyboard-only — use `Esc` to pop back).
+
+### Info Line (very bottom)
+
+```
+                        Viewing agents in project ambient-platform
+```
+
+Ephemeral toast — appears for 5 seconds on navigation changes, then fades (line clears). Triggered by:
+- Entering a new view (drill-down or command switch)
+- Switching context (`:ctx`)
+- Applying or clearing a filter
+- Errors (API failures, permission denied) — these persist until the next action rather than auto-clearing
+
+Examples:
+- `Viewing agents in project ambient-platform`
+- `Streaming messages for session 01HABC...`
+- `Switched to context staging`
+- `✗ disconnected — retrying in 5s` (persists)
+
+---
+
+## Refresh Strategy
+
+| Resource | Method | Interval |
+|----------|--------|----------|
+| Projects, Agents, Inbox | REST `GET` polling | 5s (hardcoded) |
+| Sessions | gRPC `WatchSessions` stream; fallback to REST polling | Real-time / 5s |
+| Session Messages | SSE stream (`GET /sessions/{id}/messages`) | Real-time |
+
+Polling is **skip-on-inflight**: if the previous request has not completed, the next tick is skipped. This prevents request stacking under degraded API conditions.
+
+When a view is not visible (user has drilled into a child), its polling pauses. Polling resumes when the user navigates back.
+
+---
+
+## Error Handling
+
+| Scenario | Behavior |
+|----------|----------|
+| **API unreachable** | Status line: `✗ disconnected — retrying in 5s`. Tables show stale data. Header shows `(stale Ns)` with seconds since last successful fetch. No retry limit — the TUI keeps trying indefinitely with 5s backoff. |
+| **401 Unauthorized** | Attempt to re-read token from `~/.config/ambient/config.json` (another session may have refreshed it). If still 401, status line: `✗ session expired — run 'acpctl login' in another terminal`. Stale data preserved. No modal, no forced exit. |
+| **403 Forbidden (resource)** | Inline in table: row shows `ACCESS DENIED` for the specific resource. |
+| **403 Forbidden (kind)** | Table-level message: `Insufficient permissions to list <kind>`. Distinct from empty results. |
+| **404 Not Found** | Flash message on status line. Resource removed from table on next refresh. |
+| **429 Rate Limited** | Back off to `Retry-After` header value (or 30s default). Status line: `⏳ rate limited — backing off`. |
+| **5xx Server Error** | Status line shows error summary. Stale data preserved. Retry on next poll cycle. |
+| **SSE stream disconnect** | Auto-reconnect with exponential backoff (1s, 2s, 4s, max 30s). Reconnect status shown inline in message stream: `⟳ reconnecting (attempt 3)...`. On reconnect, replay from last received `seq` via `after_seq` parameter. |
+
+---
+
+## Security
+
+| Concern | Mitigation |
+|---------|------------|
+| **Terminal escape injection** | All agent-produced content (session messages, agent prompts, inbox bodies) is sanitized before rendering. Strip ANSI escape sequences (`\x1b[...`), OSC sequences, C0/C1 control characters, and lipgloss/tview region tags. Implemented in `sanitize.go`. |
+| **TLS enforcement** | The TUI refuses plaintext HTTP connections to non-localhost servers by default. `--insecure` flag required to override. Consistent with `acpctl` CLI behavior. |
+| **Tokens on disk** | Reuses `acpctl` config at `~/.config/ambient/config.json` with 0600 file permissions (set by `acpctl login`). Contains tokens for all saved contexts. No encryption at rest — file permissions are the defense. Tokens are never logged; `Config.String()` / `Config.GoString()` redact all token fields. |
+| **Token in crash output** | `Config` struct implements `fmt.Stringer` and `fmt.GoStringer` to redact `AccessToken`. Panic recovery in `app.go` catches panics and exits cleanly without dumping the model. |
+| **Inline editing** | Prompt editing uses inline `bubbles/textinput` (no temp files, no `$EDITOR` subprocess). Content stays in memory. |
+| **Credential tokens** | The TUI never calls the credential token endpoint. Credential views show metadata only. |
+
+---
+
+## Configuration
+
+The TUI reads from the same config file as `acpctl`:
+
+```json
+// ~/.config/ambient/config.json
+{
+  "current_context": "local",
+  "contexts": {
+    "local": {
+      "server": "http://localhost:8000",
+      "access_token": "eyJ...",
+      "project": "ambient-platform"
+    },
+    "staging": {
+      "server": "https://api.staging.ambient.io",
+      "access_token": "eyJ...",
+      "project": "ambient-platform"
+    },
+    "prod": {
+      "server": "https://api.ambient.io",
+      "access_token": "eyJ...",
+      "project": "fleet-prod"
+    }
+  }
+}
+```
+
+### Context Management
+
+Contexts are auto-created and auto-named by `acpctl login`. The context name is derived from the server hostname:
+
+| Server URL | Auto-generated context name |
+|------------|---------------------------|
+| `http://localhost:8000` | `local` |
+| `https://api.staging.ambient.io` | `staging.ambient.io` |
+| `https://api.ambient.io` | `api.ambient.io` |
+
+Rules:
+- `localhost` (any port) → `local`
+- All other servers → hostname portion of the URL
+- If a context with the same name exists, `acpctl login` updates it (token, project) rather than creating a duplicate.
+- `acpctl login` sets `current_context` to the newly logged-in context.
+- `acpctl logout` removes the current context entry. If other contexts remain, `current_context` switches to the first remaining one.
+
+In the TUI:
+- `:ctx` with no argument lists all contexts in a table (name, server, project, active indicator).
+- `:ctx <name>` switches immediately — the TUI reconnects to the new server, re-fetches all data, and updates the header. Navigation stack is reset to `:projects`.
+- Tab-completion on `:ctx` suggests saved context names.
+
+No other TUI-specific config in v1. Refresh interval is hardcoded at 5s. Message buffer is hardcoded at 2000.
+
+---
+
+## Phase Colors
+
+Carried forward from the existing TUI (`view.go`). These are ANSI 256-color indices, consistent across lipgloss and any terminal that supports 256-color mode.
+
+| Phase | Color | ANSI 256 Index | Lipgloss |
+|-------|-------|----------------|----------|
+| `pending` | Yellow | 33 | `Color("33")` |
+| `running` | Green | 28 | `Color("28")` |
+| `succeeded` / `completed` | Dim grey | 240 | `Color("240")` |
+| `failed` | Red | 31 | `Color("31")` |
+| `cancelled` | Dim grey | 240 | `Color("240")` |
+
+Full palette (preserved from existing code):
+
+| Name | ANSI 256 | Usage |
+|------|----------|-------|
+| Orange | 214 | Branding, navigation highlights, selected items |
+| Cyan | 36 | Secondary accent |
+| Green | 28 | Running/success phase |
+| Red | 31 | Failed/error phase, delete confirmations |
+| Yellow | 33 | Pending phase, in-progress indicators |
+| Dim | 240 | Inactive items, separators, hints |
+| White | 255 | Primary text |
+| Blue | 69 | Command mode, links |
+
+---
+
+## Known API Gaps
+
+These are gaps where the TUI spec requires data the API does not provide efficiently. They are accepted tradeoffs for v1, not blockers.
+
+| Gap | Impact | Workaround | Permanent Fix |
+|-----|--------|------------|---------------|
+| Agent phase (current session) | Agent table PHASE column requires `GET /sessions/{id}` per agent with `current_session_id` | Fan-out fetch; cached for 5s per poll cycle | Denormalize `phase` onto Agent response |
+| Agent name on session | Session table AGENT column requires agent name resolution | Cache agent ID→name map per project; refresh with agent list | Denormalize `agent_name` onto Session response |
+| Inbox unread count | No count-only endpoint | Omitted from agent table in v1; visible in inbox view | Add `unread_count` to Agent response or `?count_only=true` param |
+| Project agent/session counts | No aggregation endpoint | Omitted from project table in v1 | Add counts to Project list response |
+
+---
+
+## Content Handling
+
+| Content type | Strategy |
+|-------------|----------|
+| Long text (prompts, message bodies) | Wrap at terminal width. No horizontal scrolling. Detail views show full text with vertical scroll. |
+| Long single-line values (URLs, IDs) | Truncate with `…` in table columns. Full value shown in detail view and via `c` (copy). |
+| Wide tables (many columns) | Columns have priority. Low-priority columns are hidden when terminal is narrow. |
+| Tool use/result payloads | One-line summary in conversation mode. Full payload in raw mode or detail view. |
+
+---
+
+## What This Spec Does NOT Cover
+
+| Topic | Why | Revisit When |
+|-------|-----|-------------|
+| K8s resource browsing (pods, namespaces) | Not the TUI's job post-CRD-transition. Use k9s. | Never — not in scope. |
+| Credential view | Credential CRUD API is not yet implemented in the API server. | API lands. |
+| RBAC views (roles, rolebindings) | Low-frequency operation. `acpctl get roles` is sufficient. | User demand. |
+| ScheduledSession view | PR #1456 spec is proposed but not yet implemented. | ScheduledSession API lands — then add `:scheduledsessions` / `:ss` view. |
+| Diagnostic view for failed sessions | Requires API to surface container exit codes, OOM events, failure reasons — not just `phase=failed`. | API exposes failure diagnostics. |
+| Mouse click/drag | Keyboard-driven, consistent with k9s. | Never. |
+| Plugin/extension system | Premature. Resource kinds are still evolving. | Resource model stabilizes. |
+| Theme customization | One color palette (see Phase Colors). | User demand. |
+| `$EDITOR` integration | Inline editing via `bubbles/textinput` is simpler and avoids temp file security concerns. | User demand for multi-line editing. |
+
+---
+
+## Migration from Existing TUI
+
+### What Carries Forward (framework-agnostic logic)
+
+| Code | Source | Destination |
+|------|--------|-------------|
+| Session message streaming (goroutine lifecycle, reconnect-with-backoff, cancellation) | `model.go` `restartSessionPoll` | `client.go` |
+| Multi-project SDK fan-out (list projects, fan out per-project fetches, mutex, error aggregation) | `fetch.go` `fetchAll` | `client.go` |
+| AG-UI event parsing (payload extraction, event type classification) | `dashboard.go` `tileDisplayPayload`, `extractKVField`, `eventTypeStyle` | `events.go` |
+| Color palette (ANSI 256 indices + lipgloss styles) | `view.go` lines 12-29 | `view.go` (unchanged) |
+| Agent CRUD operations (edit-with-dirty-tracking, confirm-delete, SDK calls) | `model.go` agent edit/delete handlers | `views/agents.go` |
+| Session message compose flow (project-scoped client resolution, PushMessage) | `model.go` compose handlers | `views/messages.go` |
+
+### What Is Dropped
+
+| Code | Reason |
+|------|--------|
+| All `kubectl`/`oc` exec calls | API-only data path |
+| Pod and Namespace views | Use k9s |
+| Port-forward management | `acpctl` subcommands / Makefile |
+| Manual string-based table rendering (`col()`, `padTo()`) | Replaced by `bubbles/table` |
+| `execCommand` shell runner | Not needed |
+
+---
+
+## Implementation Priority
+
+Each wave produces a **shippable `acpctl ambient`** — the binary is usable at the end of every wave, not just scaffolding.
+
+| Wave | Scope | Deliverable |
+|------|-------|-------------|
+| **0** | Extract reusable logic from existing code into `client.go`, `events.go`, `sanitize.go`. Replace string tables with `bubbles/table`. Remove kubectl code. Multi-context config format (`contexts` map, `current_context`). Prove architecture with project table only. | Launches, shows projects in a real table. `acpctl login` auto-creates named context. Smoke-tests pass via `teatest`. |
+| **1** | Agent table + command mode (`:projects`, `:agents`, `:sessions`, `:aliases`, `:ctx`, `:project`, `:q`) with tab completion. `:ctx` lists/switches contexts. `/` filter (regex + inverse). Navigation stack (Enter/Esc push/pop). Breadcrumb. Column sorting (Shift-key). | Two-resource browser with full k9s navigation feel. Context switching works. |
+| **2a** | Session table (global + agent-scoped). Read-only message stream view via `/messages` SSE. Conversation + raw mode toggle. | Operators can watch agent work in real time. |
+| **2b** | Send message (`POST /sessions/{id}/messages`). Streaming partial response rendering (delta accumulation). SSE reconnect with `after_seq` replay. Copy-to-clipboard (`c`). | Full interactive session experience. |
+| **3** | Inbox view. Detail views (`d`) for all resources. Agent start (`s`) and stop (`x`). Agent inline edit (`e`). New project/agent (`n`). Delete (`Ctrl-D`). | Full CRUD + inbox. Feature-complete v1. |
+
+---
+
+## Test Strategy
+
+| Layer | What | How | Required per wave |
+|-------|------|-----|-------------------|
+| **Unit** | Command parser, filter parser, event type rendering, phase color mapping, breadcrumb builder, sanitize logic | Standard Go table-driven tests | All waves |
+| **Integration (happy path)** | API client → `httptest` server with fixture JSON → table populated correctly | `teatest`: send keystrokes, assert on rendered output containing expected rows | Wave 0+ |
+| **Integration (error paths)** | 401 re-read, 403 kind-level message, 429 backoff, SSE disconnect+reconnect | `httptest` returning error codes; `teatest` asserting status line messages | Wave 2a+ |
+| **Navigation** | Enter→drill→Esc→back, command mode `:sessions`→`:agents`, filter→clear | `teatest`: send key sequences, assert on breadcrumb and table content | Wave 1+ |
+| **Performance** | Table render time with 500 rows, SSE throughput with rapid deltas | Benchmark tests (`testing.B`) with fixture data | Wave 2a+ |
+| **Manual** | Full flow: launch → navigate → filter → drill → send message → back out | Checklist per wave, run against kind cluster | All waves |
+
+---
+
+## CLI Reference
+
+| Command | Description | Status |
+|---------|-------------|--------|
+| `acpctl ambient` | Launch interactive TUI | 🔄 rewrite (exists today, replacing internals) |
