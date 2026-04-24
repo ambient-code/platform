@@ -67,7 +67,7 @@ func (a *AgentAPI) StartInProject(ctx context.Context, projectID, agentID, promp
 	}
 	var result types.StartResponse
 	path := "/projects/" + url.PathEscape(projectID) + "/agents/" + url.PathEscape(agentID) + "/start"
-	if err := a.client.do(ctx, http.MethodPost, path, body, http.StatusOK, &result); err != nil {
+	if err := a.client.do(ctx, http.MethodPost, path, body, http.StatusCreated, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
