@@ -177,6 +177,8 @@ func (m *AppModel) viewResourceTable() string {
 		return m.contextTable.View()
 	case "messages":
 		return m.messageStream.View()
+	case "detail":
+		return m.detailView.View()
 	default:
 		return m.projectTable.View()
 	}

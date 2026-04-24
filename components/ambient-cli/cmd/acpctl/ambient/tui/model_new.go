@@ -10,6 +10,7 @@ import (
 
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/ambient/tui/views"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
+	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 )
 
 // pollInterval is the auto-refresh interval for resource tables.
@@ -91,6 +92,18 @@ type AppModel struct {
 	infoMessage string
 	infoExpiry  time.Time
 
+	// Detail view
+	detailView views.DetailView
+
+	// Cached resource data for CRUD lookups (maps name/ID -> full resource).
+	cachedProjects []sdktypes.Project
+	cachedAgents   []sdktypes.Agent
+	cachedSessions []sdktypes.Session
+	cachedInbox    []sdktypes.InboxMessage
+
+	// SSE program reference (set via SetProgram after tea.NewProgram).
+	program *tea.Program
+
 	// Errors
 	lastError string
 
@@ -143,6 +156,53 @@ func NewAppModel(factory *connection.ClientFactory) (*AppModel, error) {
 	}
 
 	return m, nil
+}
+
+// SetProgram stores a reference to the tea.Program so the model can pass it to
+// WatchSessionMessages for SSE delivery. Call this after tea.NewProgram returns.
+func (m *AppModel) SetProgram(p *tea.Program) {
+	m.program = p
+}
+
+// findAgentByName returns the cached Agent with the given name, or nil.
+func (m *AppModel) findAgentByName(name string) *sdktypes.Agent {
+	for i := range m.cachedAgents {
+		if m.cachedAgents[i].Name == name {
+			return &m.cachedAgents[i]
+		}
+	}
+	return nil
+}
+
+// findProjectByName returns the cached Project with the given name, or nil.
+func (m *AppModel) findProjectByName(name string) *sdktypes.Project {
+	for i := range m.cachedProjects {
+		if m.cachedProjects[i].Name == name {
+			return &m.cachedProjects[i]
+		}
+	}
+	return nil
+}
+
+// findSessionByShortID returns the cached Session whose ID starts with the given
+// short ID prefix, or nil.
+func (m *AppModel) findSessionByShortID(shortID string) *sdktypes.Session {
+	for i := range m.cachedSessions {
+		if m.cachedSessions[i].ID == shortID || (len(m.cachedSessions[i].ID) >= len(shortID) && m.cachedSessions[i].ID[:len(shortID)] == shortID) {
+			return &m.cachedSessions[i]
+		}
+	}
+	return nil
+}
+
+// findInboxByID returns the cached InboxMessage with the given ID, or nil.
+func (m *AppModel) findInboxByID(id string) *sdktypes.InboxMessage {
+	for i := range m.cachedInbox {
+		if m.cachedInbox[i].ID == id {
+			return &m.cachedInbox[i]
+		}
+	}
+	return nil
 }
 
 // Init implements tea.Model. It returns a batch of initial commands:
@@ -264,7 +324,7 @@ func (m *AppModel) fetchActiveView() tea.Cmd {
 }
 
 // activeTable returns a pointer to the currently active ResourceTable, or nil
-// for the message stream view.
+// for the message stream and detail views.
 func (m *AppModel) activeTable() *views.ResourceTable {
 	switch m.activeView {
 	case "projects":
@@ -313,10 +373,15 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.MouseMsg:
-		// Delegate scroll events to the active table or message stream.
+		// Delegate scroll events to the active table, message stream, or detail view.
 		if m.activeView == "messages" {
 			var cmd tea.Cmd
 			m.messageStream, cmd = m.messageStream.Update(msg)
+			return m, cmd
+		}
+		if m.activeView == "detail" {
+			var cmd tea.Cmd
+			m.detailView, cmd = m.detailView.Update(msg)
 			return m, cmd
 		}
 		if tbl := m.activeTable(); tbl != nil {
@@ -340,12 +405,130 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case views.MsgStreamBackMsg:
 		// User pressed Esc in the message stream — pop back.
+		m.client.StopWatching()
 		cmd := m.popView()
 		return m, tea.Batch(cmd, m.setInfo("Back to "+m.currentNav().Kind))
 
 	case views.MsgStreamSendMsg:
 		// User composed a message to send to a session.
-		return m, m.setInfo("Send message: not yet implemented")
+		if msg.Body == "" {
+			return m, nil
+		}
+		return m, tea.Batch(
+			m.client.SendSessionMessage(m.currentProject, m.currentSession, msg.Body),
+			m.setInfo("Sending message..."),
+		)
+
+	case views.DetailBackMsg:
+		// User pressed Esc/q in the detail view — pop back.
+		cmd := m.popView()
+		return m, tea.Batch(cmd, m.setInfo("Back to "+m.currentNav().Kind))
+
+	case StartAgentMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Start agent failed: " + msg.Err.Error())
+		}
+		sessionID := ""
+		if msg.Response != nil && msg.Response.Session != nil {
+			sessionID = msg.Response.Session.ID
+		}
+		info := "Agent started"
+		if sessionID != "" {
+			info += " (session " + sessionID + ")"
+		}
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo(info))
+
+	case StopAgentMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Stop agent failed: " + msg.Err.Error())
+		}
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Agent stopped"))
+
+	case CreateAgentMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Create agent failed: " + msg.Err.Error())
+		}
+		name := ""
+		if msg.Agent != nil {
+			name = msg.Agent.Name
+		}
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Agent created: "+name))
+
+	case DeleteAgentMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Delete agent failed: " + msg.Err.Error())
+		}
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Agent deleted"))
+
+	case CreateProjectMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Create project failed: " + msg.Err.Error())
+		}
+		name := ""
+		if msg.Project != nil {
+			name = msg.Project.Name
+		}
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Project created: "+name))
+
+	case DeleteProjectMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Delete project failed: " + msg.Err.Error())
+		}
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Project deleted"))
+
+	case DeleteSessionMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Delete session failed: " + msg.Err.Error())
+		}
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Session deleted"))
+
+	case SendMessageMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Send message failed: " + msg.Err.Error())
+		}
+		return m, m.setInfo("Message sent")
+
+	case SendInboxMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Send inbox message failed: " + msg.Err.Error())
+		}
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Inbox message sent"))
+
+	case MarkInboxReadMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Mark inbox read failed: " + msg.Err.Error())
+		}
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Marked as read"))
+
+	case DeleteInboxMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Delete inbox message failed: " + msg.Err.Error())
+		}
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Inbox message deleted"))
+
+	case SessionMessageEvent:
+		// SSE message received — add to the message stream.
+		if msg.Err != nil {
+			m.messageStream.AddMessage(views.MessageEntry{
+				EventType: "error",
+				Payload:   msg.Err.Error(),
+				Timestamp: time.Now(),
+			})
+			return m, nil
+		}
+		if msg.Message != nil && m.activeView == "messages" {
+			ts := time.Now()
+			if msg.Message.CreatedAt != nil {
+				ts = *msg.Message.CreatedAt
+			}
+			m.messageStream.AddMessage(views.MessageEntry{
+				Seq:       msg.Message.Seq,
+				EventType: msg.Message.EventType,
+				Payload:   msg.Message.Payload,
+				Timestamp: ts,
+			})
+		}
+		return m, nil
 
 	case appTickMsg:
 		return m.handleTick()
@@ -415,6 +598,7 @@ func (m *AppModel) handleProjectsMsg(msg ProjectsMsg) (tea.Model, tea.Cmd) {
 	}
 
 	m.lastError = ""
+	m.cachedProjects = msg.Projects
 
 	rows := make([]table.Row, 0, len(msg.Projects))
 	for _, p := range msg.Projects {
@@ -461,6 +645,7 @@ func (m *AppModel) handleAgentsMsg(msg AgentsMsg) (tea.Model, tea.Cmd) {
 	}
 
 	m.lastError = ""
+	m.cachedAgents = msg.Agents
 	now := time.Now()
 
 	rows := make([]table.Row, 0, len(msg.Agents))
@@ -496,6 +681,7 @@ func (m *AppModel) handleSessionsMsg(msg SessionsMsg) (tea.Model, tea.Cmd) {
 	}
 
 	m.lastError = ""
+	m.cachedSessions = msg.Sessions
 	now := time.Now()
 
 	// If agent-scoped, filter sessions to only those belonging to this agent.
@@ -551,6 +737,7 @@ func (m *AppModel) handleInboxMsg(msg InboxMsg) (tea.Model, tea.Cmd) {
 	}
 
 	m.lastError = ""
+	m.cachedInbox = msg.Messages
 	now := time.Now()
 
 	rows := make([]table.Row, 0, len(msg.Messages))
@@ -612,6 +799,11 @@ func (m *AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Message stream handles its own keys.
 	if m.activeView == "messages" {
 		return m.handleMessagesKey(msg)
+	}
+
+	// Detail view handles its own keys.
+	if m.activeView == "detail" {
+		return m.handleDetailKey(msg)
 	}
 
 	return m.handleNormalKey(msg)
@@ -686,13 +878,14 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 		row := m.agentTable.SelectedRow()
 		if len(row) > 0 {
 			agentName := row[0]
-			// Agent ID comes from the SESSION column (index 2) — but we need the
-			// actual ID. For now, we use the agent name and fetch sessions by project.
-			// The agent table stores: NAME, PROMPT, SESSION, PHASE, AGE
 			m.currentAgent = agentName
-			// We don't have the agent ID directly in the table. Use name as a
-			// best-effort identifier until the API provides it in the list response.
-			m.currentAgentID = agentName
+			// Look up the real agent ID from cache.
+			agent := m.findAgentByName(agentName)
+			if agent != nil {
+				m.currentAgentID = agent.ID
+			} else {
+				m.currentAgentID = agentName // fallback
+			}
 			m.sessionTable.SetScope(agentName)
 			cmd := m.pushView("sessions", agentName, "")
 			return m, tea.Batch(cmd, m.setInfo("Viewing sessions for agent "+agentName))
@@ -701,8 +894,14 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 	case "sessions":
 		row := m.sessionTable.SelectedRow()
 		if len(row) > 0 {
-			sessionID := row[0] // Short ID is in first column
-			m.currentSession = sessionID
+			shortID := row[0] // Short ID is in first column
+			// Resolve the full session ID from cache.
+			session := m.findSessionByShortID(shortID)
+			fullSessionID := shortID
+			if session != nil {
+				fullSessionID = session.ID
+			}
+			m.currentSession = fullSessionID
 
 			// Create a new message stream for this session.
 			agentName := m.currentAgent
@@ -713,25 +912,41 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 			if len(row) > 3 {
 				phase = row[3] // PHASE column
 			}
-			m.messageStream = views.NewMessageStream(sessionID, agentName, phase)
+			m.messageStream = views.NewMessageStream(fullSessionID, agentName, phase)
 			m.resizeTable() // set message stream dimensions
 
-			// Add placeholder messages since SSE is not wired yet.
-			m.messageStream.AddMessage(views.MessageEntry{
-				Seq:       1,
-				EventType: "system",
-				Payload:   "Connected to session " + sessionID + " (SSE not yet wired)",
-				Timestamp: time.Now(),
-			})
+			cmds := []tea.Cmd{
+				m.pushView("messages", fullSessionID, fullSessionID),
+				m.setInfo("Streaming messages for session " + shortID),
+			}
 
-			cmd := m.pushView("messages", sessionID, sessionID)
-			return m, tea.Batch(cmd, m.setInfo("Streaming messages for session "+sessionID))
+			// Start SSE watcher if we have a program reference and project context.
+			if m.program != nil && m.currentProject != "" {
+				cmds = append(cmds, m.client.WatchSessionMessages(m.currentProject, fullSessionID, 0, m.program))
+			} else {
+				m.messageStream.AddMessage(views.MessageEntry{
+					Seq:       1,
+					EventType: "system",
+					Payload:   "Connected to session " + shortID + " (SSE requires program ref)",
+					Timestamp: time.Now(),
+				})
+			}
+
+			return m, tea.Batch(cmds...)
 		}
 
 	case "inbox":
 		row := m.inboxTable.SelectedRow()
 		if len(row) > 0 {
-			return m, m.setInfo("View full message body: not yet implemented")
+			msgID := row[0]
+			inboxMsg := m.findInboxByID(msgID)
+			if inboxMsg == nil {
+				return m, m.setInfo("Inbox message not found in cache: " + msgID)
+			}
+			m.detailView = views.NewDetailView("Inbox: "+msgID, views.InboxDetail(*inboxMsg))
+			m.detailView.SetSize(m.width, m.height-10)
+			cmd := m.pushView("detail", msgID, msgID)
+			return m, tea.Batch(cmd, m.setInfo("Inbox message detail"))
 		}
 	}
 
@@ -820,12 +1035,22 @@ func (m *AppModel) handleRuneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *AppModel) handleProjectsRune(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "d":
+		// Show detail view for the selected project.
 		row := m.projectTable.SelectedRow()
-		if len(row) > 0 {
-			return m, m.setInfo("Describe project: not yet implemented")
+		if len(row) == 0 {
+			return m, nil
 		}
+		projectName := row[0]
+		project := m.findProjectByName(projectName)
+		if project == nil {
+			return m, m.setInfo("Project not found in cache: " + projectName)
+		}
+		m.detailView = views.NewDetailView("Project: "+projectName, views.ProjectDetail(*project))
+		m.detailView.SetSize(m.width, m.height-10)
+		cmd := m.pushView("detail", projectName, project.ID)
+		return m, tea.Batch(cmd, m.setInfo("Project detail: "+projectName))
 	case "n":
-		return m, m.setInfo("New project: not yet implemented")
+		return m, m.setInfo("Use acpctl project create")
 	}
 	return m, nil
 }
@@ -839,17 +1064,51 @@ func (m *AppModel) handleAgentsRune(key string) (tea.Model, tea.Cmd) {
 		if len(row) > 0 {
 			agentName := row[0]
 			m.currentAgent = agentName
-			m.currentAgentID = agentName
+			agent := m.findAgentByName(agentName)
+			if agent != nil {
+				m.currentAgentID = agent.ID
+			} else {
+				m.currentAgentID = agentName // fallback
+			}
 			m.inboxTable.SetScope(agentName)
 			cmd := m.pushView("inbox", agentName, "")
 			return m, tea.Batch(cmd, m.setInfo("Viewing inbox for agent "+agentName))
 		}
 	case "s":
-		return m, m.setInfo("Start agent: not yet implemented")
+		// Start the selected agent.
+		row := m.agentTable.SelectedRow()
+		if len(row) == 0 {
+			return m, m.setInfo("No agent selected")
+		}
+		agentName := row[0]
+		agent := m.findAgentByName(agentName)
+		if agent == nil {
+			return m, m.setInfo("Agent not found in cache: " + agentName)
+		}
+		return m, tea.Batch(
+			m.client.StartAgent(m.currentProject, agent.ID, ""),
+			m.setInfo("Starting agent "+agentName+"..."),
+		)
 	case "x":
-		return m, m.setInfo("Stop agent: not yet implemented")
+		// Stop the selected agent's current session.
+		row := m.agentTable.SelectedRow()
+		if len(row) == 0 {
+			return m, m.setInfo("No agent selected")
+		}
+		agentName := row[0]
+		sessionID := ""
+		if len(row) > 2 {
+			sessionID = row[2] // SESSION column
+		}
+		if sessionID == "" || sessionID == "<none>" {
+			return m, m.setInfo("Agent " + agentName + " has no active session")
+		}
+		return m, tea.Batch(
+			m.client.StopAgent(m.currentProject, sessionID),
+			m.setInfo("Stopping agent "+agentName+"..."),
+		)
 	case "e":
-		return m, m.setInfo("Edit agent: not yet implemented")
+		return m, m.setInfo("Use acpctl agent update")
 	case "l":
 		// Logs — if agent has an active session, jump to message stream.
 		row := m.agentTable.SelectedRow()
@@ -857,7 +1116,12 @@ func (m *AppModel) handleAgentsRune(key string) (tea.Model, tea.Cmd) {
 			agentName := row[0]
 			sessionID := row[2]
 			m.currentAgent = agentName
-			m.currentAgentID = agentName
+			agent := m.findAgentByName(agentName)
+			if agent != nil {
+				m.currentAgentID = agent.ID
+			} else {
+				m.currentAgentID = agentName
+			}
 			m.currentSession = sessionID
 			phase := ""
 			if len(row) > 3 {
@@ -865,27 +1129,61 @@ func (m *AppModel) handleAgentsRune(key string) (tea.Model, tea.Cmd) {
 			}
 			m.messageStream = views.NewMessageStream(sessionID, agentName, phase)
 			m.resizeTable()
-			m.messageStream.AddMessage(views.MessageEntry{
-				Seq:       1,
-				EventType: "system",
-				Payload:   "Connected to session " + sessionID + " (SSE not yet wired)",
-				Timestamp: time.Now(),
-			})
-			cmd := m.pushView("messages", sessionID, sessionID)
-			return m, tea.Batch(cmd, m.setInfo("Streaming messages for session "+sessionID))
+
+			cmds := []tea.Cmd{
+				m.pushView("messages", sessionID, sessionID),
+				m.setInfo("Streaming messages for session " + sessionID),
+			}
+
+			// Start SSE watcher if we have a program reference and project context.
+			if m.program != nil && m.currentProject != "" {
+				cmds = append(cmds, m.client.WatchSessionMessages(m.currentProject, sessionID, 0, m.program))
+			} else {
+				m.messageStream.AddMessage(views.MessageEntry{
+					Seq:       1,
+					EventType: "system",
+					Payload:   "Connected to session " + sessionID + " (SSE requires program ref)",
+					Timestamp: time.Now(),
+				})
+			}
+
+			return m, tea.Batch(cmds...)
 		}
 		return m, m.setInfo("No active session for this agent")
 	case "d":
+		// Show detail view for the selected agent.
 		row := m.agentTable.SelectedRow()
-		if len(row) > 0 {
-			return m, m.setInfo("Describe agent: not yet implemented")
+		if len(row) == 0 {
+			return m, nil
 		}
+		agentName := row[0]
+		agent := m.findAgentByName(agentName)
+		if agent == nil {
+			return m, m.setInfo("Agent not found in cache: " + agentName)
+		}
+		m.detailView = views.NewDetailView("Agent: "+agentName, views.AgentDetail(*agent))
+		m.detailView.SetSize(m.width, m.height-10)
+		cmd := m.pushView("detail", agentName, agent.ID)
+		return m, tea.Batch(cmd, m.setInfo("Agent detail: "+agentName))
 	case "m":
-		return m, m.setInfo("Send inbox message: not yet implemented")
+		return m, m.setInfo("Use :inbox or acpctl inbox send")
 	case "n":
-		return m, m.setInfo("New agent: not yet implemented")
+		return m, m.setInfo("Use acpctl agent create")
 	case "y":
-		return m, m.setInfo("YAML dump: not yet implemented")
+		row := m.agentTable.SelectedRow()
+		if len(row) == 0 {
+			return m, nil
+		}
+		agentName := row[0]
+		agent := m.findAgentByName(agentName)
+		if agent == nil {
+			return m, m.setInfo("Agent not found in cache: " + agentName)
+		}
+		// Show agent detail as a describe view (closest to YAML dump).
+		m.detailView = views.NewDetailView("Agent: "+agentName, views.AgentDetail(*agent))
+		m.detailView.SetSize(m.width, m.height-10)
+		cmd := m.pushView("detail", agentName, agent.ID)
+		return m, tea.Batch(cmd, m.setInfo("Agent detail: "+agentName))
 	}
 	return m, nil
 }
@@ -894,17 +1192,40 @@ func (m *AppModel) handleAgentsRune(key string) (tea.Model, tea.Cmd) {
 func (m *AppModel) handleSessionsRune(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "d":
+		// Show detail view for the selected session.
 		row := m.sessionTable.SelectedRow()
-		if len(row) > 0 {
-			return m, m.setInfo("Describe session: not yet implemented")
+		if len(row) == 0 {
+			return m, nil
 		}
+		shortID := row[0]
+		session := m.findSessionByShortID(shortID)
+		if session == nil {
+			return m, m.setInfo("Session not found in cache: " + shortID)
+		}
+		m.detailView = views.NewDetailView("Session: "+shortID, views.SessionDetail(*session))
+		m.detailView.SetSize(m.width, m.height-10)
+		cmd := m.pushView("detail", shortID, session.ID)
+		return m, tea.Batch(cmd, m.setInfo("Session detail: "+shortID))
 	case "l":
 		// Same as Enter — drill into message stream.
 		return m.handleEnter()
 	case "m":
-		return m, m.setInfo("Send message to session: not yet implemented")
+		return m, m.setInfo("Use Enter to view messages, then m to compose")
 	case "y":
-		return m, m.setInfo("YAML dump: not yet implemented")
+		// Show session detail (closest to YAML dump).
+		row := m.sessionTable.SelectedRow()
+		if len(row) == 0 {
+			return m, nil
+		}
+		shortID := row[0]
+		session := m.findSessionByShortID(shortID)
+		if session == nil {
+			return m, m.setInfo("Session not found in cache: " + shortID)
+		}
+		m.detailView = views.NewDetailView("Session: "+shortID, views.SessionDetail(*session))
+		m.detailView.SetSize(m.width, m.height-10)
+		cmd := m.pushView("detail", shortID, session.ID)
+		return m, tea.Batch(cmd, m.setInfo("Session detail: "+shortID))
 	}
 	return m, nil
 }
@@ -913,9 +1234,21 @@ func (m *AppModel) handleSessionsRune(key string) (tea.Model, tea.Cmd) {
 func (m *AppModel) handleInboxRune(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "m":
-		return m, m.setInfo("Compose inbox message: not yet implemented")
+		return m, m.setInfo("Use acpctl inbox send")
 	case "r":
-		return m, m.setInfo("Mark as read: not yet implemented")
+		// Mark selected inbox message as read.
+		row := m.inboxTable.SelectedRow()
+		if len(row) == 0 {
+			return m, m.setInfo("No inbox message selected")
+		}
+		msgID := row[0] // ID column
+		if m.currentProject == "" || m.currentAgentID == "" {
+			return m, m.setInfo("No agent context for inbox")
+		}
+		return m, tea.Batch(
+			m.client.MarkInboxRead(m.currentProject, m.currentAgentID, msgID),
+			m.setInfo("Marking as read..."),
+		)
 	}
 	return m, nil
 }
@@ -926,25 +1259,67 @@ func (m *AppModel) handleCtrlD() (tea.Model, tea.Cmd) {
 	case "projects":
 		row := m.projectTable.SelectedRow()
 		if len(row) > 0 {
-			return m, m.setInfo("Delete project: not yet implemented")
+			projectName := row[0]
+			project := m.findProjectByName(projectName)
+			if project == nil {
+				return m, m.setInfo("Project not found in cache: " + projectName)
+			}
+			return m, tea.Batch(
+				m.client.DeleteProject(project.ID),
+				m.setInfo("Deleting project "+projectName+"..."),
+			)
 		}
 	case "agents":
 		row := m.agentTable.SelectedRow()
 		if len(row) > 0 {
-			return m, m.setInfo("Delete agent: not yet implemented")
+			agentName := row[0]
+			agent := m.findAgentByName(agentName)
+			if agent == nil {
+				return m, m.setInfo("Agent not found in cache: " + agentName)
+			}
+			return m, tea.Batch(
+				m.client.DeleteAgent(m.currentProject, agent.ID),
+				m.setInfo("Deleting agent "+agentName+"..."),
+			)
 		}
 	case "sessions":
 		row := m.sessionTable.SelectedRow()
 		if len(row) > 0 {
-			return m, m.setInfo("Delete/cancel session: not yet implemented")
+			shortID := row[0]
+			session := m.findSessionByShortID(shortID)
+			if session == nil {
+				return m, m.setInfo("Session not found in cache: " + shortID)
+			}
+			project := m.currentProject
+			if project == "" {
+				project = session.ProjectID
+			}
+			return m, tea.Batch(
+				m.client.DeleteSession(project, session.ID),
+				m.setInfo("Deleting session "+shortID+"..."),
+			)
 		}
 	case "inbox":
 		row := m.inboxTable.SelectedRow()
 		if len(row) > 0 {
-			return m, m.setInfo("Delete inbox message: not yet implemented")
+			msgID := row[0]
+			if m.currentProject == "" || m.currentAgentID == "" {
+				return m, m.setInfo("No agent context for inbox")
+			}
+			return m, tea.Batch(
+				m.client.DeleteInboxMessage(m.currentProject, m.currentAgentID, msgID),
+				m.setInfo("Deleting inbox message..."),
+			)
 		}
 	}
 	return m, nil
+}
+
+// handleDetailKey delegates key events to the detail view sub-model.
+func (m *AppModel) handleDetailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	m.detailView, cmd = m.detailView.Update(msg)
+	return m, cmd
 }
 
 // handleMessagesKey delegates key events to the message stream sub-model.
