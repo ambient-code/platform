@@ -115,8 +115,9 @@ func NewResourceTable(kind string, scope string, columns []table.Column, style T
 		Foreground(lipgloss.Color("0")).
 		Background(style.SelectedBg).
 		Bold(true)
-	s.Cell = s.Cell.
-		Foreground(style.HeaderColor)
+	// Don't set Cell foreground — let terminal default handle it.
+	// This allows Selected.Foreground to override cell text color
+	// (inner ANSI codes would win over outer if we set Cell.Foreground).
 	t.SetStyles(s)
 
 	return ResourceTable{
@@ -270,8 +271,6 @@ func (rt *ResourceTable) SetWidth(w int) {
 		Background(rt.style.SelectedBg).
 		Bold(true).
 		Width(usable)
-	s.Cell = s.Cell.
-		Foreground(rt.style.HeaderColor)
 	rt.inner.SetStyles(s)
 }
 
