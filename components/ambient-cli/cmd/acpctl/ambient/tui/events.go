@@ -37,6 +37,30 @@ func EventColor(eventType string) lipgloss.Color {
 	}
 }
 
+// PhaseColor returns the display color for a session phase.
+//
+//	pending              -> yellow (33)
+//	running              -> green  (28)
+//	succeeded / completed -> dim   (240)
+//	failed               -> red    (31)
+//	cancelled            -> dim    (240)
+func PhaseColor(phase string) lipgloss.Color {
+	switch strings.ToLower(phase) {
+	case "pending":
+		return colorYellow // 33
+	case "running":
+		return colorGreen // 28
+	case "succeeded", "completed":
+		return colorDim // 240
+	case "failed":
+		return colorRed // 31
+	case "cancelled":
+		return colorDim // 240
+	default:
+		return colorDim // 240
+	}
+}
+
 // EventSummary returns a one-line display summary for an AG-UI event.
 //
 // Behaviour is extracted from the existing tileDisplayPayload logic:

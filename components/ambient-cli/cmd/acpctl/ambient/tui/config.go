@@ -19,6 +19,17 @@ type TUIConfig struct {
 	Contexts       map[string]*Context `json:"contexts,omitempty"`
 }
 
+// String implements fmt.Stringer. All context tokens are redacted.
+func (tc *TUIConfig) String() string {
+	names := tc.ContextNames()
+	return fmt.Sprintf("TUIConfig{CurrentContext:%q, Contexts:[%s]}", tc.CurrentContext, strings.Join(names, ", "))
+}
+
+// GoString implements fmt.GoStringer. All context tokens are redacted.
+func (tc *TUIConfig) GoString() string {
+	return tc.String()
+}
+
 // Context represents a single server connection with its credentials and project scope.
 type Context struct {
 	Server       string `json:"server"`
