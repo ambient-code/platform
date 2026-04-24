@@ -162,9 +162,22 @@ func (m *AppModel) viewCommandBar() string {
 	return ""
 }
 
-// viewResourceTable renders the current resource table with its title bar.
+// viewResourceTable renders the current resource table or view with its title bar.
 func (m *AppModel) viewResourceTable() string {
-	return m.projectTable.View()
+	switch m.activeView {
+	case "projects":
+		return m.projectTable.View()
+	case "agents":
+		return m.agentTable.View()
+	case "sessions":
+		return m.sessionTable.View()
+	case "inbox":
+		return m.inboxTable.View()
+	case "messages":
+		return m.messageStream.View()
+	default:
+		return m.projectTable.View()
+	}
 }
 
 // viewBreadcrumb renders the navigation breadcrumb trail at the bottom.
