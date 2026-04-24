@@ -88,7 +88,7 @@ export function SessionsSidebar({
   const pathname = usePathname();
   const { data: version } = useVersion();
   const [showAll, setShowAll] = useState(false);
-  const { data, isLoading, isFetching, dataUpdatedAt, refetch } = useSessionsPaginated(
+  const { data, isLoading, isError, error, isFetching, dataUpdatedAt, refetch } = useSessionsPaginated(
     collapsed ? "" : projectName,
     { limit: 20 },
   );
@@ -319,7 +319,17 @@ export function SessionsSidebar({
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {isLoading ? (
+          {isError ? (
+            <div className="p-3 text-center">
+              <p className="text-sm text-destructive">
+                {error instanceof Error ? error.message : 'Failed to load sessions'}
+              </p>
+              <Button variant="ghost" size="sm" onClick={() => refetch()} className="mt-1">
+                <RefreshCw className="h-3 w-3 mr-1" />
+                Retry
+              </Button>
+            </div>
+          ) : isLoading ? (
             <div className="space-y-2 p-2">
               {Array.from({ length: 5 }).map((_, i) => (
                 <Skeleton key={i} className="h-10 w-full rounded-md" />

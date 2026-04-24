@@ -86,12 +86,14 @@ func AccessCheck(c *gin.Context) {
 		return
 	}
 
+	canManageRoleBindings := res.Status.Allowed
+	canCreateSessions := false
+	canListSessions := false
+
 	role := "view"
-	if res.Status.Allowed {
-		// If update on ProjectSettings is allowed, treat as admin for this page
+	if canManageRoleBindings {
 		role = "admin"
 	} else {
-		// Optional: try a lesser check for create sessions to infer "edit"
 		editSSAR := &authv1.SelfSubjectAccessReview{
 			Spec: authv1.SelfSubjectAccessReviewSpec{
 				ResourceAttributes: &authv1.ResourceAttributes{
@@ -103,9 +105,35 @@ func AccessCheck(c *gin.Context) {
 			},
 		}
 		res2, err2 := k8sClt.AuthorizationV1().SelfSubjectAccessReviews().Create(c.Request.Context(), editSSAR, v1.CreateOptions{})
-		if err2 == nil && res2.Status.Allowed {
+		if err2 != nil {
+			log.Printf("SSAR check for 'create agenticsessions' failed in %s: %v", projectName, err2)
+		} else if res2.Status.Allowed {
 			role = "edit"
+			canCreateSessions = true
 		}
+	}
+
+	// Check the exact permission that ValidateProjectContext middleware gates on
+	listSSAR := &authv1.SelfSubjectAccessReview{
+		Spec: authv1.SelfSubjectAccessReviewSpec{
+			ResourceAttributes: &authv1.ResourceAttributes{
+				Group:     "vteam.ambient-code",
+				Resource:  "agenticsessions",
+				Verb:      "list",
+				Namespace: projectName,
+			},
+		},
+	}
+	listRes, listErr := k8sClt.AuthorizationV1().SelfSubjectAccessReviews().Create(c.Request.Context(), listSSAR, v1.CreateOptions{})
+	if listErr != nil {
+		log.Printf("SSAR check for 'list agenticsessions' failed in %s: %v", projectName, listErr)
+	} else {
+		canListSessions = listRes.Status.Allowed
+	}
+
+	if canManageRoleBindings {
+		canCreateSessions = true
+		canListSessions = true
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -113,6 +141,11 @@ func AccessCheck(c *gin.Context) {
 		"allowed":  res.Status.Allowed,
 		"reason":   res.Status.Reason,
 		"userRole": role,
+		"diagnostics": gin.H{
+			"canListAgenticSessions":   canListSessions,
+			"canCreateAgenticSessions": canCreateSessions,
+			"canManageRoleBindings":    canManageRoleBindings,
+		},
 	})
 }
 

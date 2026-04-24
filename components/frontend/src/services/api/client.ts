@@ -63,7 +63,11 @@ async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     // Only check isApiError if data is an object (not a string/HTML response)
     if (typeof data === 'object' && data !== null && isApiError(data)) {
-      throw new ApiClientError(data.error, data.code, data.details);
+      const { error: errMsg, code, details: existingDetails, ...extraFields } = data;
+      throw new ApiClientError(errMsg, code ?? String(response.status), {
+        ...existingDetails,
+        ...extraFields,
+      });
     }
     throw new ApiClientError(
       `HTTP ${response.status}: ${response.statusText}`,

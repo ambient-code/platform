@@ -317,7 +317,12 @@ func ValidateProjectContext() gin.HandlerFunc {
 
 		if cachedAllowed, found := globalSSARCache.check(cacheKey); found {
 			if !cachedAllowed {
-				c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized to access project"})
+				log.Printf("validateProjectContext: SSAR denied namespace=%s verb=list resource=agenticsessions cached=true", projectHeader)
+				c.JSON(http.StatusForbidden, gin.H{
+					"error":     "Unauthorized to access project",
+					"namespace": projectHeader,
+					"hint":      "Your token does not have 'list agenticsessions' permission in this namespace. Verify that a RoleBinding to ambient-project-view/edit/admin exists for your identity.",
+				})
 				c.Abort()
 				return
 			}
@@ -347,7 +352,12 @@ func ValidateProjectContext() gin.HandlerFunc {
 			}
 			globalSSARCache.store(cacheKey, res.Status.Allowed)
 			if !res.Status.Allowed {
-				c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized to access project"})
+				log.Printf("validateProjectContext: SSAR denied namespace=%s verb=list resource=agenticsessions cached=false", projectHeader)
+				c.JSON(http.StatusForbidden, gin.H{
+					"error":     "Unauthorized to access project",
+					"namespace": projectHeader,
+					"hint":      "Your token does not have 'list agenticsessions' permission in this namespace. Verify that a RoleBinding to ambient-project-view/edit/admin exists for your identity.",
+				})
 				c.Abort()
 				return
 			}

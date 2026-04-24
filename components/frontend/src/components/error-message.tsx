@@ -24,12 +24,24 @@ export function ErrorMessage({ error, title = 'Error', onRetry }: ErrorMessagePr
       ? ` (${error.code})`
       : '';
 
+  const hint =
+    error instanceof ApiClientError && error.details?.hint
+      ? String(error.details.hint)
+      : undefined;
+
+  const namespace =
+    error instanceof ApiClientError && error.details?.namespace
+      ? String(error.details.namespace)
+      : undefined;
+
   return (
     <Alert variant="destructive">
       <AlertCircle className="h-4 w-4" />
       <AlertTitle>{title}{errorCode}</AlertTitle>
       <AlertDescription className="mt-2 flex flex-col gap-2">
         <p>{message}</p>
+        {hint && <p className="text-sm opacity-80">{hint}</p>}
+        {namespace && <p className="text-xs opacity-60">Namespace: {namespace}</p>}
         {onRetry && (
           <div>
             <Button
