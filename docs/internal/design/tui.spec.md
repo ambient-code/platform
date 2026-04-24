@@ -9,7 +9,7 @@
 
 ## Overview
 
-The Ambient TUI is a full-screen terminal interface for operating the Ambient platform. It evolves the current Bubbletea-based dashboard into a k9s-inspired resource browser backed by the Ambient API (REST/gRPC), not the Kubernetes API.
+The Ambient TUI is a full-screen terminal interface for operating the Ambient platform. It is a k9s-inspired resource browser backed by the Ambient API (REST/gRPC), not the Kubernetes API.
 
 **Design intent:** k9s's interaction model — table-first resource browsing, command mode, filtering, drill-down, contextual hotkeys — applied to the Ambient data model. Not a k9s fork. Not a generic K8s browser. A purpose-built operator console for Ambient resources.
 
@@ -37,29 +37,13 @@ The Ambient TUI is a full-screen terminal interface for operating the Ambient pl
 
 ### Framework
 
-**Bubbletea + bubbles + lipgloss** (Charmbracelet stack — same as today).
-
-The existing TUI's problem is not Bubbletea. It is that tables are hand-rendered as strings instead of using `bubbles/table`, and that data fetching shells out to `kubectl` instead of using the SDK. The framework stays. The internals are rewritten.
+**Bubbletea + bubbles + lipgloss** (Charmbracelet stack).
 
 Rationale:
-- `bubbles/table` provides column sorting, selection, scrolling, and keyboard navigation — the features the TUI currently lacks.
+- `bubbles/table` provides column sorting, selection, scrolling, and keyboard navigation.
 - `bubbles/textinput` provides command bar and compose input with cursor management.
-- Bubbletea's Elm architecture (Model/Update/View) is better suited for the TUI's state-heavy navigation (command mode, filter mode, compose mode, detail mode, navigation stack) than tview's widget-callback model.
-- `teatest` provides programmatic test harness (send keystrokes, assert on output) — tview has no equivalent.
-- The dependency already exists in `go.mod`. No new terminal abstraction layer.
-- lipgloss styling carries forward directly from `view.go`.
-
-### Migration Strategy
-
-The rewrite is incremental, not blank-slate:
-
-1. **Extract reusable logic** from existing code into framework-agnostic packages before changing any rendering. Specifically:
-   - Session message streaming (`restartSessionPoll` pattern from `model.go`)
-   - Multi-project SDK fan-out (`fetchAll` from `fetch.go`)
-   - AG-UI event parsing (`tileDisplayPayload`, `extractKVField` from `dashboard.go`)
-   - Color palette (`view.go` lines 12-29)
-2. **Replace rendering** — swap hand-rendered string tables with `bubbles/table`, swap manual input handling with `bubbles/textinput`.
-3. **Remove kubectl/oc code** — delete all `exec.Command("kubectl", ...)` paths, pod/namespace views, port-forward management.
+- Bubbletea's Elm architecture (Model/Update/View) is well-suited for the TUI's state-heavy navigation (command mode, filter mode, compose mode, detail mode, navigation stack).
+- `teatest` provides a programmatic test harness (send keystrokes, assert on output).
 
 ### Package Layout
 
@@ -617,38 +601,13 @@ These are gaps where the TUI spec requires data the API does not provide efficie
 
 ---
 
-## Migration from Existing TUI
-
-### What Carries Forward (framework-agnostic logic)
-
-| Code | Source | Destination |
-|------|--------|-------------|
-| Session message streaming (goroutine lifecycle, reconnect-with-backoff, cancellation) | `model.go` `restartSessionPoll` | `client.go` |
-| Multi-project SDK fan-out (list projects, fan out per-project fetches, mutex, error aggregation) | `fetch.go` `fetchAll` | `client.go` |
-| AG-UI event parsing (payload extraction, event type classification) | `dashboard.go` `tileDisplayPayload`, `extractKVField`, `eventTypeStyle` | `events.go` |
-| Color palette (ANSI 256 indices + lipgloss styles) | `view.go` lines 12-29 | `view.go` (unchanged) |
-| Agent CRUD operations (edit-with-dirty-tracking, confirm-delete, SDK calls) | `model.go` agent edit/delete handlers | `views/agents.go` |
-| Session message compose flow (project-scoped client resolution, PushMessage) | `model.go` compose handlers | `views/messages.go` |
-
-### What Is Dropped
-
-| Code | Reason |
-|------|--------|
-| All `kubectl`/`oc` exec calls | API-only data path |
-| Pod and Namespace views | Use k9s |
-| Port-forward management | `acpctl` subcommands / Makefile |
-| Manual string-based table rendering (`col()`, `padTo()`) | Replaced by `bubbles/table` |
-| `execCommand` shell runner | Not needed |
-
----
-
 ## Implementation Priority
 
 Each wave produces a **shippable `acpctl ambient`** — the binary is usable at the end of every wave, not just scaffolding.
 
 | Wave | Scope | Deliverable |
 |------|-------|-------------|
-| **0** | Extract reusable logic from existing code into `client.go`, `events.go`, `sanitize.go`. Replace string tables with `bubbles/table`. Remove kubectl code. Multi-context config format (`contexts` map, `current_context`). Prove architecture with project table only. | Launches, shows projects in a real table. `acpctl login` auto-creates named context. Smoke-tests pass via `teatest`. |
+| **0** | `client.go`, `events.go`, `sanitize.go` foundation modules. `bubbles/table`-based project list. Multi-context config format (`contexts` map, `current_context`). | Launches, shows projects in a real table. `acpctl login` auto-creates named context. Smoke-tests pass via `teatest`. |
 | **1** | Agent table + command mode (`:projects`, `:agents`, `:sessions`, `:aliases`, `:ctx`, `:project`, `:q`) with tab completion. `:ctx` lists/switches contexts. `/` filter (regex + inverse). Navigation stack (Enter/Esc push/pop). Breadcrumb. Column sorting (Shift-key). | Two-resource browser with full k9s navigation feel. Context switching works. |
 | **2a** | Session table (global + agent-scoped). Read-only message stream view via `/messages` SSE. Conversation + raw mode toggle. | Operators can watch agent work in real time. |
 | **2b** | Send message (`POST /sessions/{id}/messages`). Streaming partial response rendering (delta accumulation). SSE reconnect with `after_seq` replay. Copy-to-clipboard (`c`). | Full interactive session experience. |
@@ -673,4 +632,4 @@ Each wave produces a **shippable `acpctl ambient`** — the binary is usable at 
 
 | Command | Description | Status |
 |---------|-------------|--------|
-| `acpctl ambient` | Launch interactive TUI | 🔄 rewrite (exists today, replacing internals) |
+| `acpctl ambient` | Launch interactive TUI | ✅ |
