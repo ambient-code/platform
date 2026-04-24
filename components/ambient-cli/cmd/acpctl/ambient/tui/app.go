@@ -173,6 +173,8 @@ func (m *AppModel) viewResourceTable() string {
 		return m.sessionTable.View()
 	case "inbox":
 		return m.inboxTable.View()
+	case "contexts":
+		return m.contextTable.View()
 	case "messages":
 		return m.messageStream.View()
 	default:

@@ -62,10 +62,11 @@ type AppModel struct {
 	agentTable    views.ResourceTable
 	sessionTable  views.ResourceTable
 	inboxTable    views.ResourceTable
+	contextTable  views.ResourceTable
 	messageStream views.MessageStream
 
 	// Current view determines which table/view is active
-	activeView string // "projects", "agents", "sessions", "messages", "inbox"
+	activeView string // "projects", "agents", "sessions", "messages", "inbox", "contexts"
 
 	// Context for scoped views
 	currentProject string // set when drilling into a project
@@ -123,6 +124,7 @@ func NewAppModel(factory *connection.ClientFactory) (*AppModel, error) {
 	at := views.NewAgentTable("all", views.DefaultTableStyle())
 	st := views.NewSessionTable("all", views.DefaultTableStyle())
 	it := views.NewInboxTable("all", views.DefaultTableStyle())
+	ct := views.NewContextTable(views.DefaultTableStyle())
 
 	m := &AppModel{
 		config: cfg,
@@ -135,6 +137,7 @@ func NewAppModel(factory *connection.ClientFactory) (*AppModel, error) {
 		agentTable:   at,
 		sessionTable: st,
 		inboxTable:   it,
+		contextTable: ct,
 		commandInput: ci,
 		filterInput:  fi,
 	}
@@ -272,9 +275,26 @@ func (m *AppModel) activeTable() *views.ResourceTable {
 		return &m.sessionTable
 	case "inbox":
 		return &m.inboxTable
+	case "contexts":
+		return &m.contextTable
 	default:
 		return nil
 	}
+}
+
+// populateContextTable fills the context table from config.
+func (m *AppModel) populateContextTable() {
+	names := m.config.ContextNames()
+	rows := make([]table.Row, 0, len(names))
+	for _, name := range names {
+		ctx := m.config.Contexts[name]
+		if ctx == nil {
+			continue
+		}
+		active := name == m.config.CurrentContext
+		rows = append(rows, views.ContextRow(name, ctx.Server, ctx.Project, active))
+	}
+	m.contextTable.SetRows(rows)
 }
 
 // ---------------------------------------------------------------------------
@@ -377,6 +397,8 @@ func (m *AppModel) resizeTable() {
 	m.sessionTable.SetWidth(m.width)
 	m.inboxTable.SetHeight(tableHeight)
 	m.inboxTable.SetWidth(m.width)
+	m.contextTable.SetHeight(tableHeight)
+	m.contextTable.SetWidth(m.width)
 
 	// Message stream gets the full table area.
 	m.messageStream.SetSize(m.width, tableHeight+2) // +2 to account for title bar space
@@ -632,6 +654,24 @@ func (m *AppModel) handleNormalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // handleEnter processes the Enter key based on the active view.
 func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.activeView {
+	case "contexts":
+		row := m.contextTable.SelectedRow()
+		if len(row) > 1 {
+			contextName := row[1] // NAME column (index 1, after ACTIVE)
+			if err := m.config.SwitchContext(contextName); err != nil {
+				return m, m.setInfo("Error: "+err.Error())
+			}
+			m.navStack = []NavEntry{{Kind: "projects", Scope: "all"}}
+			m.activeView = "projects"
+			m.currentProject = ""
+			m.currentAgent = ""
+			m.currentAgentID = ""
+			m.currentSession = ""
+			m.activeFilter = nil
+			m.pollInFlight = true
+			return m, tea.Batch(m.client.FetchProjects(), m.setInfo("Switched to context "+contextName))
+		}
+
 	case "projects":
 		row := m.projectTable.SelectedRow()
 		if len(row) > 0 {
@@ -1086,9 +1126,12 @@ func (m *AppModel) executeCommand(input string) (tea.Model, tea.Cmd) {
 
 	case CmdContext:
 		if cmd.Arg == "" {
-			// List contexts.
-			names := m.config.ContextNames()
-			return m, m.setInfo("Contexts: "+fmt.Sprintf("%v", names))
+			// Show contexts in a table view.
+			m.populateContextTable()
+			m.navStack = []NavEntry{{Kind: "contexts", Scope: "all"}}
+			m.activeView = "contexts"
+			m.resizeTable()
+			return m, m.setInfo("Viewing contexts")
 		}
 		// Switch context.
 		if err := m.config.SwitchContext(cmd.Arg); err != nil {
