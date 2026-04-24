@@ -16,7 +16,7 @@ var grpcBypassMethods = map[string]bool{
 	"/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo": true,
 }
 
-func bearerTokenGRPCUnaryInterceptor(expectedToken string) grpc.UnaryServerInterceptor {
+func bearerTokenGRPCUnaryInterceptor(expectedToken, serviceAccountUsername string) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		if grpcBypassMethods[info.FullMethod] {
 			return handler(ctx, req)
@@ -29,6 +29,9 @@ func bearerTokenGRPCUnaryInterceptor(expectedToken string) grpc.UnaryServerInter
 						return handler(withCallerType(ctx, CallerTypeService), req)
 					}
 					if username := usernameFromJWT(token); username != "" {
+						if serviceAccountUsername != "" && username == serviceAccountUsername {
+							ctx = withCallerType(ctx, CallerTypeService)
+						}
 						return handler(auth.SetUsernameContext(ctx, username), req)
 					}
 				}
@@ -39,7 +42,7 @@ func bearerTokenGRPCUnaryInterceptor(expectedToken string) grpc.UnaryServerInter
 	}
 }
 
-func bearerTokenGRPCStreamInterceptor(expectedToken string) grpc.StreamServerInterceptor {
+func bearerTokenGRPCStreamInterceptor(expectedToken, serviceAccountUsername string) grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		if grpcBypassMethods[info.FullMethod] {
 			return handler(srv, ss)
@@ -53,6 +56,9 @@ func bearerTokenGRPCStreamInterceptor(expectedToken string) grpc.StreamServerInt
 					}
 					if username := usernameFromJWT(token); username != "" {
 						ctx := auth.SetUsernameContext(ss.Context(), username)
+						if serviceAccountUsername != "" && username == serviceAccountUsername {
+							ctx = withCallerType(ctx, CallerTypeService)
+						}
 						return handler(srv, &serviceCallerStream{ServerStream: ss, ctx: ctx})
 					}
 				}
