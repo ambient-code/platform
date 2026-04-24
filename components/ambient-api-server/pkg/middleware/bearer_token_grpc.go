@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang/glog"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -52,19 +53,32 @@ func bearerTokenGRPCStreamInterceptor(expectedToken, serviceAccountUsername stri
 			if authHeader := md.Get("authorization"); len(authHeader) > 0 {
 				if token, err := extractBearerToken(authHeader[0]); err == nil {
 					if subtle.ConstantTimeCompare([]byte(token), []byte(expectedToken)) == 1 {
+						glog.V(4).Infof("[pre-auth] stream %s: static token match, setting CallerTypeService", info.FullMethod)
 						return handler(srv, &serviceCallerStream{ServerStream: ss, ctx: withCallerType(ss.Context(), CallerTypeService)})
 					}
 					if username := usernameFromJWT(token); username != "" {
 						ctx := auth.SetUsernameContext(ss.Context(), username)
 						if serviceAccountUsername != "" && username == serviceAccountUsername {
+							glog.V(4).Infof("[pre-auth] stream %s: OIDC username %q matches service account, setting CallerTypeService", info.FullMethod, username)
 							ctx = withCallerType(ctx, CallerTypeService)
+						} else {
+							glog.V(4).Infof("[pre-auth] stream %s: OIDC username %q (service account %q, match=%v)", info.FullMethod, username, serviceAccountUsername, username == serviceAccountUsername)
 						}
 						return handler(srv, &serviceCallerStream{ServerStream: ss, ctx: ctx})
+					} else {
+						glog.V(4).Infof("[pre-auth] stream %s: usernameFromJWT returned empty, token length=%d", info.FullMethod, len(token))
 					}
+				} else {
+					glog.V(4).Infof("[pre-auth] stream %s: extractBearerToken error: %v", info.FullMethod, err)
 				}
+			} else {
+				glog.V(4).Infof("[pre-auth] stream %s: no authorization header in metadata", info.FullMethod)
 			}
+		} else {
+			glog.V(4).Infof("[pre-auth] stream %s: no incoming metadata", info.FullMethod)
 		}
 
+		glog.V(4).Infof("[pre-auth] stream %s: falling through without CallerType", info.FullMethod)
 		return handler(srv, ss)
 	}
 }
