@@ -27,8 +27,10 @@ const (
 type TableStyle struct {
 	// BorderColor is used for the title bar box-drawing characters.
 	BorderColor lipgloss.Color
-	// TitleColor is used for the resource kind and scope text in the title.
+	// TitleColor is used for the resource kind text in the title.
 	TitleColor lipgloss.Color
+	// ScopeColor is used for the scope text in parentheses.
+	ScopeColor lipgloss.Color
 	// CountColor is used for the row count in the title.
 	CountColor lipgloss.Color
 	// DimColor is used for inactive/secondary elements.
@@ -44,9 +46,10 @@ type TableStyle struct {
 // DefaultTableStyle returns a TableStyle using the project's orange-accent k9s palette.
 func DefaultTableStyle() TableStyle {
 	return TableStyle{
-		BorderColor: lipgloss.Color("214"), // orange
-		TitleColor:  lipgloss.Color("214"), // orange
-		CountColor:  lipgloss.Color("240"), // dim
+		BorderColor: lipgloss.Color("240"), // dim for border lines
+		TitleColor:  lipgloss.Color("36"),  // cyan for resource kind
+		ScopeColor:  lipgloss.Color("206"), // magenta/pink for scope
+		CountColor:  lipgloss.Color("69"),  // blue for count
 		DimColor:    lipgloss.Color("240"), // dim
 		HeaderColor: lipgloss.Color("255"), // white
 		SelectedBg:  lipgloss.Color("214"), // orange
@@ -327,32 +330,34 @@ func (rt *ResourceTable) View() string {
 }
 
 // renderTitleBar produces the k9s-style title line with box-drawing characters.
-// Example: "--- agents(ambient-platform)[12] ---"
+// The title is centered: ┌──── kind(scope)[count] ────┐
+// kind=cyan, scope=magenta, count=blue (matching k9s colors).
 func (rt *ResourceTable) renderTitleBar() string {
 	borderStyle := lipgloss.NewStyle().Foreground(rt.style.BorderColor)
-	titleStyle := lipgloss.NewStyle().Foreground(rt.style.TitleColor).Bold(true)
-	countStyle := lipgloss.NewStyle().Foreground(rt.style.CountColor)
+	kindStyle := lipgloss.NewStyle().Foreground(rt.style.TitleColor).Bold(true)
+	scopeStyle := lipgloss.NewStyle().Foreground(rt.style.ScopeColor).Bold(true)
+	countStyle := lipgloss.NewStyle().Foreground(rt.style.CountColor).Bold(true)
 
 	count := len(rt.inner.Rows())
-	title := fmt.Sprintf(" %s(%s)", rt.kind, rt.scope)
-	countStr := fmt.Sprintf("[%d]", count)
-	titleRendered := titleStyle.Render(title) + countStyle.Render(countStr) + " "
+	titleRendered := " " +
+		kindStyle.Render(rt.kind) +
+		scopeStyle.Render("("+rt.scope+")") +
+		countStyle.Render(fmt.Sprintf("[%d]", count)) +
+		" "
 
-	// Calculate the width available for the decorative dashes.
-	// lipgloss.Width accounts for ANSI sequences.
 	titleVisualWidth := lipgloss.Width(titleRendered)
 	tableWidth := rt.inner.Width()
 	if tableWidth < titleVisualWidth+6 {
-		// Not enough room for dashes; just return the title.
 		return borderStyle.Render("┌────") +
 			titleRendered +
 			borderStyle.Render("────┐")
 	}
 
-	// Distribute remaining width for left and right dash segments.
+	// Center the title between the dashes.
 	remaining := tableWidth - titleVisualWidth - 2 // 2 for corner chars
-	leftDashes := 4
+	leftDashes := remaining / 2
 	rightDashes := remaining - leftDashes
+	leftDashes = max(leftDashes, 1)
 	rightDashes = max(rightDashes, 1)
 
 	left := borderStyle.Render("┌" + strings.Repeat("─", leftDashes))
