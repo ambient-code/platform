@@ -248,6 +248,7 @@ Accessible globally (`:sessions` — all sessions across all projects) or scoped
 | `d` | Describe — show session detail (full metadata, prompt, conditions) | d |
 | `l` | Live message stream (same as Enter) | l |
 | `m` | Send message to session (`POST /sessions/{id}/messages`) | — |
+| `n` | Start a new session for the current agent (opens prompt input) | — |
 | `y` | YAML — dump session as YAML to screen | y |
 | `Ctrl-D` | Delete/cancel session (confirmation modal) | Ctrl-D |
 
@@ -382,7 +383,17 @@ Left side — context metadata (k9s style, stacked key-value):
 - **Project** (current project context)
 - **Refresh indicator** — seconds since last successful fetch. Shows `(stale)` if >15s.
 
-Right side — ASCII art branding + top-level key hints.
+Right side — ASCII art branding + key hints.
+
+The right side of the header shows contextual hotkeys that change based on the active view, displayed to the left of the static `<?>`, `<:>`, `</>` hints. For example, in the agents view:
+
+```
+<s> Start  <x> Stop  <i> Inbox  <d> Describe     <?>  Help
+<e> Edit   <l> Logs  <n> New    <Ctrl-D> Delete   <:>  Command
+                                                   </>  Filter
+```
+
+Each view shows only its relevant hotkeys. The hotkeys are rendered in dim text with the key in angle brackets.
 
 ### Command/Filter Bar
 
