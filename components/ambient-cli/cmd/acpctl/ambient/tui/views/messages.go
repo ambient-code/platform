@@ -501,11 +501,6 @@ func (ms *MessageStream) updateNormal(msg tea.KeyMsg) (MessageStream, tea.Cmd) {
 		case "k":
 			ms.scrollUp(1)
 			return *ms, nil
-		case "/":
-			ms.searchMode = true
-			ms.searchInput.Reset()
-			ms.searchInput.Focus()
-			return *ms, nil
 		case "c":
 			// Copy the selected message text to clipboard.
 			if len(ms.messages) > 0 {
