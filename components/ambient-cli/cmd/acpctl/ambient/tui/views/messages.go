@@ -299,6 +299,9 @@ type MessageStream struct {
 	cachedTsMode     int
 	cachedSearchPat  string
 
+	// Per-message glamour render cache (key = seq number).
+	glamourCache     map[int]string
+
 	// Compose
 	composeMode  bool
 	composeInput textinput.Model
@@ -660,12 +663,31 @@ func (ms *MessageStream) View() string {
 	case 2:
 		tsLabel = "Absolute"
 	}
-	indicators := fmt.Sprintf("Autoscroll:%s     Raw:%s     Pretty:%s     Time:%s     Phase:%s",
+	// Scroll position indicator.
+	allLines := ms.buildDisplayLines()
+	scrollPct := ""
+	if len(allLines) > 0 {
+		total := len(allLines)
+		contentH := ms.contentHeight()
+		if total <= contentH {
+			scrollPct = "All"
+		} else if ms.scrollOffset <= 0 {
+			scrollPct = "Top"
+		} else if ms.scrollOffset >= total-contentH {
+			scrollPct = "Bot"
+		} else {
+			pct := ms.scrollOffset * 100 / (total - contentH)
+			scrollPct = fmt.Sprintf("%d%%", pct)
+		}
+	}
+
+	indicators := fmt.Sprintf("Autoscroll:%s     Raw:%s     Pretty:%s     Time:%s     Phase:%s     %s",
 		dimIndicator.Render(autoScrollLabel),
 		dimIndicator.Render(rawLabel),
 		dimIndicator.Render(prettyLabel),
 		dimIndicator.Render(tsLabel),
 		phaseStyle.Render(ms.phase),
+		dimIndicator.Render(scrollPct),
 	)
 	if ms.sseStatus != "" && ms.sseStatus != "connected" {
 		var sseColor lipgloss.Color
@@ -926,26 +948,37 @@ func (ms *MessageStream) renderConversationEntry(entry MessageEntry, maxWidth in
 
 	availWidth := max(maxWidth-tagWidth, 10)
 
-	// In pretty mode, render all messages through glamour for markdown support.
+	// In pretty mode, render through glamour for markdown support.
+	// Uses per-message cache to avoid re-rendering on every frame.
 	if ms.wrapMode {
-		glamourWidth := max(ms.width-20, 20)
-		if r := ms.getGlamourRenderer(glamourWidth); r != nil {
-			rendered, err := r.Render(strings.TrimSpace(entry.Payload))
-			if err == nil && strings.TrimSpace(rendered) != "" {
-				// Split glamour output into lines, strip leading/trailing blanks, prefix with tag.
-				glamourLines := strings.Split(strings.TrimSpace(rendered), "\n")
-				result := make([]string, 0, len(glamourLines))
-				for i, line := range glamourLines {
-					if i == 0 {
-						result = append(result, tag+line)
-					} else {
-						result = append(result, indent+line)
-					}
+		if ms.glamourCache == nil {
+			ms.glamourCache = make(map[int]string)
+		}
+		var rendered string
+		if cached, ok := ms.glamourCache[entry.Seq]; ok {
+			rendered = cached
+		} else {
+			glamourWidth := max(ms.width-20, 20)
+			if r := ms.getGlamourRenderer(glamourWidth); r != nil {
+				out, err := r.Render(strings.TrimSpace(entry.Payload))
+				if err == nil {
+					rendered = strings.TrimSpace(out)
+					ms.glamourCache[entry.Seq] = rendered
 				}
-				return result
 			}
 		}
-		// Glamour failed — fall through to plain text rendering.
+		if rendered != "" {
+			glamourLines := strings.Split(rendered, "\n")
+			result := make([]string, 0, len(glamourLines))
+			for i, line := range glamourLines {
+				if i == 0 {
+					result = append(result, tag+line)
+				} else {
+					result = append(result, indent+line)
+				}
+			}
+			return result
+		}
 	}
 
 	wrapped := wrapText(displayText, availWidth)
