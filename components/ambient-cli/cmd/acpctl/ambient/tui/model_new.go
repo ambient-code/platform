@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -118,6 +119,15 @@ type AppModel struct {
 	// Rate-limit backoff: skip the next poll cycle when a 429 is received.
 	skipNextPoll bool
 
+	// Project shortcuts for number-key switching (like k9s namespace shortcuts).
+	// Holds project names in alphabetical order, refreshed on ProjectsMsg.
+	projectShortcuts []string
+
+	// Prompt mode for inline text input (e.g. new session prompt).
+	promptMode     bool
+	promptInput    textinput.Model
+	promptCallback func(string) (tea.Model, tea.Cmd) // called on Enter
+
 	// Terminal size
 	width, height int
 }
@@ -144,6 +154,11 @@ func NewAppModel(factory *connection.ClientFactory) (*AppModel, error) {
 	fi.Prompt = "/"
 	fi.CharLimit = 256
 
+	// Prompt bar input (for inline prompts like new session).
+	pi := textinput.New()
+	pi.Prompt = "Session prompt: "
+	pi.CharLimit = 1024
+
 	pt := views.NewProjectTable(views.DefaultTableStyle())
 	at := views.NewAgentTable("all", views.DefaultTableStyle())
 	st := views.NewSessionTable("all", views.DefaultTableStyle())
@@ -164,6 +179,7 @@ func NewAppModel(factory *connection.ClientFactory) (*AppModel, error) {
 		contextTable: ct,
 		commandInput: ci,
 		filterInput:  fi,
+		promptInput:  pi,
 	}
 
 	return m, nil
@@ -577,8 +593,8 @@ func (m *AppModel) resizeTable() {
 	//   separator lines: 2
 	// Total chrome: ~10 lines, leaving the rest for the table.
 	tableHeight := m.height - 10
-	if m.commandMode || m.filterMode {
-		tableHeight-- // command bar takes a line
+	if m.commandMode || m.filterMode || m.promptMode {
+		tableHeight-- // command/filter/prompt bar takes a line
 	}
 	if tableHeight < 1 {
 		tableHeight = 1
@@ -632,6 +648,14 @@ func (m *AppModel) handleProjectsMsg(msg ProjectsMsg) (tea.Model, tea.Cmd) {
 
 	m.lastError = ""
 	m.cachedProjects = msg.Projects
+
+	// Refresh project shortcuts (alphabetically sorted names for number-key switching).
+	names := make([]string, 0, len(msg.Projects))
+	for _, p := range msg.Projects {
+		names = append(names, p.Name)
+	}
+	sort.Strings(names)
+	m.projectShortcuts = names
 
 	rows := make([]table.Row, 0, len(msg.Projects))
 	for _, p := range msg.Projects {
@@ -840,6 +864,11 @@ func (m *AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Delete confirmation takes priority over all other modes.
 	if m.confirmingDelete {
 		return m.handleDeleteConfirmKey(msg)
+	}
+
+	// Prompt mode (inline text input for new session, etc.).
+	if m.promptMode {
+		return m.handlePromptKey(msg)
 	}
 
 	if m.commandMode {
@@ -1108,6 +1137,11 @@ func (m *AppModel) handleRuneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Number-key project shortcuts (0-9).
+	if len(key) == 1 && key[0] >= '0' && key[0] <= '9' {
+		return m.handleProjectShortcut(key[0] - '0')
+	}
+
 	// View-specific rune keybindings.
 	switch m.activeView {
 	case "projects":
@@ -1303,6 +1337,26 @@ func (m *AppModel) handleSessionsRune(key string) (tea.Model, tea.Cmd) {
 		return m.handleEnter()
 	case "m":
 		return m, m.setInfo("Use Enter to view messages, then m to compose")
+	case "n":
+		// Start a new session for the current agent.
+		if m.currentAgentID == "" || m.currentProject == "" {
+			return m, m.setInfo("Navigate to an agent first to start a session")
+		}
+		// Open prompt input for session prompt text.
+		agentID := m.currentAgentID
+		project := m.currentProject
+		m.promptMode = true
+		m.promptInput.Prompt = "Session prompt: "
+		m.promptInput.Reset()
+		m.promptInput.Focus()
+		m.promptCallback = func(text string) (tea.Model, tea.Cmd) {
+			return m, tea.Batch(
+				m.client.StartAgent(project, agentID, text),
+				m.setInfo("Starting session..."),
+			)
+		}
+		m.resizeTable()
+		return m, nil
 	case "y":
 		// Show session detail (closest to YAML dump).
 		row := m.sessionTable.SelectedRow()
@@ -1754,5 +1808,144 @@ func (m *AppModel) applyFilterToActiveTable(f *Filter) {
 func (m *AppModel) clearActiveTableFilter() {
 	if tbl := m.activeTable(); tbl != nil {
 		tbl.ClearFilter()
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Prompt mode (inline text input for new session, etc.)
+// ---------------------------------------------------------------------------
+
+// handlePromptKey processes keys while in prompt mode.
+func (m *AppModel) handlePromptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.promptMode = false
+		m.promptCallback = nil
+		m.promptInput.Reset()
+		m.promptInput.Blur()
+		m.resizeTable()
+		return m, m.setInfo("Cancelled")
+
+	case tea.KeyEnter:
+		input := m.promptInput.Value()
+		cb := m.promptCallback
+		m.promptMode = false
+		m.promptCallback = nil
+		m.promptInput.Reset()
+		m.promptInput.Blur()
+		m.resizeTable()
+		if cb != nil {
+			return cb(input)
+		}
+		return m, nil
+
+	default:
+		var cmd tea.Cmd
+		m.promptInput, cmd = m.promptInput.Update(msg)
+		return m, cmd
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Project number-key shortcuts
+// ---------------------------------------------------------------------------
+
+// handleProjectShortcut switches the project scope when a digit 0-9 is pressed.
+// 0 = "all" (clear project scope), 1-9 = projectShortcuts[digit-1].
+func (m *AppModel) handleProjectShortcut(digit byte) (tea.Model, tea.Cmd) {
+	if digit == 0 {
+		// Switch to "all" — clear project scope and go to global sessions.
+		m.currentProject = ""
+		m.currentAgent = ""
+		m.currentAgentID = ""
+		m.currentSession = ""
+		m.navStack = []NavEntry{{Kind: "projects", Scope: "all"}}
+		m.activeView = "projects"
+		m.activeFilter = nil
+		m.pollInFlight = true
+		return m, tea.Batch(m.client.FetchProjects(), m.setInfo("Switched to all projects"))
+	}
+
+	idx := int(digit) - 1
+	if idx >= len(m.projectShortcuts) {
+		return m, m.setInfo(fmt.Sprintf("No project at index %d", digit))
+	}
+
+	projectName := m.projectShortcuts[idx]
+	m.currentProject = projectName
+	m.currentAgent = ""
+	m.currentAgentID = ""
+	m.currentSession = ""
+	m.agentTable.SetScope(projectName)
+	m.navStack = []NavEntry{
+		{Kind: "projects", Scope: "all"},
+		{Kind: "agents", Scope: projectName},
+	}
+	m.activeView = "agents"
+	m.activeFilter = nil
+	m.pollInFlight = true
+	return m, tea.Batch(
+		m.client.FetchAgents(projectName),
+		m.setInfo("Switched to project "+projectName),
+	)
+}
+
+// ---------------------------------------------------------------------------
+// Contextual hotkey hints for the header
+// ---------------------------------------------------------------------------
+
+// contextualHints returns the hotkey hints for the current active view.
+func (m *AppModel) contextualHints() []string {
+	switch m.activeView {
+	case "projects":
+		return []string{
+			"<d> Describe",
+			"<n> New",
+			"<Ctrl-D> Delete",
+		}
+	case "agents":
+		return []string{
+			"<s> Start",
+			"<x> Stop",
+			"<i> Inbox",
+			"<d> Describe",
+			"<e> Edit",
+			"<l> Logs",
+			"<n> New",
+			"<Ctrl-D> Delete",
+		}
+	case "sessions":
+		return []string{
+			"<d> Describe",
+			"<l> Logs",
+			"<m> Send",
+			"<n> New",
+			"<y> YAML",
+			"<Ctrl-D> Delete",
+		}
+	case "inbox":
+		return []string{
+			"<m> Compose",
+			"<r> Mark Read",
+			"<Ctrl-D> Delete",
+		}
+	case "messages":
+		return []string{
+			"<s> Autoscroll",
+			"<r> Raw",
+			"<m> Send",
+			"<c> Copy",
+		}
+	case "contexts":
+		return []string{
+			"(Enter to switch)",
+		}
+	case "detail":
+		return []string{
+			"<c> Copy",
+			"<Esc> Back",
+		}
+	default:
+		return nil
 	}
 }

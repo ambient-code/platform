@@ -31,8 +31,8 @@ func (m *AppModel) View() string {
 	// 2. Separator.
 	sections = append(sections, styleDim.Render(strings.Repeat("─", m.width)))
 
-	// 3. Command/filter bar (only when active).
-	if m.commandMode || m.filterMode {
+	// 3. Command/filter/prompt bar (only when active).
+	if m.commandMode || m.filterMode || m.promptMode {
 		sections = append(sections, m.viewCommandBar())
 	}
 
@@ -51,8 +51,9 @@ func (m *AppModel) View() string {
 	return strings.Join(sections, "\n")
 }
 
-// viewHeader renders the multi-line header block with context info on the left
-// and branding + key hints on the right.
+// viewHeader renders the multi-line header block with context info on the left,
+// project shortcuts in the center, and contextual hotkeys + static hints + branding
+// on the right.
 func (m *AppModel) viewHeader() string {
 	// Left side: context metadata lines.
 	contextName := "none"
@@ -106,16 +107,66 @@ func (m *AppModel) viewHeader() string {
 		refreshIndicator,
 	}
 
-	// Right side: key hints + branding (column-aligned).
-	hintLines := []string{
-		styleDim.Render("<?>") + "  " + styleWhite.Render("Help   "),
-		styleDim.Render("<:>") + "  " + styleWhite.Render("Command"),
-		styleDim.Render("</>") + "  " + styleWhite.Render("Filter "),
-		"",
-		"",
+	// Build project shortcuts line (like k9s namespace shortcuts).
+	// Format: <0> all  <1> proj1  <2> proj2 ...
+	var shortcutParts []string
+	shortcutParts = append(shortcutParts, styleCyan.Render("<0>")+styleCyan.Render(" all"))
+	maxShortcuts := 6
+	if len(m.projectShortcuts) < maxShortcuts {
+		maxShortcuts = len(m.projectShortcuts)
+	}
+	for i := 0; i < maxShortcuts; i++ {
+		shortcutParts = append(shortcutParts,
+			styleCyan.Render(fmt.Sprintf("<%d>", i+1))+" "+styleCyan.Render(m.projectShortcuts[i]))
+	}
+	shortcutLine := "  " + strings.Join(shortcutParts, "  ")
+
+	// Build contextual hints (two rows, ~4 per row).
+	ctxHints := m.contextualHints()
+	var ctxRow1, ctxRow2 []string
+	splitAt := (len(ctxHints) + 1) / 2 // first row gets the larger half
+	for i, h := range ctxHints {
+		rendered := m.renderHint(h)
+		if i < splitAt {
+			ctxRow1 = append(ctxRow1, rendered)
+		} else {
+			ctxRow2 = append(ctxRow2, rendered)
+		}
+	}
+	ctxLine1 := strings.Join(ctxRow1, "  ")
+	ctxLine2 := strings.Join(ctxRow2, "  ")
+
+	// Static hints (always shown).
+	staticHints := []string{
+		styleDim.Render("<?>") + " " + styleWhite.Render("Help"),
+		styleDim.Render("<:>") + " " + styleWhite.Render("Command"),
+		styleDim.Render("</>") + " " + styleWhite.Render("Filter"),
+	}
+	staticLine := strings.Join(staticHints, "  ")
+
+	// Right side: combine contextual row 1 + static hints on line 0,
+	// contextual row 2 on line 1, then branding fills remaining lines.
+	// Layout:
+	//   Line 0: left metadata | ctx hints row1 + static | brand
+	//   Line 1: left metadata | ctx hints row2           | brand
+	//   Line 2: left metadata | shortcuts                | brand
+	//   Line 3: left metadata |                          | brand
+	//   Line 4: left metadata |                          | brand
+
+	rightHintLines := make([]string, 5)
+	if len(ctxRow1) > 0 {
+		rightHintLines[0] = ctxLine1 + "   " + staticLine
+	} else {
+		rightHintLines[0] = staticLine
+	}
+	if len(ctxRow2) > 0 {
+		rightHintLines[1] = ctxLine2
+	}
+	if len(m.projectShortcuts) > 0 {
+		rightHintLines[2] = shortcutLine
 	}
 
-	// Combine left, hints, and branding into header lines.
+	// Combine left, right-hints, and branding into header lines.
 	headerLines := make([]string, 5)
 	for i := range 5 {
 		left := ""
@@ -123,10 +174,7 @@ func (m *AppModel) viewHeader() string {
 			left = leftLines[i]
 		}
 
-		hint := ""
-		if i < len(hintLines) {
-			hint = hintLines[i]
-		}
+		hint := rightHintLines[i]
 
 		brand := ""
 		if i < len(brandLines) {
@@ -137,8 +185,16 @@ func (m *AppModel) viewHeader() string {
 		leftWidth := lipgloss.Width(left)
 		hintWidth := lipgloss.Width(hint)
 		brandWidth := lipgloss.Width(brand)
-		rightContent := hint + "  " + brand
-		rightWidth := hintWidth + 2 + brandWidth
+
+		var rightContent string
+		var rightWidth int
+		if hint != "" {
+			rightContent = hint + "  " + brand
+			rightWidth = hintWidth + 2 + brandWidth
+		} else {
+			rightContent = brand
+			rightWidth = brandWidth
+		}
 
 		gap := m.width - leftWidth - rightWidth
 		if gap < 1 {
@@ -151,8 +207,28 @@ func (m *AppModel) viewHeader() string {
 	return strings.Join(headerLines, "\n")
 }
 
-// viewCommandBar renders the command or filter input bar.
+// renderHint renders a single hotkey hint like "<d> Describe" with dim brackets
+// and white action text.
+func (m *AppModel) renderHint(hint string) string {
+	// Parse hints of the form "<key> Action" or "(text)".
+	if strings.HasPrefix(hint, "(") {
+		return styleDim.Render(hint)
+	}
+	// Find the closing bracket.
+	idx := strings.Index(hint, ">")
+	if idx < 0 {
+		return styleDim.Render(hint)
+	}
+	key := hint[:idx+1]   // e.g. "<d>"
+	action := hint[idx+1:] // e.g. " Describe"
+	return styleDim.Render(key) + styleWhite.Render(action)
+}
+
+// viewCommandBar renders the command, filter, or prompt input bar.
 func (m *AppModel) viewCommandBar() string {
+	if m.promptMode {
+		return "  " + m.promptInput.View()
+	}
 	if m.commandMode {
 		return "  " + m.commandInput.View()
 	}
@@ -195,6 +271,12 @@ func (m *AppModel) viewBreadcrumb() string {
 
 // viewInfoLine renders the ephemeral info/toast line at the very bottom.
 func (m *AppModel) viewInfoLine() string {
+	// Delete confirmation takes priority over everything.
+	if m.confirmingDelete {
+		prompt := fmt.Sprintf("Delete %s %s? (y/n)", m.deleteKind, m.deleteName)
+		return "  " + styleYellow.Render(prompt)
+	}
+
 	// Error takes priority over info.
 	if m.lastError != "" {
 		return "  " + styleRed.Render("✗ "+m.lastError)
