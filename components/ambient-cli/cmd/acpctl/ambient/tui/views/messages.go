@@ -290,6 +290,15 @@ type MessageStream struct {
 	glamourRenderer *glamour.TermRenderer
 	glamourWidth    int // width used to create the cached renderer
 
+	// Cached display lines — rebuilt when mode/messages change, not every frame.
+	cachedLines      []string
+	cachedDirty      bool // true when lines need rebuilding
+	cachedMsgCount   int
+	cachedRawMode    bool
+	cachedWrapMode   bool
+	cachedTsMode     int
+	cachedSearchPat  string
+
 	// Compose
 	composeMode  bool
 	composeInput textinput.Model
@@ -346,6 +355,7 @@ func (ms *MessageStream) AddMessage(entry MessageEntry) {
 			ms.scrollOffset = 0
 		}
 	}
+	ms.cachedDirty = true
 	if ms.autoScroll {
 		ms.scrollToBottom()
 	}
@@ -781,7 +791,23 @@ func (ms *MessageStream) renderContent(height int) []string {
 }
 
 // buildDisplayLines converts the message buffer into styled display lines.
+// Results are cached and only rebuilt when mode/messages change.
 func (ms *MessageStream) buildDisplayLines() []string {
+	searchStr := ""
+	if ms.searchPattern != nil {
+		searchStr = ms.searchPattern.String()
+	}
+	// Check if cache is still valid (timestamps always invalidate since relative times change).
+	if !ms.cachedDirty &&
+		ms.cachedMsgCount == len(ms.messages) &&
+		ms.cachedRawMode == ms.rawMode &&
+		ms.cachedWrapMode == ms.wrapMode &&
+		ms.cachedTsMode == ms.timestampMode &&
+		ms.cachedSearchPat == searchStr &&
+		ms.timestampMode == 0 {
+		return ms.cachedLines
+	}
+
 	maxLineWidth := max(ms.width-4, 20) // 2 for borders, 2 for padding
 
 	lines := make([]string, 0, len(ms.messages))
@@ -841,6 +867,13 @@ func (ms *MessageStream) buildDisplayLines() []string {
 		lines = append(lines, entryLines...)
 	}
 
+	ms.cachedLines = lines
+	ms.cachedDirty = false
+	ms.cachedMsgCount = len(ms.messages)
+	ms.cachedRawMode = ms.rawMode
+	ms.cachedWrapMode = ms.wrapMode
+	ms.cachedTsMode = ms.timestampMode
+	ms.cachedSearchPat = searchStr
 	return lines
 }
 
@@ -861,6 +894,7 @@ func (ms *MessageStream) getGlamourRenderer(wrapWidth int) *glamour.TermRenderer
 	ms.glamourWidth = wrapWidth
 	return r
 }
+
 
 // renderConversationEntry renders a single message in conversation mode.
 // Format: [event_type]  summary text (wrapped)
