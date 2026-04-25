@@ -3,7 +3,6 @@ package views
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -816,7 +815,6 @@ func (ms *MessageStream) renderContent(height int) []string {
 // buildDisplayLines converts the message buffer into styled display lines.
 // Results are cached and only rebuilt when mode/messages change.
 func (ms *MessageStream) buildDisplayLines() []string {
-	debugStart := time.Now()
 	searchStr := ""
 	if ms.searchPattern != nil {
 		searchStr = ms.searchPattern.String()
@@ -891,12 +889,6 @@ func (ms *MessageStream) buildDisplayLines() []string {
 		lines = append(lines, entryLines...)
 	}
 
-	if elapsed := time.Since(debugStart); elapsed > 100*time.Millisecond {
-		_ = os.WriteFile("/tmp/tui-render-debug.log",
-			[]byte(fmt.Sprintf("%s buildDisplayLines: %v (%d msgs, wrap=%v)\n",
-				time.Now().Format("15:04:05"), elapsed, len(ms.messages), ms.wrapMode)),
-			0644)
-	}
 	ms.cachedLines = lines
 	ms.cachedDirty = false
 	ms.cachedMsgCount = len(ms.messages)
@@ -914,7 +906,7 @@ func (ms *MessageStream) getGlamourRenderer(wrapWidth int) *glamour.TermRenderer
 		return ms.glamourRenderer
 	}
 	r, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
+		glamour.WithStandardStyle("dark"),
 		glamour.WithWordWrap(wrapWidth),
 	)
 	if err != nil {
