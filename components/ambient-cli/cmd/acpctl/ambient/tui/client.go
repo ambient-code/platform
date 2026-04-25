@@ -237,20 +237,24 @@ func (tc *TUIClient) FetchProjectCounts(projects []string) tea.Cmd {
 					return
 				}
 
-				var ac, sc int
-
 				agentList, err := client.Agents().List(ctx, defaultListOpts())
 				if err != nil {
-					ac = -1
-				} else {
-					ac = len(agentList.Items)
+					mu.Lock()
+					counts[proj] = ProjectCounts{AgentCount: -1, SessionCount: -1}
+					mu.Unlock()
+					return
 				}
+				ac := len(agentList.Items)
 
-				sessionList, err := client.Sessions().List(ctx, defaultListOpts())
-				if err != nil {
-					sc = -1
-				} else {
-					sc = len(sessionList.Items)
+				// Sum session counts per agent so the total matches what agent
+				// drill-down shows (avoids discrepancy with Sessions().List
+				// which may include orphaned sessions).
+				sc := 0
+				for _, agent := range agentList.Items {
+					sl, err := client.Agents().Sessions(ctx, proj, agent.ID, defaultListOpts())
+					if err == nil {
+						sc += len(sl.Items)
+					}
 				}
 
 				mu.Lock()
