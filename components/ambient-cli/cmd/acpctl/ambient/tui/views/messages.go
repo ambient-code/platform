@@ -535,51 +535,61 @@ func (ms *MessageStream) View() string {
 		return "Loading…"
 	}
 
-	headerStyle := lipgloss.NewStyle().Foreground(msgColorCyan).Bold(true)
-	dimStyle := lipgloss.NewStyle().Foreground(msgColorDim)
 	borderStyle := lipgloss.NewStyle().Foreground(msgColorDim)
+	kindStyle := lipgloss.NewStyle().Foreground(msgColorCyan).Bold(true)
+	scopeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("206")).Bold(true)
+	countStyle := lipgloss.NewStyle().Foreground(msgColorBlue).Bold(true)
 
-	// -- Header --
+	// -- k9s-style title bar: messages(agent/session)[count] --
 	shortID := ms.sessionID
 	if len(shortID) > 12 {
-		shortID = shortID[:12] + "…"
+		shortID = shortID[:12]
+	}
+	scope := ms.agentName + "/" + shortID
+	titleRendered := " " +
+		kindStyle.Render("messages") +
+		scopeStyle.Render("("+scope+")") +
+		countStyle.Render(fmt.Sprintf("[%d]", len(ms.messages))) +
+		" "
+	titleWidth := lipgloss.Width(titleRendered)
+	remaining := max(ms.width-titleWidth-2, 2)
+	leftDashes := remaining / 2
+	rightDashes := remaining - leftDashes
+	titleBar := borderStyle.Render("┌"+strings.Repeat("─", leftDashes)) +
+		titleRendered +
+		borderStyle.Render(strings.Repeat("─", rightDashes)+"┐")
+
+	// -- Status indicators line (below title, inside border) --
+	autoScrollLabel := "Off"
+	if ms.autoScroll {
+		autoScrollLabel = "On"
+	}
+	modeLabel := "Conversation"
+	if ms.rawMode {
+		modeLabel = "Raw"
 	}
 	phaseStyle := lipgloss.NewStyle().Foreground(phaseColor(ms.phase))
-
-	// SSE status indicator with color coding.
-	sseSegment := ""
-	if ms.sseStatus != "" {
-		var sseStyle lipgloss.Style
-		switch ms.sseStatus {
-		case "connected":
-			sseStyle = lipgloss.NewStyle().Foreground(msgColorGreen)
-		case "reconnecting":
-			sseStyle = lipgloss.NewStyle().Foreground(msgColorYellow)
-		case "disconnected":
-			sseStyle = lipgloss.NewStyle().Foreground(msgColorRed)
-		default:
-			sseStyle = lipgloss.NewStyle().Foreground(msgColorDim)
-		}
-		sseSegment = fmt.Sprintf(" %s %s %s",
-			dimStyle.Render("—"),
-			dimStyle.Render("SSE:"),
-			sseStyle.Render(ms.sseStatus),
-		)
-	}
-
-	header := fmt.Sprintf(" %s %s %s %s %s %s%s",
-		headerStyle.Render("Session"),
-		lipgloss.NewStyle().Foreground(msgColorWhite).Bold(true).Render(shortID),
-		dimStyle.Render("—"),
-		fmt.Sprintf("%s %s", dimStyle.Render("Phase:"), phaseStyle.Render(ms.phase)),
-		dimStyle.Render("—"),
-		fmt.Sprintf("%s %s", dimStyle.Render("Agent:"), lipgloss.NewStyle().Foreground(msgColorOrange).Render(ms.agentName)),
-		sseSegment,
+	indicators := fmt.Sprintf("Autoscroll:%s     Mode:%s     Phase:%s",
+		lipgloss.NewStyle().Foreground(msgColorGreen).Render(autoScrollLabel),
+		lipgloss.NewStyle().Foreground(msgColorCyan).Render(modeLabel),
+		phaseStyle.Render(ms.phase),
 	)
-
-	headerBar := borderStyle.Render("┌" + strings.Repeat("─", max(ms.width-2, 0)) + "┐")
-	headerLine := borderStyle.Render("│") +
-		padToWidth(header, ms.width-2) +
+	if ms.sseStatus != "" && ms.sseStatus != "connected" {
+		var sseColor lipgloss.Color
+		switch ms.sseStatus {
+		case "reconnecting":
+			sseColor = msgColorYellow
+		default:
+			sseColor = msgColorRed
+		}
+		indicators += fmt.Sprintf("     SSE:%s",
+			lipgloss.NewStyle().Foreground(sseColor).Render(ms.sseStatus))
+	}
+	// Center the indicators line.
+	indWidth := lipgloss.Width(indicators)
+	indPad := max((ms.width-2-indWidth)/2, 0)
+	indicatorLine := borderStyle.Render("│") +
+		padToWidth(strings.Repeat(" ", indPad)+indicators, ms.width-2) +
 		borderStyle.Render("│")
 	headerSep := borderStyle.Render("├" + strings.Repeat("─", max(ms.width-2, 0)) + "┤")
 
@@ -647,9 +657,9 @@ func (ms *MessageStream) View() string {
 
 	// Assemble.
 	var sb strings.Builder
-	sb.WriteString(headerBar)
+	sb.WriteString(titleBar)
 	sb.WriteByte('\n')
-	sb.WriteString(headerLine)
+	sb.WriteString(indicatorLine)
 	sb.WriteByte('\n')
 	sb.WriteString(headerSep)
 	sb.WriteByte('\n')
