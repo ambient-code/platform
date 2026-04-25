@@ -68,8 +68,8 @@ func phaseColor(phase string) lipgloss.Color {
 	switch strings.ToLower(phase) {
 	case "pending":
 		return msgColorYellow
-	case "running":
-		return msgColorGreen
+	case "running", "active":
+		return msgColorOrange
 	case "succeeded", "completed":
 		return msgColorDim
 	case "failed":
