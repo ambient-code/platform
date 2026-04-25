@@ -355,6 +355,7 @@ These work on every screen:
 | `Ctrl-C` | Quit immediately | `Ctrl-C` |
 | `c` | Copy selected row's ID to clipboard (OSC 52) | — |
 | Scroll wheel | Scroll up/down in tables and message stream | Scroll wheel |
+| `0`-`9` | Switch project by number (shown in header) | — (Ambient-specific, matches k9s namespace switching) |
 | `Shift-N` | Sort by name column | `Shift-N` |
 | `Shift-A` | Sort by age column | `Shift-A` |
 
@@ -384,6 +385,16 @@ Left side — context metadata (k9s style, stacked key-value):
 - **Refresh indicator** — seconds since last successful fetch. Shows `(stale)` if >15s.
 
 Right side — ASCII art branding + key hints.
+
+Between the left-side metadata and the right-side hotkey hints, the header shows numbered project shortcuts for quick switching (matching k9s's namespace number keys):
+
+```
+<0> all       <1> test       <2> test-jsell       <s> Start  <d> Describe     <?>  Help
+                                                    <x> Stop   <i> Inbox        <:>  Command
+                                                    <l> Logs   <n> New          </>  Filter
+```
+
+Projects are numbered in alphabetical order. `<0>` always means "all" (unscoped). Pressing a number key instantly switches the project context without entering command mode.
 
 The right side of the header shows contextual hotkeys that change based on the active view, displayed to the left of the static `<?>`, `<:>`, `</>` hints. For example, in the agents view:
 
