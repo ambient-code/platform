@@ -563,7 +563,7 @@ Carried forward from the existing TUI (`view.go`). These are ANSI 256-color indi
 | Phase | Color | ANSI 256 Index | Lipgloss |
 |-------|-------|----------------|----------|
 | `pending` | Yellow | 33 | `Color("33")` |
-| `running` | Green | 28 | `Color("28")` |
+| `running` | Orange | 214 | `Color("214")` |
 | `succeeded` / `completed` | Dim grey | 240 | `Color("240")` |
 | `failed` | Red | 31 | `Color("31")` |
 | `cancelled` | Dim grey | 240 | `Color("240")` |
@@ -574,12 +574,26 @@ Full palette (preserved from existing code):
 |------|----------|-------|
 | Orange | 214 | Branding, navigation highlights, selected items |
 | Cyan | 36 | Secondary accent |
-| Green | 28 | Running/success phase |
+| Green | 28 | Success indicators |
 | Red | 31 | Failed/error phase, delete confirmations |
 | Yellow | 33 | Pending phase, in-progress indicators |
 | Dim | 240 | Inactive items, separators, hints |
 | White | 255 | Primary text |
 | Blue | 69 | Command mode, links |
+
+### Row Coloring
+
+Following k9s conventions, entire table rows are colored based on resource phase/status — not just the PHASE column. This provides at-a-glance visibility into fleet health.
+
+| Phase | Row Color | ANSI 256 |
+|-------|-----------|----------|
+| `running` / `active` | Orange | 214 |
+| `pending` | Yellow | 33 |
+| `failed` | Red | 31 |
+| `succeeded` / `completed` | Dim grey | 240 |
+| `idle` / `cancelled` | Dim grey | 240 |
+
+**Selected row highlight:** The selected row uses the phase color as the **background** with black (0) foreground text. The highlight spans the full row width border-to-border. For rows without a phase (projects, contexts), the default orange (214) background is used.
 
 ---
 
