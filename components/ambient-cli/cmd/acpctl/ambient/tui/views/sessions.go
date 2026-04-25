@@ -84,16 +84,22 @@ func SessionRow(s sdktypes.Session, agentName string, now time.Time) table.Row {
 	}
 
 	phase := s.Phase
-	rowStyle := lipgloss.NewStyle().Foreground(PhaseColor(phase))
+	c := PhaseColor(phase)
+	r := func(s string) string {
+		if s == "" {
+			return ""
+		}
+		return lipgloss.NewStyle().Foreground(c).Render(s)
+	}
 
 	return table.Row{
-		rowStyle.Render(shortID),
-		rowStyle.Render(agentName),
-		rowStyle.Render(s.ProjectID),
-		rowStyle.Render(phase),
-		rowStyle.Render(s.TriggeredByUserID),
-		rowStyle.Render(started),
-		rowStyle.Render(duration),
+		r(shortID),
+		r(agentName),
+		r(s.ProjectID),
+		r(phase),
+		r(s.TriggeredByUserID),
+		r(started),
+		r(duration),
 	}
 }
 
