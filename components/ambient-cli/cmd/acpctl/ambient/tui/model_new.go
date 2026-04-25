@@ -697,9 +697,8 @@ func (m *AppModel) resizeTable() {
 	//   title bar: 1 line
 	//   breadcrumb: 1 line
 	//   info line: 1 line
-	//   separator lines: 2
-	// Total chrome: ~10 lines, leaving the rest for the table.
-	tableHeight := m.height - 10
+	// Total chrome: ~8 lines, leaving the rest for the table.
+	tableHeight := m.height - 8
 	if m.commandMode || m.filterMode || m.promptMode {
 		tableHeight-- // command/filter/prompt bar takes a line
 	}
@@ -1764,21 +1763,24 @@ func (m *AppModel) handleMessagesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // showHelp creates a HelpView for the current view and pushes it onto the nav stack.
 func (m *AppModel) showHelp() (tea.Model, tea.Cmd) {
+	// Fix 3: Capture the view name BEFORE changing activeView.
+	viewName := m.activeView
+
 	general := []views.HelpEntry{
 		{":", "Command"},
 		{"/", "Filter"},
 		{"?", "Help"},
 		{"c", "Copy ID"},
-		{"N", "Sort Name"},
-		{"A", "Sort Age"},
+		{"shift-n", "Sort Name"},
+		{"shift-a", "Sort Age"},
 	}
 
 	var resource, navigation []views.HelpEntry
 
-	switch m.activeView {
+	switch viewName {
 	case "projects":
 		resource = []views.HelpEntry{
-			{"d", "Describe"}, {"n", "New"}, {"Ctrl-D", "Delete"},
+			{"d", "Describe"}, {"n", "New"}, {"ctrl-d", "Delete"},
 		}
 		navigation = []views.HelpEntry{
 			{"Enter", "Drill into agents"}, {"q", "Quit"},
@@ -1786,7 +1788,7 @@ func (m *AppModel) showHelp() (tea.Model, tea.Cmd) {
 	case "agents":
 		resource = []views.HelpEntry{
 			{"s", "Start"}, {"x", "Stop"}, {"e", "Edit"}, {"i", "Inbox"},
-			{"l", "Logs"}, {"d", "Describe"}, {"n", "New"}, {"Ctrl-D", "Delete"},
+			{"l", "Logs"}, {"d", "Describe"}, {"n", "New"}, {"ctrl-d", "Delete"},
 		}
 		navigation = []views.HelpEntry{
 			{"Enter", "Drill into sessions"}, {"Esc", "Back to projects"},
@@ -1795,7 +1797,7 @@ func (m *AppModel) showHelp() (tea.Model, tea.Cmd) {
 	case "sessions":
 		resource = []views.HelpEntry{
 			{"d", "Describe"}, {"l", "Logs"}, {"m", "Send"}, {"n", "New"},
-			{"y", "YAML"}, {"Ctrl-D", "Delete"},
+			{"y", "YAML"}, {"ctrl-d", "Delete"},
 		}
 		navigation = []views.HelpEntry{
 			{"Enter", "Drill into messages"}, {"Esc", "Back to agents"},
@@ -1803,7 +1805,7 @@ func (m *AppModel) showHelp() (tea.Model, tea.Cmd) {
 		}
 	case "inbox":
 		resource = []views.HelpEntry{
-			{"m", "Compose"}, {"r", "Mark Read"}, {"Ctrl-D", "Delete"},
+			{"m", "Compose"}, {"r", "Mark Read"}, {"ctrl-d", "Delete"},
 		}
 		navigation = []views.HelpEntry{
 			{"Enter", "View body"}, {"Esc", "Back to agents"}, {"q", "Back"},
@@ -1811,7 +1813,7 @@ func (m *AppModel) showHelp() (tea.Model, tea.Cmd) {
 	case "messages":
 		resource = []views.HelpEntry{
 			{"s", "Autoscroll"}, {"r", "Raw Mode"}, {"m", "Send"},
-			{"c", "Copy"}, {"G", "Bottom"}, {"g", "Top"},
+			{"c", "Copy"}, {"shift-g", "Bottom"}, {"g", "Top"},
 		}
 		general = []views.HelpEntry{
 			{":", "Command"}, {"?", "Help"},
@@ -1836,13 +1838,11 @@ func (m *AppModel) showHelp() (tea.Model, tea.Cmd) {
 		}
 	}
 
-	title := fmt.Sprintf("Help(%s)", m.activeView)
+	title := viewName
 	m.helpView = views.NewHelpView(title, resource, general, navigation)
 	m.helpView.SetSize(m.width, m.height-10)
-	m.navStack = append(m.navStack, NavEntry{Kind: "help", Scope: m.activeView})
-	prevView := m.activeView
+	m.navStack = append(m.navStack, NavEntry{Kind: "help", Scope: viewName})
 	m.activeView = "help"
-	_ = prevView
 	return m, nil
 }
 
@@ -2054,7 +2054,20 @@ func (m *AppModel) executeCommand(input string) (tea.Model, tea.Cmd) {
 		return m, m.setInfo("Commands: " + fmt.Sprintf("%d available", len(entries)))
 
 	default:
-		return m, m.setInfo("Unknown command: "+input)
+		ascii := "        .-=-.\n" +
+			"       /  ! )\\\n" +
+			"      (__  _/\n" +
+			"      / _>/\n" +
+			"     / _>  \\  _\n" +
+			"    /_/  \\  \\//\n" +
+			"         (  |\n" +
+			"          ) |\n" +
+			"          \\_|"
+		msg := "< Ruroh? '" + input + "' not found >"
+		d := views.NewErrorDialog("error", msg, ascii)
+		m.dialog = &d
+		m.dialogAction = nil // single-button dismiss
+		return m, nil
 	}
 }
 

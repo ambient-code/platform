@@ -70,6 +70,17 @@ func NewDeleteDialog(kind, name string) Dialog {
 	}
 }
 
+// NewErrorDialog creates a single-button dialog with ASCII art and an error message.
+func NewErrorDialog(title, message, ascii string) Dialog {
+	return Dialog{
+		Title:   title,
+		Message: ascii + "\n" + message,
+		Buttons: []string{"Dismiss"},
+		Selected: 0,
+		Width:    50,
+	}
+}
+
 // NewInputDialog creates a dialog with a text input field and Cancel/OK buttons.
 func NewInputDialog(title, prompt string) Dialog {
 	ti := textinput.New()
@@ -159,11 +170,15 @@ func (d Dialog) View(containerWidth, containerHeight int) string {
 		Foreground(dlgColorDim).
 		Padding(0, 1)
 
-	// Calculate dialog width: max(40, message width + 8, input prompt + 16),
+	// Calculate dialog width: max(40, widest message line + 8, input prompt + 16),
 	// capped at containerWidth - 10.
 	dlgWidth := 40
-	if msgW := lipgloss.Width(d.Message) + 8; msgW > dlgWidth {
-		dlgWidth = msgW
+	if d.Message != "" {
+		for _, line := range strings.Split(d.Message, "\n") {
+			if msgW := lipgloss.Width(line) + 8; msgW > dlgWidth {
+				dlgWidth = msgW
+			}
+		}
 	}
 	if d.Input != nil {
 		if promptW := lipgloss.Width(d.Input.Prompt) + 24; promptW > dlgWidth {
@@ -206,24 +221,27 @@ func (d Dialog) View(containerWidth, containerHeight int) string {
 		strings.Repeat(" ", innerWidth) +
 		borderStyle.Render("│")
 
-	// Message line (centered within inner width).
-	var msgLine string
+	// Message lines (centered within inner width, supports multiline).
+	var msgLines []string
 	if d.Message != "" {
-		msgRendered := messageStyle.Render(d.Message)
-		msgVisualWidth := lipgloss.Width(msgRendered)
-		msgPadLeft := (innerWidth - msgVisualWidth) / 2
-		if msgPadLeft < 1 {
-			msgPadLeft = 1
+		for _, line := range strings.Split(d.Message, "\n") {
+			lineRendered := messageStyle.Render(line)
+			lineVisualWidth := lipgloss.Width(lineRendered)
+			linePadLeft := (innerWidth - lineVisualWidth) / 2
+			if linePadLeft < 1 {
+				linePadLeft = 1
+			}
+			linePadRight := innerWidth - lineVisualWidth - linePadLeft
+			if linePadRight < 0 {
+				linePadRight = 0
+			}
+			msgLines = append(msgLines,
+				borderStyle.Render("│")+
+					strings.Repeat(" ", linePadLeft)+
+					lineRendered+
+					strings.Repeat(" ", linePadRight)+
+					borderStyle.Render("│"))
 		}
-		msgPadRight := innerWidth - msgVisualWidth - msgPadLeft
-		if msgPadRight < 0 {
-			msgPadRight = 0
-		}
-		msgLine = borderStyle.Render("│") +
-			strings.Repeat(" ", msgPadLeft) +
-			msgRendered +
-			strings.Repeat(" ", msgPadRight) +
-			borderStyle.Render("│")
 	}
 
 	// Input line (if present).
@@ -275,8 +293,8 @@ func (d Dialog) View(containerWidth, containerHeight int) string {
 	var dialogLines []string
 	dialogLines = append(dialogLines, topLine)
 	dialogLines = append(dialogLines, emptyLine)
-	if d.Message != "" {
-		dialogLines = append(dialogLines, msgLine)
+	if len(msgLines) > 0 {
+		dialogLines = append(dialogLines, msgLines...)
 		dialogLines = append(dialogLines, emptyLine)
 	}
 	if d.Input != nil {

@@ -611,10 +611,12 @@ func (ms *MessageStream) View() string {
 		bottomLines = append([]string{composeSep, composeLine}, bottomLines...)
 	}
 
-	// Streaming cursor (when phase is running).
+	// Streaming cursor (when phase is running) — animated.
 	if strings.ToLower(ms.phase) == "running" {
 		cursorStyle := lipgloss.NewStyle().Foreground(msgColorOrange)
-		cursor := cursorStyle.Render(" ▌ streaming…")
+		frames := []string{"▌", "▐", "█", "▐"}
+		frame := frames[time.Now().UnixMilli()/300%4]
+		cursor := cursorStyle.Render(" " + frame + " streaming…")
 		cursorLine := borderStyle.Render("│") +
 			padToWidth(cursor, ms.width-2) +
 			borderStyle.Render("│")

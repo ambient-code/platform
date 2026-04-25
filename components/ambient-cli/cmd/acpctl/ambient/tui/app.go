@@ -10,13 +10,13 @@ import (
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/ambient/tui/views"
 )
 
-// ASCII art branding rendered in the header.
+// ASCII art branding rendered in the header (Fix 9: extra left padding).
 var brandLines = []string{
-	`   _    ___ ___  `,
-	`  /_\  / __| _ \ `,
-	` / _ \| (__|  _/ `,
-	`/_/ \_\\___|_|   `,
-	`                 `,
+	`    _    ___ ___  `,
+	`   /_\  / __| _ \ `,
+	`  / _ \| (__|  _/ `,
+	` /_/ \_\\___|_|   `,
+	`                  `,
 }
 
 // View implements tea.Model. It renders the k9s-style full-screen layout.
@@ -30,15 +30,12 @@ func (m *AppModel) View() string {
 	// 1. Header block.
 	sections = append(sections, m.viewHeader())
 
-	// 2. Separator.
-	sections = append(sections, styleDim.Render(strings.Repeat("─", m.width)))
-
-	// 3. Command/filter/prompt bar (only when active).
+	// 2. Command/filter/prompt bar (only when active).
 	if m.commandMode || m.filterMode || m.promptMode {
 		sections = append(sections, m.viewCommandBar())
 	}
 
-	// 4. Resource table with title bar (+ dialog overlay if active).
+	// 3. Resource table with title bar (+ dialog overlay if active).
 	tableOutput := m.viewResourceTable()
 	if m.dialog != nil {
 		tableH := m.height - 10
@@ -46,13 +43,10 @@ func (m *AppModel) View() string {
 	}
 	sections = append(sections, tableOutput)
 
-	// 5. Separator.
-	sections = append(sections, styleDim.Render(strings.Repeat("─", m.width)))
-
-	// 6. Breadcrumb trail.
+	// 4. Breadcrumb trail.
 	sections = append(sections, m.viewBreadcrumb())
 
-	// 7. Info line.
+	// 5. Info line.
 	sections = append(sections, m.viewInfoLine())
 
 	return strings.Join(sections, "\n")
@@ -168,7 +162,7 @@ func (m *AppModel) viewHeader() string {
 		}
 		right := ""
 		if col4[i] != "" && brand != "" {
-			right = col4[i] + "  " + brand
+			right = col4[i] + "   " + brand
 		} else if brand != "" {
 			right = brand
 		} else {
@@ -240,13 +234,32 @@ func (m *AppModel) viewResourceTable() string {
 	}
 }
 
-// viewBreadcrumb renders the navigation breadcrumb trail at the bottom.
+// viewBreadcrumb renders the navigation breadcrumb trail at the bottom
+// with a full-width background color: orange for list views, blue for leaf views.
 func (m *AppModel) viewBreadcrumb() string {
 	var segments []string
 	for _, entry := range m.navStack {
-		segments = append(segments, styleOrange.Render("<"+entry.Kind+">"))
+		segments = append(segments, "<"+entry.Kind+">")
 	}
-	return "  " + strings.Join(segments, styleDim.Render("  "))
+	text := "  " + strings.Join(segments, "  ")
+
+	// Determine if current view is a "leaf" view (messages, help, detail)
+	// or a "list" view (projects, agents, sessions, inbox, contexts).
+	isLeaf := m.activeView == "messages" || m.activeView == "help" || m.activeView == "detail"
+
+	var bgStyle lipgloss.Style
+	if isLeaf {
+		bgStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("69")).
+			Foreground(lipgloss.Color("255")).
+			Width(m.width)
+	} else {
+		bgStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("214")).
+			Foreground(lipgloss.Color("0")).
+			Width(m.width)
+	}
+	return bgStyle.Render(text)
 }
 
 // viewInfoLine renders the ephemeral info/toast line at the very bottom.

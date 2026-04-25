@@ -9,9 +9,7 @@ import (
 // Local color constants for the help view. Defined here instead of importing
 // from the parent tui package to avoid circular imports.
 var (
-	helpBorderColor = lipgloss.Color("240") // dim for borders
-	helpTitleColor  = lipgloss.Color("214") // orange for title
-	helpHeaderColor = lipgloss.Color("240") // dim for column headers
+	helpHeaderColor = lipgloss.Color("214") // orange/cyan for column headers (k9s style)
 	helpKeyColor    = lipgloss.Color("240") // dim for key brackets
 	helpActionColor = lipgloss.Color("255") // white for action text
 	helpHintColor   = lipgloss.Color("240") // dim for close hint
@@ -19,12 +17,13 @@ var (
 
 // HelpEntry represents a single keyboard shortcut entry in the help overlay.
 type HelpEntry struct {
-	Key    string // e.g. "<s>", "<Ctrl-D>", "<Enter>"
+	Key    string // e.g. "s", "ctrl-d", "Enter"
 	Action string // e.g. "Start", "Delete", "Drill into sessions"
 }
 
 // HelpView renders a full-screen help overlay showing keyboard shortcuts
 // organized into three columns: Resource, General, and Navigation.
+// Renders without borders, filling the table area like k9s does.
 type HelpView struct {
 	title      string
 	resource   []HelpEntry
@@ -52,10 +51,8 @@ func (h *HelpView) SetSize(w, ht int) {
 	h.height = ht
 }
 
-// View renders the help overlay as a bordered box with three columns.
+// View renders the help view as borderless columns filling the table area.
 func (h HelpView) View() string {
-	borderStyle := lipgloss.NewStyle().Foreground(helpBorderColor)
-	titleStyle := lipgloss.NewStyle().Foreground(helpTitleColor).Bold(true)
 	headerStyle := lipgloss.NewStyle().Foreground(helpHeaderColor).Bold(true)
 	keyStyle := lipgloss.NewStyle().Foreground(helpKeyColor)
 	actionStyle := lipgloss.NewStyle().Foreground(helpActionColor)
@@ -65,20 +62,7 @@ func (h HelpView) View() string {
 	if contentWidth < 20 {
 		contentWidth = 80
 	}
-	innerWidth := contentWidth - 4 // 2 for borders + 2 for padding
-
-	// Render title bar: ┌──── Help(agents) ────┐
-	titleText := " " + titleStyle.Render("Help("+h.title+")") + " "
-	titleVisualWidth := lipgloss.Width(titleText)
-	remaining := contentWidth - titleVisualWidth - 2
-	if remaining < 2 {
-		remaining = 2
-	}
-	leftDashes := remaining / 2
-	rightDashes := remaining - leftDashes
-	titleBar := borderStyle.Render("┌"+strings.Repeat("─", leftDashes)) +
-		titleText +
-		borderStyle.Render(strings.Repeat("─", rightDashes)+"┐")
+	innerWidth := contentWidth - 4 // padding on each side
 
 	// Compute column widths. Split inner width roughly into thirds.
 	colWidth := innerWidth / 3
@@ -93,11 +77,12 @@ func (h HelpView) View() string {
 	}
 
 	// Compute the max key width per column for alignment.
-	resKeyW := maxEntryKeyWidth(h.resource)
-	genKeyW := maxEntryKeyWidth(h.general)
-	navKeyW := maxEntryKeyWidth(h.navigation)
+	// Account for the <> brackets that renderHelpKey adds.
+	resKeyW := maxFormattedKeyWidth(h.resource)
+	genKeyW := maxFormattedKeyWidth(h.general)
+	navKeyW := maxFormattedKeyWidth(h.navigation)
 
-	// Find the tallest column to know how many rows we need.
+	// Find the tallest column to know how many rows we need (Fix 2: no blank rows).
 	maxRows := len(h.resource)
 	if len(h.general) > maxRows {
 		maxRows = len(h.general)
@@ -106,8 +91,8 @@ func (h HelpView) View() string {
 		maxRows = len(h.navigation)
 	}
 
-	// Available content height: total height minus title (1), bottom border (1), blank lines (2), headers (2), hint (1).
-	vpHeight := h.height - 7
+	// Available content height.
+	vpHeight := h.height - 5 // headers(2) + blank + hint + padding
 	if vpHeight < 1 {
 		vpHeight = 1
 	}
@@ -117,61 +102,34 @@ func (h HelpView) View() string {
 
 	var bodyLines []string
 
-	// Empty line.
-	bodyLines = append(bodyLines, h.emptyLine(borderStyle, innerWidth))
+	// Blank line before headers.
+	bodyLines = append(bodyLines, "")
 
-	// Column headers.
-	hdr1 := headerStyle.Render(padRight("Resource", col1W))
-	hdr2 := headerStyle.Render(padRight("General", col2W))
-	hdr3 := headerStyle.Render(padRight("Navigation", col3W))
-	headerLine := hdr1 + hdr2 + hdr3
-	headerLineWidth := lipgloss.Width(headerLine)
-	headerPad := innerWidth - headerLineWidth
-	if headerPad < 0 {
-		headerPad = 0
-	}
-	bodyLines = append(bodyLines,
-		borderStyle.Render("│")+" "+headerLine+strings.Repeat(" ", headerPad)+" "+borderStyle.Render("│"))
+	// Column headers (colored like k9s — orange).
+	hdr1 := headerStyle.Render(padRight("RESOURCE", col1W))
+	hdr2 := headerStyle.Render(padRight("GENERAL", col2W))
+	hdr3 := headerStyle.Render(padRight("NAVIGATION", col3W))
+	bodyLines = append(bodyLines, "  "+hdr1+hdr2+hdr3)
 
 	// Underlines for column headers.
-	ul1 := headerStyle.Render(padRight(strings.Repeat("─", min(len("Resource"), col1W-2)), col1W))
-	ul2 := headerStyle.Render(padRight(strings.Repeat("─", min(len("General"), col2W-2)), col2W))
-	ul3 := headerStyle.Render(padRight(strings.Repeat("─", min(len("Navigation"), col3W-2)), col3W))
-	underlineLine := ul1 + ul2 + ul3
-	underlineWidth := lipgloss.Width(underlineLine)
-	underlinePad := innerWidth - underlineWidth
-	if underlinePad < 0 {
-		underlinePad = 0
-	}
-	bodyLines = append(bodyLines,
-		borderStyle.Render("│")+" "+underlineLine+strings.Repeat(" ", underlinePad)+" "+borderStyle.Render("│"))
+	ul1 := headerStyle.Render(padRight(strings.Repeat("─", min(len("RESOURCE"), col1W-2)), col1W))
+	ul2 := headerStyle.Render(padRight(strings.Repeat("─", min(len("GENERAL"), col2W-2)), col2W))
+	ul3 := headerStyle.Render(padRight(strings.Repeat("─", min(len("NAVIGATION"), col3W-2)), col3W))
+	bodyLines = append(bodyLines, "  "+ul1+ul2+ul3)
 
-	// Data rows.
+	// Data rows (Fix 2: only render up to maxRows, empty cells are blank space).
 	for i := range maxRows {
 		c1 := renderHelpEntry(h.resource, i, resKeyW, col1W, keyStyle, actionStyle)
 		c2 := renderHelpEntry(h.general, i, genKeyW, col2W, keyStyle, actionStyle)
 		c3 := renderHelpEntry(h.navigation, i, navKeyW, col3W, keyStyle, actionStyle)
-
-		rowText := c1 + c2 + c3
-		rowWidth := lipgloss.Width(rowText)
-		rowPad := innerWidth - rowWidth
-		if rowPad < 0 {
-			rowPad = 0
-		}
-		bodyLines = append(bodyLines,
-			borderStyle.Render("│")+" "+rowText+strings.Repeat(" ", rowPad)+" "+borderStyle.Render("│"))
+		bodyLines = append(bodyLines, "  "+c1+c2+c3)
 	}
 
-	// Fill remaining viewport with empty lines.
-	contentLines := len(bodyLines)
-	// We want: blank + headers(2) + data rows + blank + hint = vpHeight + 5
-	targetLines := vpHeight + 3 // blank + headers(2) + data + blank + hint - 2 already counted
-	for i := contentLines; i < targetLines; i++ {
-		bodyLines = append(bodyLines, h.emptyLine(borderStyle, innerWidth))
+	// Fill remaining space.
+	targetLines := vpHeight + 3
+	for i := len(bodyLines); i < targetLines; i++ {
+		bodyLines = append(bodyLines, "")
 	}
-
-	// Empty line before hint.
-	bodyLines = append(bodyLines, h.emptyLine(borderStyle, innerWidth))
 
 	// Hint line: "Press Esc or ? to close" centered.
 	hint := hintStyle.Render("Press Esc or ? to close")
@@ -180,32 +138,22 @@ func (h HelpView) View() string {
 	if hintLeftPad < 0 {
 		hintLeftPad = 0
 	}
-	hintRightPad := innerWidth - hintLeftPad - hintWidth
-	if hintRightPad < 0 {
-		hintRightPad = 0
-	}
-	bodyLines = append(bodyLines,
-		borderStyle.Render("│")+" "+strings.Repeat(" ", hintLeftPad)+hint+strings.Repeat(" ", hintRightPad)+" "+borderStyle.Render("│"))
+	bodyLines = append(bodyLines, strings.Repeat(" ", hintLeftPad)+hint)
 
-	// Bottom border.
-	bottom := borderStyle.Render("└" + strings.Repeat("─", contentWidth-2) + "┘")
-
-	return titleBar + "\n" + strings.Join(bodyLines, "\n") + "\n" + bottom
-}
-
-// emptyLine renders an empty bordered line.
-func (h HelpView) emptyLine(borderStyle lipgloss.Style, innerWidth int) string {
-	return borderStyle.Render("│") + " " + strings.Repeat(" ", innerWidth) + " " + borderStyle.Render("│")
+	return strings.Join(bodyLines, "\n")
 }
 
 // renderHelpEntry renders a single help entry cell for a column, or empty space
 // if the index is out of range for that column's entries.
+// Keys are rendered with dim brackets like the header hints: <key>.
 func renderHelpEntry(entries []HelpEntry, idx, maxKeyW, colW int, keyStyle, actionStyle lipgloss.Style) string {
 	if idx >= len(entries) {
 		return padRight("", colW)
 	}
 	e := entries[idx]
-	keyRendered := keyStyle.Render(padRight(e.Key, maxKeyW))
+	// Render key with dim brackets: <key>
+	keyText := "<" + e.Key + ">"
+	keyRendered := keyStyle.Render(padRight(keyText, maxKeyW))
 	actionRendered := actionStyle.Render(e.Action)
 	cell := keyRendered + " " + actionRendered
 	cellWidth := lipgloss.Width(cell)
@@ -215,12 +163,13 @@ func renderHelpEntry(entries []HelpEntry, idx, maxKeyW, colW int, keyStyle, acti
 	return cell
 }
 
-// maxEntryKeyWidth returns the maximum key string length across entries.
-func maxEntryKeyWidth(entries []HelpEntry) int {
+// maxFormattedKeyWidth returns the maximum formatted key width (with <> brackets).
+func maxFormattedKeyWidth(entries []HelpEntry) int {
 	maxW := 0
 	for _, e := range entries {
-		if len(e.Key) > maxW {
-			maxW = len(e.Key)
+		w := len("<" + e.Key + ">")
+		if w > maxW {
+			maxW = w
 		}
 	}
 	return maxW
