@@ -48,6 +48,19 @@ type InboxMsg struct {
 	Err      error
 }
 
+// ProjectCounts holds agent and session counts for a single project.
+type ProjectCounts struct {
+	AgentCount   int
+	SessionCount int
+}
+
+// ProjectCountsMsg carries per-project agent and session counts keyed by
+// project name. Sent after a background fan-out fetch completes.
+type ProjectCountsMsg struct {
+	Counts map[string]ProjectCounts
+	Err    error
+}
+
 // ---------------------------------------------------------------------------
 // CRUD message types for mutating operations.
 // ---------------------------------------------------------------------------
@@ -174,6 +187,60 @@ func (tc *TUIClient) FetchProjects() tea.Cmd {
 			return ProjectsMsg{Err: err}
 		}
 		return ProjectsMsg{Projects: list.Items}
+	}
+}
+
+// FetchProjectCounts returns a tea.Cmd that fans out per-project agent and
+// session list fetches and returns a ProjectCountsMsg with the counts. Partial
+// failures are tolerated — failed projects get count -1 for both fields.
+func (tc *TUIClient) FetchProjectCounts(projects []string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		var (
+			mu     sync.Mutex
+			counts = make(map[string]ProjectCounts, len(projects))
+			wg     sync.WaitGroup
+		)
+
+		for _, proj := range projects {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+
+				client, err := tc.factory.ForProject(proj)
+				if err != nil {
+					mu.Lock()
+					counts[proj] = ProjectCounts{AgentCount: -1, SessionCount: -1}
+					mu.Unlock()
+					return
+				}
+
+				var ac, sc int
+
+				agentList, err := client.Agents().List(ctx, defaultListOpts())
+				if err != nil {
+					ac = -1
+				} else {
+					ac = len(agentList.Items)
+				}
+
+				sessionList, err := client.Sessions().List(ctx, defaultListOpts())
+				if err != nil {
+					sc = -1
+				} else {
+					sc = len(sessionList.Items)
+				}
+
+				mu.Lock()
+				counts[proj] = ProjectCounts{AgentCount: ac, SessionCount: sc}
+				mu.Unlock()
+			}()
+		}
+
+		wg.Wait()
+		return ProjectCountsMsg{Counts: counts}
 	}
 }
 

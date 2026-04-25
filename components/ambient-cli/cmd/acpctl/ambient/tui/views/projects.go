@@ -10,29 +10,45 @@ import (
 )
 
 // ProjectColumns returns the column definitions for the project list view.
-// Column order matches the TUI spec: NAME, DESCRIPTION, STATUS, AGE.
+// Column order: NAME, DESCRIPTION, STATUS, AGENTS, SESSIONS, AGE.
 func ProjectColumns() []table.Column {
 	return []table.Column{
 		{Title: "NAME", Width: 25},
 		{Title: "DESCRIPTION", Width: 40},
 		{Title: "STATUS", Width: 12},
+		{Title: "AGENTS", Width: 8},
+		{Title: "SESSIONS", Width: 8},
 		{Title: "AGE", Width: 8},
 	}
 }
 
 // ProjectRow converts an SDK Project into a table row suitable for the project
 // list view. The now parameter is used to compute the relative AGE column.
+// agentCount and sessionCount are displayed as integers; a value of -1 renders
+// as "-" to indicate counts have not been loaded yet.
 // Truncation of long values is handled by the table widget.
-func ProjectRow(p sdktypes.Project, now time.Time) table.Row {
+func ProjectRow(p sdktypes.Project, now time.Time, agentCount, sessionCount int) table.Row {
 	age := ""
 	if p.CreatedAt != nil {
 		age = FormatAge(now.Sub(*p.CreatedAt))
+	}
+
+	agents := "-"
+	if agentCount >= 0 {
+		agents = fmt.Sprintf("%d", agentCount)
+	}
+
+	sessions := "-"
+	if sessionCount >= 0 {
+		sessions = fmt.Sprintf("%d", sessionCount)
 	}
 
 	return table.Row{
 		p.Name,
 		p.Description,
 		p.Status,
+		agents,
+		sessions,
 		age,
 	}
 }

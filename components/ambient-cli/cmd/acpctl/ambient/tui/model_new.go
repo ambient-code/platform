@@ -419,6 +419,9 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ProjectsMsg:
 		return m.handleProjectsMsg(msg)
 
+	case ProjectCountsMsg:
+		return m.handleProjectCountsMsg(msg)
+
 	case AgentsMsg:
 		return m.handleAgentsMsg(msg)
 
@@ -673,6 +676,76 @@ func (m *AppModel) handleProjectsMsg(msg ProjectsMsg) (tea.Model, tea.Cmd) {
 			Sanitize(p.Name),
 			Sanitize(desc),
 			Sanitize(status),
+			"-", // AGENTS — placeholder until ProjectCountsMsg arrives
+			"-", // SESSIONS — placeholder until ProjectCountsMsg arrives
+			age,
+		})
+	}
+	m.projectTable.SetRows(rows)
+
+	// Re-apply active filter if present and we're on projects view.
+	if m.activeView == "projects" && m.activeFilter != nil {
+		f := m.activeFilter
+		m.projectTable.SetFilter(func(cols []string) bool {
+			return f.MatchRow(cols)
+		})
+	}
+
+	// Trigger background fetch of agent/session counts per project.
+	var cmds []tea.Cmd
+	if len(names) > 0 {
+		cmds = append(cmds, m.client.FetchProjectCounts(names))
+	}
+
+	return m, tea.Batch(cmds...)
+}
+
+// handleProjectCountsMsg rebuilds the project table rows with real agent and
+// session counts returned from the background FetchProjectCounts fan-out.
+func (m *AppModel) handleProjectCountsMsg(msg ProjectCountsMsg) (tea.Model, tea.Cmd) {
+	if msg.Err != nil {
+		// Non-fatal — just keep the "-" placeholders.
+		return m, nil
+	}
+
+	now := time.Now()
+	rows := make([]table.Row, 0, len(m.cachedProjects))
+	for _, p := range m.cachedProjects {
+		age := ""
+		if p.CreatedAt != nil {
+			age = fmtAge(now.Sub(*p.CreatedAt))
+		}
+		desc := p.Description
+		if len(desc) > 60 {
+			desc = desc[:59] + "..."
+		}
+		status := p.Status
+		if status == "" {
+			status = "active"
+		}
+
+		agentCount := -1
+		sessionCount := -1
+		if counts, ok := msg.Counts[p.Name]; ok {
+			agentCount = counts.AgentCount
+			sessionCount = counts.SessionCount
+		}
+
+		agents := "-"
+		if agentCount >= 0 {
+			agents = fmt.Sprintf("%d", agentCount)
+		}
+		sessions := "-"
+		if sessionCount >= 0 {
+			sessions = fmt.Sprintf("%d", sessionCount)
+		}
+
+		rows = append(rows, table.Row{
+			Sanitize(p.Name),
+			Sanitize(desc),
+			Sanitize(status),
+			agents,
+			sessions,
 			age,
 		})
 	}

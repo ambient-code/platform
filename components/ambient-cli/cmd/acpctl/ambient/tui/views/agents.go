@@ -23,9 +23,9 @@ func AgentColumns() []table.Column {
 // AgentRow converts an SDK Agent into a table row suitable for the agent list
 // view. The now parameter is used to compute the relative AGE column.
 //
-// The PHASE column is left empty because populating it requires a secondary
-// fetch of the agent's current session. The caller (model layer) is responsible
-// for enriching rows with phase data after the fan-out fetch.
+// The PHASE column shows "active" when the agent has a current session ID,
+// and is left empty otherwise. This avoids an N+1 session fetch while still
+// providing a useful status indicator.
 func AgentRow(a sdktypes.Agent, now time.Time) table.Row {
 	age := ""
 	if a.CreatedAt != nil {
@@ -33,15 +33,17 @@ func AgentRow(a sdktypes.Agent, now time.Time) table.Row {
 	}
 
 	session := "<none>"
+	phase := ""
 	if a.CurrentSessionID != "" {
 		session = a.CurrentSessionID
+		phase = "active"
 	}
 
 	return table.Row{
 		a.Name,
 		TruncateString(a.Prompt, 60),
 		session,
-		"", // PHASE — requires secondary fetch; filled in by the model
+		phase,
 		age,
 	}
 }
