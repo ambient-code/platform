@@ -593,16 +593,11 @@ func (ms *MessageStream) View() string {
 		borderStyle.Render("│")
 	headerSep := borderStyle.Render("├" + strings.Repeat("─", max(ms.width-2, 0)) + "┤")
 
-	// -- Compose / status area (rendered bottom-up to calculate remaining height) --
+	// -- Compose / streaming cursor area (rendered bottom-up) --
 	var bottomLines []string
 
-	// Status bar (always shown).
-	statusBar := ms.renderStatusBar()
 	bottomBorder := borderStyle.Render("└" + strings.Repeat("─", max(ms.width-2, 0)) + "┘")
-	bottomLines = append(bottomLines,
-		borderStyle.Render("│")+padToWidth(" "+statusBar, ms.width-2)+borderStyle.Render("│"),
-		bottomBorder,
-	)
+	bottomLines = append(bottomLines, bottomBorder)
 
 	// Compose input (if active).
 	if ms.composeMode {
@@ -626,15 +621,6 @@ func (ms *MessageStream) View() string {
 		bottomLines = append([]string{cursorLine}, bottomLines...)
 	}
 
-	// Search bar (if active).
-	if ms.searchMode {
-		searchSep := borderStyle.Render("├" + strings.Repeat("─", max(ms.width-2, 0)) + "┤")
-		searchView := ms.searchInput.View()
-		searchLine := borderStyle.Render("│") +
-			" " + padToWidth(searchView, ms.width-3) +
-			borderStyle.Render("│")
-		bottomLines = append([]string{searchSep, searchLine}, bottomLines...)
-	}
 
 	// -- Content area --
 	// 3 = header bar + header line + header separator
@@ -796,41 +782,6 @@ func (ms *MessageStream) renderRawEntry(entry MessageEntry, maxWidth int) []stri
 }
 
 // renderStatusBar builds the bottom status line with mode indicators and key hints.
-func (ms *MessageStream) renderStatusBar() string {
-	dimStyle := lipgloss.NewStyle().Foreground(msgColorDim)
-	accentStyle := lipgloss.NewStyle().Foreground(msgColorOrange)
-	blueStyle := lipgloss.NewStyle().Foreground(msgColorBlue)
-
-	var parts []string
-
-	// Autoscroll indicator.
-	if ms.autoScroll {
-		parts = append(parts, accentStyle.Render("autoscroll:on"))
-	} else {
-		parts = append(parts, dimStyle.Render("autoscroll:off"))
-	}
-
-	// Mode indicator.
-	if ms.rawMode {
-		parts = append(parts, blueStyle.Render("raw"))
-	} else {
-		parts = append(parts, dimStyle.Render("conversation"))
-	}
-
-	// Search indicator.
-	if ms.searchPattern != nil {
-		parts = append(parts, accentStyle.Render("/"+ms.searchPattern.String()))
-	}
-
-	// Message count.
-	parts = append(parts, dimStyle.Render(fmt.Sprintf("%d msgs", len(ms.messages))))
-
-	// Key hints.
-	hints := dimStyle.Render("Esc back | r raw | s scroll | m send | G bottom | / search")
-
-	return strings.Join(parts, dimStyle.Render(" │ ")) + "  " + hints
-}
-
 // ---------------------------------------------------------------------------
 // Scroll helpers
 // ---------------------------------------------------------------------------
