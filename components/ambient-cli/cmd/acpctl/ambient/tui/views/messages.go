@@ -835,6 +835,10 @@ func looksLikeMarkdown(s string) bool {
 	if strings.Contains(s, "**") || strings.Contains(s, "`") {
 		return true
 	}
+	// Detect markdown tables: lines with | separators and a --- row.
+	if strings.Contains(s, "|") && strings.Contains(s, "---") {
+		return true
+	}
 	return false
 }
 
