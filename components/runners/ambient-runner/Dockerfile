@@ -46,6 +46,10 @@ RUN npm install -g @google/gemini-cli@${GEMINI_CLI_VERSION} && \
 # Install CodeRabbit CLI (official install script, binary for current arch)
 RUN curl -fsSL https://cli.coderabbit.ai/install.sh | CODERABBIT_INSTALL_DIR=/usr/local/bin sh
 
+# Install prodsec-skills (Product Security guidance available to every session)
+RUN git clone --depth 1 https://github.com/RedHatProductSecurity/prodsec-skills.git /app/prodsec-skills && \
+    rm -rf /app/prodsec-skills/.git
+
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1

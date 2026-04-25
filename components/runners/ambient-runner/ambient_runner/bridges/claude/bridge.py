@@ -15,6 +15,7 @@ import logging
 import os
 import time
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
 from ag_ui.core import (
@@ -674,6 +675,12 @@ class ClaudeBridge(PlatformBridge):
 
         # Workspace paths
         cwd_path, add_dirs = resolve_workspace_paths(self._context)
+
+        # Prodsec-skills: make security guidance available to every session
+        _prodsec_path = "/app/prodsec-skills"
+        if Path(_prodsec_path).exists() and _prodsec_path not in add_dirs:
+            add_dirs.append(_prodsec_path)
+
         if add_dirs:
             os.environ["CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"] = "1"
 

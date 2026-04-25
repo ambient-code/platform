@@ -98,6 +98,22 @@ HUMAN_INPUT_INSTRUCTIONS = (
     "attention.\n\n"
 )
 
+PRODSEC_SKILLS_PROMPT = (
+    "## Security Skills\n"
+    "Product Security skills are available at `/app/prodsec-skills/skills/`. "
+    "When performing security-sensitive tasks (code review, writing auth/crypto/network "
+    "code, configuring infrastructure, auditing), read the relevant skill for guidance "
+    "before proceeding. Key areas:\n"
+    "- `secure_development/` — cryptography, web security, supply chain, MCP servers, "
+    "Kubernetes, API gateways, inference engines, agent security (103 skills)\n"
+    "- `security_testing/` — fuzzing (AFL++, libFuzzer, cargo-fuzz), static analysis "
+    "(Semgrep, CodeQL, SARIF) (17 skills)\n"
+    "- `security_auditing/` — context building, differential review, variant analysis "
+    "(4 skills)\n"
+    "- `developer_tooling/` — devcontainers, property-based testing (4 skills)\n"
+    "See `/app/prodsec-skills/skills/README.md` for the full index.\n\n"
+)
+
 RESTART_TOOL_DESCRIPTION = (
     "Restart the Claude session to recover from issues, clear state, "
     "or get a fresh connection. Use this if you detect you're in a "
@@ -230,6 +246,10 @@ def build_workspace_context_prompt(
         prompt += GITHUB_TOKEN_PROMPT
     if os.getenv("GITLAB_TOKEN"):
         prompt += GITLAB_TOKEN_PROMPT
+
+    # Prodsec-skills: security guidance for every session
+    if Path("/app/prodsec-skills/skills").exists():
+        prompt += PRODSEC_SKILLS_PROMPT
 
     # Workflow instructions
     if ambient_config.get("systemPrompt"):
