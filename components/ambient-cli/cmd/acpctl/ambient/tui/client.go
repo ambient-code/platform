@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -152,6 +153,13 @@ type DeleteInboxMsg struct {
 type SessionMessageEvent struct {
 	Message *sdktypes.SessionMessage
 	Err     error
+}
+
+// SessionMessagesMsg carries a batch of messages fetched via polling
+// (ListMessages). Used as a fallback when SSE is unavailable or stalled.
+type SessionMessagesMsg struct {
+	Messages []sdktypes.SessionMessage
+	Err      error
 }
 
 // ---------------------------------------------------------------------------
@@ -691,6 +699,8 @@ func (tc *TUIClient) DeleteInboxMessage(projectID, agentID, msgID string) tea.Cm
 //   - Handles reconnection with exponential backoff (1s, 2s, 4s, max 30s)
 //     internally via the SDK's WatchMessages implementation.
 //   - Is cancellable via StopWatching().
+//   - Sends an error event if the channel closes without context cancellation,
+//     signalling a silent SSE failure so the TUI can fall back to polling.
 //
 // Only one watch can be active at a time. Calling WatchSessionMessages while
 // a previous watch is running cancels the old one first.
@@ -724,15 +734,51 @@ func (tc *TUIClient) WatchSessionMessages(projectID, sessionID string, afterSeq 
 
 		// Forward messages from the SDK channel to the Bubbletea program.
 		// This goroutine exits when the channel closes (on context
-		// cancellation or stream end).
+		// cancellation or stream end). If the channel closes without
+		// cancellation, it means the SSE stream died silently -- notify
+		// the TUI so it can fall back to polling.
 		go func() {
 			defer cancel()
+			receivedAny := false
 			for msg := range msgs {
+				receivedAny = true
 				program.Send(SessionMessageEvent{Message: msg})
+			}
+			// Channel closed. If the context was not cancelled by us
+			// (StopWatching or view change), this is an unexpected close.
+			if ctx.Err() == nil {
+				errMsg := "SSE stream closed"
+				if !receivedAny {
+					errMsg = "SSE connection failed (no messages received)"
+				}
+				program.Send(SessionMessageEvent{
+					Err: fmt.Errorf("%s — falling back to polling", errMsg),
+				})
 			}
 		}()
 
 		return nil
+	}
+}
+
+// FetchSessionMessages returns a tea.Cmd that polls session messages via the
+// REST ListMessages endpoint. This is used as a fallback when SSE streaming is
+// unavailable or stalled. Only messages with seq > afterSeq are returned.
+func (tc *TUIClient) FetchSessionMessages(projectID, sessionID string, afterSeq int) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject(projectID)
+		if err != nil {
+			return SessionMessagesMsg{Err: err}
+		}
+
+		msgs, err := client.Sessions().ListMessages(ctx, sessionID, afterSeq)
+		if err != nil {
+			return SessionMessagesMsg{Err: err}
+		}
+		return SessionMessagesMsg{Messages: msgs}
 	}
 }
 

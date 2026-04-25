@@ -20,6 +20,10 @@ import (
 // pollInterval is the auto-refresh interval for resource tables.
 const pollInterval = 5 * time.Second
 
+// messagePollInterval is the polling interval for session messages when the
+// messages view is active. Faster than the table poll to keep messages fresh.
+const messagePollInterval = 2 * time.Second
+
 // infoTimeout is how long ephemeral info messages are displayed.
 const infoTimeout = 5 * time.Second
 
@@ -43,6 +47,10 @@ type NavEntry struct {
 
 // appTickMsg fires every pollInterval to trigger data refresh.
 type appTickMsg struct{ t time.Time }
+
+// messagePollTickMsg fires every messagePollInterval when the messages view is
+// active, triggering a REST poll for new session messages.
+type messagePollTickMsg struct{ t time.Time }
 
 // infoExpiredMsg signals the ephemeral info line should be cleared.
 type infoExpiredMsg struct{}
@@ -107,6 +115,10 @@ type AppModel struct {
 
 	// SSE program reference (set via SetProgram after tea.NewProgram).
 	program *tea.Program
+
+	// Message polling state (fallback when SSE is unavailable).
+	lastMessageSeq   int  // highest seq seen — poll for messages after this
+	messagePollActive bool // true when message poll tick is running
 
 	// Errors
 	lastError string
@@ -266,6 +278,14 @@ func (m *AppModel) Init() tea.Cmd {
 func (m *AppModel) tickCmd() tea.Cmd {
 	return tea.Tick(pollInterval, func(t time.Time) tea.Msg {
 		return appTickMsg{t: t}
+	})
+}
+
+// messagePollTickCmd returns a tea.Cmd that sends a messagePollTickMsg after
+// messagePollInterval. Used to drive the REST polling fallback.
+func (m *AppModel) messagePollTickCmd() tea.Cmd {
+	return tea.Tick(messagePollInterval, func(t time.Time) tea.Msg {
+		return messagePollTickMsg{t: t}
 	})
 }
 
@@ -568,6 +588,11 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Payload:   msg.Err.Error(),
 				Timestamp: time.Now(),
 			})
+			// SSE failed — ensure polling fallback is running.
+			if m.activeView == "messages" && !m.messagePollActive {
+				m.messagePollActive = true
+				return m, m.messagePollTickCmd()
+			}
 			return m, nil
 		}
 		if msg.Message != nil && m.activeView == "messages" {
@@ -582,8 +607,60 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Payload:   msg.Message.Payload,
 				Timestamp: ts,
 			})
+			// Track highest seq for polling.
+			if msg.Message.Seq > m.lastMessageSeq {
+				m.lastMessageSeq = msg.Message.Seq
+			}
 		}
 		return m, nil
+
+	case SessionMessagesMsg:
+		// Polling fallback: batch of messages from REST ListMessages.
+		if msg.Err != nil {
+			// Non-fatal — polling will retry on next tick.
+			return m, nil
+		}
+		if m.activeView != "messages" {
+			return m, nil
+		}
+		for _, sm := range msg.Messages {
+			if sm.Seq <= m.lastMessageSeq {
+				continue // already seen via SSE or previous poll
+			}
+			ts := time.Now()
+			if sm.CreatedAt != nil {
+				ts = *sm.CreatedAt
+			}
+			m.messageStream.AddMessage(views.MessageEntry{
+				Seq:       sm.Seq,
+				EventType: sm.EventType,
+				Payload:   sm.Payload,
+				Timestamp: ts,
+			})
+			if sm.Seq > m.lastMessageSeq {
+				m.lastMessageSeq = sm.Seq
+			}
+		}
+		if len(msg.Messages) > 0 {
+			m.messageStream.SetSSEStatus("polling")
+		}
+		return m, nil
+
+	case messagePollTickMsg:
+		// Periodic poll for session messages — only active in messages view.
+		if m.activeView != "messages" {
+			m.messagePollActive = false
+			return m, nil
+		}
+		// Schedule next poll tick and fetch messages.
+		var cmds []tea.Cmd
+		cmds = append(cmds, m.messagePollTickCmd())
+		if m.currentProject != "" && m.currentSession != "" {
+			cmds = append(cmds, m.client.FetchSessionMessages(
+				m.currentProject, m.currentSession, m.lastMessageSeq,
+			))
+		}
+		return m, tea.Batch(cmds...)
 
 	case appTickMsg:
 		return m.handleTick()
@@ -1173,6 +1250,7 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 				fullSessionID = session.ID
 			}
 			m.currentSession = fullSessionID
+			m.lastMessageSeq = 0
 
 			// Create a new message stream for this session.
 			agentName := m.currentAgent
@@ -1194,13 +1272,16 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 			// Start SSE watcher if we have a program reference and project context.
 			if m.program != nil && m.currentProject != "" {
 				cmds = append(cmds, m.client.WatchSessionMessages(m.currentProject, fullSessionID, 0, m.program))
-			} else {
-				m.messageStream.AddMessage(views.MessageEntry{
-					Seq:       1,
-					EventType: "system",
-					Payload:   "Connected to session " + shortID + " (SSE requires program ref)",
-					Timestamp: time.Now(),
-				})
+			}
+
+			// Always start polling fallback alongside SSE. Polling is
+			// idempotent (deduplicates by seq) and ensures messages appear
+			// even if SSE fails silently.
+			if m.currentProject != "" {
+				m.messagePollActive = true
+				cmds = append(cmds, m.messagePollTickCmd())
+				// Immediately fetch existing messages so the view is not empty.
+				cmds = append(cmds, m.client.FetchSessionMessages(m.currentProject, fullSessionID, 0))
 			}
 
 			return m, tea.Batch(cmds...)
@@ -1417,6 +1498,7 @@ func (m *AppModel) handleAgentsRune(key string) (tea.Model, tea.Cmd) {
 		m.currentAgent = agentName
 		m.currentAgentID = agent.ID
 		m.currentSession = sessionID
+		m.lastMessageSeq = 0
 		m.messageStream = views.NewMessageStream(sessionID, agentName, "active")
 		m.resizeTable()
 
@@ -1428,13 +1510,14 @@ func (m *AppModel) handleAgentsRune(key string) (tea.Model, tea.Cmd) {
 		// Start SSE watcher if we have a program reference and project context.
 		if m.program != nil && m.currentProject != "" {
 			cmds = append(cmds, m.client.WatchSessionMessages(m.currentProject, sessionID, 0, m.program))
-		} else {
-			m.messageStream.AddMessage(views.MessageEntry{
-				Seq:       1,
-				EventType: "system",
-				Payload:   "Connected to session " + sessionID + " (SSE requires program ref)",
-				Timestamp: time.Now(),
-			})
+		}
+
+		// Always start polling fallback alongside SSE.
+		if m.currentProject != "" {
+			m.messagePollActive = true
+			cmds = append(cmds, m.messagePollTickCmd())
+			// Immediately fetch existing messages so the view is not empty.
+			cmds = append(cmds, m.client.FetchSessionMessages(m.currentProject, sessionID, 0))
 		}
 
 		return m, tea.Batch(cmds...)

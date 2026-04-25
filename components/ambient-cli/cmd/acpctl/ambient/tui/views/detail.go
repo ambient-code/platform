@@ -364,7 +364,7 @@ func detailWrapText(text string, width int) []string {
 	return result
 }
 
-// wrapLine wraps a single line of text at word boundaries to fit within width.
+// detailWrapLine wraps a single line of text at word boundaries to fit within width.
 func detailWrapLine(line string, width int) []string {
 	words := strings.Fields(line)
 	if len(words) == 0 {
