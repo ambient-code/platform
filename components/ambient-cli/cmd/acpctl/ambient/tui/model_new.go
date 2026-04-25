@@ -2336,12 +2336,19 @@ func (m *AppModel) handleProjectShortcut(digit byte) (tea.Model, tea.Cmd) {
 		m.pollInFlight = true
 
 		switch m.activeView {
+		case "agents":
+			m.agentTable.SetScope("all")
+			m.navStack = []NavEntry{{Kind: "projects", Scope: "all"}, {Kind: "agents", Scope: "all"}}
+			return m, tea.Batch(m.client.FetchProjects(), m.setInfo("Viewing all agents"))
 		case "sessions":
 			m.sessionTable.SetScope("all")
 			m.navStack = []NavEntry{{Kind: "sessions", Scope: "all"}}
 			return m, tea.Batch(m.client.FetchAllSessions(), m.setInfo("Viewing all sessions"))
+		case "inbox":
+			m.navStack = []NavEntry{{Kind: "projects", Scope: "all"}}
+			m.activeView = "projects"
+			return m, tea.Batch(m.client.FetchProjects(), m.setInfo("Viewing all projects"))
 		default:
-			m.agentTable.SetScope("all")
 			m.navStack = []NavEntry{{Kind: "projects", Scope: "all"}}
 			m.activeView = "projects"
 			return m, tea.Batch(m.client.FetchProjects(), m.setInfo("Viewing all projects"))
