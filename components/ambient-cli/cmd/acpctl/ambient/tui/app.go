@@ -269,12 +269,6 @@ func (m *AppModel) viewBreadcrumb() string {
 
 // viewInfoLine renders the ephemeral info/toast line at the very bottom.
 func (m *AppModel) viewInfoLine() string {
-	// Delete confirmation takes priority over everything.
-	if m.confirmingDelete {
-		prompt := fmt.Sprintf("Delete %s %s? (y/n)", m.deleteKind, m.deleteName)
-		return "  " + styleYellow.Render(prompt)
-	}
-
 	// Error takes priority over info.
 	if m.lastError != "" {
 		return "  " + styleRed.Render("✗ "+m.lastError)

@@ -110,11 +110,9 @@ type AppModel struct {
 	// Errors
 	lastError string
 
-	// Delete confirmation
-	confirmingDelete bool
-	deleteKind       string     // "project", "agent", "session", "inbox"
-	deleteName       string     // display name for confirmation
-	deleteFunc       func() tea.Cmd // the actual delete call
+	// Dialog overlay (replaces inline delete confirmation and prompt mode for new resources).
+	dialog       *views.Dialog
+	dialogAction func() tea.Cmd // executed on DialogConfirmMsg{Confirmed: true}
 
 	// Rate-limit backoff: skip the next poll cycle when a 429 is received.
 	skipNextPoll bool
@@ -861,9 +859,9 @@ func (m *AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
-	// Delete confirmation takes priority over all other modes.
-	if m.confirmingDelete {
-		return m.handleDeleteConfirmKey(msg)
+	// Dialog overlay takes priority over all other modes.
+	if m.dialog != nil {
+		return m.handleDialogKey(msg)
 	}
 
 	// Prompt mode (inline text input for new session, etc.).
@@ -891,30 +889,39 @@ func (m *AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m.handleNormalKey(msg)
 }
 
-// handleDeleteConfirmKey handles y/n/Esc when a delete confirmation is active.
-func (m *AppModel) handleDeleteConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEsc:
-		m.confirmingDelete = false
-		m.deleteFunc = nil
-		return m, m.setInfo("Delete cancelled")
-	case tea.KeyRunes:
-		switch msg.String() {
-		case "y", "Y":
-			fn := m.deleteFunc
-			m.confirmingDelete = false
-			m.deleteFunc = nil
+// handleDialogKey delegates key events to the active dialog overlay and
+// processes the resulting DialogConfirmMsg / DialogCancelMsg.
+func (m *AppModel) handleDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	dlg, cmd := m.dialog.Update(msg)
+	m.dialog = &dlg
+
+	if cmd == nil {
+		return m, nil
+	}
+
+	// Execute the command to get the message, then dispatch it.
+	resultMsg := cmd()
+	switch resultMsg.(type) {
+	case views.DialogCancelMsg:
+		m.dialog = nil
+		m.dialogAction = nil
+		return m, m.setInfo("Cancelled")
+	case views.DialogConfirmMsg:
+		confirm := resultMsg.(views.DialogConfirmMsg)
+		if confirm.Confirmed {
+			fn := m.dialogAction
+			m.dialog = nil
+			m.dialogAction = nil
 			if fn != nil {
-				return m, tea.Batch(fn(), m.setInfo("Deleting "+m.deleteKind+" "+m.deleteName+"..."))
+				return m, tea.Batch(fn(), m.setInfo("Processing..."))
 			}
-			return m, nil
-		case "n", "N":
-			m.confirmingDelete = false
-			m.deleteFunc = nil
-			return m, m.setInfo("Delete cancelled")
+		} else {
+			m.dialog = nil
+			m.dialogAction = nil
+			return m, m.setInfo("Cancelled")
 		}
 	}
-	// Ignore all other keys while confirming.
+
 	return m, nil
 }
 
@@ -1413,13 +1420,11 @@ func (m *AppModel) handleCtrlD() (tea.Model, tea.Cmd) {
 				return m, m.setInfo("Project not found in cache: " + projectName)
 			}
 			projectID := project.ID
-			m.confirmingDelete = true
-			m.deleteKind = "project"
-			m.deleteName = projectName
-			m.deleteFunc = func() tea.Cmd {
+			d := views.NewDeleteDialog("project", projectName)
+			m.dialog = &d
+			m.dialogAction = func() tea.Cmd {
 				return m.client.DeleteProject(projectID)
 			}
-			m.infoMessage = fmt.Sprintf("Delete project %s? (y/n)", projectName)
 			return m, nil
 		}
 	case "agents":
@@ -1432,13 +1437,11 @@ func (m *AppModel) handleCtrlD() (tea.Model, tea.Cmd) {
 			}
 			agentID := agent.ID
 			currentProject := m.currentProject
-			m.confirmingDelete = true
-			m.deleteKind = "agent"
-			m.deleteName = agentName
-			m.deleteFunc = func() tea.Cmd {
+			d := views.NewDeleteDialog("agent", agentName)
+			m.dialog = &d
+			m.dialogAction = func() tea.Cmd {
 				return m.client.DeleteAgent(currentProject, agentID)
 			}
-			m.infoMessage = fmt.Sprintf("Delete agent %s? (y/n)", agentName)
 			return m, nil
 		}
 	case "sessions":
@@ -1454,13 +1457,11 @@ func (m *AppModel) handleCtrlD() (tea.Model, tea.Cmd) {
 				project = session.ProjectID
 			}
 			sessionID := session.ID
-			m.confirmingDelete = true
-			m.deleteKind = "session"
-			m.deleteName = shortID
-			m.deleteFunc = func() tea.Cmd {
+			d := views.NewDeleteDialog("session", shortID)
+			m.dialog = &d
+			m.dialogAction = func() tea.Cmd {
 				return m.client.DeleteSession(project, sessionID)
 			}
-			m.infoMessage = fmt.Sprintf("Delete session %s? (y/n)", shortID)
 			return m, nil
 		}
 	case "inbox":
@@ -1472,13 +1473,11 @@ func (m *AppModel) handleCtrlD() (tea.Model, tea.Cmd) {
 			}
 			currentProject := m.currentProject
 			currentAgentID := m.currentAgentID
-			m.confirmingDelete = true
-			m.deleteKind = "inbox"
-			m.deleteName = msgID
-			m.deleteFunc = func() tea.Cmd {
+			d := views.NewDeleteDialog("inbox message", msgID)
+			m.dialog = &d
+			m.dialogAction = func() tea.Cmd {
 				return m.client.DeleteInboxMessage(currentProject, currentAgentID, msgID)
 			}
-			m.infoMessage = fmt.Sprintf("Delete inbox %s? (y/n)", msgID)
 			return m, nil
 		}
 	}
