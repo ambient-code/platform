@@ -517,8 +517,18 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Body == "" {
 			return m, nil
 		}
+		projectID := m.currentProject
+		if projectID == "" {
+			// Resolve from cached session data.
+			if s := m.findSessionByShortID(m.currentSession); s != nil {
+				projectID = s.ProjectID
+			}
+		}
+		if projectID == "" {
+			return m, m.setInfo("Cannot send: no project context")
+		}
 		return m, tea.Batch(
-			m.client.SendSessionMessage(m.currentProject, m.currentSession, msg.Body),
+			m.client.SendSessionMessage(projectID, m.currentSession, msg.Body),
 			m.setInfo("Sending message..."),
 		)
 
