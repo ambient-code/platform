@@ -61,6 +61,18 @@ type ProjectCountsMsg struct {
 	Err    error
 }
 
+// AgentCounts holds the session count for a single agent.
+type AgentCounts struct {
+	SessionCount int
+}
+
+// AgentCountsMsg carries per-agent session counts keyed by agent ID.
+// Sent after a background fan-out fetch completes.
+type AgentCountsMsg struct {
+	Counts map[string]AgentCounts
+	Err    error
+}
+
 // ---------------------------------------------------------------------------
 // CRUD message types for mutating operations.
 // ---------------------------------------------------------------------------
@@ -241,6 +253,48 @@ func (tc *TUIClient) FetchProjectCounts(projects []string) tea.Cmd {
 
 		wg.Wait()
 		return ProjectCountsMsg{Counts: counts}
+	}
+}
+
+// FetchAgentCounts returns a tea.Cmd that fans out per-agent session list
+// fetches and returns an AgentCountsMsg with the counts. Uses the
+// AgentAPI.Sessions() endpoint to count sessions per agent. Partial failures
+// are tolerated — failed agents get count -1.
+func (tc *TUIClient) FetchAgentCounts(projectID string, agentIDs []string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		var (
+			mu     sync.Mutex
+			counts = make(map[string]AgentCounts, len(agentIDs))
+			wg     sync.WaitGroup
+		)
+
+		client, err := tc.factory.ForProject(projectID)
+		if err != nil {
+			return AgentCountsMsg{Err: err}
+		}
+
+		for _, agentID := range agentIDs {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+
+				sessionList, err := client.Agents().Sessions(ctx, projectID, agentID, defaultListOpts())
+				sc := -1
+				if err == nil {
+					sc = len(sessionList.Items)
+				}
+
+				mu.Lock()
+				counts[agentID] = AgentCounts{SessionCount: sc}
+				mu.Unlock()
+			}()
+		}
+
+		wg.Wait()
+		return AgentCountsMsg{Counts: counts}
 	}
 }
 

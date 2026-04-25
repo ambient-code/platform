@@ -1,49 +1,57 @@
 package views
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/lipgloss"
 
 	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 )
 
 // AgentColumns returns the column definitions for the agent list view.
-// Column order matches the TUI spec: NAME, PROMPT, SESSION, PHASE, AGE.
+// Column order matches the TUI spec: NAME, PROMPT, SESSIONS, PHASE, AGE.
 func AgentColumns() []table.Column {
 	return []table.Column{
 		{Title: "NAME", Width: 20},
 		{Title: "PROMPT", Width: 60},
-		{Title: "SESSION", Width: 14},
+		{Title: "SESSIONS", Width: 10},
 		{Title: "PHASE", Width: 12},
 		{Title: "AGE", Width: 8},
 	}
 }
 
 // AgentRow converts an SDK Agent into a table row suitable for the agent list
-// view. The now parameter is used to compute the relative AGE column.
+// view. The sessionCount parameter is the number of sessions for this agent
+// (-1 means not yet loaded, displayed as "-"). The now parameter is used to
+// compute the relative AGE column.
 //
-// The PHASE column shows "active" when the agent has a current session ID,
-// and is left empty otherwise. This avoids an N+1 session fetch while still
-// providing a useful status indicator.
-func AgentRow(a sdktypes.Agent, now time.Time) table.Row {
+// The PHASE column shows "active" (orange) when the agent has a current
+// session ID, and "idle" (dim) otherwise. Phase text is rendered with
+// embedded lipgloss color so it displays correctly in the bubbles/table.
+func AgentRow(a sdktypes.Agent, sessionCount int, now time.Time) table.Row {
 	age := ""
 	if a.CreatedAt != nil {
 		age = FormatAge(now.Sub(*a.CreatedAt))
 	}
 
-	session := "<none>"
-	phase := ""
+	sessions := "-"
+	if sessionCount >= 0 {
+		sessions = fmt.Sprintf("%d", sessionCount)
+	}
+
+	phase := "idle"
 	if a.CurrentSessionID != "" {
-		session = a.CurrentSessionID
 		phase = "active"
 	}
+	styledPhase := lipgloss.NewStyle().Foreground(PhaseColor(phase)).Render(phase)
 
 	return table.Row{
 		a.Name,
 		TruncateString(a.Prompt, 60),
-		session,
-		phase,
+		sessions,
+		styledPhase,
 		age,
 	}
 }

@@ -425,6 +425,9 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case AgentsMsg:
 		return m.handleAgentsMsg(msg)
 
+	case AgentCountsMsg:
+		return m.handleAgentCountsMsg(msg)
+
 	case SessionsMsg:
 		return m.handleSessionsMsg(msg)
 
@@ -763,6 +766,7 @@ func (m *AppModel) handleProjectCountsMsg(msg ProjectCountsMsg) (tea.Model, tea.
 }
 
 // handleAgentsMsg populates the agent table from a fetch result.
+// Session counts are initially shown as "-" until AgentCountsMsg arrives.
 func (m *AppModel) handleAgentsMsg(msg AgentsMsg) (tea.Model, tea.Cmd) {
 	m.pollInFlight = false
 	m.lastFetch = time.Now()
@@ -781,10 +785,60 @@ func (m *AppModel) handleAgentsMsg(msg AgentsMsg) (tea.Model, tea.Cmd) {
 
 	rows := make([]table.Row, 0, len(msg.Agents))
 	for _, a := range msg.Agents {
-		row := views.AgentRow(a, now)
-		// Sanitize all cells.
+		// Pass -1 for session count — placeholder until AgentCountsMsg arrives.
+		row := views.AgentRow(a, -1, now)
+		// Sanitize all cells except PHASE (index 3) which contains embedded ANSI color.
 		for i := range row {
-			row[i] = Sanitize(row[i])
+			if i != 3 {
+				row[i] = Sanitize(row[i])
+			}
+		}
+		rows = append(rows, row)
+	}
+	m.agentTable.SetRows(rows)
+
+	// Re-apply active filter if present and we're on agents view.
+	if m.activeView == "agents" && m.activeFilter != nil {
+		f := m.activeFilter
+		m.agentTable.SetFilter(func(cols []string) bool {
+			return f.MatchRow(cols)
+		})
+	}
+
+	// Trigger background fetch of session counts per agent.
+	var cmds []tea.Cmd
+	if len(msg.Agents) > 0 && m.currentProject != "" {
+		agentIDs := make([]string, 0, len(msg.Agents))
+		for _, a := range msg.Agents {
+			agentIDs = append(agentIDs, a.ID)
+		}
+		cmds = append(cmds, m.client.FetchAgentCounts(m.currentProject, agentIDs))
+	}
+
+	return m, tea.Batch(cmds...)
+}
+
+// handleAgentCountsMsg rebuilds agent table rows with real session counts
+// returned from the background FetchAgentCounts fan-out.
+func (m *AppModel) handleAgentCountsMsg(msg AgentCountsMsg) (tea.Model, tea.Cmd) {
+	if msg.Err != nil {
+		// Non-fatal — just keep the "-" placeholders.
+		return m, nil
+	}
+
+	now := time.Now()
+	rows := make([]table.Row, 0, len(m.cachedAgents))
+	for _, a := range m.cachedAgents {
+		sc := -1
+		if counts, ok := msg.Counts[a.ID]; ok {
+			sc = counts.SessionCount
+		}
+		row := views.AgentRow(a, sc, now)
+		// Sanitize all cells except PHASE (index 3) which contains embedded ANSI color.
+		for i := range row {
+			if i != 3 {
+				row[i] = Sanitize(row[i])
+			}
 		}
 		rows = append(rows, row)
 	}
@@ -825,8 +879,11 @@ func (m *AppModel) handleSessionsMsg(msg SessionsMsg) (tea.Model, tea.Cmd) {
 		for _, s := range sessions {
 			if s.AgentID == m.currentAgentID {
 				row := views.SessionRow(s, m.currentAgent, now)
+				// Sanitize all cells except PHASE (index 3) which contains embedded ANSI color.
 				for i := range row {
-					row[i] = Sanitize(row[i])
+					if i != 3 {
+						row[i] = Sanitize(row[i])
+					}
 				}
 				rows = append(rows, row)
 			}
@@ -841,8 +898,11 @@ func (m *AppModel) handleSessionsMsg(msg SessionsMsg) (tea.Model, tea.Cmd) {
 				agentName = agentName[:12]
 			}
 			row := views.SessionRow(s, agentName, now)
+			// Sanitize all cells except PHASE (index 3) which contains embedded ANSI color.
 			for i := range row {
-				row[i] = Sanitize(row[i])
+				if i != 3 {
+					row[i] = Sanitize(row[i])
+				}
 			}
 			rows = append(rows, row)
 		}
@@ -1303,15 +1363,15 @@ func (m *AppModel) handleAgentsRune(key string) (tea.Model, tea.Cmd) {
 			return m, m.setInfo("No agent selected")
 		}
 		agentName := row[0]
-		sessionID := ""
-		if len(row) > 2 {
-			sessionID = row[2] // SESSION column
+		agent := m.findAgentByName(agentName)
+		if agent == nil {
+			return m, m.setInfo("Agent not found in cache: " + agentName)
 		}
-		if sessionID == "" || sessionID == "<none>" {
+		if agent.CurrentSessionID == "" {
 			return m, m.setInfo("Agent " + agentName + " has no active session")
 		}
 		return m, tea.Batch(
-			m.client.StopAgent(m.currentProject, sessionID),
+			m.client.StopAgent(m.currentProject, agent.CurrentSessionID),
 			m.setInfo("Stopping agent "+agentName+"..."),
 		)
 	case "e":
@@ -1319,44 +1379,42 @@ func (m *AppModel) handleAgentsRune(key string) (tea.Model, tea.Cmd) {
 	case "l":
 		// Logs — if agent has an active session, jump to message stream.
 		row := m.agentTable.SelectedRow()
-		if len(row) > 2 && row[2] != "<none>" && row[2] != "" {
-			agentName := row[0]
-			sessionID := row[2]
-			m.currentAgent = agentName
-			agent := m.findAgentByName(agentName)
-			if agent != nil {
-				m.currentAgentID = agent.ID
-			} else {
-				m.currentAgentID = agentName
-			}
-			m.currentSession = sessionID
-			phase := ""
-			if len(row) > 3 {
-				phase = row[3]
-			}
-			m.messageStream = views.NewMessageStream(sessionID, agentName, phase)
-			m.resizeTable()
-
-			cmds := []tea.Cmd{
-				m.pushView("messages", sessionID, sessionID),
-				m.setInfo("Streaming messages for session " + sessionID),
-			}
-
-			// Start SSE watcher if we have a program reference and project context.
-			if m.program != nil && m.currentProject != "" {
-				cmds = append(cmds, m.client.WatchSessionMessages(m.currentProject, sessionID, 0, m.program))
-			} else {
-				m.messageStream.AddMessage(views.MessageEntry{
-					Seq:       1,
-					EventType: "system",
-					Payload:   "Connected to session " + sessionID + " (SSE requires program ref)",
-					Timestamp: time.Now(),
-				})
-			}
-
-			return m, tea.Batch(cmds...)
+		if len(row) == 0 {
+			return m, m.setInfo("No agent selected")
 		}
-		return m, m.setInfo("No active session for this agent")
+		agentName := row[0]
+		agent := m.findAgentByName(agentName)
+		if agent == nil {
+			return m, m.setInfo("Agent not found in cache: " + agentName)
+		}
+		if agent.CurrentSessionID == "" {
+			return m, m.setInfo("No active session for this agent")
+		}
+		sessionID := agent.CurrentSessionID
+		m.currentAgent = agentName
+		m.currentAgentID = agent.ID
+		m.currentSession = sessionID
+		m.messageStream = views.NewMessageStream(sessionID, agentName, "active")
+		m.resizeTable()
+
+		cmds := []tea.Cmd{
+			m.pushView("messages", sessionID, sessionID),
+			m.setInfo("Streaming messages for session " + sessionID),
+		}
+
+		// Start SSE watcher if we have a program reference and project context.
+		if m.program != nil && m.currentProject != "" {
+			cmds = append(cmds, m.client.WatchSessionMessages(m.currentProject, sessionID, 0, m.program))
+		} else {
+			m.messageStream.AddMessage(views.MessageEntry{
+				Seq:       1,
+				EventType: "system",
+				Payload:   "Connected to session " + sessionID + " (SSE requires program ref)",
+				Timestamp: time.Now(),
+			})
+		}
+
+		return m, tea.Batch(cmds...)
 	case "d":
 		// Show detail view for the selected agent.
 		row := m.agentTable.SelectedRow()

@@ -1,12 +1,38 @@
 package views
 
 import (
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/lipgloss"
 
 	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 )
+
+// PhaseColor returns the display color for a session or agent phase.
+//
+//	pending              -> yellow (33)
+//	running / active     -> orange (214)
+//	succeeded / completed -> dim   (240)
+//	failed               -> red    (31)
+//	cancelled / idle     -> dim    (240)
+func PhaseColor(phase string) lipgloss.Color {
+	switch strings.ToLower(phase) {
+	case "pending":
+		return lipgloss.Color("33") // yellow
+	case "running", "active":
+		return lipgloss.Color("214") // orange
+	case "succeeded", "completed":
+		return lipgloss.Color("240") // dim
+	case "failed":
+		return lipgloss.Color("31") // red
+	case "cancelled", "idle":
+		return lipgloss.Color("240") // dim
+	default:
+		return lipgloss.Color("240") // dim
+	}
+}
 
 // SessionColumns returns the column definitions for the session list view.
 // Column order matches the TUI spec: ID, AGENT, PROJECT, PHASE, TRIGGERED BY, STARTED, DURATION.
@@ -31,6 +57,9 @@ func SessionColumns() []table.Column {
 // ID is shown in short form (first 12 characters). DURATION is computed as
 // CompletionTime - StartTime for completed sessions, now - StartTime for
 // running sessions, or empty for pending sessions.
+//
+// The PHASE column value is rendered with lipgloss-embedded color so it
+// displays correctly in the bubbles/table without conflicting with Cell style.
 func SessionRow(s sdktypes.Session, agentName string, now time.Time) table.Row {
 	// Short ID: first 12 characters.
 	shortID := s.ID
@@ -54,11 +83,15 @@ func SessionRow(s sdktypes.Session, agentName string, now time.Time) table.Row {
 		duration = FormatAge(now.Sub(*s.StartTime))
 	}
 
+	// Render PHASE with embedded color.
+	phase := s.Phase
+	styledPhase := lipgloss.NewStyle().Foreground(PhaseColor(phase)).Render(phase)
+
 	return table.Row{
 		shortID,
 		agentName,
 		s.ProjectID,
-		s.Phase,
+		styledPhase,
 		s.TriggeredByUserID,
 		started,
 		duration,
