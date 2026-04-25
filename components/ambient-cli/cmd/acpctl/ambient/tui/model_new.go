@@ -1803,7 +1803,7 @@ func (m *AppModel) showHelp() (tea.Model, tea.Cmd) {
 	case "sessions":
 		resource = []views.HelpEntry{
 			{"d", "Describe"}, {"l", "Logs"}, {"m", "Send"}, {"n", "New"},
-			{"y", "YAML"}, {"ctrl-d", "Delete"},
+			{"y", "JSON"}, {"ctrl-d", "Delete"},
 		}
 		navigation = []views.HelpEntry{
 			{"Enter", "Drill into messages"}, {"Esc", "Back to agents"},
