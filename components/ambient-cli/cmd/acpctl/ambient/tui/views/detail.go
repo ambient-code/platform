@@ -443,6 +443,20 @@ func formatJSON(s string) string {
 	return string(formatted)
 }
 
+// ResourceJSON converts any resource to DetailLines showing pretty-printed JSON.
+// Used by the `y` (YAML) hotkey to show the raw resource data.
+func ResourceJSON(resource any) []DetailLine {
+	data, err := json.MarshalIndent(resource, "", "  ")
+	if err != nil {
+		return []DetailLine{{Key: "error", Value: err.Error()}}
+	}
+	var lines []DetailLine
+	for _, line := range strings.Split(string(data), "\n") {
+		lines = append(lines, DetailLine{Value: line})
+	}
+	return lines
+}
+
 // --- Resource-specific detail constructors ---
 
 // ProjectDetail returns detail lines for all fields of a Project resource.

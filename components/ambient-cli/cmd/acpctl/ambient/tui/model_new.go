@@ -1566,11 +1566,10 @@ func (m *AppModel) handleAgentsRune(key string) (tea.Model, tea.Cmd) {
 		if agent == nil {
 			return m, m.setInfo("Agent not found in cache: " + agentName)
 		}
-		// Show agent detail as a describe view (closest to YAML dump).
-		m.detailView = views.NewDetailView("Agent: "+agentName, views.AgentDetail(*agent))
+		m.detailView = views.NewDetailView("YAML: "+agentName, views.ResourceJSON(*agent))
 		m.detailView.SetSize(m.width, m.height-10)
 		cmd := m.pushView("detail", agentName, agent.ID)
-		return m, tea.Batch(cmd, m.setInfo("Agent detail: "+agentName))
+		return m, tea.Batch(cmd, m.setInfo("YAML: "+agentName))
 	}
 	return m, nil
 }
@@ -1619,7 +1618,6 @@ func (m *AppModel) handleSessionsRune(key string) (tea.Model, tea.Cmd) {
 		m.resizeTable()
 		return m, nil
 	case "y":
-		// Show session detail (closest to YAML dump).
 		row := m.sessionTable.SelectedRow()
 		if len(row) == 0 {
 			return m, nil
@@ -1629,7 +1627,7 @@ func (m *AppModel) handleSessionsRune(key string) (tea.Model, tea.Cmd) {
 		if session == nil {
 			return m, m.setInfo("Session not found in cache: " + shortID)
 		}
-		m.detailView = views.NewDetailView("Session: "+shortID, views.SessionDetail(*session))
+		m.detailView = views.NewDetailView("YAML: "+shortID, views.ResourceJSON(*session))
 		m.detailView.SetSize(m.width, m.height-10)
 		cmd := m.pushView("detail", shortID, session.ID)
 		return m, tea.Batch(cmd, m.setInfo("Session detail: "+shortID))
