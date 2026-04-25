@@ -700,7 +700,7 @@ func (m *AppModel) resizeTable() {
 	// Total chrome: ~8 lines, leaving the rest for the table.
 	tableHeight := m.height - 8
 	if m.commandMode || m.filterMode || m.promptMode {
-		tableHeight-- // command/filter/prompt bar takes a line
+		tableHeight -= 3 // bordered command bar: top border + content + bottom border
 	}
 	if tableHeight < 1 {
 		tableHeight = 1
@@ -2055,33 +2055,11 @@ func (m *AppModel) executeCommand(input string) (tea.Model, tea.Cmd) {
 
 	default:
 		ascii := "" +
-			"       ,\n" +
-			"      /|\n" +
-			"     / |\n" +
-			"    /  /\n" +
-			"   |   |\n" +
-			"  /    |\n" +
-			"  |    \\_\n" +
-			"  |      \\__\n" +
-			"  \\       __\\_______\n" +
-			"   \\                 \\_\n" +
-			"   | /                 \\\n" +
-			"   \\/                   \\\n" +
-			"    |                    |\n" +
-			"    \\                   \\|\n" +
-			"    |                    \\\n" +
-			"    \\                     |\n" +
-			"    /\\    \\_               \\\n" +
-			"   / |      \\__ (   )       \\\n" +
-			"  /  \\      / |\\\\  /       __\\____\n" +
-			"  |  ,     |  /\\ \\ \\__    |       \\_\n" +
-			"  \\_/|\\___/   \\   \\}}}\\__|  (@)     )\n" +
-			"   \\)\\)\\)      \\_\\---\\   \\|       \\ \\\n" +
-			"                 \\>\\>\\>   \\   /\\__o_o)\n" +
-			"                           | /  VVVVV\n" +
-			"                           \\ \\    \\\n" +
-			"                            \\ \\MMMMM     oh bugger!\n" +
-			"                             \\______/"
+			"            __\n" +
+			"           / _)\n" +
+			"    .-^^^-/ /\n" +
+			"  __/       /\n" +
+			" <__.|_|-|_|   oh bugger!"
 		msg := "< Ruroh? '" + input + "' not found >"
 		d := views.NewErrorDialog("error", msg, ascii)
 		m.dialog = &d
