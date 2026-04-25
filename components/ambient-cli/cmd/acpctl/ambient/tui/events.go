@@ -23,7 +23,7 @@ func EventColor(eventType string) lipgloss.Color {
 	case "user":
 		return colorWhite // 255
 	case "assistant":
-		return colorGreen // 28
+		return colorWhite // 255 — assistant text is primary content
 	case "tool_use":
 		return colorDim // 240
 	case "tool_result":

@@ -49,7 +49,7 @@ func eventColor(eventType string) lipgloss.Color {
 	case "user":
 		return msgColorWhite
 	case "assistant":
-		return msgColorGreen
+		return msgColorWhite
 	case "tool_use":
 		return msgColorDim
 	case "tool_result":
@@ -536,9 +536,9 @@ func (ms *MessageStream) View() string {
 	}
 
 	borderStyle := lipgloss.NewStyle().Foreground(msgColorDim)
-	kindStyle := lipgloss.NewStyle().Foreground(msgColorCyan).Bold(true)
-	scopeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("206")).Bold(true)
-	countStyle := lipgloss.NewStyle().Foreground(msgColorBlue).Bold(true)
+	kindStyle := lipgloss.NewStyle().Foreground(msgColorOrange).Bold(true)
+	scopeStyle := lipgloss.NewStyle().Foreground(msgColorDim).Bold(true)
+	countStyle := lipgloss.NewStyle().Foreground(msgColorDim).Bold(true)
 
 	// -- k9s-style title bar: messages(agent/session)[count] --
 	shortID := ms.sessionID
@@ -569,9 +569,10 @@ func (ms *MessageStream) View() string {
 		modeLabel = "Raw"
 	}
 	phaseStyle := lipgloss.NewStyle().Foreground(phaseColor(ms.phase))
+	dimIndicator := lipgloss.NewStyle().Foreground(msgColorDim)
 	indicators := fmt.Sprintf("Autoscroll:%s     Mode:%s     Phase:%s",
-		lipgloss.NewStyle().Foreground(msgColorGreen).Render(autoScrollLabel),
-		lipgloss.NewStyle().Foreground(msgColorCyan).Render(modeLabel),
+		dimIndicator.Render(autoScrollLabel),
+		dimIndicator.Render(modeLabel),
 		phaseStyle.Render(ms.phase),
 	)
 	if ms.sseStatus != "" && ms.sseStatus != "connected" {
@@ -612,7 +613,7 @@ func (ms *MessageStream) View() string {
 
 	// Streaming cursor (when phase is running).
 	if strings.ToLower(ms.phase) == "running" {
-		cursorStyle := lipgloss.NewStyle().Foreground(msgColorGreen)
+		cursorStyle := lipgloss.NewStyle().Foreground(msgColorOrange)
 		cursor := cursorStyle.Render(" ▌ streaming…")
 		cursorLine := borderStyle.Render("│") +
 			padToWidth(cursor, ms.width-2) +

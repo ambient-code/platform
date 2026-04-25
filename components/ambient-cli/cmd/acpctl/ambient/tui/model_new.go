@@ -641,6 +641,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.lastMessageSeq = sm.Seq
 			}
 		}
+		m.lastFetch = time.Now()
 		if len(msg.Messages) > 0 {
 			m.messageStream.SetSSEStatus("polling")
 		}
@@ -1730,6 +1731,24 @@ func (m *AppModel) handleDetailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleMessagesKey delegates key events to the message stream sub-model.
 func (m *AppModel) handleMessagesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Intercept global keys before delegating to the message stream.
+	if msg.Type == tea.KeyRunes {
+		switch string(msg.Runes) {
+		case ":":
+			m.commandMode = true
+			m.commandInput.Focus()
+			m.resizeTable()
+			return m, nil
+		case "?":
+			return m, m.viewSpecificHelp()
+		case "q":
+			return m, m.popView()
+		}
+	}
+	if msg.Type == tea.KeyCtrlC {
+		return m, tea.Quit
+	}
+
 	var cmd tea.Cmd
 	m.messageStream, cmd = m.messageStream.Update(msg)
 	return m, cmd

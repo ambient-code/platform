@@ -48,9 +48,9 @@ type TableStyle struct {
 func DefaultTableStyle() TableStyle {
 	return TableStyle{
 		BorderColor: lipgloss.Color("240"), // dim for border lines
-		TitleColor:  lipgloss.Color("36"),  // cyan for resource kind
-		ScopeColor:  lipgloss.Color("206"), // magenta/pink for scope
-		CountColor:  lipgloss.Color("69"),  // blue for count
+		TitleColor:  lipgloss.Color("214"), // orange for resource kind (brand)
+		ScopeColor:  lipgloss.Color("240"), // dim for scope (context, not emphasis)
+		CountColor:  lipgloss.Color("240"), // dim for count (metadata)
 		DimColor:    lipgloss.Color("240"), // dim
 		HeaderColor: lipgloss.Color("255"), // white
 		SelectedBg:  lipgloss.Color("214"), // orange

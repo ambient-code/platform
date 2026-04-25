@@ -82,13 +82,13 @@ func (m *AppModel) viewHeader() string {
 	showShortcuts := m.activeView != "projects" && m.activeView != "contexts" &&
 		m.activeView != "messages" && m.activeView != "detail" && len(m.projectShortcuts) > 0
 	if showShortcuts {
-		col2[0] = styleGreen.Render("<0>") + " " + styleWhite.Render("all")
+		col2[0] = styleBlue.Render("<0>") + " " + styleWhite.Render("all")
 		for i := range min(len(m.projectShortcuts), 4) {
 			name := m.projectShortcuts[i]
 			if len(name) > 16 {
 				name = name[:13] + "..."
 			}
-			col2[i+1] = styleGreen.Render(fmt.Sprintf("<%d>", i+1)) + " " + styleWhite.Render(name)
+			col2[i+1] = styleBlue.Render(fmt.Sprintf("<%d>", i+1)) + " " + styleWhite.Render(name)
 		}
 	}
 
