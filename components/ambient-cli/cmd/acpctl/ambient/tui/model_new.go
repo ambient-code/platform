@@ -2421,8 +2421,9 @@ func (m *AppModel) openEditorForResource(kind, resourceID, projectID string, res
 		return m, m.setInfo("Failed to set temp file permissions: " + err.Error())
 	}
 
-	header := "// Edit the JSON below. Lines starting with // are stripped before parsing.\n" +
-		"// Save and quit to apply changes. Empty file aborts the edit.\n" +
+	header := "// Please edit the object below. Lines beginning with '//' will be ignored,\n" +
+		"// and an empty file will abort the edit. If an error occurs while saving,\n" +
+		"// this file will be reopened with the relevant failures.\n" +
 		"//\n"
 	if _, err := tmpFile.WriteString(header); err != nil {
 		tmpFile.Close()
