@@ -111,12 +111,7 @@ func NewResourceTable(kind string, scope string, columns []table.Column, style T
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderBottom(true).
 		BorderForeground(style.BorderColor)
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("0")).
-		Background(style.SelectedBg).
-		Bold(true)
-	// Don't set Cell foreground — let terminal default handle it.
-	// This allows Selected.Foreground to override cell text color
+	s.Selected = s.Selected.Bold(true)
 	// (inner ANSI codes would win over outer if we set Cell.Foreground).
 	t.SetStyles(s)
 
@@ -267,10 +262,7 @@ func (rt *ResourceTable) SetWidth(w int) {
 		BorderBottom(true).
 		BorderForeground(rt.style.BorderColor)
 	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("0")).
-		Background(rt.style.SelectedBg).
-		Bold(true).
-		Width(distributable + cellPadding)
+		Bold(true)
 	rt.inner.SetStyles(s)
 }
 
@@ -336,14 +328,52 @@ func (rt *ResourceTable) View() string {
 	titleBar := rt.renderTitleBar()
 	tableView := rt.inner.View()
 
-	// Wrap each table line with side borders.
+	// Wrap each table line with side borders, applying full-width highlight
+	// to the selected row.
 	tableLines := strings.Split(tableView, "\n")
+	selectedStyle := lipgloss.NewStyle().
+		Background(rt.style.SelectedBg).
+		Foreground(lipgloss.Color("0"))
+
+	// The table output is: header line(s) + separator + data rows.
+	// Header takes 2 lines (header text + border), data rows follow.
+	// The selected data row index relative to visible rows is cursor - start.
+	cursor := rt.inner.Cursor()
+	visibleRows := rt.inner.Rows()
+	headerLines := 2 // header + bottom border
+	selectedLineIdx := -1
+	if len(visibleRows) > 0 {
+		// Find which visible line the cursor maps to.
+		// bubbles/table internally tracks start/end; cursor - start = visual position.
+		// We approximate: if cursor < len(visibleRows), selectedLineIdx = headerLines + cursor
+		// But the viewport handles scrolling, so the cursor position within the viewport
+		// is the bold row. We detect it by checking which data line has bold styling.
+		for i, line := range tableLines {
+			if i >= headerLines && strings.Contains(line, "\x1b[1m") {
+				selectedLineIdx = i
+				break
+			}
+		}
+	}
+	_ = cursor
+
 	var bordered []string
-	for _, line := range tableLines {
+	for i, line := range tableLines {
+		innerWidth := w - 4 // 2 for │ chars, 2 for padding spaces
 		lineWidth := lipgloss.Width(line)
-		pad := max(w-lineWidth-2, 0) // 2 for side border chars
-		bordered = append(bordered,
-			borderStyle.Render("│")+" "+line+strings.Repeat(" ", pad)+borderStyle.Render("│"))
+
+		if i == selectedLineIdx && selectedLineIdx >= 0 {
+			// Apply full-width orange background with black text.
+			pad := max(innerWidth-lineWidth, 0)
+			content := line + strings.Repeat(" ", pad)
+			highlighted := selectedStyle.Render(content)
+			bordered = append(bordered,
+				borderStyle.Render("│")+" "+highlighted+" "+borderStyle.Render("│"))
+		} else {
+			pad := max(w-lineWidth-2, 0)
+			bordered = append(bordered,
+				borderStyle.Render("│")+" "+line+strings.Repeat(" ", pad)+borderStyle.Render("│"))
+		}
 	}
 
 	// Bottom border.

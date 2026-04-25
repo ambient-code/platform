@@ -45,14 +45,14 @@ func AgentRow(a sdktypes.Agent, sessionCount int, now time.Time) table.Row {
 	if a.CurrentSessionID != "" {
 		phase = "active"
 	}
-	styledPhase := lipgloss.NewStyle().Foreground(PhaseColor(phase)).Render(phase)
+	rowStyle := lipgloss.NewStyle().Foreground(PhaseColor(phase))
 
 	return table.Row{
-		a.Name,
-		TruncateString(a.Prompt, 60),
-		sessions,
-		styledPhase,
-		age,
+		rowStyle.Render(a.Name),
+		rowStyle.Render(TruncateString(a.Prompt, 60)),
+		rowStyle.Render(sessions),
+		rowStyle.Render(phase),
+		rowStyle.Render(age),
 	}
 }
 

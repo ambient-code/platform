@@ -83,18 +83,17 @@ func SessionRow(s sdktypes.Session, agentName string, now time.Time) table.Row {
 		duration = FormatAge(now.Sub(*s.StartTime))
 	}
 
-	// Render PHASE with embedded color.
 	phase := s.Phase
-	styledPhase := lipgloss.NewStyle().Foreground(PhaseColor(phase)).Render(phase)
+	rowStyle := lipgloss.NewStyle().Foreground(PhaseColor(phase))
 
 	return table.Row{
-		shortID,
-		agentName,
-		s.ProjectID,
-		styledPhase,
-		s.TriggeredByUserID,
-		started,
-		duration,
+		rowStyle.Render(shortID),
+		rowStyle.Render(agentName),
+		rowStyle.Render(s.ProjectID),
+		rowStyle.Render(phase),
+		rowStyle.Render(s.TriggeredByUserID),
+		rowStyle.Render(started),
+		rowStyle.Render(duration),
 	}
 }
 
