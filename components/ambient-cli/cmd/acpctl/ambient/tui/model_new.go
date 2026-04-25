@@ -159,6 +159,13 @@ func NewAppModel(factory *connection.ClientFactory) (*AppModel, error) {
 	pi.CharLimit = 1024
 
 	pt := views.NewProjectTable(views.DefaultTableStyle())
+	// Project rows: STATUS is column index 2 (NAME, DESCRIPTION, STATUS, AGENTS, SESSIONS, AGE)
+	pt.SetRowColorFunc(func(row table.Row) lipgloss.Color {
+		if len(row) > 2 {
+			return views.PhaseColor(row[2])
+		}
+		return lipgloss.Color("240")
+	})
 	at := views.NewAgentTable("all", views.DefaultTableStyle())
 	// Agent rows: PHASE is column index 3 (NAME, PROMPT, SESSIONS, PHASE, AGE)
 	at.SetRowColorFunc(func(row table.Row) lipgloss.Color {
