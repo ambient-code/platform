@@ -86,6 +86,9 @@ type ResourceTable struct {
 	// sort tracks the current column sort state.
 	sort sortState
 
+	// tableStyles caches the current styles for dynamic updates (e.g. phase-based highlight).
+	tableStyles table.Styles
+
 	// columns stores the original column definitions for sort indicator rendering.
 	columns []table.Column
 }
@@ -112,16 +115,19 @@ func NewResourceTable(kind string, scope string, columns []table.Column, style T
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderBottom(true).
 		BorderForeground(style.BorderColor)
-	s.Selected = s.Selected.Bold(true)
-	// (inner ANSI codes would win over outer if we set Cell.Foreground).
+	s.Selected = s.Selected.
+		Foreground(lipgloss.Color("0")).
+		Background(style.SelectedBg).
+		Bold(true)
 	t.SetStyles(s)
 
 	return ResourceTable{
-		inner:   t,
-		kind:    kind,
-		scope:   scope,
-		style:   style,
-		columns: cols,
+		inner:       t,
+		kind:        kind,
+		scope:       scope,
+		style:       style,
+		columns:     cols,
+		tableStyles: s,
 		sort: sortState{
 			colIdx:    -1,
 			direction: SortNone,
@@ -263,7 +269,11 @@ func (rt *ResourceTable) SetWidth(w int) {
 		BorderBottom(true).
 		BorderForeground(rt.style.BorderColor)
 	s.Selected = s.Selected.
-		Bold(true)
+		Foreground(lipgloss.Color("0")).
+		Background(rt.style.SelectedBg).
+		Bold(true).
+		Width(distributable + cellPadding)
+	rt.tableStyles = s
 	rt.inner.SetStyles(s)
 }
 
@@ -309,7 +319,34 @@ func (rt *ResourceTable) Update(msg tea.Msg) (ResourceTable, tea.Cmd) {
 
 	var cmd tea.Cmd
 	rt.inner, cmd = rt.inner.Update(msg)
+	rt.updateSelectedStyle()
 	return *rt, cmd
+}
+
+// updateSelectedStyle adjusts the Selected row background to match the
+// phase color of the currently selected row.
+func (rt *ResourceTable) updateSelectedStyle() {
+	bg := rt.style.SelectedBg
+	row := rt.inner.SelectedRow()
+	if len(row) > 0 {
+		for _, cell := range row {
+			raw := strings.TrimSpace(strings.ToLower(stripANSI(cell)))
+			switch raw {
+			case "running", "active":
+				bg = PhaseColor("running")
+			case "pending":
+				bg = PhaseColor("pending")
+			case "failed":
+				bg = PhaseColor("failed")
+			case "completed", "succeeded":
+				bg = PhaseColor("completed")
+			case "idle", "cancelled":
+				bg = PhaseColor("idle")
+			}
+		}
+	}
+	rt.tableStyles.Selected = rt.tableStyles.Selected.Background(bg)
+	rt.inner.SetStyles(rt.tableStyles)
 }
 
 // View renders the table with a k9s-style title bar.
@@ -329,65 +366,14 @@ func (rt *ResourceTable) View() string {
 	titleBar := rt.renderTitleBar()
 	tableView := rt.inner.View()
 
-	// Wrap each table line with side borders, applying full-width highlight
-	// to the selected row using the phase color as background.
+	// Wrap each table line with side borders.
 	tableLines := strings.Split(tableView, "\n")
-
-	// Determine the selected row's highlight color from its phase/status.
-	// Default to orange; if the row has phase data, use PhaseColor as background.
-	selectedBg := rt.style.SelectedBg
-	selectedRow := rt.inner.SelectedRow()
-	if len(selectedRow) > 0 {
-		// Check each cell for a known phase color by looking at the raw row data.
-		// The phase is typically in the PHASE column. We scan all cells for phase keywords.
-		for _, cell := range selectedRow {
-			// Strip ANSI to get the raw text.
-			raw := stripANSI(cell)
-			raw = strings.TrimSpace(strings.ToLower(raw))
-			switch raw {
-			case "running", "active":
-				selectedBg = PhaseColor("running")
-			case "pending":
-				selectedBg = PhaseColor("pending")
-			case "failed":
-				selectedBg = PhaseColor("failed")
-			case "completed", "succeeded":
-				selectedBg = PhaseColor("completed")
-			case "idle", "cancelled":
-				selectedBg = PhaseColor("idle")
-			}
-		}
-	}
-	highlightStyle := lipgloss.NewStyle().
-		Background(selectedBg).
-		Foreground(lipgloss.Color("0"))
-
-	// Find the selected line by detecting bold marker.
-	const dataStart = 2 // header + border
-	selectedLineIdx := -1
-	for i, line := range tableLines {
-		if i >= dataStart && strings.Contains(line, "\x1b[1m") {
-			selectedLineIdx = i
-			break
-		}
-	}
-
 	var bordered []string
-	for i, line := range tableLines {
-		innerWidth := w - 4
+	for _, line := range tableLines {
 		lineWidth := lipgloss.Width(line)
-
-		if i == selectedLineIdx && selectedLineIdx >= 0 {
-			pad := max(innerWidth-lineWidth, 0)
-			content := line + strings.Repeat(" ", pad)
-			highlighted := highlightStyle.Render(content)
-			bordered = append(bordered,
-				borderStyle.Render("│")+" "+highlighted+" "+borderStyle.Render("│"))
-		} else {
-			pad := max(w-lineWidth-2, 0)
-			bordered = append(bordered,
-				borderStyle.Render("│")+" "+line+strings.Repeat(" ", pad)+borderStyle.Render("│"))
-		}
+		pad := max(w-lineWidth-2, 0)
+		bordered = append(bordered,
+			borderStyle.Render("│")+" "+line+strings.Repeat(" ", pad)+borderStyle.Render("│"))
 	}
 
 	// Bottom border.
