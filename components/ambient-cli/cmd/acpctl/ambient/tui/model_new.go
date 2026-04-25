@@ -1,7 +1,10 @@
 package tui
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
 	"sort"
 	"strings"
 	"time"
@@ -54,6 +57,30 @@ type messagePollTickMsg struct{ t time.Time }
 
 // infoExpiredMsg signals the ephemeral info line should be cleared.
 type infoExpiredMsg struct{}
+
+// editCompleteMsg is sent when the user's $EDITOR exits after editing a
+// resource as JSON. The handler reads the temp file, diffs against the
+// original, and PATCHes any changed fields.
+type editCompleteMsg struct {
+	ResourceKind string // "agent", "project", "session"
+	ResourceID   string // ID of the resource being edited
+	ProjectID    string // project scope (for agents/sessions)
+	TempFile     string // path to the temp file containing edited JSON
+	OriginalJSON []byte // original JSON before editing (for diffing)
+	Err          error  // non-nil if the editor process failed
+}
+
+// getEditor returns the user's preferred editor command by checking $EDITOR,
+// then $VISUAL, falling back to "vi".
+func getEditor() string {
+	if e := os.Getenv("EDITOR"); e != "" {
+		return e
+	}
+	if e := os.Getenv("VISUAL"); e != "" {
+		return e
+	}
+	return "vi"
+}
 
 // ---------------------------------------------------------------------------
 // AppModel — the TUI model with full navigation hierarchy
@@ -557,6 +584,39 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.setInfo("Delete session failed: " + msg.Err.Error())
 		}
 		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Session deleted"))
+
+	case UpdateAgentMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Update agent failed: " + msg.Err.Error())
+		}
+		name := ""
+		if msg.Agent != nil {
+			name = msg.Agent.Name
+		}
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Agent updated: "+name))
+
+	case UpdateProjectMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Update project failed: " + msg.Err.Error())
+		}
+		name := ""
+		if msg.Project != nil {
+			name = msg.Project.Name
+		}
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Project updated: "+name))
+
+	case UpdateSessionMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Update session failed: " + msg.Err.Error())
+		}
+		name := ""
+		if msg.Session != nil {
+			name = msg.Session.Name
+		}
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Session updated: "+name))
+
+	case editCompleteMsg:
+		return m.handleEditComplete(msg)
 
 	case SendMessageMsg:
 		if msg.Err != nil {
@@ -1436,6 +1496,8 @@ func (m *AppModel) handleProjectsRune(key string) (tea.Model, tea.Cmd) {
 		m.detailView.SetSize(m.width, m.height-10)
 		cmd := m.pushView("detail", projectName, project.ID)
 		return m, tea.Batch(cmd, m.setInfo("Project detail: "+projectName))
+	case "e":
+		return m.openEditorForProject()
 	case "n":
 		return m, m.setInfo("Use acpctl project create")
 	}
@@ -1495,7 +1557,7 @@ func (m *AppModel) handleAgentsRune(key string) (tea.Model, tea.Cmd) {
 			m.setInfo("Stopping agent "+agentName+"..."),
 		)
 	case "e":
-		return m, m.setInfo("Use acpctl agent update")
+		return m.openEditorForAgent()
 	case "l":
 		// Logs — if agent has an active session, jump to message stream.
 		row := m.agentTable.SelectedRow()
@@ -1577,6 +1639,8 @@ func (m *AppModel) handleAgentsRune(key string) (tea.Model, tea.Cmd) {
 // handleSessionsRune handles session-view-specific hotkeys.
 func (m *AppModel) handleSessionsRune(key string) (tea.Model, tea.Cmd) {
 	switch key {
+	case "e":
+		return m.openEditorForSession()
 	case "d":
 		// Show detail view for the selected session.
 		row := m.sessionTable.SelectedRow()
@@ -1786,7 +1850,7 @@ func (m *AppModel) showHelp() (tea.Model, tea.Cmd) {
 	switch viewName {
 	case "projects":
 		resource = []views.HelpEntry{
-			{"d", "Describe"}, {"n", "New"}, {"ctrl-d", "Delete"},
+			{"d", "Describe"}, {"e", "Edit"}, {"n", "New"}, {"ctrl-d", "Delete"},
 		}
 		navigation = []views.HelpEntry{
 			{"Enter", "Drill into agents"}, {"q", "Quit"},
@@ -1802,7 +1866,7 @@ func (m *AppModel) showHelp() (tea.Model, tea.Cmd) {
 		}
 	case "sessions":
 		resource = []views.HelpEntry{
-			{"d", "Describe"}, {"l", "Logs"}, {"m", "Send"}, {"n", "New"},
+			{"d", "Describe"}, {"e", "Edit"}, {"l", "Logs"}, {"m", "Send"}, {"n", "New"},
 			{"y", "JSON"}, {"ctrl-d", "Delete"},
 		}
 		navigation = []views.HelpEntry{
@@ -2275,6 +2339,227 @@ func (m *AppModel) handleProjectShortcut(digit byte) (tea.Model, tea.Cmd) {
 }
 
 // ---------------------------------------------------------------------------
+// $EDITOR integration
+// ---------------------------------------------------------------------------
+
+// openEditorForAgent serializes the selected agent as JSON, writes it to a
+// temp file, and suspends the TUI to open the user's $EDITOR. On return the
+// editCompleteMsg handler diffs and PATCHes any changes.
+func (m *AppModel) openEditorForAgent() (tea.Model, tea.Cmd) {
+	row := m.agentTable.SelectedRow()
+	if len(row) == 0 {
+		return m, m.setInfo("No agent selected")
+	}
+	agentName := row[0]
+	agent := m.findAgentByName(agentName)
+	if agent == nil {
+		return m, m.setInfo("Agent not found in cache: " + agentName)
+	}
+	if m.currentProject == "" {
+		return m, m.setInfo("No project context for edit")
+	}
+
+	return m.openEditorForResource("agent", agent.ID, m.currentProject, *agent)
+}
+
+// openEditorForProject serializes the selected project as JSON, writes it to a
+// temp file, and suspends the TUI to open the user's $EDITOR.
+func (m *AppModel) openEditorForProject() (tea.Model, tea.Cmd) {
+	row := m.projectTable.SelectedRow()
+	if len(row) == 0 {
+		return m, m.setInfo("No project selected")
+	}
+	projectName := row[0]
+	project := m.findProjectByName(projectName)
+	if project == nil {
+		return m, m.setInfo("Project not found in cache: " + projectName)
+	}
+
+	return m.openEditorForResource("project", project.ID, "", *project)
+}
+
+// openEditorForSession serializes the selected session as JSON, writes it to a
+// temp file, and suspends the TUI to open the user's $EDITOR.
+func (m *AppModel) openEditorForSession() (tea.Model, tea.Cmd) {
+	row := m.sessionTable.SelectedRow()
+	if len(row) == 0 {
+		return m, m.setInfo("No session selected")
+	}
+	shortID := row[0]
+	session := m.findSessionByShortID(shortID)
+	if session == nil {
+		return m, m.setInfo("Session not found in cache: " + shortID)
+	}
+
+	projectID := m.currentProject
+	if projectID == "" {
+		projectID = session.ProjectID
+	}
+	if projectID == "" {
+		return m, m.setInfo("No project context for edit")
+	}
+
+	return m.openEditorForResource("session", session.ID, projectID, *session)
+}
+
+// openEditorForResource is the shared implementation that writes JSON to a temp
+// file, opens $EDITOR via tea.ExecProcess, and returns an editCompleteMsg when
+// the editor exits.
+func (m *AppModel) openEditorForResource(kind, resourceID, projectID string, resource any) (tea.Model, tea.Cmd) {
+	originalJSON, err := json.MarshalIndent(resource, "", "  ")
+	if err != nil {
+		return m, m.setInfo("Failed to serialize " + kind + ": " + err.Error())
+	}
+
+	tmpFile, err := os.CreateTemp("", "acpctl-edit-*.json")
+	if err != nil {
+		return m, m.setInfo("Failed to create temp file: " + err.Error())
+	}
+
+	if err := os.Chmod(tmpFile.Name(), 0600); err != nil {
+		os.Remove(tmpFile.Name())
+		return m, m.setInfo("Failed to set temp file permissions: " + err.Error())
+	}
+
+	if _, err := tmpFile.Write(originalJSON); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpFile.Name())
+		return m, m.setInfo("Failed to write temp file: " + err.Error())
+	}
+	if err := tmpFile.Close(); err != nil {
+		os.Remove(tmpFile.Name())
+		return m, m.setInfo("Failed to close temp file: " + err.Error())
+	}
+
+	editor := getEditor()
+	tmpPath := tmpFile.Name()
+	origCopy := make([]byte, len(originalJSON))
+	copy(origCopy, originalJSON)
+
+	c := exec.Command(editor, tmpPath) //nolint:gosec // editor is from user's env
+	return m, tea.ExecProcess(c, func(err error) tea.Msg {
+		return editCompleteMsg{
+			ResourceKind: kind,
+			ResourceID:   resourceID,
+			ProjectID:    projectID,
+			TempFile:     tmpPath,
+			OriginalJSON: origCopy,
+			Err:          err,
+		}
+	})
+}
+
+// handleEditComplete processes the editCompleteMsg after the editor exits.
+// It reads the edited JSON, diffs against the original, builds a patch map
+// with only changed fields, and calls the appropriate update method.
+func (m *AppModel) handleEditComplete(msg editCompleteMsg) (tea.Model, tea.Cmd) {
+	// Always clean up the temp file.
+	defer os.Remove(msg.TempFile)
+
+	if msg.Err != nil {
+		return m, m.setInfo("Editor exited with error: " + msg.Err.Error())
+	}
+
+	// Read the edited file.
+	editedJSON, err := os.ReadFile(msg.TempFile)
+	if err != nil {
+		return m, m.setInfo("Failed to read edited file: " + err.Error())
+	}
+
+	// Parse both original and edited JSON into maps for diffing.
+	var original map[string]any
+	if err := json.Unmarshal(msg.OriginalJSON, &original); err != nil {
+		return m, m.setInfo("Failed to parse original JSON: " + err.Error())
+	}
+	var edited map[string]any
+	if err := json.Unmarshal(editedJSON, &edited); err != nil {
+		return m, m.setInfo("Failed to parse edited JSON: " + err.Error())
+	}
+
+	// Determine which fields are editable based on resource kind.
+	var editableFields []string
+	switch msg.ResourceKind {
+	case "agent":
+		editableFields = []string{
+			"name", "prompt", "labels", "annotations", "description",
+			"display_name", "llm_model", "llm_max_tokens", "llm_temperature",
+			"repo_url", "environment_variables", "resource_overrides",
+		}
+	case "project":
+		editableFields = []string{
+			"name", "description", "display_name", "labels", "annotations",
+			"prompt", "status",
+		}
+	case "session":
+		editableFields = []string{
+			"name", "prompt", "labels", "annotations",
+			"llm_model", "llm_max_tokens", "llm_temperature",
+			"repo_url", "repos", "resource_overrides", "timeout",
+			"environment_variables",
+		}
+	}
+
+	// Build patch with only changed editable fields.
+	patch := make(map[string]any)
+	for _, field := range editableFields {
+		origVal, origOK := original[field]
+		editVal, editOK := edited[field]
+
+		// Field was added in the edit.
+		if !origOK && editOK {
+			patch[field] = editVal
+			continue
+		}
+		// Field was removed in the edit.
+		if origOK && !editOK {
+			// Send zero value to clear the field.
+			patch[field] = nil
+			continue
+		}
+		// Both present — compare serialized forms for robustness.
+		if origOK && editOK {
+			origSer, _ := json.Marshal(origVal)
+			editSer, _ := json.Marshal(editVal)
+			if string(origSer) != string(editSer) {
+				patch[field] = editVal
+			}
+		}
+	}
+
+	if len(patch) == 0 {
+		return m, m.setInfo("No changes detected")
+	}
+
+	// Build a summary of changed fields.
+	var changedFields []string
+	for k := range patch {
+		changedFields = append(changedFields, k)
+	}
+	sort.Strings(changedFields)
+	summary := strings.Join(changedFields, ", ")
+
+	switch msg.ResourceKind {
+	case "agent":
+		return m, tea.Batch(
+			m.client.UpdateAgent(msg.ProjectID, msg.ResourceID, patch),
+			m.setInfo("Updating agent ("+summary+")..."),
+		)
+	case "project":
+		return m, tea.Batch(
+			m.client.UpdateProject(msg.ResourceID, patch),
+			m.setInfo("Updating project ("+summary+")..."),
+		)
+	case "session":
+		return m, tea.Batch(
+			m.client.UpdateSession(msg.ProjectID, msg.ResourceID, patch),
+			m.setInfo("Updating session ("+summary+")..."),
+		)
+	default:
+		return m, m.setInfo("Unknown resource kind: " + msg.ResourceKind)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Contextual hotkey hints for the header
 // ---------------------------------------------------------------------------
 
@@ -2284,6 +2569,7 @@ func (m *AppModel) contextualHints() []string {
 	case "projects":
 		return []string{
 			"<d> Describe",
+			"<e> Edit",
 			"<n> New",
 			"<Ctrl-D> Delete",
 		}
@@ -2301,6 +2587,7 @@ func (m *AppModel) contextualHints() []string {
 	case "sessions":
 		return []string{
 			"<d> Describe",
+			"<e> Edit",
 			"<l> Logs",
 			"<m> Send",
 			"<n> New",

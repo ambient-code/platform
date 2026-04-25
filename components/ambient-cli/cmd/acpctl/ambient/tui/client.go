@@ -116,9 +116,21 @@ type CreateProjectMsg struct {
 	Err     error
 }
 
+// UpdateProjectMsg carries the result of patching a project.
+type UpdateProjectMsg struct {
+	Project *sdktypes.Project
+	Err     error
+}
+
 // DeleteProjectMsg carries the result of deleting a project.
 type DeleteProjectMsg struct {
 	Err error
+}
+
+// UpdateSessionMsg carries the result of patching a session.
+type UpdateSessionMsg struct {
+	Session *sdktypes.Session
+	Err     error
 }
 
 // DeleteSessionMsg carries the result of deleting a session.
@@ -567,6 +579,25 @@ func (tc *TUIClient) CreateProject(name, description string) tea.Cmd {
 	}
 }
 
+// UpdateProject returns a tea.Cmd that patches a project with the given fields.
+func (tc *TUIClient) UpdateProject(projectID string, patch map[string]any) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject("_")
+		if err != nil {
+			return UpdateProjectMsg{Err: err}
+		}
+
+		result, err := client.Projects().Update(ctx, projectID, patch)
+		if err != nil {
+			return UpdateProjectMsg{Err: err}
+		}
+		return UpdateProjectMsg{Project: result}
+	}
+}
+
 // DeleteProject returns a tea.Cmd that deletes a project by ID.
 func (tc *TUIClient) DeleteProject(projectID string) tea.Cmd {
 	return func() tea.Msg {
@@ -586,6 +617,25 @@ func (tc *TUIClient) DeleteProject(projectID string) tea.Cmd {
 // ---------------------------------------------------------------------------
 // Session operations
 // ---------------------------------------------------------------------------
+
+// UpdateSession returns a tea.Cmd that patches a session with the given fields.
+func (tc *TUIClient) UpdateSession(projectID, sessionID string, patch map[string]any) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject(projectID)
+		if err != nil {
+			return UpdateSessionMsg{Err: err}
+		}
+
+		result, err := client.Sessions().Update(ctx, sessionID, patch)
+		if err != nil {
+			return UpdateSessionMsg{Err: err}
+		}
+		return UpdateSessionMsg{Session: result}
+	}
+}
 
 // DeleteSession returns a tea.Cmd that deletes a session by ID.
 func (tc *TUIClient) DeleteSession(projectID, sessionID string) tea.Cmd {
