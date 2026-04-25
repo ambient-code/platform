@@ -69,10 +69,6 @@ func (m *AppModel) viewHeader() string {
 			}
 		}
 	}
-	if len(serverURL) > 45 {
-		serverURL = serverURL[:42] + "..."
-	}
-
 	// Col 1: metadata.
 	col1 := [5]string{
 		fmt.Sprintf(" %s %s %s", styleDim.Render("Context:"), styleOrange.Render(contextName), styleDim.Render("[RW]")),
