@@ -79,7 +79,9 @@ func (m *AppModel) viewHeader() string {
 
 	// Col 2: project shortcuts (stacked, padded to fixed width).
 	var col2 [5]string
-	if m.activeView != "projects" && m.activeView != "contexts" && len(m.projectShortcuts) > 0 {
+	showShortcuts := m.activeView != "projects" && m.activeView != "contexts" &&
+		m.activeView != "messages" && m.activeView != "detail" && len(m.projectShortcuts) > 0
+	if showShortcuts {
 		col2[0] = styleGreen.Render("<0>") + " " + styleWhite.Render("all")
 		for i := range min(len(m.projectShortcuts), 4) {
 			name := m.projectShortcuts[i]

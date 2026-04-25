@@ -272,7 +272,7 @@ func (rt *ResourceTable) SetWidth(w int) {
 		Foreground(lipgloss.Color("0")).
 		Background(rt.style.SelectedBg).
 		Bold(true).
-		Width(distributable + cellPadding)
+		Width(usable)
 	rt.tableStyles = s
 	rt.inner.SetStyles(s)
 }

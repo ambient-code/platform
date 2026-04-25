@@ -1277,9 +1277,10 @@ func (m *AppModel) handleRuneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Number-key project shortcuts (0-9) — only active below the projects/contexts level.
+	// Number-key project shortcuts (0-9) — only active on table views below project level.
 	if len(key) == 1 && key[0] >= '0' && key[0] <= '9' &&
-		m.activeView != "projects" && m.activeView != "contexts" {
+		m.activeView != "projects" && m.activeView != "contexts" &&
+		m.activeView != "messages" && m.activeView != "detail" {
 		return m.handleProjectShortcut(key[0] - '0')
 	}
 
