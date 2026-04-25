@@ -1370,12 +1370,8 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 				projectID = session.ProjectID
 			}
 
-			// Start SSE watcher if we have a program reference.
-			if m.program != nil && projectID != "" {
-				cmds = append(cmds, m.client.WatchSessionMessages(projectID, fullSessionID, 0, m.program))
-			}
-
-			// Always start polling fallback alongside SSE.
+			// Use polling for messages (SSE disabled — the synchronous SSE
+			// connection setup blocks the UI for several seconds).
 			if projectID != "" {
 				m.messagePollActive = true
 				cmds = append(cmds, m.messagePollTickCmd())
@@ -1607,12 +1603,7 @@ func (m *AppModel) handleAgentsRune(key string) (tea.Model, tea.Cmd) {
 			m.setInfo("Streaming messages for session " + sessionID),
 		}
 
-		// Start SSE watcher if we have a program reference and project context.
-		if m.program != nil && m.currentProject != "" {
-			cmds = append(cmds, m.client.WatchSessionMessages(m.currentProject, sessionID, 0, m.program))
-		}
-
-		// Always start polling fallback alongside SSE.
+		// Use polling for messages (SSE disabled — blocks UI).
 		if m.currentProject != "" {
 			m.messagePollActive = true
 			cmds = append(cmds, m.messagePollTickCmd())
