@@ -537,8 +537,9 @@ func (ms *MessageStream) View() string {
 
 	borderStyle := lipgloss.NewStyle().Foreground(msgColorDim)
 	kindStyle := lipgloss.NewStyle().Foreground(msgColorOrange).Bold(true)
-	scopeStyle := lipgloss.NewStyle().Foreground(msgColorDim).Bold(true)
-	countStyle := lipgloss.NewStyle().Foreground(msgColorDim).Bold(true)
+	scopeStyle := lipgloss.NewStyle().Foreground(msgColorBlue).Bold(true)
+	countStyle := lipgloss.NewStyle().Foreground(msgColorWhite).Bold(true)
+	dimStyle := lipgloss.NewStyle().Foreground(msgColorDim)
 
 	// -- k9s-style title bar: messages(agent/session)[count] --
 	shortID := ms.sessionID
@@ -548,8 +549,8 @@ func (ms *MessageStream) View() string {
 	scope := ms.agentName + "/" + shortID
 	titleRendered := " " +
 		kindStyle.Render("messages") +
-		scopeStyle.Render("("+scope+")") +
-		countStyle.Render(fmt.Sprintf("[%d]", len(ms.messages))) +
+		dimStyle.Render("(") + scopeStyle.Render(scope) + dimStyle.Render(")") +
+		dimStyle.Render("[") + countStyle.Render(fmt.Sprintf("%d", len(ms.messages))) + dimStyle.Render("]") +
 		" "
 	titleWidth := lipgloss.Width(titleRendered)
 	remaining := max(ms.width-titleWidth-2, 2)

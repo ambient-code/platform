@@ -49,8 +49,8 @@ func DefaultTableStyle() TableStyle {
 	return TableStyle{
 		BorderColor: lipgloss.Color("240"), // dim for border lines
 		TitleColor:  lipgloss.Color("214"), // orange for resource kind (brand)
-		ScopeColor:  lipgloss.Color("240"), // dim for scope (context, not emphasis)
-		CountColor:  lipgloss.Color("240"), // dim for count (metadata)
+		ScopeColor:  lipgloss.Color("69"),  // blue for scope name (complementary)
+		CountColor:  lipgloss.Color("255"), // white for count number
 		DimColor:    lipgloss.Color("240"), // dim
 		HeaderColor: lipgloss.Color("255"), // white
 		SelectedBg:  lipgloss.Color("214"), // orange
@@ -432,10 +432,11 @@ func (rt *ResourceTable) renderTitleBar() string {
 		filterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
 		filterPart = " " + filterStyle.Render("</"+rt.filterText+">")
 	}
+	dimStyle := lipgloss.NewStyle().Foreground(rt.style.DimColor)
 	titleRendered := " " +
 		kindStyle.Render(rt.kind) +
-		scopeStyle.Render("("+rt.scope+")") +
-		countStyle.Render(fmt.Sprintf("[%d]", count)) +
+		dimStyle.Render("(") + scopeStyle.Render(rt.scope) + dimStyle.Render(")") +
+		dimStyle.Render("[") + countStyle.Render(fmt.Sprintf("%d", count)) + dimStyle.Render("]") +
 		filterPart +
 		" "
 
