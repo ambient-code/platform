@@ -450,6 +450,11 @@ func (ms *MessageStream) Update(msg tea.Msg) (MessageStream, tea.Cmd) {
 func (ms *MessageStream) updateNormal(msg tea.KeyMsg) (MessageStream, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
+		// If search filter is active, clear it first instead of backing out.
+		if ms.searchPattern != nil {
+			ms.searchPattern = nil
+			return *ms, nil
+		}
 		return *ms, func() tea.Msg { return MsgStreamBackMsg{} }
 
 	case tea.KeyEnter:
@@ -781,8 +786,9 @@ func (ms *MessageStream) buildDisplayLines() []string {
 
 	lines := make([]string, 0, len(ms.messages))
 
-	dimStyle := lipgloss.NewStyle().Foreground(msgColorDim)
-	separator := dimStyle.Render(strings.Repeat("─", max(maxLineWidth/2, 10)))
+	sepStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("236"))
+	const tagPad = 14
+	separator := strings.Repeat(" ", tagPad) + sepStyle.Render(strings.Repeat("─", max(maxLineWidth-tagPad, 10)))
 
 	now := time.Now()
 	prevWasUserOrAssistant := false
