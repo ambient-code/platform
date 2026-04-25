@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -38,6 +39,37 @@ type Context struct {
 	RefreshToken string `json:"refresh_token,omitempty"`
 	IssuerURL    string `json:"issuer_url,omitempty"`
 	ClientID     string `json:"client_id,omitempty"`
+}
+
+// Username extracts the username from the JWT access token claims.
+// Checks preferred_username, sub, email in order. Returns "unknown" on failure.
+func (c *Context) Username() string {
+	if c.AccessToken == "" {
+		return "unknown"
+	}
+	parts := strings.SplitN(c.AccessToken, ".", 3)
+	if len(parts) < 2 {
+		return "unknown"
+	}
+	// Decode the payload (base64url, no padding).
+	payload := parts[1]
+	if rem := len(payload) % 4; rem != 0 {
+		payload += strings.Repeat("=", 4-rem)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(strings.NewReplacer("-", "+", "_", "/").Replace(payload))
+	if err != nil {
+		return "unknown"
+	}
+	var claims map[string]any
+	if err := json.Unmarshal(decoded, &claims); err != nil {
+		return "unknown"
+	}
+	for _, key := range []string{"preferred_username", "sub", "email"} {
+		if v, ok := claims[key].(string); ok && v != "" {
+			return v
+		}
+	}
+	return "unknown"
 }
 
 // String implements fmt.Stringer. The access token is redacted for security.

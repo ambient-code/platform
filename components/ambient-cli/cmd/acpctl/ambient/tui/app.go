@@ -73,7 +73,7 @@ func (m *AppModel) viewHeader() string {
 	// Col 1: metadata.
 	col1 := [5]string{
 		fmt.Sprintf(" %s %s %s", styleDim.Render("Context:"), styleOrange.Render(contextName), styleDim.Render("[RW]")),
-		fmt.Sprintf(" %s %s", styleDim.Render("User:   "), styleWhite.Render("user")),
+		fmt.Sprintf(" %s %s", styleDim.Render("User:   "), styleWhite.Render(m.currentUser())),
 		fmt.Sprintf(" %s %s", styleDim.Render("Project:"), styleOrange.Render(project)),
 		fmt.Sprintf(" %s %s", styleDim.Render("Server: "), styleDim.Render(serverURL)),
 	}

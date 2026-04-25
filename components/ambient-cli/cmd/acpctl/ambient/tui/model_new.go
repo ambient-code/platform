@@ -334,6 +334,18 @@ func (m *AppModel) setInfo(msg string) tea.Cmd {
 	return m.infoExpireCmd()
 }
 
+// currentUser returns the authenticated username from the JWT token.
+func (m *AppModel) currentUser() string {
+	if m.config == nil {
+		return "unknown"
+	}
+	ctx := m.config.Current()
+	if ctx == nil {
+		return "unknown"
+	}
+	return ctx.Username()
+}
+
 // currentNav returns the current (topmost) navigation entry.
 func (m *AppModel) currentNav() NavEntry {
 	if len(m.navStack) == 0 {
