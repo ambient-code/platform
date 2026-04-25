@@ -381,6 +381,11 @@ func (ms MessageStream) ComposeValue() string {
 	return ms.composeInput.Value()
 }
 
+// SetSearchPattern sets or clears the message filter pattern.
+func (ms *MessageStream) SetSearchPattern(pat *regexp.Regexp) {
+	ms.searchPattern = pat
+}
+
 // ClearCompose resets the compose input and exits compose mode.
 func (ms *MessageStream) ClearCompose() {
 	ms.composeInput.Reset()
@@ -776,16 +781,39 @@ func (ms *MessageStream) buildDisplayLines() []string {
 
 	lines := make([]string, 0, len(ms.messages))
 
+	dimStyle := lipgloss.NewStyle().Foreground(msgColorDim)
+	separator := dimStyle.Render(strings.Repeat("─", max(maxLineWidth/2, 10)))
+
 	now := time.Now()
+	prevWasUserOrAssistant := false
 	for _, entry := range ms.messages {
+		// Apply search filter if active.
+		if ms.searchPattern != nil {
+			text := eventSummary(entry.EventType, entry.Payload)
+			if !ms.searchPattern.MatchString(text) && !ms.searchPattern.MatchString(entry.Payload) {
+				continue
+			}
+		}
+
 		var entryLines []string
 		if ms.rawMode {
 			entryLines = ms.renderRawEntry(entry, maxLineWidth)
 		} else {
 			entryLines = ms.renderConversationEntry(entry, maxLineWidth)
 		}
+		if len(entryLines) == 0 {
+			continue
+		}
+
+		// Add dim separator between user/assistant messages in conversation mode.
+		isUserOrAssistant := entry.EventType == "user" || entry.EventType == "assistant"
+		if !ms.rawMode && isUserOrAssistant && prevWasUserOrAssistant {
+			lines = append(lines, separator)
+		}
+		prevWasUserOrAssistant = isUserOrAssistant
+
 		// Prepend timestamp to the first line if timestamps are enabled.
-		if ms.timestampMode > 0 && len(entryLines) > 0 && !entry.Timestamp.IsZero() {
+		if ms.timestampMode > 0 && !entry.Timestamp.IsZero() {
 			tsStyle := lipgloss.NewStyle().Foreground(msgColorDim)
 			var ts string
 			if ms.timestampMode == 1 {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -1843,6 +1844,25 @@ func (m *AppModel) handleMessagesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case ":":
 			m.commandMode = true
 			m.commandInput.Focus()
+			m.resizeTable()
+			return m, nil
+		case "/":
+			m.promptMode = true
+			m.promptInput.Prompt = "Search: "
+			m.promptInput.Reset()
+			m.promptInput.Focus()
+			m.promptCallback = func(input string) (tea.Model, tea.Cmd) {
+				if input == "" {
+					m.messageStream.SetSearchPattern(nil)
+					return m, m.setInfo("Search cleared")
+				}
+				pat, err := regexp.Compile("(?i)" + input)
+				if err != nil {
+					return m, m.setInfo("Invalid pattern: " + err.Error())
+				}
+				m.messageStream.SetSearchPattern(pat)
+				return m, m.setInfo("Searching: " + input)
+			}
 			m.resizeTable()
 			return m, nil
 		case "?":
