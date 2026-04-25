@@ -2193,16 +2193,25 @@ func (m *AppModel) handlePromptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // 0 = "all" (clear project scope), 1-9 = projectShortcuts[digit-1].
 func (m *AppModel) handleProjectShortcut(digit byte) (tea.Model, tea.Cmd) {
 	if digit == 0 {
-		// Switch to "all" — clear project scope and go to global sessions.
+		// Switch to "all" — clear project scope, stay in current view type.
 		m.currentProject = ""
 		m.currentAgent = ""
 		m.currentAgentID = ""
 		m.currentSession = ""
-		m.navStack = []NavEntry{{Kind: "projects", Scope: "all"}}
-		m.activeView = "projects"
 		m.activeFilter = nil
 		m.pollInFlight = true
-		return m, tea.Batch(m.client.FetchProjects(), m.setInfo("Switched to all projects"))
+
+		switch m.activeView {
+		case "sessions":
+			m.sessionTable.SetScope("all")
+			m.navStack = []NavEntry{{Kind: "sessions", Scope: "all"}}
+			return m, tea.Batch(m.client.FetchAllSessions(), m.setInfo("Viewing all sessions"))
+		default:
+			m.agentTable.SetScope("all")
+			m.navStack = []NavEntry{{Kind: "projects", Scope: "all"}}
+			m.activeView = "projects"
+			return m, tea.Batch(m.client.FetchProjects(), m.setInfo("Viewing all projects"))
+		}
 	}
 
 	idx := int(digit) - 1
