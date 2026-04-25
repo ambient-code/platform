@@ -628,13 +628,13 @@ func (ms *MessageStream) View() string {
 	if ms.autoScroll {
 		autoScrollLabel = "On"
 	}
-	modeLabel := "Conversation"
+	rawLabel := "Off"
 	if ms.rawMode {
-		modeLabel = "Raw"
+		rawLabel = "On"
 	}
-	wrapLabel := "Off"
+	truncLabel := "On"
 	if ms.wrapMode {
-		wrapLabel = "On"
+		truncLabel = "Off"
 	}
 	phaseStyle := lipgloss.NewStyle().Foreground(phaseColor(ms.phase))
 	dimIndicator := lipgloss.NewStyle().Foreground(msgColorDim)
@@ -645,10 +645,10 @@ func (ms *MessageStream) View() string {
 	case 2:
 		tsLabel = "Absolute"
 	}
-	indicators := fmt.Sprintf("Autoscroll:%s     Mode:%s     Wrap:%s     Time:%s     Phase:%s",
+	indicators := fmt.Sprintf("Autoscroll:%s     Raw:%s     Truncate:%s     Time:%s     Phase:%s",
 		dimIndicator.Render(autoScrollLabel),
-		dimIndicator.Render(modeLabel),
-		dimIndicator.Render(wrapLabel),
+		dimIndicator.Render(rawLabel),
+		dimIndicator.Render(truncLabel),
 		dimIndicator.Render(tsLabel),
 		phaseStyle.Render(ms.phase),
 	)

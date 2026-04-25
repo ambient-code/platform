@@ -1911,7 +1911,7 @@ func (m *AppModel) showHelp() (tea.Model, tea.Cmd) {
 		}
 	case "messages":
 		resource = []views.HelpEntry{
-			{"s", "Autoscroll"}, {"r", "Raw Mode"}, {"w", "Wrap"}, {"t", "Timestamps"},
+			{"s", "Autoscroll"}, {"r", "Raw Mode"}, {"w", "Truncate"}, {"t", "Timestamps"},
 			{"m", "Send"}, {"c", "Copy"}, {"shift-g", "Bottom"}, {"g", "Top"},
 		}
 		general = []views.HelpEntry{
@@ -2676,9 +2676,12 @@ func (m *AppModel) contextualHints() []string {
 		return []string{
 			"<s> Autoscroll",
 			"<r> Raw",
-			"<w> Wrap",
+			"<w> Truncate",
+			"<t> Timestamps",
 			"<m> Send",
 			"<c> Copy",
+			"<shift-g> Bottom",
+			"<g> Top",
 		}
 	case "contexts":
 		return []string{
