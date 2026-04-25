@@ -234,32 +234,30 @@ func (m *AppModel) viewResourceTable() string {
 	}
 }
 
-// viewBreadcrumb renders the navigation breadcrumb trail at the bottom
-// with a full-width background color: orange for list views, blue for leaf views.
+// viewBreadcrumb renders the navigation breadcrumb trail at the bottom.
+// Each segment is an individual colored box: orange for list views, blue for leaves.
 func (m *AppModel) viewBreadcrumb() string {
+	listStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color("214")).
+		Foreground(lipgloss.Color("0")).
+		Padding(0, 1)
+	leafStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color("69")).
+		Foreground(lipgloss.Color("255")).
+		Padding(0, 1)
+
+	leafKinds := map[string]bool{"messages": true, "help": true, "detail": true}
+
 	var segments []string
 	for _, entry := range m.navStack {
-		segments = append(segments, "<"+entry.Kind+">")
+		label := "<" + entry.Kind + ">"
+		if leafKinds[entry.Kind] {
+			segments = append(segments, leafStyle.Render(label))
+		} else {
+			segments = append(segments, listStyle.Render(label))
+		}
 	}
-	text := "  " + strings.Join(segments, "  ")
-
-	// Determine if current view is a "leaf" view (messages, help, detail)
-	// or a "list" view (projects, agents, sessions, inbox, contexts).
-	isLeaf := m.activeView == "messages" || m.activeView == "help" || m.activeView == "detail"
-
-	var bgStyle lipgloss.Style
-	if isLeaf {
-		bgStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("69")).
-			Foreground(lipgloss.Color("255")).
-			Width(m.width)
-	} else {
-		bgStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("214")).
-			Foreground(lipgloss.Color("0")).
-			Width(m.width)
-	}
-	return bgStyle.Render(text)
+	return "  " + strings.Join(segments, "  ")
 }
 
 // viewInfoLine renders the ephemeral info/toast line at the very bottom.
