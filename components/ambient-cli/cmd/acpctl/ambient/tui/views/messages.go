@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -225,6 +226,9 @@ type MessageStream struct {
 	agentName string
 	phase     string
 
+	// SSE connection status: "", "connected", "reconnecting", "disconnected".
+	sseStatus string
+
 	// Message buffer (ring buffer, 2000 max).
 	messages    []MessageEntry
 	maxMessages int
@@ -307,6 +311,12 @@ func (ms *MessageStream) SetSize(w, h int) {
 // whether to render the streaming cursor).
 func (ms *MessageStream) SetPhase(phase string) {
 	ms.phase = phase
+}
+
+// SetSSEStatus updates the SSE connection status indicator shown in the header.
+// Valid values: "", "connected", "reconnecting", "disconnected".
+func (ms *MessageStream) SetSSEStatus(status string) {
+	ms.sseStatus = status
 }
 
 // ComposeValue returns the current text in the compose input.
@@ -433,6 +443,22 @@ func (ms *MessageStream) updateNormal(msg tea.KeyMsg) (MessageStream, tea.Cmd) {
 			ms.searchInput.Reset()
 			ms.searchInput.Focus()
 			return *ms, nil
+		case "c":
+			// Copy the selected message text to clipboard.
+			if len(ms.messages) > 0 {
+				idx := ms.scrollOffset
+				if idx >= len(ms.messages) {
+					idx = len(ms.messages) - 1
+				}
+				if idx >= 0 {
+					text := eventSummary(ms.messages[idx].EventType, ms.messages[idx].Payload)
+					if text == "" {
+						text = ms.messages[idx].Payload
+					}
+					_ = clipboard.WriteAll(text)
+				}
+			}
+			return *ms, nil
 		}
 	}
 
@@ -520,13 +546,35 @@ func (ms *MessageStream) View() string {
 	}
 	phaseStyle := lipgloss.NewStyle().Foreground(phaseColor(ms.phase))
 
-	header := fmt.Sprintf(" %s %s %s %s %s %s",
+	// SSE status indicator with color coding.
+	sseSegment := ""
+	if ms.sseStatus != "" {
+		var sseStyle lipgloss.Style
+		switch ms.sseStatus {
+		case "connected":
+			sseStyle = lipgloss.NewStyle().Foreground(msgColorGreen)
+		case "reconnecting":
+			sseStyle = lipgloss.NewStyle().Foreground(msgColorYellow)
+		case "disconnected":
+			sseStyle = lipgloss.NewStyle().Foreground(msgColorRed)
+		default:
+			sseStyle = lipgloss.NewStyle().Foreground(msgColorDim)
+		}
+		sseSegment = fmt.Sprintf(" %s %s %s",
+			dimStyle.Render("—"),
+			dimStyle.Render("SSE:"),
+			sseStyle.Render(ms.sseStatus),
+		)
+	}
+
+	header := fmt.Sprintf(" %s %s %s %s %s %s%s",
 		headerStyle.Render("Session"),
 		lipgloss.NewStyle().Foreground(msgColorWhite).Bold(true).Render(shortID),
 		dimStyle.Render("—"),
 		fmt.Sprintf("%s %s", dimStyle.Render("Phase:"), phaseStyle.Render(ms.phase)),
 		dimStyle.Render("—"),
 		fmt.Sprintf("%s %s", dimStyle.Render("Agent:"), lipgloss.NewStyle().Foreground(msgColorOrange).Render(ms.agentName)),
+		sseSegment,
 	)
 
 	headerBar := borderStyle.Render("┌" + strings.Repeat("─", max(ms.width-2, 0)) + "┐")

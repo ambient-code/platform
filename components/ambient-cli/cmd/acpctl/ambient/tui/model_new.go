@@ -2,8 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -106,6 +108,15 @@ type AppModel struct {
 
 	// Errors
 	lastError string
+
+	// Delete confirmation
+	confirmingDelete bool
+	deleteKind       string     // "project", "agent", "session", "inbox"
+	deleteName       string     // display name for confirmation
+	deleteFunc       func() tea.Cmd // the actual delete call
+
+	// Rate-limit backoff: skip the next poll cycle when a 429 is received.
+	skipNextPoll bool
 
 	// Terminal size
 	width, height int
@@ -509,6 +520,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SessionMessageEvent:
 		// SSE message received — add to the message stream.
 		if msg.Err != nil {
+			m.messageStream.SetSSEStatus("reconnecting")
 			m.messageStream.AddMessage(views.MessageEntry{
 				EventType: "error",
 				Payload:   msg.Err.Error(),
@@ -517,6 +529,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.Message != nil && m.activeView == "messages" {
+			m.messageStream.SetSSEStatus("connected")
 			ts := time.Now()
 			if msg.Message.CreatedAt != nil {
 				ts = *msg.Message.CreatedAt
@@ -588,13 +601,32 @@ func (m *AppModel) resizeTable() {
 	m.detailView.SetSize(m.width, tableHeight+2)
 }
 
+// classifyAPIError inspects the error string and returns a user-friendly message
+// plus a flag indicating whether the caller should skip the next poll cycle (429).
+func (m *AppModel) classifyAPIError(err error, resourceKind string) (string, bool) {
+	errStr := err.Error()
+	switch {
+	case strings.Contains(errStr, "401") || strings.Contains(errStr, "Unauthorized"):
+		return "Session expired — run 'acpctl login' in another terminal", false
+	case strings.Contains(errStr, "403") || strings.Contains(errStr, "Forbidden"):
+		return "Insufficient permissions to list " + resourceKind, false
+	case strings.Contains(errStr, "429"):
+		return "Rate limited — backing off", true
+	default:
+		return errStr, false
+	}
+}
+
 // handleProjectsMsg populates the project table from a fetch result.
 func (m *AppModel) handleProjectsMsg(msg ProjectsMsg) (tea.Model, tea.Cmd) {
 	m.pollInFlight = false
 	m.lastFetch = time.Now()
 
 	if msg.Err != nil {
-		m.lastError = msg.Err.Error()
+		errMsg, skipPoll := m.classifyAPIError(msg.Err, "projects")
+		m.lastError = errMsg
+		m.skipNextPoll = m.skipNextPoll || skipPoll
+		// Preserve stale data — don't clear table rows.
 		return m, nil
 	}
 
@@ -641,7 +673,10 @@ func (m *AppModel) handleAgentsMsg(msg AgentsMsg) (tea.Model, tea.Cmd) {
 	m.lastFetch = time.Now()
 
 	if msg.Err != nil {
-		m.lastError = msg.Err.Error()
+		errMsg, skipPoll := m.classifyAPIError(msg.Err, "agents")
+		m.lastError = errMsg
+		m.skipNextPoll = m.skipNextPoll || skipPoll
+		// Preserve stale data — don't clear table rows.
 		return m, nil
 	}
 
@@ -677,7 +712,10 @@ func (m *AppModel) handleSessionsMsg(msg SessionsMsg) (tea.Model, tea.Cmd) {
 	m.lastFetch = time.Now()
 
 	if msg.Err != nil {
-		m.lastError = msg.Err.Error()
+		errMsg, skipPoll := m.classifyAPIError(msg.Err, "sessions")
+		m.lastError = errMsg
+		m.skipNextPoll = m.skipNextPoll || skipPoll
+		// Preserve stale data — don't clear table rows.
 		return m, nil
 	}
 
@@ -733,7 +771,10 @@ func (m *AppModel) handleInboxMsg(msg InboxMsg) (tea.Model, tea.Cmd) {
 	m.lastFetch = time.Now()
 
 	if msg.Err != nil {
-		m.lastError = msg.Err.Error()
+		errMsg, skipPoll := m.classifyAPIError(msg.Err, "inbox messages")
+		m.lastError = errMsg
+		m.skipNextPoll = m.skipNextPoll || skipPoll
+		// Preserve stale data — don't clear table rows.
 		return m, nil
 	}
 
@@ -762,10 +803,16 @@ func (m *AppModel) handleInboxMsg(msg InboxMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleTick manages periodic polling. Skips if a fetch is already in flight.
-// Fetches data for the active view rather than always fetching projects.
+// handleTick manages periodic polling. Skips if a fetch is already in flight
+// or if skipNextPoll is set (e.g. after a 429 rate-limit response).
 func (m *AppModel) handleTick() (tea.Model, tea.Cmd) {
 	cmds := []tea.Cmd{m.tickCmd()} // always schedule next tick
+
+	// If rate-limited, skip this cycle and reset the flag for the next one.
+	if m.skipNextPoll {
+		m.skipNextPoll = false
+		return m, tea.Batch(cmds...)
+	}
 
 	if !m.pollInFlight && m.activeView != "messages" {
 		m.pollInFlight = true
@@ -790,6 +837,11 @@ func (m *AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
+	// Delete confirmation takes priority over all other modes.
+	if m.confirmingDelete {
+		return m.handleDeleteConfirmKey(msg)
+	}
+
 	if m.commandMode {
 		return m.handleCommandKey(msg)
 	}
@@ -808,6 +860,33 @@ func (m *AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m.handleNormalKey(msg)
+}
+
+// handleDeleteConfirmKey handles y/n/Esc when a delete confirmation is active.
+func (m *AppModel) handleDeleteConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.confirmingDelete = false
+		m.deleteFunc = nil
+		return m, m.setInfo("Delete cancelled")
+	case tea.KeyRunes:
+		switch msg.String() {
+		case "y", "Y":
+			fn := m.deleteFunc
+			m.confirmingDelete = false
+			m.deleteFunc = nil
+			if fn != nil {
+				return m, tea.Batch(fn(), m.setInfo("Deleting "+m.deleteKind+" "+m.deleteName+"..."))
+			}
+			return m, nil
+		case "n", "N":
+			m.confirmingDelete = false
+			m.deleteFunc = nil
+			return m, m.setInfo("Delete cancelled")
+		}
+	}
+	// Ignore all other keys while confirming.
+	return m, nil
 }
 
 // handleNormalKey processes keys when neither command nor filter mode is active.
@@ -1013,6 +1092,18 @@ func (m *AppModel) handleRuneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			cols := tbl.Columns()
 			// AGE is the last column in all table views.
 			tbl.SortByColumn(len(cols) - 1)
+		}
+		return m, nil
+
+	case "c":
+		// Copy the first column value (resource name/ID) of the selected row to clipboard.
+		if tbl := m.activeTable(); tbl != nil {
+			row := tbl.SelectedRow()
+			if len(row) > 0 {
+				value := row[0]
+				_ = clipboard.WriteAll(value)
+				return m, m.setInfo("Copied: " + value)
+			}
 		}
 		return m, nil
 	}
@@ -1255,6 +1346,7 @@ func (m *AppModel) handleInboxRune(key string) (tea.Model, tea.Cmd) {
 }
 
 // handleCtrlD handles the delete/cancel keybinding across all views.
+// Instead of deleting immediately, it sets up a confirmation prompt.
 func (m *AppModel) handleCtrlD() (tea.Model, tea.Cmd) {
 	switch m.activeView {
 	case "projects":
@@ -1265,10 +1357,15 @@ func (m *AppModel) handleCtrlD() (tea.Model, tea.Cmd) {
 			if project == nil {
 				return m, m.setInfo("Project not found in cache: " + projectName)
 			}
-			return m, tea.Batch(
-				m.client.DeleteProject(project.ID),
-				m.setInfo("Deleting project "+projectName+"..."),
-			)
+			projectID := project.ID
+			m.confirmingDelete = true
+			m.deleteKind = "project"
+			m.deleteName = projectName
+			m.deleteFunc = func() tea.Cmd {
+				return m.client.DeleteProject(projectID)
+			}
+			m.infoMessage = fmt.Sprintf("Delete project %s? (y/n)", projectName)
+			return m, nil
 		}
 	case "agents":
 		row := m.agentTable.SelectedRow()
@@ -1278,10 +1375,16 @@ func (m *AppModel) handleCtrlD() (tea.Model, tea.Cmd) {
 			if agent == nil {
 				return m, m.setInfo("Agent not found in cache: " + agentName)
 			}
-			return m, tea.Batch(
-				m.client.DeleteAgent(m.currentProject, agent.ID),
-				m.setInfo("Deleting agent "+agentName+"..."),
-			)
+			agentID := agent.ID
+			currentProject := m.currentProject
+			m.confirmingDelete = true
+			m.deleteKind = "agent"
+			m.deleteName = agentName
+			m.deleteFunc = func() tea.Cmd {
+				return m.client.DeleteAgent(currentProject, agentID)
+			}
+			m.infoMessage = fmt.Sprintf("Delete agent %s? (y/n)", agentName)
+			return m, nil
 		}
 	case "sessions":
 		row := m.sessionTable.SelectedRow()
@@ -1295,10 +1398,15 @@ func (m *AppModel) handleCtrlD() (tea.Model, tea.Cmd) {
 			if project == "" {
 				project = session.ProjectID
 			}
-			return m, tea.Batch(
-				m.client.DeleteSession(project, session.ID),
-				m.setInfo("Deleting session "+shortID+"..."),
-			)
+			sessionID := session.ID
+			m.confirmingDelete = true
+			m.deleteKind = "session"
+			m.deleteName = shortID
+			m.deleteFunc = func() tea.Cmd {
+				return m.client.DeleteSession(project, sessionID)
+			}
+			m.infoMessage = fmt.Sprintf("Delete session %s? (y/n)", shortID)
+			return m, nil
 		}
 	case "inbox":
 		row := m.inboxTable.SelectedRow()
@@ -1307,10 +1415,16 @@ func (m *AppModel) handleCtrlD() (tea.Model, tea.Cmd) {
 			if m.currentProject == "" || m.currentAgentID == "" {
 				return m, m.setInfo("No agent context for inbox")
 			}
-			return m, tea.Batch(
-				m.client.DeleteInboxMessage(m.currentProject, m.currentAgentID, msgID),
-				m.setInfo("Deleting inbox message..."),
-			)
+			currentProject := m.currentProject
+			currentAgentID := m.currentAgentID
+			m.confirmingDelete = true
+			m.deleteKind = "inbox"
+			m.deleteName = msgID
+			m.deleteFunc = func() tea.Cmd {
+				return m.client.DeleteInboxMessage(currentProject, currentAgentID, msgID)
+			}
+			m.infoMessage = fmt.Sprintf("Delete inbox %s? (y/n)", msgID)
+			return m, nil
 		}
 	}
 	return m, nil
