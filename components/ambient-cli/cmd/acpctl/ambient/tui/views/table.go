@@ -86,6 +86,9 @@ type ResourceTable struct {
 	// sort tracks the current column sort state.
 	sort sortState
 
+	// filterText is shown in the title bar when a filter is active (e.g. "</searchterm>").
+	filterText string
+
 	// rowColorFunc maps a row to its foreground color. If nil, rows use default color.
 	rowColorFunc func(row table.Row) lipgloss.Color
 
@@ -173,6 +176,12 @@ func (rt *ResourceTable) SetRowColorFunc(f func(row table.Row) lipgloss.Color) {
 func (rt *ResourceTable) SetFilter(predicate func([]string) bool) {
 	rt.filterPredicate = predicate
 	rt.applyFilterAndSort()
+}
+
+// SetFilterText sets the filter text shown in the title bar (e.g. "searchterm").
+// Pass "" to clear.
+func (rt *ResourceTable) SetFilterText(text string) {
+	rt.filterText = text
 }
 
 // ClearFilter removes any active client-side filter.
@@ -418,10 +427,16 @@ func (rt *ResourceTable) renderTitleBar() string {
 	countStyle := lipgloss.NewStyle().Foreground(rt.style.CountColor).Bold(true)
 
 	count := len(rt.inner.Rows())
+	filterPart := ""
+	if rt.filterText != "" {
+		filterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
+		filterPart = " " + filterStyle.Render("</"+rt.filterText+">")
+	}
 	titleRendered := " " +
 		kindStyle.Render(rt.kind) +
 		scopeStyle.Render("("+rt.scope+")") +
 		countStyle.Render(fmt.Sprintf("[%d]", count)) +
+		filterPart +
 		" "
 
 	titleVisualWidth := lipgloss.Width(titleRendered)

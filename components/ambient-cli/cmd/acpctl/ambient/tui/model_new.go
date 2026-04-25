@@ -1171,6 +1171,14 @@ func (m *AppModel) handleNormalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Global keybindings first.
 	switch msg.Type {
 	case tea.KeyEsc:
+		// If a filter is active, clear it first instead of popping the view.
+		if m.activeFilter != nil {
+			m.activeFilter = nil
+			if tbl := m.activeTable(); tbl != nil {
+				tbl.ClearFilter()
+			}
+			return m, m.setInfo("Filter cleared")
+		}
 		cmd := m.popView()
 		if cmd != nil {
 			return m, tea.Batch(cmd, m.setInfo("Back to "+m.currentNav().Kind))
@@ -2059,7 +2067,7 @@ func (m *AppModel) executeCommand(input string) (tea.Model, tea.Cmd) {
 			"           / _)\n" +
 			"    .-^^^-/ /\n" +
 			"  __/       /\n" +
-			" <__.|_|-|_|   oh bugger!"
+			" <__.|_|-|_|"
 		msg := "< Ruroh? '" + input + "' not found >"
 		d := views.NewErrorDialog("error", msg, ascii)
 		m.dialog = &d
@@ -2150,6 +2158,7 @@ func (m *AppModel) applyFilterToActiveTable(f *Filter) {
 		tbl.SetFilter(func(cols []string) bool {
 			return f.MatchRow(cols)
 		})
+		tbl.SetFilterText(f.Raw)
 	}
 }
 
@@ -2157,6 +2166,7 @@ func (m *AppModel) applyFilterToActiveTable(f *Filter) {
 func (m *AppModel) clearActiveTableFilter() {
 	if tbl := m.activeTable(); tbl != nil {
 		tbl.ClearFilter()
+		tbl.SetFilterText("")
 	}
 }
 
