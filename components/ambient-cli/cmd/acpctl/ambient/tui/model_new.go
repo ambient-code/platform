@@ -729,10 +729,18 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Schedule next poll tick and fetch messages.
 		var cmds []tea.Cmd
 		cmds = append(cmds, m.messagePollTickCmd())
-		if m.currentProject != "" && m.currentSession != "" {
-			cmds = append(cmds, m.client.FetchSessionMessages(
-				m.currentProject, m.currentSession, m.lastMessageSeq,
-			))
+		if m.currentSession != "" {
+			projectID := m.currentProject
+			if projectID == "" {
+				if s := m.findSessionByShortID(m.currentSession); s != nil {
+					projectID = s.ProjectID
+				}
+			}
+			if projectID != "" {
+				cmds = append(cmds, m.client.FetchSessionMessages(
+					projectID, m.currentSession, m.lastMessageSeq,
+				))
+			}
 		}
 		return m, tea.Batch(cmds...)
 
@@ -1355,19 +1363,22 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 				m.setInfo("Streaming messages for session " + shortID),
 			}
 
-			// Start SSE watcher if we have a program reference and project context.
-			if m.program != nil && m.currentProject != "" {
-				cmds = append(cmds, m.client.WatchSessionMessages(m.currentProject, fullSessionID, 0, m.program))
+			// Resolve project ID — may be empty if reached from global sessions.
+			projectID := m.currentProject
+			if projectID == "" && session != nil {
+				projectID = session.ProjectID
 			}
 
-			// Always start polling fallback alongside SSE. Polling is
-			// idempotent (deduplicates by seq) and ensures messages appear
-			// even if SSE fails silently.
-			if m.currentProject != "" {
+			// Start SSE watcher if we have a program reference.
+			if m.program != nil && projectID != "" {
+				cmds = append(cmds, m.client.WatchSessionMessages(projectID, fullSessionID, 0, m.program))
+			}
+
+			// Always start polling fallback alongside SSE.
+			if projectID != "" {
 				m.messagePollActive = true
 				cmds = append(cmds, m.messagePollTickCmd())
-				// Immediately fetch existing messages so the view is not empty.
-				cmds = append(cmds, m.client.FetchSessionMessages(m.currentProject, fullSessionID, 0))
+				cmds = append(cmds, m.client.FetchSessionMessages(projectID, fullSessionID, 0))
 			}
 
 			return m, tea.Batch(cmds...)
