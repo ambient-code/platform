@@ -875,14 +875,16 @@ func (ms *MessageStream) renderConversationEntry(entry MessageEntry, maxWidth in
 		return nil
 	}
 
-	tag := typeStyle.Render("[" + entry.EventType + "]")
-	tagWidth := lipgloss.Width(tag)
+	// Pad all tags to a fixed width so text always starts at the same column.
+	const tagPadWidth = 14 // widest is [tool_result] = 13 chars + 1 padding
+	rawTag := "[" + entry.EventType + "]"
+	padded := rawTag + strings.Repeat(" ", max(tagPadWidth-len(rawTag), 1))
+	tag := typeStyle.Render(padded)
+	tagWidth := tagPadWidth
 
-	// Indent continuation lines to align with the text after the tag.
-	indent := strings.Repeat(" ", tagWidth+2)
+	indent := strings.Repeat(" ", tagWidth)
 
-	// Available width for text content after the tag.
-	availWidth := max(maxWidth-tagWidth-2, 10) // 2 for spacing between tag and text
+	availWidth := max(maxWidth-tagWidth, 10)
 
 	// For assistant messages, try glamour markdown rendering.
 	if entry.EventType == "assistant" && ms.wrapMode && looksLikeMarkdown(entry.Payload) {
