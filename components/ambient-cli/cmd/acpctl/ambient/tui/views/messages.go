@@ -10,6 +10,7 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -47,17 +48,17 @@ var (
 func eventColor(eventType string) lipgloss.Color {
 	switch eventType {
 	case "user":
-		return msgColorWhite
+		return msgColorWhite // 255
 	case "assistant":
-		return msgColorWhite
+		return msgColorBlue // 69 — complementary accent
 	case "tool_use":
-		return msgColorDim
+		return msgColorDim // 240
 	case "tool_result":
-		return msgColorDim
+		return msgColorDim // 240
 	case "system":
-		return msgColorYellow
+		return msgColorYellow // 33
 	case "error":
-		return msgColorRed
+		return msgColorRed // 31
 	default:
 		return msgColorDim
 	}
@@ -155,6 +156,51 @@ func eventSummary(eventType, payload string) string {
 	return ""
 }
 
+// eventFullText produces the full untruncated display string for a message entry.
+// Used when wrapMode is enabled to show complete message payloads.
+func eventFullText(eventType, payload string) string {
+	switch eventType {
+	case "user":
+		return strings.TrimSpace(payload)
+	case "assistant":
+		return strings.TrimSpace(payload)
+	case "tool_use":
+		name := extractJSONField(payload, "name")
+		if name == "" {
+			return strings.TrimSpace(payload)
+		}
+		input := extractJSONField(payload, "input")
+		if input != "" {
+			return name + " " + strings.TrimSpace(input)
+		}
+		return name
+	case "tool_result":
+		content := extractJSONField(payload, "content")
+		isError := extractJSONField(payload, "is_error")
+		indicator := "✓"
+		if isError == "true" {
+			indicator = "✗"
+		}
+		if content != "" {
+			return fmt.Sprintf("%s %s", indicator, strings.TrimSpace(content))
+		}
+		return fmt.Sprintf("%s %d bytes", indicator, len(content))
+	case "system":
+		return strings.TrimSpace(payload)
+	case "error":
+		msg := extractJSONField(payload, "message")
+		if msg != "" {
+			return "✗ " + strings.TrimSpace(msg)
+		}
+		if payload != "" {
+			return "✗ " + strings.TrimSpace(payload)
+		}
+		return "✗ unknown error"
+	}
+	// Fallback: same as eventSummary for streaming event types.
+	return eventSummary(eventType, payload)
+}
+
 // truncatePayload trims whitespace and truncates to max length.
 func truncatePayload(s string, max int) string {
 	s = strings.TrimSpace(s)
@@ -234,9 +280,15 @@ type MessageStream struct {
 	maxMessages int
 
 	// Display
-	scrollOffset int
-	autoScroll   bool // default true — view follows new messages
-	rawMode      bool // false=conversation, true=raw JSON
+	scrollOffset  int
+	autoScroll    bool // default true — view follows new messages
+	rawMode       bool // false=conversation, true=raw JSON
+	wrapMode      bool // false=truncated (120 chars), true=full text with word wrap
+	timestampMode int  // 0=off, 1=relative, 2=absolute
+
+	// Glamour markdown renderer (created lazily on first use, cached).
+	glamourRenderer *glamour.TermRenderer
+	glamourWidth    int // width used to create the cached renderer
 
 	// Compose
 	composeMode  bool
@@ -320,6 +372,11 @@ func (ms *MessageStream) SetSSEStatus(status string) {
 }
 
 // ComposeValue returns the current text in the compose input.
+// IsComposeMode returns true when the compose input is active.
+func (ms MessageStream) IsComposeMode() bool {
+	return ms.composeMode
+}
+
 func (ms MessageStream) ComposeValue() string {
 	return ms.composeInput.Value()
 }
@@ -414,6 +471,12 @@ func (ms *MessageStream) updateNormal(msg tea.KeyMsg) (MessageStream, tea.Cmd) {
 		switch msg.String() {
 		case "r":
 			ms.rawMode = !ms.rawMode
+			return *ms, nil
+		case "w":
+			ms.wrapMode = !ms.wrapMode
+			return *ms, nil
+		case "t":
+			ms.timestampMode = (ms.timestampMode + 1) % 3
 			return *ms, nil
 		case "s":
 			ms.autoScroll = !ms.autoScroll
@@ -569,11 +632,24 @@ func (ms *MessageStream) View() string {
 	if ms.rawMode {
 		modeLabel = "Raw"
 	}
+	wrapLabel := "Off"
+	if ms.wrapMode {
+		wrapLabel = "On"
+	}
 	phaseStyle := lipgloss.NewStyle().Foreground(phaseColor(ms.phase))
 	dimIndicator := lipgloss.NewStyle().Foreground(msgColorDim)
-	indicators := fmt.Sprintf("Autoscroll:%s     Mode:%s     Phase:%s",
+	tsLabel := "Off"
+	switch ms.timestampMode {
+	case 1:
+		tsLabel = "Relative"
+	case 2:
+		tsLabel = "Absolute"
+	}
+	indicators := fmt.Sprintf("Autoscroll:%s     Mode:%s     Wrap:%s     Time:%s     Phase:%s",
 		dimIndicator.Render(autoScrollLabel),
 		dimIndicator.Render(modeLabel),
+		dimIndicator.Render(wrapLabel),
+		dimIndicator.Render(tsLabel),
 		phaseStyle.Render(ms.phase),
 	)
 	if ms.sseStatus != "" && ms.sseStatus != "connected" {
@@ -705,15 +781,79 @@ func (ms *MessageStream) buildDisplayLines() []string {
 
 	lines := make([]string, 0, len(ms.messages))
 
+	now := time.Now()
 	for _, entry := range ms.messages {
+		var entryLines []string
 		if ms.rawMode {
-			lines = append(lines, ms.renderRawEntry(entry, maxLineWidth)...)
+			entryLines = ms.renderRawEntry(entry, maxLineWidth)
 		} else {
-			lines = append(lines, ms.renderConversationEntry(entry, maxLineWidth)...)
+			entryLines = ms.renderConversationEntry(entry, maxLineWidth)
 		}
+		// Prepend timestamp to the first line if timestamps are enabled.
+		if ms.timestampMode > 0 && len(entryLines) > 0 && !entry.Timestamp.IsZero() {
+			tsStyle := lipgloss.NewStyle().Foreground(msgColorDim)
+			var ts string
+			if ms.timestampMode == 1 {
+				d := now.Sub(entry.Timestamp)
+				if d < time.Minute {
+					ts = fmt.Sprintf("%ds", int(d.Seconds()))
+				} else if d < time.Hour {
+					ts = fmt.Sprintf("%dm", int(d.Minutes()))
+				} else if d < 24*time.Hour {
+					ts = fmt.Sprintf("%dh", int(d.Hours()))
+				} else {
+					ts = fmt.Sprintf("%dd", int(d.Hours()/24))
+				}
+			} else {
+				ts = entry.Timestamp.Format("15:04:05")
+			}
+			entryLines[0] = tsStyle.Render(fmt.Sprintf("%-8s", ts)) + entryLines[0]
+		}
+		lines = append(lines, entryLines...)
 	}
 
 	return lines
+}
+
+// looksLikeMarkdown returns true if the text appears to contain markdown formatting.
+func looksLikeMarkdown(s string) bool {
+	// Check for common markdown indicators: headings, bold/italic, code blocks,
+	// inline code, list items.
+	if strings.Contains(s, "```") {
+		return true
+	}
+	for _, line := range strings.Split(s, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "# ") || strings.HasPrefix(trimmed, "## ") ||
+			strings.HasPrefix(trimmed, "### ") {
+			return true
+		}
+		if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
+			return true
+		}
+	}
+	if strings.Contains(s, "**") || strings.Contains(s, "`") {
+		return true
+	}
+	return false
+}
+
+// getGlamourRenderer returns a cached glamour renderer, creating one lazily on
+// first use. If the terminal width has changed, the renderer is recreated.
+func (ms *MessageStream) getGlamourRenderer(wrapWidth int) *glamour.TermRenderer {
+	if ms.glamourRenderer != nil && ms.glamourWidth == wrapWidth {
+		return ms.glamourRenderer
+	}
+	r, err := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(wrapWidth),
+	)
+	if err != nil {
+		return nil
+	}
+	ms.glamourRenderer = r
+	ms.glamourWidth = wrapWidth
+	return r
 }
 
 // renderConversationEntry renders a single message in conversation mode.
@@ -723,8 +863,14 @@ func (ms *MessageStream) renderConversationEntry(entry MessageEntry, maxWidth in
 	typeStyle := lipgloss.NewStyle().Foreground(color).Bold(true)
 	textStyle := lipgloss.NewStyle().Foreground(color)
 
-	summary := eventSummary(entry.EventType, entry.Payload)
-	if summary == "" {
+	// Choose full text or truncated summary based on wrapMode.
+	var displayText string
+	if ms.wrapMode {
+		displayText = eventFullText(entry.EventType, entry.Payload)
+	} else {
+		displayText = eventSummary(entry.EventType, entry.Payload)
+	}
+	if displayText == "" {
 		// Suppressed event types (TOOL_CALL_ARGS, etc.) — don't render.
 		return nil
 	}
@@ -735,10 +881,32 @@ func (ms *MessageStream) renderConversationEntry(entry MessageEntry, maxWidth in
 	// Indent continuation lines to align with the text after the tag.
 	indent := strings.Repeat(" ", tagWidth+2)
 
-	// Wrap the summary text.
+	// Available width for text content after the tag.
 	availWidth := max(maxWidth-tagWidth-2, 10) // 2 for spacing between tag and text
 
-	wrapped := wrapText(summary, availWidth)
+	// For assistant messages, try glamour markdown rendering.
+	if entry.EventType == "assistant" && ms.wrapMode && looksLikeMarkdown(entry.Payload) {
+		glamourWidth := max(ms.width-20, 20)
+		if r := ms.getGlamourRenderer(glamourWidth); r != nil {
+			rendered, err := r.Render(strings.TrimSpace(entry.Payload))
+			if err == nil && strings.TrimSpace(rendered) != "" {
+				// Split glamour output into lines and prefix with the tag.
+				glamourLines := strings.Split(strings.TrimRight(rendered, "\n"), "\n")
+				result := make([]string, 0, len(glamourLines))
+				for i, line := range glamourLines {
+					if i == 0 {
+						result = append(result, tag+"  "+line)
+					} else {
+						result = append(result, indent+line)
+					}
+				}
+				return result
+			}
+		}
+		// Glamour failed — fall through to plain text rendering.
+	}
+
+	wrapped := wrapText(displayText, availWidth)
 	if len(wrapped) == 0 {
 		return []string{tag}
 	}
@@ -831,6 +999,8 @@ func (ms *MessageStream) contentHeight() int {
 func (ms *MessageStream) enterComposeMode() {
 	ms.composeMode = true
 	ms.composeInput.Focus()
+	ms.scrollToBottom()
+	ms.autoScroll = true
 }
 
 // ---------------------------------------------------------------------------

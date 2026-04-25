@@ -1829,6 +1829,14 @@ func (m *AppModel) handleDetailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleMessagesKey delegates key events to the message stream sub-model.
 func (m *AppModel) handleMessagesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// When compose mode is active, ALL keys go to the message stream —
+	// don't intercept :, ?, q etc. as they're meant to be typed.
+	if m.messageStream.IsComposeMode() {
+		var cmd tea.Cmd
+		m.messageStream, cmd = m.messageStream.Update(msg)
+		return m, cmd
+	}
+
 	// Intercept global keys before delegating to the message stream.
 	if msg.Type == tea.KeyRunes {
 		switch string(msg.Runes) {
@@ -1903,8 +1911,8 @@ func (m *AppModel) showHelp() (tea.Model, tea.Cmd) {
 		}
 	case "messages":
 		resource = []views.HelpEntry{
-			{"s", "Autoscroll"}, {"r", "Raw Mode"}, {"m", "Send"},
-			{"c", "Copy"}, {"shift-g", "Bottom"}, {"g", "Top"},
+			{"s", "Autoscroll"}, {"r", "Raw Mode"}, {"w", "Wrap"}, {"t", "Timestamps"},
+			{"m", "Send"}, {"c", "Copy"}, {"shift-g", "Bottom"}, {"g", "Top"},
 		}
 		general = []views.HelpEntry{
 			{":", "Command"}, {"?", "Help"},
@@ -2668,6 +2676,7 @@ func (m *AppModel) contextualHints() []string {
 		return []string{
 			"<s> Autoscroll",
 			"<r> Raw",
+			"<w> Wrap",
 			"<m> Send",
 			"<c> Copy",
 		}
