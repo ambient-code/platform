@@ -12,11 +12,11 @@ import (
 
 // ASCII art branding rendered in the header (Fix 9: extra left padding).
 var brandLines = []string{
+	`                  `,
 	`    _    ___ ___  `,
 	`   /_\  / __| _ \ `,
 	`  / _ \| (__|  _/ `,
 	` /_/ \_\\___|_|   `,
-	`                  `,
 }
 
 // View implements tea.Model. It renders the k9s-style full-screen layout.
@@ -240,10 +240,12 @@ func (m *AppModel) viewBreadcrumb() string {
 	listStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color("214")).
 		Foreground(lipgloss.Color("0")).
+		Bold(true).
 		Padding(0, 1)
 	leafStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color("69")).
 		Foreground(lipgloss.Color("255")).
+		Bold(true).
 		Padding(0, 1)
 
 	leafKinds := map[string]bool{"messages": true, "help": true, "detail": true}
@@ -257,7 +259,7 @@ func (m *AppModel) viewBreadcrumb() string {
 			segments = append(segments, listStyle.Render(label))
 		}
 	}
-	return "  " + strings.Join(segments, "  ")
+	return " " + strings.Join(segments, " ")
 }
 
 // viewInfoLine renders the ephemeral info/toast line at the very bottom.
