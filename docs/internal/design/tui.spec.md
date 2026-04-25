@@ -30,6 +30,7 @@ The Ambient TUI is a full-screen terminal interface for operating the Ambient pl
 | Offline-safe auth | The TUI reuses `acpctl login` credentials from `~/.config/ambient/config.json`. No separate auth flow. |
 | Multi-context | Operators work across local, staging, and production. The TUI saves every server the user has logged into as a named context and supports instant switching — same as k9s with kubeconfig clusters. |
 | Sanitize all external content | Agent-produced output is rendered in the terminal. All content from the API is stripped of ANSI escape sequences, terminal control characters, and framework-specific tags before display. |
+| Consistent chrome | All views use the same UI structure: hotkey hints in the header, filtering via the global `/` command bar, breadcrumbs at the bottom. No view defines its own bottom status bar or proprietary filter mechanism. Status indicators (Autoscroll, Mode, Phase) for the message stream belong in the sub-header line below the title bar, inside the bordered area. |
 
 ---
 
@@ -254,6 +255,7 @@ Accessible globally (`:sessions` — all sessions across all projects) or scoped
 
 ### Message Stream View
 
+**UI consistency:** The message stream follows the same layout conventions as all other views. Keyboard shortcuts are shown in the header (not in a bottom status bar). Filtering uses the global `/` command bar. The only view-specific chrome is the status indicator line below the title bar (Autoscroll, Mode, Phase, SSE status).
 
 #### Data Source
 
