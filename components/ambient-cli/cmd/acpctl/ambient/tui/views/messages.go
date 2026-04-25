@@ -815,33 +815,6 @@ func (ms *MessageStream) buildDisplayLines() []string {
 	return lines
 }
 
-// looksLikeMarkdown returns true if the text appears to contain markdown formatting.
-func looksLikeMarkdown(s string) bool {
-	// Check for common markdown indicators: headings, bold/italic, code blocks,
-	// inline code, list items.
-	if strings.Contains(s, "```") {
-		return true
-	}
-	for _, line := range strings.Split(s, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "# ") || strings.HasPrefix(trimmed, "## ") ||
-			strings.HasPrefix(trimmed, "### ") {
-			return true
-		}
-		if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
-			return true
-		}
-	}
-	if strings.Contains(s, "**") || strings.Contains(s, "`") {
-		return true
-	}
-	// Detect markdown tables: lines with | separators and a --- row.
-	if strings.Contains(s, "|") && strings.Contains(s, "---") {
-		return true
-	}
-	return false
-}
-
 // getGlamourRenderer returns a cached glamour renderer, creating one lazily on
 // first use. If the terminal width has changed, the renderer is recreated.
 func (ms *MessageStream) getGlamourRenderer(wrapWidth int) *glamour.TermRenderer {
@@ -890,8 +863,8 @@ func (ms *MessageStream) renderConversationEntry(entry MessageEntry, maxWidth in
 
 	availWidth := max(maxWidth-tagWidth, 10)
 
-	// For assistant messages, try glamour markdown rendering.
-	if entry.EventType == "assistant" && ms.wrapMode && looksLikeMarkdown(entry.Payload) {
+	// In pretty mode, render all messages through glamour for markdown support.
+	if ms.wrapMode {
 		glamourWidth := max(ms.width-20, 20)
 		if r := ms.getGlamourRenderer(glamourWidth); r != nil {
 			rendered, err := r.Render(strings.TrimSpace(entry.Payload))
