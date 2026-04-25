@@ -2054,15 +2054,34 @@ func (m *AppModel) executeCommand(input string) (tea.Model, tea.Cmd) {
 		return m, m.setInfo("Commands: " + fmt.Sprintf("%d available", len(entries)))
 
 	default:
-		ascii := "        .-=-.\n" +
-			"       /  ! )\\\n" +
-			"      (__  _/\n" +
-			"      / _>/\n" +
-			"     / _>  \\  _\n" +
-			"    /_/  \\  \\//\n" +
-			"         (  |\n" +
-			"          ) |\n" +
-			"          \\_|"
+		ascii := "" +
+			"       ,\n" +
+			"      /|\n" +
+			"     / |\n" +
+			"    /  /\n" +
+			"   |   |\n" +
+			"  /    |\n" +
+			"  |    \\_\n" +
+			"  |      \\__\n" +
+			"  \\       __\\_______\n" +
+			"   \\                 \\_\n" +
+			"   | /                 \\\n" +
+			"   \\/                   \\\n" +
+			"    |                    |\n" +
+			"    \\                   \\|\n" +
+			"    |                    \\\n" +
+			"    \\                     |\n" +
+			"    /\\    \\_               \\\n" +
+			"   / |      \\__ (   )       \\\n" +
+			"  /  \\      / |\\\\  /       __\\____\n" +
+			"  |  ,     |  /\\ \\ \\__    |       \\_\n" +
+			"  \\_/|\\___/   \\   \\}}}\\__|  (@)     )\n" +
+			"   \\)\\)\\)      \\_\\---\\   \\|       \\ \\\n" +
+			"                 \\>\\>\\>   \\   /\\__o_o)\n" +
+			"                           | /  VVVVV\n" +
+			"                           \\ \\    \\\n" +
+			"                            \\ \\MMMMM     oh bugger!\n" +
+			"                             \\______/"
 		msg := "< Ruroh? '" + input + "' not found >"
 		d := views.NewErrorDialog("error", msg, ascii)
 		m.dialog = &d

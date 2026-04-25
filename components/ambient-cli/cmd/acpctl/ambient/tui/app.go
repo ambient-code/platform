@@ -196,18 +196,36 @@ func (m *AppModel) renderHint(hint string) string {
 	return styleDim.Render(key) + styleWhite.Render(action)
 }
 
-// viewCommandBar renders the command, filter, or prompt input bar.
+// viewCommandBar renders the command, filter, or prompt input bar with a border.
 func (m *AppModel) viewCommandBar() string {
+	var content string
 	if m.promptMode {
-		return "  " + m.promptInput.View()
+		content = m.promptInput.View()
+	} else if m.commandMode {
+		content = m.commandInput.View()
+	} else if m.filterMode {
+		content = m.filterInput.View()
+	} else {
+		return ""
 	}
-	if m.commandMode {
-		return "  " + m.commandInput.View()
+
+	borderColor := lipgloss.Color("36") // cyan border like k9s
+	bs := lipgloss.NewStyle().Foreground(borderColor)
+	innerW := m.width - 4
+	if innerW < 10 {
+		innerW = 10
 	}
-	if m.filterMode {
-		return "  " + m.filterInput.View()
+
+	top := bs.Render("┌" + strings.Repeat("─", innerW+2) + "┐")
+	contentWidth := lipgloss.Width(content)
+	pad := ""
+	if contentWidth < innerW {
+		pad = strings.Repeat(" ", innerW-contentWidth)
 	}
-	return ""
+	mid := bs.Render("│") + " " + content + pad + " " + bs.Render("│")
+	bot := bs.Render("└" + strings.Repeat("─", innerW+2) + "┘")
+
+	return top + "\n" + mid + "\n" + bot
 }
 
 // viewResourceTable renders the current resource table or view with its title bar.
