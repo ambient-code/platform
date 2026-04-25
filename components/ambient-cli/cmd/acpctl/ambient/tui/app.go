@@ -51,14 +51,11 @@ func (m *AppModel) View() string {
 	return strings.Join(sections, "\n")
 }
 
-// viewHeader renders the multi-line header block with context info on the left,
-// project shortcuts in the center, and contextual hotkeys + static hints + branding
-// on the right.
+// viewHeader renders the header with 4 columns like k9s:
+//
+//	Col1: Metadata    Col2: Project shortcuts    Col3: Hotkey hints    Col4: Logo+refresh
 func (m *AppModel) viewHeader() string {
-	// Left side: context metadata lines.
-	contextName := "none"
-	serverURL := "unknown"
-	project := "none"
+	contextName, serverURL, project := "none", "unknown", "none"
 	if m.config != nil {
 		if m.config.CurrentContext != "" {
 			contextName = m.config.CurrentContext
@@ -72,145 +69,115 @@ func (m *AppModel) viewHeader() string {
 			}
 		}
 	}
+	if len(serverURL) > 45 {
+		serverURL = serverURL[:42] + "..."
+	}
 
-	// Refresh indicator.
-	refreshIndicator := ""
+	// Col 1: metadata.
+	col1 := [5]string{
+		fmt.Sprintf(" %s %s %s", styleDim.Render("Context:"), styleOrange.Render(contextName), styleDim.Render("[RW]")),
+		fmt.Sprintf(" %s %s", styleDim.Render("User:   "), styleWhite.Render("user")),
+		fmt.Sprintf(" %s %s", styleDim.Render("Project:"), styleOrange.Render(project)),
+		fmt.Sprintf(" %s %s", styleDim.Render("Server: "), styleDim.Render(serverURL)),
+	}
+
+	// Col 2: project shortcuts (stacked, padded to fixed width).
+	var col2 [5]string
+	if m.activeView != "projects" && m.activeView != "contexts" && len(m.projectShortcuts) > 0 {
+		col2[0] = styleGreen.Render("<0>") + " " + styleWhite.Render("all")
+		for i := range min(len(m.projectShortcuts), 4) {
+			name := m.projectShortcuts[i]
+			if len(name) > 16 {
+				name = name[:13] + "..."
+			}
+			col2[i+1] = styleGreen.Render(fmt.Sprintf("<%d>", i+1)) + " " + styleWhite.Render(name)
+		}
+	}
+
+	// Col 3: contextual hotkey hints (two rows).
+	var col3 [5]string
+	hints := m.contextualHints()
+	split := (len(hints) + 1) / 2
+	var row1, row2 []string
+	for i, h := range hints {
+		if i < split {
+			row1 = append(row1, m.renderHint(h))
+		} else {
+			row2 = append(row2, m.renderHint(h))
+		}
+	}
+	col3[0] = strings.Join(row1, "  ")
+	col3[1] = strings.Join(row2, "  ")
+
+	// Col 4: static hints + logo + refresh.
+	var col4 [5]string
+	col4[0] = styleDim.Render("<?>") + " " + styleWhite.Render("Help   ")
+	col4[1] = styleDim.Render("<:>") + " " + styleWhite.Render("Command")
+	col4[2] = styleDim.Render("</>") + " " + styleWhite.Render("Filter ")
 	if !m.lastFetch.IsZero() {
 		elapsed := time.Since(m.lastFetch)
-		indicator := fmt.Sprintf("%ds", int(elapsed.Seconds()))
+		ind := fmt.Sprintf("⟳ %ds", int(elapsed.Seconds()))
 		if elapsed > staleThreshold {
-			indicator += " (stale)"
-			refreshIndicator = styleRed.Render("  ⟳ " + indicator)
+			col4[3] = styleRed.Render(ind + " (stale)")
 		} else {
-			refreshIndicator = styleDim.Render("  ⟳ " + indicator)
+			col4[3] = styleDim.Render(ind)
 		}
 	}
 
-	// Truncate server URL if too long.
-	displayServer := serverURL
-	if len(displayServer) > 50 {
-		displayServer = displayServer[:47] + "..."
-	}
+	// Fixed column positions (visual widths).
+	const col2Start = 40 // shortcuts column starts at char 40
+	const col3Start = 65 // hotkeys column starts at char 65
 
-	leftLines := []string{
-		fmt.Sprintf("  %s %s %s",
-			styleDim.Render("Context:"),
-			styleOrange.Render(contextName),
-			styleDim.Render("[RW]"),
-		),
-		fmt.Sprintf("  %s %s",
-			styleDim.Render("User:   "),
-			styleWhite.Render("user"),
-		),
-		fmt.Sprintf("  %s %s",
-			styleDim.Render("Project:"),
-			styleOrange.Render(project),
-		),
-		fmt.Sprintf("  %s %s  %s",
-			styleDim.Render("Server: "),
-			styleDim.Render(displayServer),
-			refreshIndicator,
-		),
-		"",
-	}
-
-	// Build stacked project shortcuts (only below project/context level).
-	// Fixed-width columns so they align vertically.
-	showShortcuts := m.activeView != "projects" && m.activeView != "contexts" && len(m.projectShortcuts) > 0
-	var shortcutLines []string
-	if showShortcuts {
-		shortcutLines = append(shortcutLines, styleCyan.Render("<0>")+" "+styleCyan.Render("all"))
-		maxShortcuts := min(len(m.projectShortcuts), 4)
-		for i := range maxShortcuts {
-			name := m.projectShortcuts[i]
-			if len(name) > 18 {
-				name = name[:15] + "..."
-			}
-			shortcutLines = append(shortcutLines,
-				styleCyan.Render(fmt.Sprintf("<%d>", i+1))+" "+styleCyan.Render(name))
-		}
-	}
-
-	// Build contextual hints (two rows, ~4 per row).
-	ctxHints := m.contextualHints()
-	var ctxRow1, ctxRow2 []string
-	splitAt := (len(ctxHints) + 1) / 2
-	for i, h := range ctxHints {
-		rendered := m.renderHint(h)
-		if i < splitAt {
-			ctxRow1 = append(ctxRow1, rendered)
-		} else {
-			ctxRow2 = append(ctxRow2, rendered)
-		}
-	}
-	ctxLine1 := strings.Join(ctxRow1, "  ")
-	ctxLine2 := strings.Join(ctxRow2, "  ")
-
-	// Static hints (always shown).
-	staticHints := []string{
-		styleDim.Render("<?>") + " " + styleWhite.Render("Help"),
-		styleDim.Render("<:>") + " " + styleWhite.Render("Command"),
-		styleDim.Render("</>") + " " + styleWhite.Render("Filter"),
-	}
-	staticLine := strings.Join(staticHints, "  ")
-
-	// Right side layout:
-	//   Line 0: ctx hints row1 + static hints
-	//   Line 1: ctx hints row2
-	//   Lines 2+: (empty, branding fills in)
-	rightHintLines := make([]string, 5)
-	if len(ctxRow1) > 0 {
-		rightHintLines[0] = ctxLine1 + "   " + staticLine
-	} else {
-		rightHintLines[0] = staticLine
-	}
-	if len(ctxRow2) > 0 {
-		rightHintLines[1] = ctxLine2
-	}
-
-	// Combine left metadata, shortcuts (middle), right hints + branding.
-	headerLines := make([]string, 5)
+	lines := make([]string, 5)
 	for i := range 5 {
-		left := ""
-		if i < len(leftLines) {
-			left = leftLines[i]
+		// Start with col1.
+		line := col1[i]
+		w := lipgloss.Width(line)
+
+		// Pad to col2 position and add shortcut.
+		if col2[i] != "" {
+			if w < col2Start {
+				line += strings.Repeat(" ", col2Start-w)
+			} else {
+				line += "  "
+			}
+			line += col2[i]
 		}
+		w = lipgloss.Width(line)
 
-		// Stacked project shortcuts (middle column).
-		shortcut := ""
-		if i < len(shortcutLines) {
-			shortcut = "  " + shortcutLines[i]
+		// Pad to col3 position and add hints.
+		if col3[i] != "" {
+			if w < col3Start {
+				line += strings.Repeat(" ", col3Start-w)
+			} else {
+				line += "  "
+			}
+			line += col3[i]
 		}
+		w = lipgloss.Width(line)
 
-		hint := rightHintLines[i]
-
+		// Right-align col4 (static hints + brand).
 		brand := ""
 		if i < len(brandLines) {
 			brand = styleOrange.Render(brandLines[i])
 		}
-
-		leftContent := left + shortcut
-		leftWidth := lipgloss.Width(leftContent)
-
-		var rightContent string
-		var rightWidth int
-		if hint != "" {
-			rightContent = hint + "  " + brand
-			rightWidth = lipgloss.Width(hint) + 2 + lipgloss.Width(brand)
+		right := ""
+		if col4[i] != "" && brand != "" {
+			right = col4[i] + "  " + brand
+		} else if brand != "" {
+			right = brand
 		} else {
-			rightContent = brand
-			rightWidth = lipgloss.Width(brand)
+			right = col4[i]
 		}
-
-		gap := m.width - leftWidth - rightWidth
+		rw := lipgloss.Width(right)
+		gap := m.width - w - rw
 		if gap < 1 {
 			gap = 1
 		}
-
-		headerLines[i] = leftContent + strings.Repeat(" ", gap) + rightContent
+		lines[i] = line + strings.Repeat(" ", gap) + right
 	}
 
-	return strings.Join(headerLines, "\n")
+	return strings.Join(lines, "\n")
 }
 
 // renderHint renders a single hotkey hint like "<d> Describe" with dim brackets
