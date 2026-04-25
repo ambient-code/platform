@@ -86,15 +86,17 @@ func (m *AppModel) viewHeader() string {
 		}
 	}
 
+	// Truncate server URL if too long.
+	displayServer := serverURL
+	if len(displayServer) > 50 {
+		displayServer = displayServer[:47] + "..."
+	}
+
 	leftLines := []string{
 		fmt.Sprintf("  %s %s %s",
 			styleDim.Render("Context:"),
 			styleOrange.Render(contextName),
 			styleDim.Render("[RW]"),
-		),
-		fmt.Sprintf("  %s %s",
-			styleDim.Render("Server: "),
-			styleWhite.Render(serverURL),
 		),
 		fmt.Sprintf("  %s %s",
 			styleDim.Render("User:   "),
@@ -104,22 +106,28 @@ func (m *AppModel) viewHeader() string {
 			styleDim.Render("Project:"),
 			styleOrange.Render(project),
 		),
-		refreshIndicator,
+		fmt.Sprintf("  %s %s  %s",
+			styleDim.Render("Server: "),
+			styleDim.Render(displayServer),
+			refreshIndicator,
+		),
+		"",
 	}
 
 	// Build stacked project shortcuts (only below project/context level).
-	// Rendered vertically like k9s namespace shortcuts:
-	//   <0> all
-	//   <1> test
-	//   <2> test-jsell
+	// Fixed-width columns so they align vertically.
 	showShortcuts := m.activeView != "projects" && m.activeView != "contexts" && len(m.projectShortcuts) > 0
 	var shortcutLines []string
 	if showShortcuts {
 		shortcutLines = append(shortcutLines, styleCyan.Render("<0>")+" "+styleCyan.Render("all"))
 		maxShortcuts := min(len(m.projectShortcuts), 4)
 		for i := range maxShortcuts {
+			name := m.projectShortcuts[i]
+			if len(name) > 18 {
+				name = name[:15] + "..."
+			}
 			shortcutLines = append(shortcutLines,
-				styleCyan.Render(fmt.Sprintf("<%d>", i+1))+" "+styleCyan.Render(m.projectShortcuts[i]))
+				styleCyan.Render(fmt.Sprintf("<%d>", i+1))+" "+styleCyan.Render(name))
 		}
 	}
 
