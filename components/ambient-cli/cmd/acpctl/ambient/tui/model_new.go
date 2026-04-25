@@ -583,8 +583,9 @@ func (m *AppModel) resizeTable() {
 	m.contextTable.SetHeight(tableHeight)
 	m.contextTable.SetWidth(m.width)
 
-	// Message stream gets the full table area.
-	m.messageStream.SetSize(m.width, tableHeight+2) // +2 to account for title bar space
+	// Message stream and detail view get the full table area.
+	m.messageStream.SetSize(m.width, tableHeight+2)
+	m.detailView.SetSize(m.width, tableHeight+2)
 }
 
 // handleProjectsMsg populates the project table from a fetch result.
