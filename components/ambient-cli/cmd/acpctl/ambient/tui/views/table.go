@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+
 // SortDirection represents the sort order for a column.
 type SortDirection int
 
@@ -329,44 +330,57 @@ func (rt *ResourceTable) View() string {
 	tableView := rt.inner.View()
 
 	// Wrap each table line with side borders, applying full-width highlight
-	// to the selected row.
+	// to the selected row using the phase color as background.
 	tableLines := strings.Split(tableView, "\n")
-	selectedStyle := lipgloss.NewStyle().
-		Background(rt.style.SelectedBg).
-		Foreground(lipgloss.Color("0"))
 
-	// The table output is: header line(s) + separator + data rows.
-	// Header takes 2 lines (header text + border), data rows follow.
-	// The selected data row index relative to visible rows is cursor - start.
-	cursor := rt.inner.Cursor()
-	visibleRows := rt.inner.Rows()
-	headerLines := 2 // header + bottom border
-	selectedLineIdx := -1
-	if len(visibleRows) > 0 {
-		// Find which visible line the cursor maps to.
-		// bubbles/table internally tracks start/end; cursor - start = visual position.
-		// We approximate: if cursor < len(visibleRows), selectedLineIdx = headerLines + cursor
-		// But the viewport handles scrolling, so the cursor position within the viewport
-		// is the bold row. We detect it by checking which data line has bold styling.
-		for i, line := range tableLines {
-			if i >= headerLines && strings.Contains(line, "\x1b[1m") {
-				selectedLineIdx = i
-				break
+	// Determine the selected row's highlight color from its phase/status.
+	// Default to orange; if the row has phase data, use PhaseColor as background.
+	selectedBg := rt.style.SelectedBg
+	selectedRow := rt.inner.SelectedRow()
+	if len(selectedRow) > 0 {
+		// Check each cell for a known phase color by looking at the raw row data.
+		// The phase is typically in the PHASE column. We scan all cells for phase keywords.
+		for _, cell := range selectedRow {
+			// Strip ANSI to get the raw text.
+			raw := stripANSI(cell)
+			raw = strings.TrimSpace(strings.ToLower(raw))
+			switch raw {
+			case "running", "active":
+				selectedBg = PhaseColor("running")
+			case "pending":
+				selectedBg = PhaseColor("pending")
+			case "failed":
+				selectedBg = PhaseColor("failed")
+			case "completed", "succeeded":
+				selectedBg = PhaseColor("completed")
+			case "idle", "cancelled":
+				selectedBg = PhaseColor("idle")
 			}
 		}
 	}
-	_ = cursor
+	highlightStyle := lipgloss.NewStyle().
+		Background(selectedBg).
+		Foreground(lipgloss.Color("0"))
+
+	// Find the selected line by detecting bold marker.
+	const dataStart = 2 // header + border
+	selectedLineIdx := -1
+	for i, line := range tableLines {
+		if i >= dataStart && strings.Contains(line, "\x1b[1m") {
+			selectedLineIdx = i
+			break
+		}
+	}
 
 	var bordered []string
 	for i, line := range tableLines {
-		innerWidth := w - 4 // 2 for │ chars, 2 for padding spaces
+		innerWidth := w - 4
 		lineWidth := lipgloss.Width(line)
 
 		if i == selectedLineIdx && selectedLineIdx >= 0 {
-			// Apply full-width orange background with black text.
 			pad := max(innerWidth-lineWidth, 0)
 			content := line + strings.Repeat(" ", pad)
-			highlighted := selectedStyle.Render(content)
+			highlighted := highlightStyle.Render(content)
 			bordered = append(bordered,
 				borderStyle.Render("│")+" "+highlighted+" "+borderStyle.Render("│"))
 		} else {
