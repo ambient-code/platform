@@ -107,24 +107,26 @@ func (m *AppModel) viewHeader() string {
 		refreshIndicator,
 	}
 
-	// Build project shortcuts line (like k9s namespace shortcuts).
-	// Format: <0> all  <1> proj1  <2> proj2 ...
-	var shortcutParts []string
-	shortcutParts = append(shortcutParts, styleCyan.Render("<0>")+styleCyan.Render(" all"))
-	maxShortcuts := 6
-	if len(m.projectShortcuts) < maxShortcuts {
-		maxShortcuts = len(m.projectShortcuts)
+	// Build stacked project shortcuts (only below project/context level).
+	// Rendered vertically like k9s namespace shortcuts:
+	//   <0> all
+	//   <1> test
+	//   <2> test-jsell
+	showShortcuts := m.activeView != "projects" && m.activeView != "contexts" && len(m.projectShortcuts) > 0
+	var shortcutLines []string
+	if showShortcuts {
+		shortcutLines = append(shortcutLines, styleCyan.Render("<0>")+" "+styleCyan.Render("all"))
+		maxShortcuts := min(len(m.projectShortcuts), 4)
+		for i := range maxShortcuts {
+			shortcutLines = append(shortcutLines,
+				styleCyan.Render(fmt.Sprintf("<%d>", i+1))+" "+styleCyan.Render(m.projectShortcuts[i]))
+		}
 	}
-	for i := 0; i < maxShortcuts; i++ {
-		shortcutParts = append(shortcutParts,
-			styleCyan.Render(fmt.Sprintf("<%d>", i+1))+" "+styleCyan.Render(m.projectShortcuts[i]))
-	}
-	shortcutLine := "  " + strings.Join(shortcutParts, "  ")
 
 	// Build contextual hints (two rows, ~4 per row).
 	ctxHints := m.contextualHints()
 	var ctxRow1, ctxRow2 []string
-	splitAt := (len(ctxHints) + 1) / 2 // first row gets the larger half
+	splitAt := (len(ctxHints) + 1) / 2
 	for i, h := range ctxHints {
 		rendered := m.renderHint(h)
 		if i < splitAt {
@@ -144,15 +146,10 @@ func (m *AppModel) viewHeader() string {
 	}
 	staticLine := strings.Join(staticHints, "  ")
 
-	// Right side: combine contextual row 1 + static hints on line 0,
-	// contextual row 2 on line 1, then branding fills remaining lines.
-	// Layout:
-	//   Line 0: left metadata | ctx hints row1 + static | brand
-	//   Line 1: left metadata | ctx hints row2           | brand
-	//   Line 2: left metadata | shortcuts                | brand
-	//   Line 3: left metadata |                          | brand
-	//   Line 4: left metadata |                          | brand
-
+	// Right side layout:
+	//   Line 0: ctx hints row1 + static hints
+	//   Line 1: ctx hints row2
+	//   Lines 2+: (empty, branding fills in)
 	rightHintLines := make([]string, 5)
 	if len(ctxRow1) > 0 {
 		rightHintLines[0] = ctxLine1 + "   " + staticLine
@@ -162,16 +159,19 @@ func (m *AppModel) viewHeader() string {
 	if len(ctxRow2) > 0 {
 		rightHintLines[1] = ctxLine2
 	}
-	if len(m.projectShortcuts) > 0 {
-		rightHintLines[2] = shortcutLine
-	}
 
-	// Combine left, right-hints, and branding into header lines.
+	// Combine left metadata, shortcuts (middle), right hints + branding.
 	headerLines := make([]string, 5)
 	for i := range 5 {
 		left := ""
 		if i < len(leftLines) {
 			left = leftLines[i]
+		}
+
+		// Stacked project shortcuts (middle column).
+		shortcut := ""
+		if i < len(shortcutLines) {
+			shortcut = "  " + shortcutLines[i]
 		}
 
 		hint := rightHintLines[i]
@@ -181,19 +181,17 @@ func (m *AppModel) viewHeader() string {
 			brand = styleOrange.Render(brandLines[i])
 		}
 
-		// Calculate padding to right-align hints and branding.
-		leftWidth := lipgloss.Width(left)
-		hintWidth := lipgloss.Width(hint)
-		brandWidth := lipgloss.Width(brand)
+		leftContent := left + shortcut
+		leftWidth := lipgloss.Width(leftContent)
 
 		var rightContent string
 		var rightWidth int
 		if hint != "" {
 			rightContent = hint + "  " + brand
-			rightWidth = hintWidth + 2 + brandWidth
+			rightWidth = lipgloss.Width(hint) + 2 + lipgloss.Width(brand)
 		} else {
 			rightContent = brand
-			rightWidth = brandWidth
+			rightWidth = lipgloss.Width(brand)
 		}
 
 		gap := m.width - leftWidth - rightWidth
@@ -201,7 +199,7 @@ func (m *AppModel) viewHeader() string {
 			gap = 1
 		}
 
-		headerLines[i] = left + strings.Repeat(" ", gap) + rightContent
+		headerLines[i] = leftContent + strings.Repeat(" ", gap) + rightContent
 	}
 
 	return strings.Join(headerLines, "\n")
