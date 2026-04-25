@@ -2421,6 +2421,14 @@ func (m *AppModel) openEditorForResource(kind, resourceID, projectID string, res
 		return m, m.setInfo("Failed to set temp file permissions: " + err.Error())
 	}
 
+	header := "// Edit the JSON below. Lines starting with // are stripped before parsing.\n" +
+		"// Save and quit to apply changes. Empty file aborts the edit.\n" +
+		"//\n"
+	if _, err := tmpFile.WriteString(header); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpFile.Name())
+		return m, m.setInfo("Failed to write temp file: " + err.Error())
+	}
 	if _, err := tmpFile.Write(originalJSON); err != nil {
 		tmpFile.Close()
 		os.Remove(tmpFile.Name())
@@ -2453,10 +2461,8 @@ func (m *AppModel) openEditorForResource(kind, resourceID, projectID string, res
 // It reads the edited JSON, diffs against the original, builds a patch map
 // with only changed fields, and calls the appropriate update method.
 func (m *AppModel) handleEditComplete(msg editCompleteMsg) (tea.Model, tea.Cmd) {
-	// Always clean up the temp file.
-	defer os.Remove(msg.TempFile)
-
 	if msg.Err != nil {
+		os.Remove(msg.TempFile)
 		return m, m.setInfo("Editor exited with error: " + msg.Err.Error())
 	}
 
@@ -2466,14 +2472,36 @@ func (m *AppModel) handleEditComplete(msg editCompleteMsg) (tea.Model, tea.Cmd) 
 		return m, m.setInfo("Failed to read edited file: " + err.Error())
 	}
 
+	// Strip comment lines (// ...) before parsing.
+	strippedJSON := stripJSONComments(string(editedJSON))
+
+	// Empty file = abort.
+	if strings.TrimSpace(strippedJSON) == "" {
+		return m, m.setInfo("Edit aborted (empty file)")
+	}
+
 	// Parse both original and edited JSON into maps for diffing.
 	var original map[string]any
 	if err := json.Unmarshal(msg.OriginalJSON, &original); err != nil {
 		return m, m.setInfo("Failed to parse original JSON: " + err.Error())
 	}
 	var edited map[string]any
-	if err := json.Unmarshal(editedJSON, &edited); err != nil {
-		return m, m.setInfo("Failed to parse edited JSON: " + err.Error())
+	if err := json.Unmarshal([]byte(strippedJSON), &edited); err != nil {
+		// Reopen the editor with the error as a comment at the top.
+		errorHeader := fmt.Sprintf("// ERROR: %s\n// Fix the JSON below and save again. Empty file aborts.\n//\n", err.Error())
+		_ = os.WriteFile(msg.TempFile, []byte(errorHeader+string(editedJSON)), 0600)
+		editor := getEditor()
+		c := exec.Command(editor, msg.TempFile) //nolint:gosec
+		return m, tea.ExecProcess(c, func(editorErr error) tea.Msg {
+			return editCompleteMsg{
+				ResourceKind: msg.ResourceKind,
+				ResourceID:   msg.ResourceID,
+				ProjectID:    msg.ProjectID,
+				TempFile:     msg.TempFile,
+				OriginalJSON: msg.OriginalJSON,
+				Err:          editorErr,
+			}
+		})
 	}
 
 	// Determine which fields are editable based on resource kind.
@@ -2527,8 +2555,10 @@ func (m *AppModel) handleEditComplete(msg editCompleteMsg) (tea.Model, tea.Cmd) 
 	}
 
 	if len(patch) == 0 {
+		os.Remove(msg.TempFile)
 		return m, m.setInfo("No changes detected")
 	}
+	os.Remove(msg.TempFile)
 
 	// Build a summary of changed fields.
 	var changedFields []string
@@ -2557,6 +2587,18 @@ func (m *AppModel) handleEditComplete(msg editCompleteMsg) (tea.Model, tea.Cmd) 
 	default:
 		return m, m.setInfo("Unknown resource kind: " + msg.ResourceKind)
 	}
+}
+
+// stripJSONComments removes lines starting with // from the input.
+func stripJSONComments(s string) string {
+	var lines []string
+	for _, line := range strings.Split(s, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "//") {
+			lines = append(lines, line)
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // ---------------------------------------------------------------------------
