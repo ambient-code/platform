@@ -93,20 +93,28 @@ func (m *AppModel) viewHeader() string {
 		}
 	}
 
-	// Col 3: contextual hotkey hints (two rows).
+	// Col 3: contextual hotkey hints (up to 4 rows, ~4 per row).
 	var col3 [5]string
 	hints := m.contextualHints()
-	split := (len(hints) + 1) / 2
-	var row1, row2 []string
-	for i, h := range hints {
-		if i < split {
-			row1 = append(row1, m.renderHint(h))
-		} else {
-			row2 = append(row2, m.renderHint(h))
+	perRow := 4
+	if len(hints) <= 8 {
+		perRow = (len(hints) + 3) / 4 // spread across 4 rows
+		if perRow < 2 {
+			perRow = 2
 		}
 	}
-	col3[0] = strings.Join(row1, "  ")
-	col3[1] = strings.Join(row2, "  ")
+	rowIdx := 0
+	var currentRow []string
+	for i, h := range hints {
+		currentRow = append(currentRow, m.renderHint(h))
+		if (i+1)%perRow == 0 || i == len(hints)-1 {
+			if rowIdx < 5 {
+				col3[rowIdx] = strings.Join(currentRow, "  ")
+			}
+			currentRow = nil
+			rowIdx++
+		}
+	}
 
 	// Col 4: static hints + logo + refresh.
 	var col4 [5]string

@@ -472,7 +472,7 @@ func (ms *MessageStream) updateNormal(msg tea.KeyMsg) (MessageStream, tea.Cmd) {
 		case "r":
 			ms.rawMode = !ms.rawMode
 			return *ms, nil
-		case "w":
+		case "p":
 			ms.wrapMode = !ms.wrapMode
 			return *ms, nil
 		case "t":
@@ -632,9 +632,9 @@ func (ms *MessageStream) View() string {
 	if ms.rawMode {
 		rawLabel = "On"
 	}
-	truncLabel := "On"
+	prettyLabel := "Off"
 	if ms.wrapMode {
-		truncLabel = "Off"
+		prettyLabel = "On"
 	}
 	phaseStyle := lipgloss.NewStyle().Foreground(phaseColor(ms.phase))
 	dimIndicator := lipgloss.NewStyle().Foreground(msgColorDim)
@@ -645,10 +645,10 @@ func (ms *MessageStream) View() string {
 	case 2:
 		tsLabel = "Absolute"
 	}
-	indicators := fmt.Sprintf("Autoscroll:%s     Raw:%s     Truncate:%s     Time:%s     Phase:%s",
+	indicators := fmt.Sprintf("Autoscroll:%s     Raw:%s     Pretty:%s     Time:%s     Phase:%s",
 		dimIndicator.Render(autoScrollLabel),
 		dimIndicator.Render(rawLabel),
-		dimIndicator.Render(truncLabel),
+		dimIndicator.Render(prettyLabel),
 		dimIndicator.Render(tsLabel),
 		phaseStyle.Render(ms.phase),
 	)
