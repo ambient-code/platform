@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/ambient/tui/views"
 )
 
 // ASCII art branding rendered in the header.
@@ -36,8 +38,13 @@ func (m *AppModel) View() string {
 		sections = append(sections, m.viewCommandBar())
 	}
 
-	// 4. Resource table with title bar.
-	sections = append(sections, m.viewResourceTable())
+	// 4. Resource table with title bar (+ dialog overlay if active).
+	tableOutput := m.viewResourceTable()
+	if m.dialog != nil {
+		tableH := m.height - 10
+		tableOutput = views.OverlayDialog(tableOutput, *m.dialog, m.width, tableH)
+	}
+	sections = append(sections, tableOutput)
 
 	// 5. Separator.
 	sections = append(sections, styleDim.Render(strings.Repeat("─", m.width)))
