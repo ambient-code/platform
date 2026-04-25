@@ -39,10 +39,10 @@ func PhaseColor(phase string) lipgloss.Color {
 func SessionColumns() []table.Column {
 	return []table.Column{
 		{Title: "ID", Width: 14},
-		{Title: "AGENT", Width: 15},
-		{Title: "PROJECT", Width: 15},
+		{Title: "NAME", Width: 15},
+		{Title: "AGENT", Width: 12},
+		{Title: "PROJECT", Width: 12},
 		{Title: "PHASE", Width: 12},
-		{Title: "TRIGGERED BY", Width: 15},
 		{Title: "STARTED", Width: 10},
 		{Title: "DURATION", Width: 10},
 	}
@@ -85,10 +85,10 @@ func SessionRow(s sdktypes.Session, agentName string, now time.Time) table.Row {
 
 	return table.Row{
 		shortID,
+		s.Name,
 		agentName,
 		s.ProjectID,
 		s.Phase,
-		s.TriggeredByUserID,
 		started,
 		duration,
 	}

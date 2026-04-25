@@ -107,6 +107,9 @@ type AppModel struct {
 	// Detail view
 	detailView views.DetailView
 
+	// Help overlay
+	helpView views.HelpView
+
 	// Cached resource data for CRUD lookups (maps name/ID -> full resource).
 	cachedProjects []sdktypes.Project
 	cachedAgents   []sdktypes.Agent
@@ -187,10 +190,10 @@ func NewAppModel(factory *connection.ClientFactory) (*AppModel, error) {
 		return lipgloss.Color("240")
 	})
 	st := views.NewSessionTable("all", views.DefaultTableStyle())
-	// Session rows: PHASE is column index 3 (ID, AGENT, PROJECT, PHASE, ...)
+	// Session rows: PHASE is column index 4 (ID, NAME, AGENT, PROJECT, PHASE, ...)
 	st.SetRowColorFunc(func(row table.Row) lipgloss.Color {
-		if len(row) > 3 {
-			return views.PhaseColor(row[3])
+		if len(row) > 4 {
+			return views.PhaseColor(row[4])
 		}
 		return lipgloss.Color("240")
 	})
@@ -1109,6 +1112,11 @@ func (m *AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleFilterKey(msg)
 	}
 
+	// Help overlay handles its own keys.
+	if m.activeView == "help" {
+		return m.handleHelpKey(msg)
+	}
+
 	// Message stream handles its own keys.
 	if m.activeView == "messages" {
 		return m.handleMessagesKey(msg)
@@ -1256,11 +1264,11 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 			// Create a new message stream for this session.
 			agentName := m.currentAgent
 			if agentName == "" && len(row) > 1 {
-				agentName = row[1] // AGENT column
+				agentName = row[2] // AGENT column
 			}
 			phase := ""
-			if len(row) > 3 {
-				phase = row[3] // PHASE column
+			if len(row) > 4 {
+				phase = row[4] // PHASE column
 			}
 			m.messageStream = views.NewMessageStream(fullSessionID, agentName, phase)
 			m.resizeTable() // set message stream dimensions
@@ -1327,7 +1335,7 @@ func (m *AppModel) handleRuneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "?":
-		return m, m.viewSpecificHelp()
+		return m.showHelp()
 
 	case "q":
 		if len(m.navStack) <= 1 {
@@ -1740,7 +1748,7 @@ func (m *AppModel) handleMessagesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.resizeTable()
 			return m, nil
 		case "?":
-			return m, m.viewSpecificHelp()
+			return m.showHelp()
 		case "q":
 			return m, m.popView()
 		}
@@ -1754,22 +1762,97 @@ func (m *AppModel) handleMessagesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// viewSpecificHelp returns a help info message based on the active view.
-func (m *AppModel) viewSpecificHelp() tea.Cmd {
+// showHelp creates a HelpView for the current view and pushes it onto the nav stack.
+func (m *AppModel) showHelp() (tea.Model, tea.Cmd) {
+	general := []views.HelpEntry{
+		{":", "Command"},
+		{"/", "Filter"},
+		{"?", "Help"},
+		{"c", "Copy ID"},
+		{"N", "Sort Name"},
+		{"A", "Sort Age"},
+	}
+
+	var resource, navigation []views.HelpEntry
+
 	switch m.activeView {
 	case "projects":
-		return m.setInfo("Help: Enter drill | d describe | n new | Ctrl-D delete | : cmd | / filter | q quit")
+		resource = []views.HelpEntry{
+			{"d", "Describe"}, {"n", "New"}, {"Ctrl-D", "Delete"},
+		}
+		navigation = []views.HelpEntry{
+			{"Enter", "Drill into agents"}, {"q", "Quit"},
+		}
 	case "agents":
-		return m.setInfo("Help: Enter sessions | i inbox | s start | x stop | e edit | l logs | d describe | m send | n new | Ctrl-D delete")
+		resource = []views.HelpEntry{
+			{"s", "Start"}, {"x", "Stop"}, {"e", "Edit"}, {"i", "Inbox"},
+			{"l", "Logs"}, {"d", "Describe"}, {"n", "New"}, {"Ctrl-D", "Delete"},
+		}
+		navigation = []views.HelpEntry{
+			{"Enter", "Drill into sessions"}, {"Esc", "Back to projects"},
+			{"q", "Back"}, {"0-9", "Switch project"},
+		}
 	case "sessions":
-		return m.setInfo("Help: Enter/l messages | d describe | m send | y YAML | Ctrl-D delete | q back")
+		resource = []views.HelpEntry{
+			{"d", "Describe"}, {"l", "Logs"}, {"m", "Send"}, {"n", "New"},
+			{"y", "YAML"}, {"Ctrl-D", "Delete"},
+		}
+		navigation = []views.HelpEntry{
+			{"Enter", "Drill into messages"}, {"Esc", "Back to agents"},
+			{"q", "Back"}, {"0-9", "Switch project"},
+		}
 	case "inbox":
-		return m.setInfo("Help: Enter view | m compose | r mark read | Ctrl-D delete | q back")
+		resource = []views.HelpEntry{
+			{"m", "Compose"}, {"r", "Mark Read"}, {"Ctrl-D", "Delete"},
+		}
+		navigation = []views.HelpEntry{
+			{"Enter", "View body"}, {"Esc", "Back to agents"}, {"q", "Back"},
+		}
 	case "messages":
-		return m.setInfo("Help: Esc back | r raw | s scroll | m send | G bottom | g top | / search")
-	default:
-		return m.setInfo("Help: q quit | : command | / filter | Enter drill-in | Esc back")
+		resource = []views.HelpEntry{
+			{"s", "Autoscroll"}, {"r", "Raw Mode"}, {"m", "Send"},
+			{"c", "Copy"}, {"G", "Bottom"}, {"g", "Top"},
+		}
+		general = []views.HelpEntry{
+			{":", "Command"}, {"?", "Help"},
+		}
+		navigation = []views.HelpEntry{
+			{"Esc", "Back to sessions"}, {"q", "Back"},
+		}
+	case "contexts":
+		resource = []views.HelpEntry{}
+		navigation = []views.HelpEntry{
+			{"Enter", "Switch context"}, {"Esc", "Back"}, {"q", "Back"},
+		}
+	case "detail":
+		resource = []views.HelpEntry{
+			{"c", "Copy value"}, {"j/k", "Scroll"},
+		}
+		general = []views.HelpEntry{
+			{"?", "Help"},
+		}
+		navigation = []views.HelpEntry{
+			{"Esc", "Back"}, {"q", "Back"},
+		}
 	}
+
+	title := fmt.Sprintf("Help(%s)", m.activeView)
+	m.helpView = views.NewHelpView(title, resource, general, navigation)
+	m.helpView.SetSize(m.width, m.height-10)
+	m.navStack = append(m.navStack, NavEntry{Kind: "help", Scope: m.activeView})
+	prevView := m.activeView
+	m.activeView = "help"
+	_ = prevView
+	return m, nil
+}
+
+// handleHelpKey processes keys while the help overlay is shown.
+func (m *AppModel) handleHelpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.Type == tea.KeyEsc || (msg.Type == tea.KeyRunes && string(msg.Runes) == "?") ||
+		(msg.Type == tea.KeyRunes && string(msg.Runes) == "q") {
+		return m, m.popView()
+	}
+	return m, nil
 }
 
 // handleCommandKey processes keys while in command mode.
@@ -2132,18 +2215,36 @@ func (m *AppModel) handleProjectShortcut(digit byte) (tea.Model, tea.Cmd) {
 	m.currentAgent = ""
 	m.currentAgentID = ""
 	m.currentSession = ""
-	m.agentTable.SetScope(projectName)
-	m.navStack = []NavEntry{
-		{Kind: "projects", Scope: "all"},
-		{Kind: "agents", Scope: projectName},
-	}
-	m.activeView = "agents"
 	m.activeFilter = nil
 	m.pollInFlight = true
-	return m, tea.Batch(
-		m.client.FetchAgents(projectName),
-		m.setInfo("Switched to project "+projectName),
-	)
+
+	// Stay in the same view type when switching projects.
+	targetView := m.activeView
+	switch targetView {
+	case "sessions":
+		m.sessionTable.SetScope(projectName)
+		m.navStack = []NavEntry{
+			{Kind: "projects", Scope: "all"},
+			{Kind: "agents", Scope: projectName},
+			{Kind: "sessions", Scope: projectName},
+		}
+		m.activeView = "sessions"
+		return m, tea.Batch(
+			m.client.FetchSessions(projectName),
+			m.setInfo("Switched to project "+projectName),
+		)
+	default:
+		m.agentTable.SetScope(projectName)
+		m.navStack = []NavEntry{
+			{Kind: "projects", Scope: "all"},
+			{Kind: "agents", Scope: projectName},
+		}
+		m.activeView = "agents"
+		return m, tea.Batch(
+			m.client.FetchAgents(projectName),
+			m.setInfo("Switched to project "+projectName),
+		)
+	}
 }
 
 // ---------------------------------------------------------------------------

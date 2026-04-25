@@ -233,6 +233,8 @@ func (m *AppModel) viewResourceTable() string {
 		return m.messageStream.View()
 	case "detail":
 		return m.detailView.View()
+	case "help":
+		return m.helpView.View()
 	default:
 		return m.projectTable.View()
 	}
