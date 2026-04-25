@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/ambient/tui/views"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
@@ -159,7 +160,21 @@ func NewAppModel(factory *connection.ClientFactory) (*AppModel, error) {
 
 	pt := views.NewProjectTable(views.DefaultTableStyle())
 	at := views.NewAgentTable("all", views.DefaultTableStyle())
+	// Agent rows: PHASE is column index 3 (NAME, PROMPT, SESSIONS, PHASE, AGE)
+	at.SetRowColorFunc(func(row table.Row) lipgloss.Color {
+		if len(row) > 3 {
+			return views.PhaseColor(row[3])
+		}
+		return lipgloss.Color("240")
+	})
 	st := views.NewSessionTable("all", views.DefaultTableStyle())
+	// Session rows: PHASE is column index 3 (ID, AGENT, PROJECT, PHASE, ...)
+	st.SetRowColorFunc(func(row table.Row) lipgloss.Color {
+		if len(row) > 3 {
+			return views.PhaseColor(row[3])
+		}
+		return lipgloss.Color("240")
+	})
 	it := views.NewInboxTable("all", views.DefaultTableStyle())
 	ct := views.NewContextTable(views.DefaultTableStyle())
 

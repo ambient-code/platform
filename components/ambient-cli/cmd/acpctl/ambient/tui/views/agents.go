@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/table"
-	"github.com/charmbracelet/lipgloss"
 
 	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 )
@@ -45,20 +44,13 @@ func AgentRow(a sdktypes.Agent, sessionCount int, now time.Time) table.Row {
 	if a.CurrentSessionID != "" {
 		phase = "active"
 	}
-	c := PhaseColor(phase)
-	r := func(s string) string {
-		if s == "" {
-			return ""
-		}
-		return lipgloss.NewStyle().Foreground(c).Render(s)
-	}
 
 	return table.Row{
-		r(a.Name),
-		r(TruncateString(a.Prompt, 60)),
-		r(sessions),
-		r(phase),
-		r(age),
+		a.Name,
+		TruncateString(a.Prompt, 60),
+		sessions,
+		phase,
+		age,
 	}
 }
 

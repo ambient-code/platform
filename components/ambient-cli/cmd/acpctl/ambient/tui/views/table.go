@@ -86,6 +86,9 @@ type ResourceTable struct {
 	// sort tracks the current column sort state.
 	sort sortState
 
+	// rowColorFunc maps a row to its foreground color. If nil, rows use default color.
+	rowColorFunc func(row table.Row) lipgloss.Color
+
 	// tableStyles caches the current styles for dynamic updates (e.g. phase-based highlight).
 	tableStyles table.Styles
 
@@ -156,6 +159,12 @@ func (rt *ResourceTable) SetRows(rows []table.Row) {
 	rt.allRows = make([]table.Row, len(rows))
 	copy(rt.allRows, rows)
 	rt.applyFilterAndSort()
+}
+
+// SetRowColorFunc sets a function that determines the foreground color for each
+// row based on its data. Used for phase-based row coloring (k9s style).
+func (rt *ResourceTable) SetRowColorFunc(f func(row table.Row) lipgloss.Color) {
+	rt.rowColorFunc = f
 }
 
 // SetFilter sets a client-side filter predicate. Rows for which the predicate
@@ -328,22 +337,8 @@ func (rt *ResourceTable) Update(msg tea.Msg) (ResourceTable, tea.Cmd) {
 func (rt *ResourceTable) updateSelectedStyle() {
 	bg := rt.style.SelectedBg
 	row := rt.inner.SelectedRow()
-	if len(row) > 0 {
-		for _, cell := range row {
-			raw := strings.TrimSpace(strings.ToLower(stripANSI(cell)))
-			switch raw {
-			case "running", "active":
-				bg = PhaseColor("running")
-			case "pending":
-				bg = PhaseColor("pending")
-			case "failed":
-				bg = PhaseColor("failed")
-			case "completed", "succeeded":
-				bg = PhaseColor("completed")
-			case "idle", "cancelled":
-				bg = PhaseColor("idle")
-			}
-		}
+	if rt.rowColorFunc != nil && len(row) > 0 {
+		bg = rt.rowColorFunc(row)
 	}
 	rt.tableStyles.Selected = rt.tableStyles.Selected.Background(bg)
 	rt.inner.SetStyles(rt.tableStyles)
@@ -366,12 +361,43 @@ func (rt *ResourceTable) View() string {
 	titleBar := rt.renderTitleBar()
 	tableView := rt.inner.View()
 
-	// Wrap each table line with side borders.
+	// Wrap each table line with side borders, applying per-row phase coloring.
 	tableLines := strings.Split(tableView, "\n")
+	visibleRows := rt.inner.Rows()
+	cursor := rt.inner.Cursor()
+	const headerLineCount = 2 // header text + border separator
+
+	// Determine the first visible row index. The cursor is the absolute row
+	// index; the table height tells us how many rows are visible. The visual
+	// position of the cursor within the viewport is cursor - firstVisible.
+	tableH := rt.inner.Height()
+	firstVisible := 0
+	if cursor >= tableH {
+		firstVisible = cursor - tableH + 1
+	}
+
 	var bordered []string
-	for _, line := range tableLines {
+	for i, line := range tableLines {
 		lineWidth := lipgloss.Width(line)
 		pad := max(w-lineWidth-2, 0)
+
+		dataRowIdx := i - headerLineCount // which data row this line is
+		isDataRow := dataRowIdx >= 0 && dataRowIdx < len(visibleRows)
+		isSelected := isDataRow && (firstVisible+dataRowIdx) == cursor
+
+		if isDataRow && rt.rowColorFunc != nil && !isSelected {
+			absIdx := firstVisible + dataRowIdx
+			if absIdx < len(visibleRows) {
+				fg := rt.rowColorFunc(visibleRows[absIdx])
+				coloredLine := lipgloss.NewStyle().Foreground(fg).Render(line)
+				coloredLineWidth := lipgloss.Width(coloredLine)
+				colorPad := max(w-coloredLineWidth-2, 0)
+				bordered = append(bordered,
+					borderStyle.Render("│")+" "+coloredLine+strings.Repeat(" ", colorPad)+borderStyle.Render("│"))
+				continue
+			}
+		}
+
 		bordered = append(bordered,
 			borderStyle.Render("│")+" "+line+strings.Repeat(" ", pad)+borderStyle.Render("│"))
 	}

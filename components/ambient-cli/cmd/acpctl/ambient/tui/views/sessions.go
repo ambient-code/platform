@@ -83,23 +83,14 @@ func SessionRow(s sdktypes.Session, agentName string, now time.Time) table.Row {
 		duration = FormatAge(now.Sub(*s.StartTime))
 	}
 
-	phase := s.Phase
-	c := PhaseColor(phase)
-	r := func(s string) string {
-		if s == "" {
-			return ""
-		}
-		return lipgloss.NewStyle().Foreground(c).Render(s)
-	}
-
 	return table.Row{
-		r(shortID),
-		r(agentName),
-		r(s.ProjectID),
-		r(phase),
-		r(s.TriggeredByUserID),
-		r(started),
-		r(duration),
+		shortID,
+		agentName,
+		s.ProjectID,
+		s.Phase,
+		s.TriggeredByUserID,
+		started,
+		duration,
 	}
 }
 
