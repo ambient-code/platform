@@ -869,12 +869,12 @@ func (ms *MessageStream) renderConversationEntry(entry MessageEntry, maxWidth in
 		if r := ms.getGlamourRenderer(glamourWidth); r != nil {
 			rendered, err := r.Render(strings.TrimSpace(entry.Payload))
 			if err == nil && strings.TrimSpace(rendered) != "" {
-				// Split glamour output into lines and prefix with the tag.
-				glamourLines := strings.Split(strings.TrimRight(rendered, "\n"), "\n")
+				// Split glamour output into lines, strip leading/trailing blanks, prefix with tag.
+				glamourLines := strings.Split(strings.TrimSpace(rendered), "\n")
 				result := make([]string, 0, len(glamourLines))
 				for i, line := range glamourLines {
 					if i == 0 {
-						result = append(result, tag+"  "+line)
+						result = append(result, tag+line)
 					} else {
 						result = append(result, indent+line)
 					}
