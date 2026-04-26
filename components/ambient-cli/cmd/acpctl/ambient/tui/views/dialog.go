@@ -363,3 +363,114 @@ func OverlayDialog(background string, dialog Dialog, containerWidth, containerHe
 
 	return strings.Join(bgLines, "\n")
 }
+
+// OverlayForm renders a huh form inside a bordered box matching the confirm
+// dialog aesthetic (dim single-line border, orange title), centered on top of
+// background content. The title is displayed as ┌───<Title>───┐.
+func OverlayForm(background, formView, title string, containerWidth, containerHeight int) string {
+	bgLines := strings.Split(background, "\n")
+	for len(bgLines) < containerHeight {
+		bgLines = append(bgLines, "")
+	}
+
+	borderStyle := lipgloss.NewStyle().Foreground(dlgColorDim)
+	titleStyle := lipgloss.NewStyle().Foreground(dlgColorOrange).Bold(true)
+	hintStyle := lipgloss.NewStyle().Foreground(dlgColorDim)
+
+	// Strip trailing blank lines from the form view so the box is tight.
+	formLines := strings.Split(formView, "\n")
+	for len(formLines) > 0 && strings.TrimSpace(formLines[len(formLines)-1]) == "" {
+		formLines = formLines[:len(formLines)-1]
+	}
+
+	// Determine inner width: max(form content, 56) to ensure comfortable padding.
+	innerWidth := 56
+	for _, fl := range formLines {
+		if w := lipgloss.Width(fl) + 4; w > innerWidth {
+			innerWidth = w
+		}
+	}
+	maxInner := containerWidth - 12
+	if maxInner < 30 {
+		maxInner = 30
+	}
+	if innerWidth > maxInner {
+		innerWidth = maxInner
+	}
+
+	// Top border with title: ┌────<New Session>────┐
+	titleText := titleStyle.Render(title)
+	titleVisualWidth := lipgloss.Width(titleText)
+	titleDecorated := borderStyle.Render("<") + titleText + borderStyle.Render(">")
+	titleDecoratedWidth := titleVisualWidth + 2
+	remaining := innerWidth - titleDecoratedWidth
+	if remaining < 2 {
+		remaining = 2
+	}
+	leftDashes := remaining / 2
+	rightDashes := remaining - leftDashes
+	topLine := borderStyle.Render("┌"+strings.Repeat("─", leftDashes)) +
+		titleDecorated +
+		borderStyle.Render(strings.Repeat("─", rightDashes)+"┐")
+
+	emptyLine := borderStyle.Render("│") +
+		strings.Repeat(" ", innerWidth) +
+		borderStyle.Render("│")
+
+	bottomLine := borderStyle.Render("└" + strings.Repeat("─", innerWidth) + "┘")
+
+	// Hint line: "Tab: next  Enter: submit  Esc: cancel"
+	hint := hintStyle.Render("Tab: next  Enter: submit  Esc: cancel")
+	hintW := lipgloss.Width(hint)
+	hintPadL := (innerWidth - hintW) / 2
+	if hintPadL < 1 {
+		hintPadL = 1
+	}
+	hintPadR := innerWidth - hintW - hintPadL
+	if hintPadR < 0 {
+		hintPadR = 0
+	}
+	hintLine := borderStyle.Render("│") +
+		strings.Repeat(" ", hintPadL) + hint + strings.Repeat(" ", hintPadR) +
+		borderStyle.Render("│")
+
+	// Assemble the dialog lines.
+	var dialogLines []string
+	dialogLines = append(dialogLines, topLine, emptyLine)
+	for _, fl := range formLines {
+		lineW := lipgloss.Width(fl)
+		padL := 2
+		padR := innerWidth - lineW - padL
+		if padR < 0 {
+			padR = 0
+		}
+		dialogLines = append(dialogLines,
+			borderStyle.Render("│")+
+				strings.Repeat(" ", padL)+fl+strings.Repeat(" ", padR)+
+				borderStyle.Render("│"))
+	}
+	dialogLines = append(dialogLines, emptyLine, hintLine, emptyLine, bottomLine)
+
+	// Center the dialog in the container.
+	dlgHeight := len(dialogLines)
+	vOffset := (containerHeight - dlgHeight) / 2
+	if vOffset < 0 {
+		vOffset = 0
+	}
+
+	dlgVisualWidth := lipgloss.Width(dialogLines[0])
+	hPad := (containerWidth - dlgVisualWidth) / 2
+	if hPad < 0 {
+		hPad = 0
+	}
+
+	for i, dLine := range dialogLines {
+		target := vOffset + i
+		if target >= len(bgLines) {
+			break
+		}
+		bgLines[target] = strings.Repeat(" ", hPad) + dLine
+	}
+
+	return strings.Join(bgLines, "\n")
+}

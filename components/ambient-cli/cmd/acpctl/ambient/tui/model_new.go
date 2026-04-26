@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/ambient/tui/views"
@@ -55,6 +56,10 @@ type appTickMsg struct{ t time.Time }
 // messagePollTickMsg fires every messagePollInterval when the messages view is
 // active, triggering a REST poll for new session messages.
 type messagePollTickMsg struct{ t time.Time }
+
+// uiTickMsg fires every second to refresh cosmetic elements (e.g. the
+// stale-data counter in the header) without waiting for a keypress.
+type uiTickMsg struct{}
 
 // infoExpiredMsg signals the ephemeral info line should be cleared.
 type infoExpiredMsg struct{}
@@ -154,9 +159,14 @@ type AppModel struct {
 	// Errors
 	lastError string
 
-	// Dialog overlay (replaces inline delete confirmation and prompt mode for new resources).
+	// Dialog overlay for confirm/delete prompts.
 	dialog       *views.Dialog
-	dialogAction func() tea.Cmd // executed on DialogConfirmMsg{Confirmed: true}
+	dialogAction func(value string) tea.Cmd // executed on DialogConfirmMsg{Confirmed: true}
+
+	// Form overlay for multi-field creation dialogs (huh forms).
+	formOverlay    *huh.Form
+	formTitle      string         // title shown in the form border
+	formOnComplete func() tea.Cmd // called when form reaches StateCompleted
 
 	// Rate-limit backoff: skip the next poll cycle when a 429 is received.
 	skipNextPoll bool
@@ -302,6 +312,7 @@ func (m *AppModel) Init() tea.Cmd {
 		tea.WindowSize(),
 		m.client.FetchProjects(),
 		m.tickCmd(),
+		m.uiTickCmd(),
 	)
 }
 
@@ -317,6 +328,13 @@ func (m *AppModel) tickCmd() tea.Cmd {
 func (m *AppModel) messagePollTickCmd() tea.Cmd {
 	return tea.Tick(messagePollInterval, func(t time.Time) tea.Msg {
 		return messagePollTickMsg{t: t}
+	})
+}
+
+// uiTickCmd returns a tea.Cmd that sends a uiTickMsg after 1 second.
+func (m *AppModel) uiTickCmd() tea.Cmd {
+	return tea.Tick(time.Second, func(_ time.Time) tea.Msg {
+		return uiTickMsg{}
 	})
 }
 
@@ -474,6 +492,14 @@ func (m *AppModel) populateContextTable() {
 // Update implements tea.Model. It dispatches messages to the appropriate
 // handler based on the current mode and message type.
 func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// When a form overlay is active, forward ALL messages to it — huh emits
+	// internal messages (nextFieldMsg, etc.) that must round-trip through
+	// bubbletea's message loop. Only window-resize and ctrl-c are handled
+	// here; everything else goes to the form.
+	if m.formOverlay != nil {
+		return m.updateFormOverlay(msg)
+	}
+
 	switch msg := msg.(type) {
 
 	case tea.WindowSizeMsg:
@@ -601,6 +627,16 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.setInfo("Delete project failed: " + msg.Err.Error())
 		}
 		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Project deleted"))
+
+	case CreateSessionMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Create session failed: " + msg.Err.Error())
+		}
+		name := ""
+		if msg.Session != nil {
+			name = msg.Session.Name
+		}
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Session created: "+name))
 
 	case DeleteSessionMsg:
 		if msg.Err != nil {
@@ -757,6 +793,9 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
+	case uiTickMsg:
+		return m, m.uiTickCmd()
+
 	case appTickMsg:
 		return m.handleTick()
 
@@ -783,13 +822,13 @@ func (m *AppModel) resizeTable() {
 	}
 
 	// Layout budget:
-	//   header block: 5 lines
+	//   header block: 6 lines (5-line grid + server row)
 	//   command/filter bar: 1 line (when visible) — accounted for dynamically
 	//   title bar: 1 line
 	//   breadcrumb: 1 line
 	//   info line: 1 line
-	// Total chrome: ~8 lines, leaving the rest for the table.
-	tableHeight := m.height - 8
+	// Total chrome: ~9 lines, leaving the rest for the table.
+	tableHeight := m.height - 9
 	if m.commandMode || m.filterMode || m.promptMode {
 		tableHeight -= 3 // bordered command bar: top border + content + bottom border
 	}
@@ -1244,7 +1283,7 @@ func (m *AppModel) handleDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.dialog = nil
 			m.dialogAction = nil
 			if fn != nil {
-				return m, tea.Batch(fn(), m.setInfo("Processing..."))
+				return m, tea.Batch(fn(confirm.Value), m.setInfo("Processing..."))
 			}
 		} else {
 			m.dialog = nil
@@ -1254,6 +1293,57 @@ func (m *AppModel) handleDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// updateFormOverlay forwards all messages to the active huh form and detects
+// completion or abort. Called from the top of Update() before the type switch
+// so that huh's internal messages (nextFieldMsg, etc.) are properly routed.
+func (m *AppModel) updateFormOverlay(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle resize even while form is active.
+	if ws, ok := msg.(tea.WindowSizeMsg); ok {
+		m.width = ws.Width
+		m.height = ws.Height
+		m.resizeTable()
+	}
+
+	// Esc dismisses the form (huh uses ctrl+c for its own abort).
+	if key, ok := msg.(tea.KeyMsg); ok {
+		if key.Type == tea.KeyEsc {
+			m.formOverlay = nil
+			m.formTitle = ""
+			m.formOnComplete = nil
+			return m, m.setInfo("Cancelled")
+		}
+		if key.Type == tea.KeyCtrlC {
+			return m, tea.Quit
+		}
+	}
+
+	// Forward everything to the form.
+	model, cmd := m.formOverlay.Update(msg)
+	if f, ok := model.(*huh.Form); ok {
+		m.formOverlay = f
+	}
+
+	// Check terminal states.
+	switch m.formOverlay.State {
+	case huh.StateCompleted:
+		fn := m.formOnComplete
+		m.formOverlay = nil
+		m.formTitle = ""
+		m.formOnComplete = nil
+		if fn != nil {
+			return m, tea.Batch(fn(), m.setInfo("Processing..."))
+		}
+		return m, nil
+	case huh.StateAborted:
+		m.formOverlay = nil
+		m.formTitle = ""
+		m.formOnComplete = nil
+		return m, m.setInfo("Cancelled")
+	}
+
+	return m, cmd
 }
 
 // handleNormalKey processes keys when neither command nor filter mode is active.
@@ -1529,7 +1619,18 @@ func (m *AppModel) handleProjectsRune(key string) (tea.Model, tea.Cmd) {
 	case "e":
 		return m.openEditorForProject()
 	case "n":
-		return m, m.setInfo("Use acpctl project create")
+		var name, description string
+		form := views.NewProjectForm(&name, &description)
+		form.WithWidth(60)
+		m.formOverlay = form
+		m.formTitle = "New Project"
+		m.formOnComplete = func() tea.Cmd {
+			return tea.Batch(
+				m.client.CreateProject(name, description),
+				m.setInfo("Creating project "+name+"..."),
+			)
+		}
+		return m, m.formOverlay.Init()
 	}
 	return m, nil
 }
@@ -1642,7 +1743,22 @@ func (m *AppModel) handleAgentsRune(key string) (tea.Model, tea.Cmd) {
 	case "m":
 		return m, m.setInfo("Use :inbox or acpctl inbox send")
 	case "n":
-		return m, m.setInfo("Use acpctl agent create")
+		if m.currentProject == "" {
+			return m, m.setInfo("Navigate to a project first")
+		}
+		project := m.currentProject
+		var name, prompt string
+		form := views.NewAgentForm(&name, &prompt)
+		form.WithWidth(60)
+		m.formOverlay = form
+		m.formTitle = "New Agent"
+		m.formOnComplete = func() tea.Cmd {
+			return tea.Batch(
+				m.client.CreateAgent(project, name, prompt),
+				m.setInfo("Creating agent "+name+"..."),
+			)
+		}
+		return m, m.formOverlay.Init()
 	case "y":
 		row := m.agentTable.SelectedRow()
 		if len(row) == 0 {
@@ -1687,25 +1803,44 @@ func (m *AppModel) handleSessionsRune(key string) (tea.Model, tea.Cmd) {
 	case "m":
 		return m, m.setInfo("Use Enter to view messages, then m to compose")
 	case "n":
-		// Start a new session for the current agent.
-		if m.currentAgentID == "" || m.currentProject == "" {
-			return m, m.setInfo("Navigate to an agent first to start a session")
+		var name, prompt, projectID, agentID string
+		// Pre-select current project if set.
+		projectID = m.currentProject
+		// Pre-select current agent if set.
+		agentID = m.currentAgentID
+		// Build project options from cache.
+		var projectOpts []huh.Option[string]
+		for _, p := range m.cachedProjects {
+			opt := huh.NewOption(p.Name, p.Name)
+			if p.Name == projectID {
+				opt = opt.Selected(true)
+			}
+			projectOpts = append(projectOpts, opt)
 		}
-		// Open prompt input for session prompt text.
-		agentID := m.currentAgentID
-		project := m.currentProject
-		m.promptMode = true
-		m.promptInput.Prompt = "Session prompt: "
-		m.promptInput.Reset()
-		m.promptInput.Focus()
-		m.promptCallback = func(text string) (tea.Model, tea.Cmd) {
-			return m, tea.Batch(
-				m.client.StartAgent(project, agentID, text),
-				m.setInfo("Starting session..."),
+		if len(projectOpts) == 0 {
+			return m, m.setInfo("No projects available")
+		}
+		// Build agent options from cache.
+		agentOpts := []huh.Option[string]{
+			huh.NewOption("(none — standalone)", ""),
+		}
+		for _, a := range m.cachedAgents {
+			agentOpts = append(agentOpts, huh.NewOption(a.Name, a.ID))
+		}
+		form := views.NewSessionForm(&name, &prompt, &projectID, projectOpts, &agentID, agentOpts)
+		form.WithWidth(60)
+		m.formOverlay = form
+		m.formTitle = "New Session"
+		m.formOnComplete = func() tea.Cmd {
+			if projectID == "" {
+				return m.setInfo("Project is required")
+			}
+			return tea.Batch(
+				m.client.CreateSession(projectID, name, prompt, agentID),
+				m.setInfo("Creating session "+name+"..."),
 			)
 		}
-		m.resizeTable()
-		return m, nil
+		return m, m.formOverlay.Init()
 	case "y":
 		row := m.sessionTable.SelectedRow()
 		if len(row) == 0 {
@@ -1762,7 +1897,7 @@ func (m *AppModel) handleCtrlD() (tea.Model, tea.Cmd) {
 			projectID := project.ID
 			d := views.NewDeleteDialog("project", projectName)
 			m.dialog = &d
-			m.dialogAction = func() tea.Cmd {
+			m.dialogAction = func(_ string) tea.Cmd {
 				return m.client.DeleteProject(projectID)
 			}
 			return m, nil
@@ -1779,7 +1914,7 @@ func (m *AppModel) handleCtrlD() (tea.Model, tea.Cmd) {
 			currentProject := m.currentProject
 			d := views.NewDeleteDialog("agent", agentName)
 			m.dialog = &d
-			m.dialogAction = func() tea.Cmd {
+			m.dialogAction = func(_ string) tea.Cmd {
 				return m.client.DeleteAgent(currentProject, agentID)
 			}
 			return m, nil
@@ -1799,7 +1934,7 @@ func (m *AppModel) handleCtrlD() (tea.Model, tea.Cmd) {
 			sessionID := session.ID
 			d := views.NewDeleteDialog("session", shortID)
 			m.dialog = &d
-			m.dialogAction = func() tea.Cmd {
+			m.dialogAction = func(_ string) tea.Cmd {
 				return m.client.DeleteSession(project, sessionID)
 			}
 			return m, nil
@@ -1815,7 +1950,7 @@ func (m *AppModel) handleCtrlD() (tea.Model, tea.Cmd) {
 			currentAgentID := m.currentAgentID
 			d := views.NewDeleteDialog("inbox message", msgID)
 			m.dialog = &d
-			m.dialogAction = func() tea.Cmd {
+			m.dialogAction = func(_ string) tea.Cmd {
 				return m.client.DeleteInboxMessage(currentProject, currentAgentID, msgID)
 			}
 			return m, nil
@@ -1884,84 +2019,12 @@ func (m *AppModel) handleMessagesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // showHelp creates a HelpView for the current view and pushes it onto the nav stack.
+// Hints are pulled from the viewHintRegistry (hints.go) — the single source of truth.
 func (m *AppModel) showHelp() (tea.Model, tea.Cmd) {
-	// Fix 3: Capture the view name BEFORE changing activeView.
 	viewName := m.activeView
+	h := hintsForView(viewName)
 
-	general := []views.HelpEntry{
-		{":", "Command"},
-		{"/", "Filter"},
-		{"?", "Help"},
-		{"c", "Copy ID"},
-		{"shift-n", "Sort Name"},
-		{"shift-a", "Sort Age"},
-	}
-
-	var resource, navigation []views.HelpEntry
-
-	switch viewName {
-	case "projects":
-		resource = []views.HelpEntry{
-			{"d", "Describe"}, {"e", "Edit"}, {"n", "New"}, {"ctrl-d", "Delete"},
-		}
-		navigation = []views.HelpEntry{
-			{"Enter", "Drill into agents"}, {"q", "Quit"},
-		}
-	case "agents":
-		resource = []views.HelpEntry{
-			{"s", "Start"}, {"x", "Stop"}, {"e", "Edit"}, {"i", "Inbox"},
-			{"l", "Logs"}, {"d", "Describe"}, {"n", "New"}, {"ctrl-d", "Delete"},
-		}
-		navigation = []views.HelpEntry{
-			{"Enter", "Drill into sessions"}, {"Esc", "Back to projects"},
-			{"q", "Back"}, {"0-9", "Switch project"},
-		}
-	case "sessions":
-		resource = []views.HelpEntry{
-			{"d", "Describe"}, {"e", "Edit"}, {"l", "Logs"}, {"m", "Send"}, {"n", "New"},
-			{"y", "JSON"}, {"ctrl-d", "Delete"},
-		}
-		navigation = []views.HelpEntry{
-			{"Enter", "Drill into messages"}, {"Esc", "Back to agents"},
-			{"q", "Back"}, {"0-9", "Switch project"},
-		}
-	case "inbox":
-		resource = []views.HelpEntry{
-			{"m", "Compose"}, {"r", "Mark Read"}, {"ctrl-d", "Delete"},
-		}
-		navigation = []views.HelpEntry{
-			{"Enter", "View body"}, {"Esc", "Back to agents"}, {"q", "Back"},
-		}
-	case "messages":
-		resource = []views.HelpEntry{
-			{"s", "Autoscroll"}, {"r", "Raw Mode"}, {"p", "Pretty"}, {"t", "Timestamps"},
-			{"m", "Send"}, {"c", "Copy"}, {"shift-g", "Bottom"}, {"g", "Top"},
-		}
-		general = []views.HelpEntry{
-			{":", "Command"}, {"?", "Help"},
-		}
-		navigation = []views.HelpEntry{
-			{"Esc", "Back to sessions"}, {"q", "Back"},
-		}
-	case "contexts":
-		resource = []views.HelpEntry{}
-		navigation = []views.HelpEntry{
-			{"Enter", "Switch context"}, {"Esc", "Back"}, {"q", "Back"},
-		}
-	case "detail":
-		resource = []views.HelpEntry{
-			{"c", "Copy value"}, {"j/k", "Scroll"},
-		}
-		general = []views.HelpEntry{
-			{"?", "Help"},
-		}
-		navigation = []views.HelpEntry{
-			{"Esc", "Back"}, {"q", "Back"},
-		}
-	}
-
-	title := viewName
-	m.helpView = views.NewHelpView(title, resource, general, navigation)
+	m.helpView = views.NewHelpView(viewName, h.Resource, h.General, h.Navigation)
 	m.helpView.SetSize(m.width, m.height-10)
 	m.navStack = append(m.navStack, NavEntry{Kind: "help", Scope: viewName})
 	m.activeView = "help"
@@ -2665,64 +2728,13 @@ func stripJSONComments(s string) string {
 // Contextual hotkey hints for the header
 // ---------------------------------------------------------------------------
 
-// contextualHints returns the hotkey hints for the current active view.
+// contextualHints returns the hotkey hints for the current active view,
+// derived from the viewHintRegistry (hints.go).
 func (m *AppModel) contextualHints() []string {
-	switch m.activeView {
-	case "projects":
-		return []string{
-			"<d> Describe",
-			"<e> Edit",
-			"<n> New",
-			"<Ctrl-D> Delete",
-		}
-	case "agents":
-		return []string{
-			"<s> Start",
-			"<x> Stop",
-			"<i> Inbox",
-			"<d> Describe",
-			"<e> Edit",
-			"<l> Logs",
-			"<n> New",
-			"<Ctrl-D> Delete",
-		}
-	case "sessions":
-		return []string{
-			"<d> Describe",
-			"<e> Edit",
-			"<l> Logs",
-			"<m> Send",
-			"<n> New",
-			"<y> JSON",
-			"<Ctrl-D> Delete",
-		}
-	case "inbox":
-		return []string{
-			"<m> Compose",
-			"<r> Mark Read",
-			"<Ctrl-D> Delete",
-		}
-	case "messages":
-		return []string{
-			"<s> Autoscroll",
-			"<r> Raw",
-			"<p> Pretty",
-			"<t> Timestamps",
-			"<m> Send",
-			"<c> Copy",
-			"<shift-g> Bottom",
-			"<g> Top",
-		}
-	case "contexts":
-		return []string{
-			"(Enter to switch)",
-		}
-	case "detail":
-		return []string{
-			"<c> Copy",
-			"<Esc> Back",
-		}
-	default:
-		return nil
+	h := hintsForView(m.activeView)
+	var out []string
+	for _, e := range h.Resource {
+		out = append(out, "<"+e.Key+"> "+e.Action)
 	}
+	return out
 }

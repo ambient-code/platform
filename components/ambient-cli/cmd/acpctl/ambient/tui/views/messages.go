@@ -394,6 +394,12 @@ func (ms MessageStream) ComposeValue() string {
 	return ms.composeInput.Value()
 }
 
+// Toggle state getters — used by the header to highlight active toggles.
+func (ms MessageStream) IsAutoScroll() bool    { return ms.autoScroll }
+func (ms MessageStream) IsRawMode() bool       { return ms.rawMode }
+func (ms MessageStream) IsWrapMode() bool      { return ms.wrapMode }
+func (ms MessageStream) TimestampMode() int    { return ms.timestampMode }
+
 // SetSearchPattern sets or clears the message filter pattern.
 func (ms *MessageStream) SetSearchPattern(pat *regexp.Regexp) {
 	ms.searchPattern = pat
@@ -681,11 +687,19 @@ func (ms *MessageStream) View() string {
 		}
 	}
 
-	indicators := fmt.Sprintf("Autoscroll:%s     Raw:%s     Pretty:%s     Time:%s     Phase:%s     %s",
-		dimIndicator.Render(autoScrollLabel),
-		dimIndicator.Render(rawLabel),
-		dimIndicator.Render(prettyLabel),
-		dimIndicator.Render(tsLabel),
+	activeIndicator := lipgloss.NewStyle().Foreground(msgColorBlue)
+	renderToggle := func(label, value string, on bool) string {
+		s := dimIndicator
+		if on {
+			s = activeIndicator
+		}
+		return dimIndicator.Render(label+":") + s.Render(value)
+	}
+	indicators := fmt.Sprintf("%s     %s     %s     %s     Phase:%s     %s",
+		renderToggle("Autoscroll", autoScrollLabel, ms.autoScroll),
+		renderToggle("Raw", rawLabel, ms.rawMode),
+		renderToggle("Pretty", prettyLabel, ms.wrapMode),
+		renderToggle("Time", tsLabel, ms.timestampMode > 0),
 		phaseStyle.Render(ms.phase),
 		dimIndicator.Render(scrollPct),
 	)

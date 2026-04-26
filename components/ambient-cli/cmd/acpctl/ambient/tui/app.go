@@ -35,9 +35,12 @@ func (m *AppModel) View() string {
 		sections = append(sections, m.viewCommandBar())
 	}
 
-	// 3. Resource table with title bar (+ dialog overlay if active).
+	// 3. Resource table with title bar (+ dialog/form overlay if active).
 	tableOutput := m.viewResourceTable()
-	if m.dialog != nil {
+	if m.formOverlay != nil {
+		tableH := m.height - 10
+		tableOutput = views.OverlayForm(tableOutput, m.formOverlay.View(), m.formTitle, m.width, tableH)
+	} else if m.dialog != nil {
 		tableH := m.height - 10
 		tableOutput = views.OverlayDialog(tableOutput, *m.dialog, m.width, tableH)
 	}
@@ -70,12 +73,11 @@ func (m *AppModel) viewHeader() string {
 			}
 		}
 	}
-	// Col 1: metadata.
+	// Col 1: metadata (server is rendered on its own line below the header grid).
 	col1 := [5]string{
 		fmt.Sprintf(" %s %s %s", styleDim.Render("Context:"), styleOrange.Render(contextName), styleDim.Render("[RW]")),
 		fmt.Sprintf(" %s %s", styleDim.Render("User:   "), styleWhite.Render(m.currentUser())),
 		fmt.Sprintf(" %s %s", styleDim.Render("Project:"), styleOrange.Render(project)),
-		fmt.Sprintf(" %s %s", styleDim.Render("Server: "), styleDim.Render(serverURL)),
 	}
 
 	// Col 2: project shortcuts (stacked, padded to fixed width).
@@ -184,17 +186,17 @@ func (m *AppModel) viewHeader() string {
 		lines[i] = line + strings.Repeat(" ", gap) + right
 	}
 
-	return strings.Join(lines, "\n")
+	// Server URL on its own full-width row below the grid to avoid pushing columns.
+	serverLine := fmt.Sprintf(" %s %s", styleDim.Render("Server:"), styleDim.Render(serverURL))
+	return strings.Join(lines, "\n") + "\n" + serverLine
 }
 
 // renderHint renders a single hotkey hint like "<d> Describe" with dim brackets
 // and white action text.
 func (m *AppModel) renderHint(hint string) string {
-	// Parse hints of the form "<key> Action" or "(text)".
 	if strings.HasPrefix(hint, "(") {
 		return styleDim.Render(hint)
 	}
-	// Find the closing bracket.
 	idx := strings.Index(hint, ">")
 	if idx < 0 {
 		return styleDim.Render(hint)

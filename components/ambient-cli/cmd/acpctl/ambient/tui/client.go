@@ -127,6 +127,12 @@ type DeleteProjectMsg struct {
 	Err error
 }
 
+// CreateSessionMsg carries the result of creating a standalone session.
+type CreateSessionMsg struct {
+	Session *sdktypes.Session
+	Err     error
+}
+
 // UpdateSessionMsg carries the result of patching a session.
 type UpdateSessionMsg struct {
 	Session *sdktypes.Session
@@ -617,6 +623,37 @@ func (tc *TUIClient) DeleteProject(projectID string) tea.Cmd {
 // ---------------------------------------------------------------------------
 // Session operations
 // ---------------------------------------------------------------------------
+
+// CreateSession returns a tea.Cmd that creates a standalone session. The session
+// is not tied to an agent unless agentID is provided. Only name is required.
+func (tc *TUIClient) CreateSession(projectID, name, prompt, agentID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		proj := projectID
+		if proj == "" {
+			proj = "_"
+		}
+		client, err := tc.factory.ForProject(proj)
+		if err != nil {
+			return CreateSessionMsg{Err: err}
+		}
+
+		session := &sdktypes.Session{
+			Name:      name,
+			ProjectID: projectID,
+			Prompt:    prompt,
+			AgentID:   agentID,
+		}
+
+		result, err := client.Sessions().Create(ctx, session)
+		if err != nil {
+			return CreateSessionMsg{Err: err}
+		}
+		return CreateSessionMsg{Session: result}
+	}
+}
 
 // UpdateSession returns a tea.Cmd that patches a session with the given fields.
 func (tc *TUIClient) UpdateSession(projectID, sessionID string, patch map[string]any) tea.Cmd {
