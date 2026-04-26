@@ -105,12 +105,11 @@ PRODSEC_SKILLS_PROMPT = (
     "code, configuring infrastructure, auditing), read the relevant skill for guidance "
     "before proceeding. Key areas:\n"
     "- `secure_development/` — cryptography, web security, supply chain, MCP servers, "
-    "Kubernetes, API gateways, inference engines, agent security (103 skills)\n"
+    "Kubernetes, API gateways, inference engines, agent security\n"
     "- `security_testing/` — fuzzing (AFL++, libFuzzer, cargo-fuzz), static analysis "
-    "(Semgrep, CodeQL, SARIF) (17 skills)\n"
-    "- `security_auditing/` — context building, differential review, variant analysis "
-    "(4 skills)\n"
-    "- `developer_tooling/` — devcontainers, property-based testing (4 skills)\n"
+    "(Semgrep, CodeQL, SARIF)\n"
+    "- `security_auditing/` — context building, differential review, variant analysis\n"
+    "- `developer_tooling/` — devcontainers, property-based testing\n"
     "See `/app/prodsec-skills/skills/README.md` for the full index.\n\n"
 )
 

@@ -678,7 +678,7 @@ class ClaudeBridge(PlatformBridge):
 
         # Prodsec-skills: make security guidance available to every session
         _prodsec_path = "/app/prodsec-skills"
-        if Path(_prodsec_path).exists() and _prodsec_path not in add_dirs:
+        if Path(f"{_prodsec_path}/skills").exists() and _prodsec_path not in add_dirs:
             add_dirs.append(_prodsec_path)
 
         if add_dirs:

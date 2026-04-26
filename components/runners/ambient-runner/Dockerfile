@@ -47,7 +47,9 @@ RUN npm install -g @google/gemini-cli@${GEMINI_CLI_VERSION} && \
 RUN curl -fsSL https://cli.coderabbit.ai/install.sh | CODERABBIT_INSTALL_DIR=/usr/local/bin sh
 
 # Install prodsec-skills (Product Security guidance available to every session)
-RUN git clone --depth 1 https://github.com/RedHatProductSecurity/prodsec-skills.git /app/prodsec-skills && \
+ARG PRODSEC_SKILLS_REF=f100e15c3f560771e5ede57f7fce03dcb61512eb
+RUN git clone https://github.com/RedHatProductSecurity/prodsec-skills.git /app/prodsec-skills && \
+    git -C /app/prodsec-skills checkout --detach "${PRODSEC_SKILLS_REF}" && \
     rm -rf /app/prodsec-skills/.git
 
 # Set environment variables
