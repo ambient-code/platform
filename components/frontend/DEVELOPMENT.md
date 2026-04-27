@@ -208,6 +208,20 @@ The `+` button dropdown in `new-session-view.tsx` is the single entry point for 
 
 New options flow: `onCreateSession` config → `page.tsx` → `createSessionMutation.mutate()` → POST `/api/projects/{project}/agentic-sessions` → backend handler → CR spec. For booleans, add to `CreateAgenticSessionRequest` in `types/session.go`. For complex options, serialize to env var on the CR and parse in the runner.
 
+### Adding an Integration to Onboarding
+
+When adding a new `*ConnectionCard` to the platform:
+
+1. Add the status field to `IntegrationsStatus` in `src/services/api/integrations.ts`.
+2. Add one `IntegrationEntry` to `INTEGRATION_REGISTRY` in `src/components/onboarding/integration-registry.ts`:
+   - `id` matching the new key in `IntegrationsStatus`
+   - `name`, `description` for display
+   - `isConnected` function deriving boolean from the status shape
+   - `renderCard` wrapping the new `*ConnectionCard` component
+3. No other onboarding files need to change. The integrations step iterates the registry automatically.
+
+The compile-time guard will error if you add a status field without a registry entry.
+
 ## Pre-Commit Checklist
 
 - [ ] Zero `any` types (or justified with eslint-disable)
