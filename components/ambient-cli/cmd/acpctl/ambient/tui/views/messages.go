@@ -1423,6 +1423,8 @@ func (ms *MessageStream) renderConversationEntry(entry MessageEntry, maxWidth in
 
 	// In pretty mode, render through glamour for markdown support.
 	// Uses per-message cache to avoid re-rendering on every frame.
+	// Glamour renders displayText (extracted content), not the raw payload
+	// which may be a JSON envelope for AG-UI events.
 	if ms.wrapMode {
 		if ms.glamourCache == nil {
 			ms.glamourCache = make(map[int]string)
@@ -1433,7 +1435,7 @@ func (ms *MessageStream) renderConversationEntry(entry MessageEntry, maxWidth in
 		} else {
 			glamourWidth := max(ms.width-20, 20)
 			if r := ms.getGlamourRenderer(glamourWidth); r != nil {
-				out, err := r.Render(strings.TrimSpace(sanitizedPayload))
+				out, err := r.Render(strings.TrimSpace(displayText))
 				if err == nil {
 					rendered = strings.TrimSpace(out)
 					ms.glamourCache[entry.Seq] = rendered
