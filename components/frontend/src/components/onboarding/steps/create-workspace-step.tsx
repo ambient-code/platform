@@ -7,7 +7,7 @@ import { WorkspaceForm } from "@/components/workspace-form";
 import type { CreateProjectRequest } from "@/types/project";
 import type { WizardStepProps } from "../welcome-wizard";
 
-export function CreateWorkspaceStep({ onNext, wizardState }: WizardStepProps) {
+export function CreateWorkspaceStep({ onNext }: WizardStepProps) {
   const createProjectMutation = useCreateProject();
   const [error, setError] = useState<string | null>(null);
 
