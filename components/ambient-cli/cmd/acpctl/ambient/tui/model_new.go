@@ -741,6 +741,24 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err != nil {
 			return m, m.setInfo("Send message failed: " + msg.Err.Error())
 		}
+		// Add the user message to the stream immediately so it's visible
+		// without waiting for a poll. The /events stream only carries
+		// runner AG-UI events, not echoed user messages.
+		if msg.Message != nil {
+			ts := time.Now()
+			if msg.Message.CreatedAt != nil {
+				ts = *msg.Message.CreatedAt
+			}
+			m.messageStream.AddMessage(views.MessageEntry{
+				Seq:       msg.Message.Seq,
+				EventType: "user",
+				Payload:   msg.Message.Payload,
+				Timestamp: ts,
+			})
+			if msg.Message.Seq > m.lastMessageSeq {
+				m.lastMessageSeq = msg.Message.Seq
+			}
+		}
 		return m, m.setInfo("Message sent")
 
 	case SendInboxMsg:
@@ -1593,15 +1611,16 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 				// Always fetch historical messages first for context.
 				cmds = append(cmds, m.client.FetchSessionMessages(projectID, fullSessionID, 0))
 
+				// Always run message polling for DB-persisted user/assistant
+				// messages (the /events stream only carries AG-UI runner events).
+				m.messagePollActive = true
+				cmds = append(cmds, m.messagePollTickCmd())
+
 				if isRunningPhase(phase) && m.program != nil {
 					// For running sessions, also start the AG-UI event stream
 					// for live tool calls and text deltas.
 					m.messageStream.SetSSEStatus("connecting")
 					cmds = append(cmds, m.client.WatchSessionEvents(projectID, fullSessionID, m.program))
-				} else {
-					// For completed sessions, poll /messages for any updates.
-					m.messagePollActive = true
-					cmds = append(cmds, m.messagePollTickCmd())
 				}
 			}
 
@@ -1854,14 +1873,12 @@ func (m *AppModel) handleAgentsRune(key string) (tea.Model, tea.Cmd) {
 		}
 
 		if m.currentProject != "" {
-			// Fetch history first, then start live stream.
 			cmds = append(cmds, m.client.FetchSessionMessages(m.currentProject, sessionID, 0))
+			m.messagePollActive = true
+			cmds = append(cmds, m.messagePollTickCmd())
 			if m.program != nil {
 				m.messageStream.SetSSEStatus("connecting")
 				cmds = append(cmds, m.client.WatchSessionEvents(m.currentProject, sessionID, m.program))
-			} else {
-				m.messagePollActive = true
-				cmds = append(cmds, m.messagePollTickCmd())
 			}
 		}
 
