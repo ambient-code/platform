@@ -37,6 +37,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <meta name="backend-ws-base" content={wsBase} />
+        <meta name="github-app-slug" content={env.GITHUB_APP_SLUG ?? ''} />
+        <meta name="github-callback-url" content={process.env.GITHUB_CALLBACK_URL ?? ''} />
       </head>
       {/* suppressHydrationWarning is needed here as well since ThemeProvider modifies the class attribute */}
       <body className={`${GeistSans.variable} ${GeistMono.variable} font-sans min-h-screen flex flex-col`} suppressHydrationWarning>
