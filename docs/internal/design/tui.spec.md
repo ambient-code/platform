@@ -259,9 +259,13 @@ Accessible globally (`:sessions` — all sessions across all projects) or scoped
 
 #### Data Source
 
-The TUI connects to **`GET /sessions/{id}/messages`** (SSE). This single endpoint handles both replay and live delivery server-side: it loads all messages after a cursor via `AllBySessionIDAfterSeq`, subscribes to the pub/sub channel, replays the historical batch, then switches to live delivery — deduplicating by `msg.Seq`. The TUI does not need to coordinate two endpoints.
+The TUI uses a **dual-stream strategy** for session messages:
 
-The `/events` endpoint (raw runner SSE) is not used. `/messages` is the durable, replay-safe stream.
+1. **Live sessions** (`phase == Running`): Connect to **`GET /sessions/{id}/events`** (AG-UI SSE stream). This proxies raw events from the runner pod, including tool calls (`tool_use`, `tool_result`, `TOOL_CALL_START`, `TOOL_CALL_ARGS`, `TOOL_CALL_RESULT`), text deltas, and system events. This gives operators full visibility into agent activity as it happens.
+
+2. **Historical replay / fallback**: Connect to **`GET /sessions/{id}/messages`** (DB-backed SSE). This endpoint serves durable `user`/`assistant` messages from the API server's database. Used when the session is not running (completed, stopped, failed) or when the `/events` stream fails.
+
+The SDK provides `StreamEvents(ctx, sessionID)` for the live AG-UI stream and `WatchMessages(ctx, sessionID, afterSeq)` for the DB-backed stream. The TUI prefers `/events` for running sessions and falls back to `/messages` for completed sessions or on error.
 
 #### Display Modes
 
@@ -294,6 +298,15 @@ The `/events` endpoint (raw runner SSE) is not used. `/messages` is the durable,
 | `assistant` | Full text, green. For streaming: accumulate `TEXT_MESSAGE_CONTENT` deltas into a growing line, re-render on each delta. Show `▌` cursor at end until `TEXT_MESSAGE_END`. |
 | `tool_use` | One-line summary: tool name + first arg, truncated to terminal width. Dim. |
 | `tool_result` | One-line summary: `✓` or `✗` + size. Dim. Expandable via `Enter` on the line (future). |
+| `TOOL_CALL_START` | One-line summary: `⚙ tool_name`. Dim. |
+| `TOOL_CALL_ARGS` | Tool input args (truncated in default mode, full in pretty mode). Dim. |
+| `TOOL_CALL_RESULT` | Tool output content (truncated in default mode, full in pretty mode). Dim. |
+| `TOOL_CALL_END` | Suppressed (no visual output). |
+| `TEXT_MESSAGE_START` | Suppressed (streaming start marker). |
+| `TEXT_MESSAGE_CONTENT` | Delta text, accumulated into the current assistant message. |
+| `TEXT_MESSAGE_END` | Suppressed (streaming end marker). |
+| `RUN_FINISHED` | `[done]` marker. Dim. |
+| `RUN_ERROR` | `✗` + error message. Red. |
 | `system` | Full text, yellow |
 | `error` | Full text, red |
 
@@ -468,7 +481,8 @@ Examples:
 |----------|--------|----------|
 | Projects, Agents, Inbox | REST `GET` polling | 5s (hardcoded) |
 | Sessions | gRPC `WatchSessions` stream; fallback to REST polling | Real-time / 5s |
-| Session Messages | SSE stream (`GET /sessions/{id}/messages`) | Real-time |
+| Session Messages (live) | AG-UI SSE stream (`GET /sessions/{id}/events`) | Real-time |
+| Session Messages (replay) | DB-backed SSE (`GET /sessions/{id}/messages`) | Real-time |
 
 Polling is **skip-on-inflight**: if the previous request has not completed, the next tick is skipped. This prevents request stacking under degraded API conditions.
 
