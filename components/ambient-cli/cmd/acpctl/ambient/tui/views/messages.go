@@ -701,6 +701,8 @@ func (ms *MessageStream) SetPhase(phase string) {
 
 // SetSSEStatus updates the SSE connection status indicator shown in the header.
 // Valid values: "", "connected", "reconnecting", "disconnected".
+func (ms MessageStream) GetSSEStatus() string { return ms.sseStatus }
+
 func (ms *MessageStream) SetSSEStatus(status string) {
 	ms.sseStatus = status
 }

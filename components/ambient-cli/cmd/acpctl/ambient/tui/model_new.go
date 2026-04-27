@@ -842,9 +842,19 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.activeView != "messages" {
 			return m, nil
 		}
+		sseConnected := m.messageStream.GetSSEStatus() == "connected"
 		for _, sm := range msg.Messages {
 			if sm.Seq <= m.lastMessageSeq {
 				continue // already seen via SSE or previous poll
+			}
+			// When the event stream is connected, skip assistant messages
+			// from polling — they're DB echoes of what the event stream
+			// already delivered live. Only let user messages through.
+			if sseConnected && sm.EventType == "assistant" {
+				if sm.Seq > m.lastMessageSeq {
+					m.lastMessageSeq = sm.Seq
+				}
+				continue
 			}
 			ts := time.Now()
 			if sm.CreatedAt != nil {
