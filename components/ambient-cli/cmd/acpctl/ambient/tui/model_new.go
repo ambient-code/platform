@@ -778,8 +778,9 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.Message != nil && m.activeView == "messages" {
-			// Dedup: skip messages already seen via polling.
-			if msg.Message.Seq <= m.lastMessageSeq {
+			// Dedup: skip messages already seen via polling (not applicable
+			// to live AG-UI events which use their own seq counter).
+			if !msg.IsLiveEvent && msg.Message.Seq <= m.lastMessageSeq {
 				return m, nil
 			}
 			m.messageStream.SetSSEStatus("connected")
