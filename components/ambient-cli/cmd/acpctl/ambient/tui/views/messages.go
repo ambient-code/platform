@@ -408,6 +408,12 @@ type MessageStream struct {
 	glamourRenderer *glamour.TermRenderer
 	glamourWidth    int // width used to create the cached renderer
 
+	// Streaming accumulator — coalesces AG-UI deltas into a single growing entry.
+	streamingEntry    *MessageEntry  // the in-progress text message being accumulated
+	streamingText     strings.Builder // accumulated text for the current text message
+	streamingToolEntry *MessageEntry  // the in-progress tool call being accumulated
+	streamingToolArgs  strings.Builder // accumulated args for the current tool call
+
 	// Cached display lines — rebuilt when mode/messages change, not every frame.
 	cachedLines      []string
 	cachedDirty      bool // true when lines need rebuilding
@@ -483,6 +489,144 @@ func (ms *MessageStream) AddMessage(entry MessageEntry) {
 	ms.cachedDirty = true
 	if ms.autoScroll {
 		ms.scrollToBottom()
+	}
+}
+
+// HandleStreamEvent processes AG-UI streaming events by accumulating deltas
+// into a single growing message entry instead of creating a separate entry per
+// delta. This produces clean output where text streams in place rather than
+// appearing as dozens of fragment lines.
+func (ms *MessageStream) HandleStreamEvent(entry MessageEntry) {
+	switch entry.EventType {
+
+	// -- Text message accumulation --
+
+	case "TEXT_MESSAGE_START":
+		// Begin a new assistant message slot.
+		ms.streamingText.Reset()
+		newEntry := MessageEntry{
+			Seq:       entry.Seq,
+			EventType: "assistant",
+			Payload:   "",
+			Timestamp: entry.Timestamp,
+		}
+		ms.streamingEntry = &newEntry
+		ms.messages = append(ms.messages, newEntry)
+		ms.evictIfNeeded()
+		ms.cachedDirty = true
+		if ms.autoScroll {
+			ms.scrollToBottom()
+		}
+
+	case "TEXT_MESSAGE_CONTENT":
+		delta := extractJSONField(entry.Payload, "delta")
+		if delta == "" {
+			return
+		}
+		ms.streamingText.WriteString(delta)
+		// Update the last message entry in place.
+		if ms.streamingEntry != nil && len(ms.messages) > 0 {
+			ms.messages[len(ms.messages)-1].Payload = ms.streamingText.String()
+			// Invalidate glamour cache for this entry since content changed.
+			if ms.glamourCache != nil {
+				delete(ms.glamourCache, ms.messages[len(ms.messages)-1].Seq)
+			}
+			ms.cachedDirty = true
+			if ms.autoScroll {
+				ms.scrollToBottom()
+			}
+		}
+
+	case "TEXT_MESSAGE_END":
+		// Finalize the accumulated text message.
+		ms.streamingEntry = nil
+		ms.cachedDirty = true
+
+	// -- Tool call accumulation --
+
+	case "TOOL_CALL_START":
+		ms.streamingToolArgs.Reset()
+		// Extract the tool name from the payload.
+		toolName := extractJSONField(entry.Payload, "tool_call_name")
+		if toolName == "" {
+			toolName = extractJSONField(entry.Payload, "tool_name")
+		}
+		if toolName == "" {
+			toolName = extractJSONField(entry.Payload, "toolCallName")
+		}
+		if toolName == "" {
+			toolName = extractJSONField(entry.Payload, "name")
+		}
+		newEntry := MessageEntry{
+			Seq:       entry.Seq,
+			EventType: "tool_use",
+			Payload:   toolName,
+			Timestamp: entry.Timestamp,
+		}
+		ms.streamingToolEntry = &newEntry
+		ms.messages = append(ms.messages, newEntry)
+		ms.evictIfNeeded()
+		ms.cachedDirty = true
+		if ms.autoScroll {
+			ms.scrollToBottom()
+		}
+
+	case "TOOL_CALL_ARGS":
+		delta := extractJSONField(entry.Payload, "delta")
+		if delta == "" {
+			return
+		}
+		ms.streamingToolArgs.WriteString(delta)
+		// Append accumulated args to the tool call entry's payload.
+		if ms.streamingToolEntry != nil && len(ms.messages) > 0 {
+			// Find the tool call entry (it may not be the very last if a text
+			// message arrived between START and ARGS, but typically it is).
+			for i := len(ms.messages) - 1; i >= 0; i-- {
+				if ms.messages[i].Seq == ms.streamingToolEntry.Seq {
+					// Keep the tool name, append args after a space.
+					baseName := ms.streamingToolEntry.Payload
+					ms.messages[i].Payload = baseName + " " + ms.streamingToolArgs.String()
+					break
+				}
+			}
+			ms.cachedDirty = true
+			if ms.autoScroll {
+				ms.scrollToBottom()
+			}
+		}
+
+	case "TOOL_CALL_END":
+		ms.streamingToolEntry = nil
+		ms.cachedDirty = true
+
+	// -- Non-accumulated events: add as normal entries --
+
+	case "TOOL_CALL_RESULT":
+		entry.EventType = "tool_result"
+		ms.AddMessage(entry)
+
+	default:
+		// RUN_FINISHED, RUN_ERROR, and anything else — pass through.
+		ms.AddMessage(entry)
+	}
+}
+
+// IsStreaming returns true when a text message is actively being accumulated
+// from AG-UI deltas. Used by View() to show the streaming cursor.
+func (ms *MessageStream) IsStreaming() bool {
+	return ms.streamingEntry != nil
+}
+
+// evictIfNeeded trims the message buffer to maxMessages if it has grown too large.
+func (ms *MessageStream) evictIfNeeded() {
+	if len(ms.messages) > ms.maxMessages {
+		excess := len(ms.messages) - ms.maxMessages
+		if ms.glamourCache != nil {
+			for _, evicted := range ms.messages[:excess] {
+				delete(ms.glamourCache, evicted.Seq)
+			}
+		}
+		ms.messages = ms.messages[excess:]
 	}
 }
 
@@ -897,8 +1041,9 @@ func (ms *MessageStream) View() string {
 		bottomLines = append([]string{composeSep, composeLine}, bottomLines...)
 	}
 
-	// Streaming cursor (when phase is running) — animated.
-	if strings.ToLower(ms.phase) == "running" {
+	// Streaming cursor — shown when phase is running OR when actively
+	// accumulating AG-UI deltas (IsStreaming).
+	if strings.ToLower(ms.phase) == "running" || ms.IsStreaming() {
 		cursorStyle := msgCursorStyle
 		frames := []string{"▌", "▐", "█", "▐"}
 		frame := frames[time.Now().UnixMilli()/300%4]
@@ -1228,7 +1373,7 @@ func (ms *MessageStream) contentHeight() int {
 	if ms.composeMode {
 		bottomLines += 2 // compose separator + compose line
 	}
-	if strings.ToLower(ms.phase) == "running" {
+	if strings.ToLower(ms.phase) == "running" || ms.IsStreaming() {
 		bottomLines++ // streaming cursor line
 	}
 	h := ms.height - topLines - bottomLines

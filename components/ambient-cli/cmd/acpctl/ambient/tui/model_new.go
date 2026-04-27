@@ -787,12 +787,23 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.Message.CreatedAt != nil {
 				ts = *msg.Message.CreatedAt
 			}
-			m.messageStream.AddMessage(views.MessageEntry{
+			entry := views.MessageEntry{
 				Seq:       msg.Message.Seq,
 				EventType: msg.Message.EventType,
 				Payload:   msg.Message.Payload,
 				Timestamp: ts,
-			})
+			}
+			// Route AG-UI streaming events through the accumulator so that
+			// deltas are coalesced into a single growing message instead of
+			// appearing as dozens of fragment lines.
+			switch msg.Message.EventType {
+			case "TEXT_MESSAGE_START", "TEXT_MESSAGE_CONTENT", "TEXT_MESSAGE_END",
+				"TOOL_CALL_START", "TOOL_CALL_ARGS", "TOOL_CALL_END",
+				"TOOL_CALL_RESULT":
+				m.messageStream.HandleStreamEvent(entry)
+			default:
+				m.messageStream.AddMessage(entry)
+			}
 			// Track highest seq for polling.
 			if msg.Message.Seq > m.lastMessageSeq {
 				m.lastMessageSeq = msg.Message.Seq
