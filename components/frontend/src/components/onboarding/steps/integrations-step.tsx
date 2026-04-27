@@ -14,7 +14,7 @@ import type { WizardStepProps } from "../welcome-wizard";
 const SESSION_KEY = "acp-onboarding-wizard-state";
 
 export function IntegrationsStep({ onNext, wizardState }: WizardStepProps) {
-  const { data: integrations, isLoading, refetch } = useIntegrationsStatus();
+  const { data: integrations, isLoading, isError, refetch } = useIntegrationsStatus();
   const appConfig = useAppConfig();
 
   const connectedCount = integrations
@@ -63,6 +63,16 @@ export function IntegrationsStep({ onNext, wizardState }: WizardStepProps) {
       {isLoading ? (
         <div className="flex items-center justify-center py-8">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : isError ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4">
+          <p className="text-sm text-destructive">
+            Failed to load integrations. You can skip this step and configure
+            them later from the Integrations page.
+          </p>
+          <Button variant="outline" className="mt-3" onClick={() => refetch()}>
+            Retry
+          </Button>
         </div>
       ) : integrations ? (
         <ScrollableCardGrid>

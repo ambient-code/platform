@@ -26,7 +26,8 @@ function generateWorkspaceName(displayName: string): string {
     .replace(/[^a-z0-9-]/g, "")
     .replace(/-+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 63);
+    .slice(0, 63)
+    .replace(/^-+|-+$/g, "");
 }
 
 function validateProjectName(name: string): string | null {
@@ -128,6 +129,9 @@ export function WorkspaceForm({
               placeholder="e.g. My Research Workspace"
               maxLength={100}
             />
+            {nameError && (
+              <p className="text-sm text-red-600 dark:text-red-400">{nameError}</p>
+            )}
           </div>
         )}
 
@@ -189,7 +193,7 @@ export function WorkspaceForm({
             Cancel
           </Button>
         )}
-        <Button data-testid="create-workspace-submit" type="submit" disabled={isSubmitting || !!nameError}>
+        <Button data-testid="create-workspace-submit" type="submit" disabled={isSubmitting || clusterLoading || !!nameError}>
           {isSubmitting
             ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating...</>
             : <><Save className="w-4 h-4 mr-2" />{submitLabel}</>}

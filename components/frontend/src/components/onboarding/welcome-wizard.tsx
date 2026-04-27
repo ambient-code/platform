@@ -33,27 +33,40 @@ type WelcomeWizardProps = {
 
 const STEPS = [WelcomeStep, CreateWorkspaceStep, IntegrationsStep, CompletionStep];
 
+function clearSessionState() {
+  try { sessionStorage.removeItem(SESSION_KEY); } catch { /* noop */ }
+}
+
 export function WelcomeWizard({ open, onDismiss }: WelcomeWizardProps) {
   const [stepIndex, setStepIndex] = useState(0);
   const [wizardState, setWizardState] = useState<WizardState>({
     createdWorkspaceName: null,
   });
 
-  // Resume from sessionStorage after OAuth redirect (GitHub App install)
   useEffect(() => {
     try {
       const saved = sessionStorage.getItem(SESSION_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as { step?: number; createdWorkspaceName?: string };
-        if (parsed.step !== undefined) setStepIndex(parsed.step);
-        if (parsed.createdWorkspaceName)
-          setWizardState((s) => ({ ...s, createdWorkspaceName: parsed.createdWorkspaceName ?? null }));
-        sessionStorage.removeItem(SESSION_KEY);
+      if (!saved) return;
+
+      const parsed = JSON.parse(saved) as { step?: number; createdWorkspaceName?: string };
+
+      if (typeof parsed.step === "number" && parsed.step >= 0 && parsed.step < STEPS.length) {
+        setStepIndex(parsed.step);
+      }
+      if (typeof parsed.createdWorkspaceName === "string" && parsed.createdWorkspaceName) {
+        setWizardState((s) => ({ ...s, createdWorkspaceName: parsed.createdWorkspaceName ?? null }));
       }
     } catch {
       // sessionStorage may be unavailable or contain invalid JSON
+    } finally {
+      clearSessionState();
     }
   }, []);
+
+  const dismissWizard = useCallback(() => {
+    clearSessionState();
+    onDismiss();
+  }, [onDismiss]);
 
   const handleNext = useCallback(
     (update?: Partial<WizardState>) => {
@@ -61,10 +74,10 @@ export function WelcomeWizard({ open, onDismiss }: WelcomeWizardProps) {
       if (stepIndex < STEPS.length - 1) {
         setStepIndex((i) => i + 1);
       } else {
-        onDismiss();
+        dismissWizard();
       }
     },
-    [stepIndex, onDismiss]
+    [stepIndex, dismissWizard]
   );
 
   const StepComponent = STEPS[stepIndex];
@@ -73,7 +86,7 @@ export function WelcomeWizard({ open, onDismiss }: WelcomeWizardProps) {
   const isIntermediate = stepIndex > 0 && stepIndex < STEPS.length - 1;
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onDismiss(); }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) dismissWizard(); }}>
       <DialogContent
         showCloseButton={!isIntermediate}
         className={`w-[calc(100%-2rem)] max-h-[90vh] overflow-y-auto transition-[max-width] duration-200 ${isWideStep ? "sm:max-w-[95vw] lg:max-w-[1200px]" : "sm:max-w-[720px]"}`}
@@ -88,14 +101,14 @@ export function WelcomeWizard({ open, onDismiss }: WelcomeWizardProps) {
 
         <StepComponent
           onNext={handleNext}
-          onSkip={onDismiss}
+          onSkip={dismissWizard}
           wizardState={wizardState}
         />
 
         {isIntermediate && (
           <button
             type="button"
-            onClick={onDismiss}
+            onClick={dismissWizard}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors self-center mt-2"
           >
             Skip setup

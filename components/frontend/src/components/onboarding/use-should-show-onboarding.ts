@@ -21,15 +21,19 @@ export function useShouldShowOnboarding(): {
   isLoading: boolean;
   dismiss: () => void;
 } {
-  const { data, isLoading } = useProjectsPaginated({ limit: 1 });
+  const { data, isLoading, isError } = useProjectsPaginated({ limit: 1 });
 
   const [dismissed, setDismissed] = useState(() => {
     if (typeof window === "undefined") return false;
-    return localStorage.getItem(ONBOARDING_FLAG) === "true";
+    try {
+      return localStorage.getItem(ONBOARDING_FLAG) === "true";
+    } catch {
+      return false;
+    }
   });
 
   const hasProjects = (data?.totalCount ?? 0) > 0;
-  const shouldShow = !isLoading && !hasProjects && !dismissed;
+  const shouldShow = !isLoading && !isError && !hasProjects && !dismissed;
 
   const dismiss = useCallback(() => {
     setDismissed(true);
