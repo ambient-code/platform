@@ -533,9 +533,15 @@ func (ms *MessageStream) updateNormal(msg tea.KeyMsg) (MessageStream, tea.Cmd) {
 		switch msg.String() {
 		case "r":
 			ms.rawMode = !ms.rawMode
+			if ms.autoScroll {
+				ms.scrollToBottom()
+			}
 			return *ms, nil
 		case "p":
 			ms.wrapMode = !ms.wrapMode
+			if ms.autoScroll {
+				ms.scrollToBottom()
+			}
 			return *ms, nil
 		case "t":
 			ms.timestampMode = (ms.timestampMode + 1) % 3

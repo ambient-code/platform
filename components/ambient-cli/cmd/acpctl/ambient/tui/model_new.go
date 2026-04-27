@@ -556,6 +556,14 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case InboxMsg:
 		return m.handleInboxMsg(msg)
 
+	case views.DialogCancelMsg:
+		m.dialog = nil
+		m.dialogAction = nil
+		return m, m.setInfo("Cancelled")
+
+	case views.DialogConfirmMsg:
+		return m.handleDialogConfirm(msg)
+
 	case views.MsgStreamCopyMsg:
 		// Clipboard copy result from the message stream sub-model.
 		if msg.Err != nil {
@@ -1327,43 +1335,34 @@ func (m *AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleDialogKey delegates key events to the active dialog overlay and
-// processes the resulting DialogConfirmMsg / DialogCancelMsg.
+// returns the resulting command to the bubbletea runtime for dispatch.
 func (m *AppModel) handleDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	dlg, cmd := m.dialog.Update(msg)
 	m.dialog = &dlg
+	return m, cmd
+}
 
-	if cmd == nil {
-		return m, nil
-	}
-
-	// Execute the command to get the message, then dispatch it.
-	resultMsg := cmd()
-	switch resultMsg.(type) {
-	case views.DialogCancelMsg:
+// handleDialogResult processes DialogConfirmMsg / DialogCancelMsg delivered
+// by the bubbletea runtime (rather than being called inline).
+func (m *AppModel) handleDialogConfirm(confirm views.DialogConfirmMsg) (tea.Model, tea.Cmd) {
+	if confirm.Confirmed {
+		fn := m.dialogAction
 		m.dialog = nil
 		m.dialogAction = nil
-		return m, m.setInfo("Cancelled")
-	case views.DialogConfirmMsg:
-		confirm := resultMsg.(views.DialogConfirmMsg)
-		if confirm.Confirmed {
-			fn := m.dialogAction
-			m.dialog = nil
-			m.dialogAction = nil
-			if fn != nil {
-				return m, tea.Batch(fn(confirm.Value), m.setInfo("Processing..."))
-			}
-		} else {
-			m.dialog = nil
-			infoText := "Cancelled"
-			if m.dialogAction == nil {
-				// Error/info dialog (single-button dismiss) — not a cancel.
-				infoText = "Dismissed"
-			}
-			m.dialogAction = nil
-			return m, m.setInfo(infoText)
+		if fn != nil {
+			return m, tea.Batch(fn(confirm.Value), m.setInfo("Processing..."))
 		}
+	} else {
+		m.dialog = nil
+		infoText := "Cancelled"
+		if m.dialogAction == nil {
+			infoText = "Dismissed"
+		}
+		m.dialogAction = nil
+		return m, m.setInfo(infoText)
 	}
-
+	m.dialog = nil
+	m.dialogAction = nil
 	return m, nil
 }
 
