@@ -1575,15 +1575,18 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 			}
 
 			if projectID != "" {
-				// Use AG-UI event stream for running sessions; poll /messages
-				// for completed/stopped/failed sessions (historical replay).
+				// Always fetch historical messages first for context.
+				cmds = append(cmds, m.client.FetchSessionMessages(projectID, fullSessionID, 0))
+
 				if isRunningPhase(phase) && m.program != nil {
+					// For running sessions, also start the AG-UI event stream
+					// for live tool calls and text deltas.
 					m.messageStream.SetSSEStatus("connecting")
 					cmds = append(cmds, m.client.WatchSessionEvents(projectID, fullSessionID, m.program))
 				} else {
+					// For completed sessions, poll /messages for any updates.
 					m.messagePollActive = true
 					cmds = append(cmds, m.messagePollTickCmd())
-					cmds = append(cmds, m.client.FetchSessionMessages(projectID, fullSessionID, 0))
 				}
 			}
 
@@ -1836,14 +1839,14 @@ func (m *AppModel) handleAgentsRune(key string) (tea.Model, tea.Cmd) {
 		}
 
 		if m.currentProject != "" {
-			// Active agent sessions are running — use the AG-UI event stream.
+			// Fetch history first, then start live stream.
+			cmds = append(cmds, m.client.FetchSessionMessages(m.currentProject, sessionID, 0))
 			if m.program != nil {
 				m.messageStream.SetSSEStatus("connecting")
 				cmds = append(cmds, m.client.WatchSessionEvents(m.currentProject, sessionID, m.program))
 			} else {
 				m.messagePollActive = true
 				cmds = append(cmds, m.messagePollTickCmd())
-				cmds = append(cmds, m.client.FetchSessionMessages(m.currentProject, sessionID, 0))
 			}
 		}
 
