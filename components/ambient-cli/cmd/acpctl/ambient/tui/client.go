@@ -1011,9 +1011,16 @@ func (tc *TUIClient) WatchSessionEvents(projectID, sessionID string, program *te
 					return
 				}
 
-				// If the stream ended normally (RUN_FINISHED/RUN_ERROR), we're done.
+				// If the stream ended normally (RUN_FINISHED/RUN_ERROR), the current
+				// run is done but another may start when the user sends a message.
+				// Reconnect after a short delay to pick up the next run.
 				if streamDone {
-					return
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(1 * time.Second):
+					}
+					continue
 				}
 
 				// Unexpected close — reconnect.
