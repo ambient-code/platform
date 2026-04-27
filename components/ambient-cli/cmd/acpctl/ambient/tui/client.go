@@ -242,10 +242,13 @@ func (tc *TUIClient) FetchProjectCounts(projects []string) tea.Cmd {
 			wg     sync.WaitGroup
 		)
 
+		sem := make(chan struct{}, 10)
 		for _, proj := range projects {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
 
 				client, err := tc.factory.ForProject(proj)
 				if err != nil {
@@ -302,10 +305,13 @@ func (tc *TUIClient) FetchAgentCounts(projectID string, agentIDs []string) tea.C
 			return AgentCountsMsg{Err: err}
 		}
 
+		sem := make(chan struct{}, 10)
 		for _, agentID := range agentIDs {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
 
 				sessionList, err := client.Agents().Sessions(ctx, projectID, agentID, defaultListOpts())
 				sc := -1
@@ -392,10 +398,13 @@ func (tc *TUIClient) FetchAllSessions() tea.Cmd {
 			wg          sync.WaitGroup
 		)
 
+		sem := make(chan struct{}, 10)
 		for _, proj := range projList.Items {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
 
 				projClient, err := tc.factory.ForProject(proj.Name)
 				if err != nil {

@@ -383,7 +383,11 @@ func (m *AppModel) pushView(kind, scope, id string) tea.Cmd {
 	m.activeView = kind
 	m.activeFilter = nil
 	m.pollInFlight = true
-	return m.fetchActiveView()
+	if fetchCmd := m.fetchActiveView(); fetchCmd != nil {
+		return fetchCmd
+	}
+	m.pollInFlight = false
+	return nil
 }
 
 // popView pops the current navigation entry, switches back to the parent view,
@@ -392,6 +396,13 @@ func (m *AppModel) popView() tea.Cmd {
 	if len(m.navStack) <= 1 {
 		return nil
 	}
+	// If we're leaving the messages view, stop SSE and polling.
+	poppedKind := m.navStack[len(m.navStack)-1].Kind
+	if poppedKind == "messages" {
+		m.client.StopWatching()
+		m.messagePollActive = false
+	}
+
 	m.navStack = m.navStack[:len(m.navStack)-1]
 	nav := m.currentNav()
 	m.activeView = nav.Kind
@@ -545,6 +556,17 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case InboxMsg:
 		return m.handleInboxMsg(msg)
 
+	case views.MsgStreamCopyMsg:
+		// Clipboard copy result from the message stream sub-model.
+		if msg.Err != nil {
+			return m, m.setInfo("Copy failed: " + msg.Err.Error())
+		}
+		copied := msg.Text
+		if len(copied) > 60 {
+			copied = copied[:57] + "..."
+		}
+		return m, m.setInfo("Copied: " + copied)
+
 	case views.MsgStreamBackMsg:
 		// User pressed Esc in the message stream — pop back.
 		m.client.StopWatching()
@@ -588,12 +610,14 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if sessionID != "" {
 			info += " (session " + sessionID + ")"
 		}
+		m.pollInFlight = true
 		return m, tea.Batch(m.fetchActiveView(), m.setInfo(info))
 
 	case StopAgentMsg:
 		if msg.Err != nil {
 			return m, m.setInfo("Stop agent failed: " + msg.Err.Error())
 		}
+		m.pollInFlight = true
 		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Agent stopped"))
 
 	case CreateAgentMsg:
@@ -604,12 +628,18 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Agent != nil {
 			name = msg.Agent.Name
 		}
+		m.pollInFlight = true
 		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Agent created: "+name))
 
 	case DeleteAgentMsg:
 		if msg.Err != nil {
+			if strings.Contains(msg.Err.Error(), "404") || strings.Contains(msg.Err.Error(), "not found") {
+				m.pollInFlight = true
+				return m, tea.Batch(m.fetchActiveView(), m.setInfo("Already deleted — refreshing"))
+			}
 			return m, m.setInfo("Delete agent failed: " + msg.Err.Error())
 		}
+		m.pollInFlight = true
 		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Agent deleted"))
 
 	case CreateProjectMsg:
@@ -620,12 +650,18 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Project != nil {
 			name = msg.Project.Name
 		}
+		m.pollInFlight = true
 		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Project created: "+name))
 
 	case DeleteProjectMsg:
 		if msg.Err != nil {
+			if strings.Contains(msg.Err.Error(), "404") || strings.Contains(msg.Err.Error(), "not found") {
+				m.pollInFlight = true
+				return m, tea.Batch(m.fetchActiveView(), m.setInfo("Already deleted — refreshing"))
+			}
 			return m, m.setInfo("Delete project failed: " + msg.Err.Error())
 		}
+		m.pollInFlight = true
 		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Project deleted"))
 
 	case CreateSessionMsg:
@@ -636,12 +672,18 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Session != nil {
 			name = msg.Session.Name
 		}
+		m.pollInFlight = true
 		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Session created: "+name))
 
 	case DeleteSessionMsg:
 		if msg.Err != nil {
+			if strings.Contains(msg.Err.Error(), "404") || strings.Contains(msg.Err.Error(), "not found") {
+				m.pollInFlight = true
+				return m, tea.Batch(m.fetchActiveView(), m.setInfo("Already deleted — refreshing"))
+			}
 			return m, m.setInfo("Delete session failed: " + msg.Err.Error())
 		}
+		m.pollInFlight = true
 		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Session deleted"))
 
 	case UpdateAgentMsg:
@@ -652,6 +694,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Agent != nil {
 			name = msg.Agent.Name
 		}
+		m.pollInFlight = true
 		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Agent updated: "+name))
 
 	case UpdateProjectMsg:
@@ -662,6 +705,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Project != nil {
 			name = msg.Project.Name
 		}
+		m.pollInFlight = true
 		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Project updated: "+name))
 
 	case UpdateSessionMsg:
@@ -672,6 +716,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Session != nil {
 			name = msg.Session.Name
 		}
+		m.pollInFlight = true
 		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Session updated: "+name))
 
 	case editCompleteMsg:
@@ -718,6 +763,10 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.Message != nil && m.activeView == "messages" {
+			// Dedup: skip messages already seen via polling.
+			if msg.Message.Seq <= m.lastMessageSeq {
+				return m, nil
+			}
 			m.messageStream.SetSSEStatus("connected")
 			ts := time.Now()
 			if msg.Message.CreatedAt != nil {
@@ -739,8 +788,8 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SessionMessagesMsg:
 		// Polling fallback: batch of messages from REST ListMessages.
 		if msg.Err != nil {
-			// Non-fatal — polling will retry on next tick.
-			return m, nil
+			// Non-fatal — polling will retry on next tick, but inform user.
+			return m, m.setInfo("Message poll error: " + msg.Err.Error())
 		}
 		if m.activeView != "messages" {
 			return m, nil
@@ -897,7 +946,7 @@ func (m *AppModel) handleProjectsMsg(msg ProjectsMsg) (tea.Model, tea.Cmd) {
 	for _, p := range msg.Projects {
 		age := ""
 		if p.CreatedAt != nil {
-			age = fmtAge(time.Since(*p.CreatedAt))
+			age = views.FormatAge(time.Since(*p.CreatedAt))
 		}
 		desc := p.Description
 		if len(desc) > 60 {
@@ -932,6 +981,10 @@ func (m *AppModel) handleProjectsMsg(msg ProjectsMsg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.client.FetchProjectCounts(names))
 	}
 
+	if len(msg.Projects) >= 200 {
+		cmds = append(cmds, m.setInfo("Showing first 200 projects"))
+	}
+
 	return m, tea.Batch(cmds...)
 }
 
@@ -948,7 +1001,7 @@ func (m *AppModel) handleProjectCountsMsg(msg ProjectCountsMsg) (tea.Model, tea.
 	for _, p := range m.cachedProjects {
 		age := ""
 		if p.CreatedAt != nil {
-			age = fmtAge(now.Sub(*p.CreatedAt))
+			age = views.FormatAge(now.Sub(*p.CreatedAt))
 		}
 		desc := p.Description
 		if len(desc) > 60 {
@@ -1047,6 +1100,10 @@ func (m *AppModel) handleAgentsMsg(msg AgentsMsg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.client.FetchAgentCounts(m.currentProject, agentIDs))
 	}
 
+	if len(msg.Agents) >= 200 {
+		cmds = append(cmds, m.setInfo("Showing first 200 agents"))
+	}
+
 	return m, tea.Batch(cmds...)
 }
 
@@ -1111,9 +1168,9 @@ func (m *AppModel) handleSessionsMsg(msg SessionsMsg) (tea.Model, tea.Cmd) {
 		for _, s := range sessions {
 			if s.AgentID == m.currentAgentID {
 				row := views.SessionRow(s, m.currentAgent, now)
-				// Sanitize all cells except PHASE (index 3) which contains embedded ANSI color.
+				// Sanitize all cells except PHASE (index 4): [ID(0), NAME(1), AGENT(2), PROJECT(3), PHASE(4), STARTED(5), DURATION(6)].
 				for i := range row {
-					if i != 3 {
+					if i != 4 {
 						row[i] = Sanitize(row[i])
 					}
 				}
@@ -1130,9 +1187,9 @@ func (m *AppModel) handleSessionsMsg(msg SessionsMsg) (tea.Model, tea.Cmd) {
 				agentName = agentName[:12]
 			}
 			row := views.SessionRow(s, agentName, now)
-			// Sanitize all cells except PHASE (index 3) which contains embedded ANSI color.
+			// Sanitize all cells except PHASE (index 4): [ID(0), NAME(1), AGENT(2), PROJECT(3), PHASE(4), STARTED(5), DURATION(6)].
 			for i := range row {
-				if i != 3 {
+				if i != 4 {
 					row[i] = Sanitize(row[i])
 				}
 			}
@@ -1147,6 +1204,10 @@ func (m *AppModel) handleSessionsMsg(msg SessionsMsg) (tea.Model, tea.Cmd) {
 		m.sessionTable.SetFilter(func(cols []string) bool {
 			return f.MatchRow(cols)
 		})
+	}
+
+	if len(msg.Sessions) >= 200 {
+		return m, m.setInfo("Showing first 200 sessions")
 	}
 
 	return m, nil
@@ -1187,6 +1248,10 @@ func (m *AppModel) handleInboxMsg(msg InboxMsg) (tea.Model, tea.Cmd) {
 		})
 	}
 
+	if len(msg.Messages) >= 200 {
+		return m, m.setInfo("Showing first 200 inbox messages")
+	}
+
 	return m, nil
 }
 
@@ -1219,8 +1284,10 @@ func (m *AppModel) handleTick() (tea.Model, tea.Cmd) {
 
 // handleKey dispatches key events based on the current mode.
 func (m *AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Ctrl-C always quits.
+	// Ctrl-C always quits — clean up SSE goroutines first.
 	if msg.Type == tea.KeyCtrlC {
+		m.client.StopWatching()
+		m.messagePollActive = false
 		return m, tea.Quit
 	}
 
@@ -1287,8 +1354,13 @@ func (m *AppModel) handleDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		} else {
 			m.dialog = nil
+			infoText := "Cancelled"
+			if m.dialogAction == nil {
+				// Error/info dialog (single-button dismiss) — not a cancel.
+				infoText = "Dismissed"
+			}
 			m.dialogAction = nil
-			return m, m.setInfo("Cancelled")
+			return m, m.setInfo(infoText)
 		}
 	}
 
@@ -1304,6 +1376,30 @@ func (m *AppModel) updateFormOverlay(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = ws.Width
 		m.height = ws.Height
 		m.resizeTable()
+	}
+
+	// Don't swallow tick messages — they keep the poll and UI refresh chains alive.
+	if _, ok := msg.(appTickMsg); ok {
+		return m.handleTick()
+	}
+	if _, ok := msg.(uiTickMsg); ok {
+		return m, m.uiTickCmd()
+	}
+
+	// Don't swallow data-fetch responses — they clear pollInFlight and update caches.
+	switch typedMsg := msg.(type) {
+	case ProjectsMsg:
+		return m.handleProjectsMsg(typedMsg)
+	case AgentsMsg:
+		return m.handleAgentsMsg(typedMsg)
+	case SessionsMsg:
+		return m.handleSessionsMsg(typedMsg)
+	case InboxMsg:
+		return m.handleInboxMsg(typedMsg)
+	case ProjectCountsMsg:
+		return m.handleProjectCountsMsg(typedMsg)
+	case AgentCountsMsg:
+		return m.handleAgentCountsMsg(typedMsg)
 	}
 
 	// Esc dismisses the form (huh uses ctrl+c for its own abort).
@@ -1526,6 +1622,8 @@ func (m *AppModel) handleRuneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "q":
 		if len(m.navStack) <= 1 {
+			m.client.StopWatching()
+			m.messagePollActive = false
 			return m, tea.Quit
 		}
 		cmd := m.popView()
@@ -1565,11 +1663,20 @@ func (m *AppModel) handleRuneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "c":
 		// Copy the first column value (resource name/ID) of the selected row to clipboard.
+		// For sessions, resolve the full ID from cache (table shows truncated short IDs).
 		if tbl := m.activeTable(); tbl != nil {
 			row := tbl.SelectedRow()
 			if len(row) > 0 {
 				value := row[0]
-				_ = clipboard.WriteAll(value)
+				// Resolve full session ID from cache if we're in sessions view.
+				if m.activeView == "sessions" {
+					if s := m.findSessionByShortID(value); s != nil {
+						value = s.ID
+					}
+				}
+				if err := clipboard.WriteAll(value); err != nil {
+					return m, m.setInfo("Copy failed: " + err.Error())
+				}
 				return m, m.setInfo("Copied: " + value)
 			}
 		}
@@ -1579,7 +1686,8 @@ func (m *AppModel) handleRuneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Number-key project shortcuts (0-9) — only active on table views below project level.
 	if len(key) == 1 && key[0] >= '0' && key[0] <= '9' &&
 		m.activeView != "projects" && m.activeView != "contexts" &&
-		m.activeView != "messages" && m.activeView != "detail" {
+		m.activeView != "messages" && m.activeView != "detail" &&
+		m.activeView != "inbox" {
 		return m.handleProjectShortcut(key[0] - '0')
 	}
 
@@ -1818,13 +1926,17 @@ func (m *AppModel) handleSessionsRune(key string) (tea.Model, tea.Cmd) {
 			projectOpts = append(projectOpts, opt)
 		}
 		if len(projectOpts) == 0 {
-			return m, m.setInfo("No projects available")
+			return m, m.setInfo("Navigate to projects view first to populate project list")
 		}
-		// Build agent options from cache.
+		// Build agent options from cache, filtered to the selected project.
 		agentOpts := []huh.Option[string]{
 			huh.NewOption("(none — standalone)", ""),
 		}
 		for _, a := range m.cachedAgents {
+			// Only show agents belonging to the pre-selected project.
+			if projectID != "" && a.ProjectID != projectID {
+				continue
+			}
 			agentOpts = append(agentOpts, huh.NewOption(a.Name, a.ID))
 		}
 		form := views.NewSessionForm(&name, &prompt, &projectID, projectOpts, &agentID, agentOpts)
@@ -2081,10 +2193,17 @@ func (m *AppModel) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // executeCommand parses and dispatches a command-mode input.
 func (m *AppModel) executeCommand(input string) (tea.Model, tea.Cmd) {
+	// If we're leaving the messages view via a command, stop SSE and polling.
+	if m.activeView == "messages" {
+		m.client.StopWatching()
+		m.messagePollActive = false
+	}
+
 	cmd := ParseCommand(input)
 
 	switch cmd.Kind {
 	case CmdQuit:
+		m.client.StopWatching()
 		return m, tea.Quit
 
 	case CmdProjects:
@@ -2185,12 +2304,7 @@ func (m *AppModel) executeCommand(input string) (tea.Model, tea.Cmd) {
 		)
 
 	case CmdMessages:
-		if m.currentSession == "" {
-			return m, m.setInfo("No session context — drill into a session first")
-		}
-		m.activeView = "messages"
-		m.activeFilter = nil
-		return m, m.setInfo("Streaming messages for session "+m.currentSession)
+		return m, m.setInfo("Use Enter from sessions view to open messages")
 
 	case CmdContext:
 		if cmd.Arg == "" {
@@ -2228,15 +2342,21 @@ func (m *AppModel) executeCommand(input string) (tea.Model, tea.Cmd) {
 
 	case CmdAliases:
 		entries := AliasTable()
-		var lines []string
+		var detailLines []views.DetailLine
 		for _, e := range entries {
 			aliases := ""
 			if len(e.Aliases) > 0 {
-				aliases = " (" + fmt.Sprintf("%v", e.Aliases) + ")"
+				aliases = " (" + strings.Join(e.Aliases, ", ") + ")"
 			}
-			lines = append(lines, e.Command+aliases+" - "+e.Description)
+			detailLines = append(detailLines, views.DetailLine{
+				Key:   e.Command + aliases,
+				Value: e.Description,
+			})
 		}
-		return m, m.setInfo("Commands: " + fmt.Sprintf("%d available", len(entries)))
+		m.detailView = views.NewDetailView("Commands", detailLines)
+		m.detailView.SetSize(m.width, m.height-10)
+		cmdPush := m.pushView("detail", "aliases", "")
+		return m, tea.Batch(cmdPush, m.setInfo(fmt.Sprintf("%d commands available", len(entries))))
 
 	default:
 		ascii := "" +
@@ -2390,7 +2510,7 @@ func (m *AppModel) handlePromptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // 0 = "all" (clear project scope), 1-9 = projectShortcuts[digit-1].
 func (m *AppModel) handleProjectShortcut(digit byte) (tea.Model, tea.Cmd) {
 	if digit == 0 {
-		// Switch to "all" — clear project scope, stay in current view type.
+		// Switch to "all" — clear project scope, navigate back to projects view.
 		m.currentProject = ""
 		m.currentAgent = ""
 		m.currentAgentID = ""
@@ -2400,9 +2520,10 @@ func (m *AppModel) handleProjectShortcut(digit byte) (tea.Model, tea.Cmd) {
 
 		switch m.activeView {
 		case "agents":
-			m.agentTable.SetScope("all")
-			m.navStack = []NavEntry{{Kind: "projects", Scope: "all"}, {Kind: "agents", Scope: "all"}}
-			return m, tea.Batch(m.client.FetchProjects(), m.setInfo("Viewing all agents"))
+			// Can't list all agents across projects — go back to projects view.
+			m.navStack = []NavEntry{{Kind: "projects", Scope: "all"}}
+			m.activeView = "projects"
+			return m, tea.Batch(m.client.FetchProjects(), m.setInfo("Back to projects"))
 		case "sessions":
 			m.sessionTable.SetScope("all")
 			m.navStack = []NavEntry{{Kind: "sessions", Scope: "all"}}
@@ -2632,9 +2753,7 @@ func (m *AppModel) handleEditComplete(msg editCompleteMsg) (tea.Model, tea.Cmd) 
 	switch msg.ResourceKind {
 	case "agent":
 		editableFields = []string{
-			"name", "prompt", "labels", "annotations", "description",
-			"display_name", "llm_model", "llm_max_tokens", "llm_temperature",
-			"repo_url", "environment_variables", "resource_overrides",
+			"name", "prompt", "labels", "annotations",
 		}
 	case "project":
 		editableFields = []string{

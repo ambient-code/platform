@@ -91,10 +91,36 @@ func (dv *DetailView) Update(msg tea.Msg) (DetailView, tea.Cmd) {
 		case "pgup":
 			dv.moveCursor(-dv.viewportHeight())
 		case "c":
-			// Copy value of the current detail line to clipboard via OSC 52.
-			// The actual clipboard integration is handled by the terminal.
-			if dv.cursor >= 0 && dv.cursor < len(dv.lines) {
-				return *dv, copyToClipboard(dv.lines[dv.cursor].Value)
+			// Copy value of the current rendered line to clipboard.
+			// The cursor indexes rendered (wrapped) lines, so we map back to
+			// the source line's value via renderedLines.
+			rendered := dv.renderedLines()
+			if dv.cursor >= 0 && dv.cursor < len(rendered) {
+				line := rendered[dv.cursor]
+				// If this is a continuation line (empty Key), walk backwards
+				// to find the source key-value pair and copy its full value.
+				if line.Key == "" {
+					for j := dv.cursor - 1; j >= 0; j-- {
+						if rendered[j].Key != "" {
+							// Find the original source line by Key.
+							for _, src := range dv.lines {
+								if src.Key == rendered[j].Key {
+									return *dv, copyToClipboard(src.Value)
+								}
+							}
+							break
+						}
+					}
+					// Fallback: copy the continuation line's value.
+					return *dv, copyToClipboard(line.Value)
+				}
+				// Key-value line — find the full source value.
+				for _, src := range dv.lines {
+					if src.Key == line.Key {
+						return *dv, copyToClipboard(src.Value)
+					}
+				}
+				return *dv, copyToClipboard(line.Value)
 			}
 		}
 

@@ -97,6 +97,14 @@ type ResourceTable struct {
 
 	// columns stores the original column definitions for sort indicator rendering.
 	columns []table.Column
+
+	// Cached styles derived from the TableStyle — set once during construction
+	// and updated in SetWidth. Avoids lipgloss.NewStyle() allocations per frame.
+	styleBorder lipgloss.Style
+	styleKind   lipgloss.Style
+	styleScope  lipgloss.Style
+	styleCount  lipgloss.Style
+	styleDim    lipgloss.Style
 }
 
 // NewResourceTable creates a ResourceTable configured with the given resource kind,
@@ -138,6 +146,11 @@ func NewResourceTable(kind string, scope string, columns []table.Column, style T
 			colIdx:    -1,
 			direction: SortNone,
 		},
+		styleBorder: lipgloss.NewStyle().Foreground(style.BorderColor),
+		styleKind:   lipgloss.NewStyle().Foreground(style.TitleColor).Bold(true),
+		styleScope:  lipgloss.NewStyle().Foreground(style.ScopeColor).Bold(true),
+		styleCount:  lipgloss.NewStyle().Foreground(style.CountColor).Bold(true),
+		styleDim:    lipgloss.NewStyle().Foreground(style.DimColor),
 	}
 }
 
@@ -158,10 +171,31 @@ func (rt *ResourceTable) SetKind(kind string) {
 }
 
 // SetRows replaces all data rows. Filtering and sorting are re-applied.
+// The previously selected row's key (first column) is preserved if still present.
 func (rt *ResourceTable) SetRows(rows []table.Row) {
+	// Capture current selection key before replacing data.
+	var selectedKey string
+	if oldRows := rt.inner.Rows(); len(oldRows) > 0 {
+		cursor := rt.inner.Cursor()
+		if cursor >= 0 && cursor < len(oldRows) && len(oldRows[cursor]) > 0 {
+			selectedKey = oldRows[cursor][0]
+		}
+	}
+
 	rt.allRows = make([]table.Row, len(rows))
 	copy(rt.allRows, rows)
 	rt.applyFilterAndSort()
+
+	// Restore cursor to the row with the same key.
+	if selectedKey != "" {
+		visibleRows := rt.inner.Rows()
+		for i, row := range visibleRows {
+			if len(row) > 0 && row[0] == selectedKey {
+				rt.inner.SetCursor(i)
+				return
+			}
+		}
+	}
 }
 
 // SetRowColorFunc sets a function that determines the foreground color for each
@@ -361,7 +395,7 @@ func (rt *ResourceTable) updateSelectedStyle() {
 //
 // using box-drawing characters and the configured border color.
 func (rt *ResourceTable) View() string {
-	borderStyle := lipgloss.NewStyle().Foreground(rt.style.BorderColor)
+	borderStyle := rt.cachedBorderStyle()
 	w := rt.inner.Width()
 	if w < 4 {
 		w = 80
@@ -421,18 +455,17 @@ func (rt *ResourceTable) View() string {
 // The title is centered: ┌──── kind(scope)[count] ────┐
 // kind=cyan, scope=magenta, count=blue (matching k9s colors).
 func (rt *ResourceTable) renderTitleBar() string {
-	borderStyle := lipgloss.NewStyle().Foreground(rt.style.BorderColor)
-	kindStyle := lipgloss.NewStyle().Foreground(rt.style.TitleColor).Bold(true)
-	scopeStyle := lipgloss.NewStyle().Foreground(rt.style.ScopeColor).Bold(true)
-	countStyle := lipgloss.NewStyle().Foreground(rt.style.CountColor).Bold(true)
+	borderStyle := rt.cachedBorderStyle()
+	kindStyle := rt.cachedKindStyle()
+	scopeStyle := rt.cachedScopeStyle()
+	countStyle := rt.cachedCountStyle()
 
 	count := len(rt.inner.Rows())
 	filterPart := ""
 	if rt.filterText != "" {
-		filterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
-		filterPart = " " + filterStyle.Render("</"+rt.filterText+">")
+		filterPart = " " + rt.styleKind.Render("</"+rt.filterText+">")
 	}
-	dimStyle := lipgloss.NewStyle().Foreground(rt.style.DimColor)
+	dimStyle := rt.styleDim
 	titleRendered := " " +
 		kindStyle.Render(rt.kind) +
 		dimStyle.Render("(") + scopeStyle.Render(rt.scope) + dimStyle.Render(")") +
@@ -531,4 +564,23 @@ func cellValue(row table.Row, colIdx int) string {
 		return ""
 	}
 	return row[colIdx]
+}
+
+// Cached style accessors — return the pre-built styles stored on the struct.
+// Initialised in NewResourceTable; no allocations per call.
+
+func (rt *ResourceTable) cachedBorderStyle() lipgloss.Style {
+	return rt.styleBorder
+}
+
+func (rt *ResourceTable) cachedKindStyle() lipgloss.Style {
+	return rt.styleKind
+}
+
+func (rt *ResourceTable) cachedScopeStyle() lipgloss.Style {
+	return rt.styleScope
+}
+
+func (rt *ResourceTable) cachedCountStyle() lipgloss.Style {
+	return rt.styleCount
 }

@@ -58,10 +58,10 @@ func ParseFilter(input string) (*Filter, error) {
 		return f, nil
 	}
 
-	// Compile as case-insensitive regex
+	// Compile as case-insensitive regex, falling back to literal match on invalid regex.
 	re, err := regexp.Compile("(?i)" + input)
 	if err != nil {
-		return nil, fmt.Errorf("invalid filter regex: %w", err)
+		re = regexp.MustCompile("(?i)" + regexp.QuoteMeta(input))
 	}
 	f.Pattern = re
 

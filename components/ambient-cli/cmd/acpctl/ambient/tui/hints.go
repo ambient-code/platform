@@ -19,6 +19,7 @@ func defaultGeneral() []views.HelpEntry {
 		{Key: "/", Action: "Filter"},
 		{Key: "?", Action: "Help"},
 		{Key: "c", Action: "Copy ID"},
+		{Key: "j/k", Action: "Up/Down"},
 		{Key: "shift-n", Action: "Sort Name"},
 		{Key: "shift-a", Action: "Sort Age"},
 	}
@@ -47,6 +48,7 @@ var viewHintRegistry = map[string]ViewHints{
 			{Key: "e", Action: "Edit"},
 			{Key: "l", Action: "Logs"},
 			{Key: "n", Action: "New"},
+			{Key: "y", Action: "JSON"},
 			{Key: "ctrl-d", Action: "Delete"},
 		},
 		Navigation: []views.HelpEntry{
@@ -61,7 +63,7 @@ var viewHintRegistry = map[string]ViewHints{
 			{Key: "d", Action: "Describe"},
 			{Key: "e", Action: "Edit"},
 			{Key: "l", Action: "Logs"},
-			{Key: "m", Action: "Send"},
+			{Key: "m", Action: "Send (via msgs)"},
 			{Key: "n", Action: "New"},
 			{Key: "y", Action: "JSON"},
 			{Key: "ctrl-d", Action: "Delete"},
@@ -75,7 +77,6 @@ var viewHintRegistry = map[string]ViewHints{
 	},
 	"inbox": {
 		Resource: []views.HelpEntry{
-			{Key: "m", Action: "Compose"},
 			{Key: "r", Action: "Mark Read"},
 			{Key: "ctrl-d", Action: "Delete"},
 		},
@@ -91,7 +92,7 @@ var viewHintRegistry = map[string]ViewHints{
 			{Key: "r", Action: "Raw"},
 			{Key: "p", Action: "Pretty"},
 			{Key: "t", Action: "Timestamps"},
-			{Key: "m", Action: "Send"},
+			{Key: "m", Action: "Compose"},
 			{Key: "c", Action: "Copy"},
 			{Key: "shift-g", Action: "Bottom"},
 			{Key: "g", Action: "Top"},

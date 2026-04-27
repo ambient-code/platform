@@ -27,6 +27,13 @@ type MsgStreamSendMsg struct {
 	Body      string
 }
 
+// MsgStreamCopyMsg carries the result of a clipboard copy attempt. The parent
+// handles this to display success or failure via the info line.
+type MsgStreamCopyMsg struct {
+	Text string // the text that was (or was attempted to be) copied
+	Err  error  // non-nil if the clipboard write failed
+}
+
 // ---------------------------------------------------------------------------
 // Color palette (duplicated from parent tui package to avoid circular import)
 // ---------------------------------------------------------------------------
@@ -40,6 +47,19 @@ var (
 	msgColorOrange = lipgloss.Color("214")
 	msgColorCyan   = lipgloss.Color("36")
 	msgColorBlue   = lipgloss.Color("69")
+)
+
+// Hoisted styles for the message stream View to avoid allocations on every frame.
+var (
+	msgBorderStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	msgKindStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
+	msgScopeStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("69")).Bold(true)
+	msgCountStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Bold(true)
+	msgDimStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	msgDimIndicator   = lipgloss.NewStyle().Foreground(msgColorDim)
+	msgActiveIndicator = lipgloss.NewStyle().Foreground(msgColorBlue)
+	msgCursorStyle    = lipgloss.NewStyle().Foreground(msgColorOrange)
+	msgSepStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("236"))
 )
 
 // eventColor returns the lipgloss color for a semantic event type.
@@ -201,13 +221,15 @@ func eventFullText(eventType, payload string) string {
 	return eventSummary(eventType, payload)
 }
 
-// truncatePayload trims whitespace and truncates to max length.
-func truncatePayload(s string, max int) string {
+// truncatePayload trims whitespace and truncates to max runes (not bytes) to
+// avoid splitting multi-byte UTF-8 characters.
+func truncatePayload(s string, maxRunes int) string {
 	s = strings.TrimSpace(s)
-	if len(s) <= max {
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
 		return s
 	}
-	return s[:max-1] + "…"
+	return string(runes[:maxRunes-1]) + "…"
 }
 
 // extractJSONField extracts a string field from a JSON payload.
@@ -352,11 +374,15 @@ func (ms *MessageStream) AddMessage(entry MessageEntry) {
 		// Evict oldest — shift the slice. For a 2000-entry buffer this is
 		// acceptable; a true ring buffer optimisation can come later.
 		excess := len(ms.messages) - ms.maxMessages
-		ms.messages = ms.messages[excess:]
-		ms.scrollOffset -= excess
-		if ms.scrollOffset < 0 {
-			ms.scrollOffset = 0
+		// Clean up glamour cache entries for evicted messages.
+		if ms.glamourCache != nil {
+			for _, evicted := range ms.messages[:excess] {
+				delete(ms.glamourCache, evicted.Seq)
+			}
 		}
+		ms.messages = ms.messages[excess:]
+		// Don't adjust scrollOffset here — it's a display-line offset, not a
+		// message-array index. renderContent's clamp handles any overshoot.
 	}
 	ms.cachedDirty = true
 	if ms.autoScroll {
@@ -364,8 +390,15 @@ func (ms *MessageStream) AddMessage(entry MessageEntry) {
 	}
 }
 
-// SetSize updates the viewport dimensions.
+// SetSize updates the viewport dimensions and invalidates caches that depend
+// on width (glamour renderer and per-message glamour cache).
 func (ms *MessageStream) SetSize(w, h int) {
+	if w != ms.width {
+		// Width changed — glamour output is width-dependent.
+		ms.glamourRenderer = nil
+		ms.glamourCache = nil
+		ms.cachedDirty = true
+	}
 	ms.width = w
 	ms.height = h
 	ms.composeInput.Width = max(w-lipgloss.Width(ms.composeInput.Prompt)-4, 20)
@@ -531,18 +564,34 @@ func (ms *MessageStream) updateNormal(msg tea.KeyMsg) (MessageStream, tea.Cmd) {
 			ms.scrollUp(1)
 			return *ms, nil
 		case "c":
-			// Copy the selected message text to clipboard.
+			// Copy the first visible message's payload to clipboard.
+			// scrollOffset is a display-line offset, so we iterate messages
+			// and count display lines to find the right one.
 			if len(ms.messages) > 0 {
-				idx := ms.scrollOffset
-				if idx >= len(ms.messages) {
-					idx = len(ms.messages) - 1
-				}
-				if idx >= 0 {
-					text := eventSummary(ms.messages[idx].EventType, ms.messages[idx].Payload)
-					if text == "" {
-						text = ms.messages[idx].Payload
+				lineCount := 0
+				for _, entry := range ms.messages {
+					var entryLines []string
+					if ms.rawMode {
+						entryLines = ms.renderRawEntry(entry, max(ms.width-4, 20))
+					} else {
+						entryLines = ms.renderConversationEntry(entry, max(ms.width-4, 20))
 					}
-					_ = clipboard.WriteAll(text)
+					if len(entryLines) == 0 {
+						continue
+					}
+					lineCount += len(entryLines)
+					if lineCount > ms.scrollOffset {
+						text := eventSummary(entry.EventType, entry.Payload)
+						if text == "" {
+							text = entry.Payload
+						}
+						// Return a command so the parent can handle
+						// clipboard write and display success/failure.
+						return *ms, func() tea.Msg {
+							err := clipboard.WriteAll(text)
+							return MsgStreamCopyMsg{Text: text, Err: err}
+						}
+					}
 				}
 			}
 			return *ms, nil
@@ -622,11 +671,11 @@ func (ms *MessageStream) View() string {
 		return "Loading…"
 	}
 
-	borderStyle := lipgloss.NewStyle().Foreground(msgColorDim)
-	kindStyle := lipgloss.NewStyle().Foreground(msgColorOrange).Bold(true)
-	scopeStyle := lipgloss.NewStyle().Foreground(msgColorBlue).Bold(true)
-	countStyle := lipgloss.NewStyle().Foreground(msgColorWhite).Bold(true)
-	dimStyle := lipgloss.NewStyle().Foreground(msgColorDim)
+	borderStyle := msgBorderStyle
+	kindStyle := msgKindStyle
+	scopeStyle := msgScopeStyle
+	countStyle := msgCountStyle
+	dimStyle := msgDimStyle
 
 	// -- k9s-style title bar: messages(agent/session)[count] --
 	shortID := ms.sessionID
@@ -661,7 +710,7 @@ func (ms *MessageStream) View() string {
 		prettyLabel = "On"
 	}
 	phaseStyle := lipgloss.NewStyle().Foreground(phaseColor(ms.phase))
-	dimIndicator := lipgloss.NewStyle().Foreground(msgColorDim)
+	dimIndicator := msgDimIndicator
 	tsLabel := "Off"
 	switch ms.timestampMode {
 	case 1:
@@ -687,7 +736,7 @@ func (ms *MessageStream) View() string {
 		}
 	}
 
-	activeIndicator := lipgloss.NewStyle().Foreground(msgColorBlue)
+	activeIndicator := msgActiveIndicator
 	renderToggle := func(label, value string, on bool) string {
 		s := dimIndicator
 		if on {
@@ -711,8 +760,9 @@ func (ms *MessageStream) View() string {
 		default:
 			sseColor = msgColorRed
 		}
+		sseStyle := lipgloss.NewStyle().Foreground(sseColor)
 		indicators += fmt.Sprintf("     SSE:%s",
-			lipgloss.NewStyle().Foreground(sseColor).Render(ms.sseStatus))
+			sseStyle.Render(ms.sseStatus))
 	}
 	// Center the indicators line.
 	indWidth := lipgloss.Width(indicators)
@@ -741,7 +791,7 @@ func (ms *MessageStream) View() string {
 
 	// Streaming cursor (when phase is running) — animated.
 	if strings.ToLower(ms.phase) == "running" {
-		cursorStyle := lipgloss.NewStyle().Foreground(msgColorOrange)
+		cursorStyle := msgCursorStyle
 		frames := []string{"▌", "▐", "█", "▐"}
 		frame := frames[time.Now().UnixMilli()/300%4]
 		cursor := cursorStyle.Render(" " + frame + " streaming…")
@@ -790,23 +840,12 @@ func (ms *MessageStream) View() string {
 // renderContent produces the visible message lines for the content area.
 func (ms *MessageStream) renderContent(height int) []string {
 	if len(ms.messages) == 0 {
-		dimStyle := lipgloss.NewStyle().Foreground(msgColorDim)
-		return []string{dimStyle.Render("No messages yet.")}
+		return []string{msgDimStyle.Render("No messages yet.")}
 	}
 
-	// Build all display lines from messages.
+	// Build all display lines from messages. Search filtering is already
+	// applied inside buildDisplayLines at the message level.
 	allLines := ms.buildDisplayLines()
-
-	// Apply search filter — highlight matches.
-	if ms.searchPattern != nil {
-		filtered := make([]string, 0, len(allLines))
-		for _, line := range allLines {
-			if ms.searchPattern.MatchString(stripANSI(line)) {
-				filtered = append(filtered, line)
-			}
-		}
-		allLines = filtered
-	}
 
 	// Apply scroll offset.
 	total := len(allLines)
@@ -848,9 +887,8 @@ func (ms *MessageStream) buildDisplayLines() []string {
 
 	lines := make([]string, 0, len(ms.messages))
 
-	sepStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("236"))
 	const tagPad = 14
-	separator := strings.Repeat(" ", tagPad) + sepStyle.Render(strings.Repeat("─", max(maxLineWidth-tagPad, 10)))
+	separator := strings.Repeat(" ", tagPad) + msgSepStyle.Render(strings.Repeat("─", max(maxLineWidth-tagPad, 10)))
 
 	now := time.Now()
 	prevWasUserOrAssistant := false
@@ -882,7 +920,7 @@ func (ms *MessageStream) buildDisplayLines() []string {
 
 		// Prepend timestamp to the first line if timestamps are enabled.
 		if ms.timestampMode > 0 && !entry.Timestamp.IsZero() {
-			tsStyle := lipgloss.NewStyle().Foreground(msgColorDim)
+			tsStyle := msgDimStyle
 			var ts string
 			if ms.timestampMode == 1 {
 				d := now.Sub(entry.Timestamp)
@@ -939,12 +977,15 @@ func (ms *MessageStream) renderConversationEntry(entry MessageEntry, maxWidth in
 	typeStyle := lipgloss.NewStyle().Foreground(color).Bold(true)
 	textStyle := lipgloss.NewStyle().Foreground(color)
 
+	// Sanitize payload to strip ANSI escapes and control characters from agent output.
+	sanitizedPayload := SanitizePayload(entry.Payload)
+
 	// Choose full text or truncated summary based on wrapMode.
 	var displayText string
 	if ms.wrapMode {
-		displayText = eventFullText(entry.EventType, entry.Payload)
+		displayText = eventFullText(entry.EventType, sanitizedPayload)
 	} else {
-		displayText = eventSummary(entry.EventType, entry.Payload)
+		displayText = eventSummary(entry.EventType, sanitizedPayload)
 	}
 	if displayText == "" {
 		// Suppressed event types (TOOL_CALL_ARGS, etc.) — don't render.
@@ -974,7 +1015,7 @@ func (ms *MessageStream) renderConversationEntry(entry MessageEntry, maxWidth in
 		} else {
 			glamourWidth := max(ms.width-20, 20)
 			if r := ms.getGlamourRenderer(glamourWidth); r != nil {
-				out, err := r.Render(strings.TrimSpace(entry.Payload))
+				out, err := r.Render(strings.TrimSpace(sanitizedPayload))
 				if err == nil {
 					rendered = strings.TrimSpace(out)
 					ms.glamourCache[entry.Seq] = rendered
@@ -1014,7 +1055,10 @@ func (ms *MessageStream) renderConversationEntry(entry MessageEntry, maxWidth in
 
 // renderRawEntry renders a single message as a JSON line in raw mode.
 func (ms *MessageStream) renderRawEntry(entry MessageEntry, maxWidth int) []string {
-	dimStyle := lipgloss.NewStyle().Foreground(msgColorDim)
+	dimStyle := msgDimStyle
+
+	// Sanitize payload to strip ANSI escapes and control characters from agent output.
+	sanitizedPayload := SanitizePayload(entry.Payload)
 
 	raw := struct {
 		Seq       int    `json:"seq"`
@@ -1024,7 +1068,7 @@ func (ms *MessageStream) renderRawEntry(entry MessageEntry, maxWidth int) []stri
 	}{
 		Seq:       entry.Seq,
 		EventType: entry.EventType,
-		Payload:   entry.Payload,
+		Payload:   sanitizedPayload,
 		Timestamp: entry.Timestamp.Format(time.RFC3339),
 	}
 
@@ -1067,18 +1111,19 @@ func (ms *MessageStream) scrollToBottom() {
 }
 
 // contentHeight returns the usable content height given the current dimensions.
+// This must match the calculation in View() to avoid scroll/display mismatches.
 func (ms *MessageStream) contentHeight() int {
-	// Approximate: total height minus header (3 lines) minus status/compose/cursor.
-	h := ms.height - 5
+	// Top: title bar + indicator line + header separator = 3 lines.
+	topLines := 3
+	// Bottom: bottom border = 1 line.
+	bottomLines := 1
 	if ms.composeMode {
-		h -= 2
+		bottomLines += 2 // compose separator + compose line
 	}
 	if strings.ToLower(ms.phase) == "running" {
-		h--
+		bottomLines++ // streaming cursor line
 	}
-	if ms.searchMode {
-		h -= 2
-	}
+	h := ms.height - topLines - bottomLines
 	if h < 1 {
 		h = 1
 	}
@@ -1096,9 +1141,10 @@ func (ms *MessageStream) enterComposeMode() {
 // Text helpers
 // ---------------------------------------------------------------------------
 
-// wrapText breaks a string into lines of at most maxWidth characters.
+// wrapText breaks a string into lines of at most maxWidth visual characters.
 // It splits on word boundaries where possible, falling back to hard breaks
-// for very long tokens.
+// for very long tokens. Uses rune-aware operations and lipgloss.Width for
+// visual width measurement to avoid splitting multi-byte UTF-8 characters.
 func wrapText(s string, maxWidth int) []string {
 	if maxWidth <= 0 {
 		maxWidth = 80
@@ -1119,7 +1165,7 @@ func wrapText(s string, maxWidth int) []string {
 	current := words[0]
 
 	for _, word := range words[1:] {
-		if len(current)+1+len(word) <= maxWidth {
+		if lipgloss.Width(current)+1+lipgloss.Width(word) <= maxWidth {
 			current += " " + word
 		} else {
 			lines = append(lines, current)
@@ -1131,9 +1177,19 @@ func wrapText(s string, maxWidth int) []string {
 	// Hard-break any lines that still exceed maxWidth (long single tokens).
 	var result []string
 	for _, line := range lines {
-		for len(line) > maxWidth {
-			result = append(result, line[:maxWidth])
-			line = line[maxWidth:]
+		for lipgloss.Width(line) > maxWidth {
+			// Slice by rune to avoid splitting multi-byte characters.
+			runes := []rune(line)
+			take := len(runes)
+			// Binary-ish search: start from end and find the cut point.
+			for take > 0 && lipgloss.Width(string(runes[:take])) > maxWidth {
+				take--
+			}
+			if take == 0 {
+				take = 1 // always make progress
+			}
+			result = append(result, string(runes[:take]))
+			line = string(runes[take:])
 		}
 		result = append(result, line)
 	}

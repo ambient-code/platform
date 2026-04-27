@@ -10,6 +10,9 @@ import (
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/ambient/tui/views"
 )
 
+// Hoisted command bar border style to avoid allocations on every frame.
+var commandBarBorderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("36"))
+
 // ASCII art branding rendered in the header (Fix 9: extra left padding).
 var brandLines = []string{
 	`                  `,
@@ -39,9 +42,15 @@ func (m *AppModel) View() string {
 	tableOutput := m.viewResourceTable()
 	if m.formOverlay != nil {
 		tableH := m.height - 10
+		if tableH < 1 {
+			tableH = 1
+		}
 		tableOutput = views.OverlayForm(tableOutput, m.formOverlay.View(), m.formTitle, m.width, tableH)
 	} else if m.dialog != nil {
 		tableH := m.height - 10
+		if tableH < 1 {
+			tableH = 1
+		}
 		tableOutput = views.OverlayDialog(tableOutput, *m.dialog, m.width, tableH)
 	}
 	sections = append(sections, tableOutput)
@@ -156,9 +165,13 @@ func (m *AppModel) viewHeader() string {
 		}
 	}
 
-	// Fixed column positions (visual widths).
-	const col2Start = 40 // shortcuts column starts at char 40
-	const col3Start = 65 // hotkeys column starts at char 65
+	// Dynamic column positions based on terminal width.
+	col2Start := 40 // shortcuts column starts at char 40
+	col3Start := 65 // hotkeys column starts at char 65
+
+	// On narrow terminals, skip columns to avoid overlap.
+	skipShortcuts := m.width < 100
+	skipHints := m.width < 80
 
 	lines := make([]string, 5)
 	for i := range 5 {
@@ -166,8 +179,8 @@ func (m *AppModel) viewHeader() string {
 		line := col1[i]
 		w := lipgloss.Width(line)
 
-		// Pad to col2 position and add shortcut.
-		if col2[i] != "" {
+		// Pad to col2 position and add shortcut (skip on narrow terminals).
+		if col2[i] != "" && !skipShortcuts {
 			if w < col2Start {
 				line += strings.Repeat(" ", col2Start-w)
 			} else {
@@ -177,8 +190,8 @@ func (m *AppModel) viewHeader() string {
 		}
 		w = lipgloss.Width(line)
 
-		// Pad to col3 position and add hints.
-		if col3[i] != "" {
+		// Pad to col3 position and add hints (skip on narrow terminals).
+		if col3[i] != "" && !skipHints {
 			if w < col3Start {
 				line += strings.Repeat(" ", col3Start-w)
 			} else {
@@ -247,8 +260,7 @@ func (m *AppModel) viewCommandBar() string {
 		return ""
 	}
 
-	borderColor := lipgloss.Color("36") // cyan border like k9s
-	bs := lipgloss.NewStyle().Foreground(borderColor)
+	bs := commandBarBorderStyle
 	innerW := m.width - 4
 	if innerW < 10 {
 		innerW = 10
@@ -290,19 +302,25 @@ func (m *AppModel) viewResourceTable() string {
 	}
 }
 
+// Hoisted breadcrumb styles to avoid allocations on every frame.
+var (
+	breadcrumbListStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("214")).
+				Foreground(lipgloss.Color("0")).
+				Bold(true).
+				Padding(0, 1)
+	breadcrumbLeafStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("63")).
+				Foreground(lipgloss.Color("231")).
+				Bold(true).
+				Padding(0, 1)
+)
+
 // viewBreadcrumb renders the navigation breadcrumb trail at the bottom.
 // Each segment is an individual colored box: orange for list views, blue for leaves.
 func (m *AppModel) viewBreadcrumb() string {
-	listStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("214")).
-		Foreground(lipgloss.Color("0")).
-		Bold(true).
-		Padding(0, 1)
-	leafStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("63")).
-		Foreground(lipgloss.Color("231")).
-		Bold(true).
-		Padding(0, 1)
+	listStyle := breadcrumbListStyle
+	leafStyle := breadcrumbLeafStyle
 
 	leafKinds := map[string]bool{"messages": true, "help": true, "detail": true}
 

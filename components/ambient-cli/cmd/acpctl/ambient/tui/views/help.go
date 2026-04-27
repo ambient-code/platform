@@ -175,11 +175,12 @@ func maxFormattedKeyWidth(entries []HelpEntry) int {
 	return maxW
 }
 
-// padRight pads s with spaces to reach width w. If s is already wider, it is
-// returned unmodified.
+// padRight pads s with spaces to reach visual width w. Uses lipgloss.Width to
+// correctly handle multi-byte Unicode characters and ANSI escape sequences.
 func padRight(s string, w int) string {
-	if len(s) >= w {
+	vw := lipgloss.Width(s)
+	if vw >= w {
 		return s
 	}
-	return s + strings.Repeat(" ", w-len(s))
+	return s + strings.Repeat(" ", w-vw)
 }
