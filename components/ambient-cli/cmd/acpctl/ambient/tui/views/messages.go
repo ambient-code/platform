@@ -85,10 +85,11 @@ func eventColor(eventType string) lipgloss.Color {
 		return msgColorCyan
 	case "RUN_STARTED", "RUN_FINISHED":
 		return msgColorGreen
-	case "REASONING_START", "REASONING_MESSAGE_START",
+	case "reasoning",
+		"REASONING_START", "REASONING_MESSAGE_START",
 		"REASONING_MESSAGE_CONTENT", "REASONING_MESSAGE_END",
 		"REASONING_END":
-		return msgColorOrange
+		return msgColorDim
 	case "STEP_STARTED", "STEP_FINISHED":
 		return msgColorYellow
 	default:
@@ -126,6 +127,8 @@ func eventSummary(eventType, payload string) string {
 	case "user":
 		return truncatePayload(payload, 120)
 	case "assistant":
+		return truncatePayload(payload, 120)
+	case "reasoning":
 		return truncatePayload(payload, 120)
 	case "tool_use":
 		name := extractJSONField(payload, "name")
@@ -233,6 +236,8 @@ func eventSummary(eventType, payload string) string {
 func eventFullText(eventType, payload string) string {
 	switch eventType {
 	case "user":
+		return strings.TrimSpace(payload)
+	case "reasoning":
 		return strings.TrimSpace(payload)
 	case "assistant":
 		return strings.TrimSpace(payload)
@@ -411,8 +416,10 @@ type MessageStream struct {
 	// Streaming accumulator — coalesces AG-UI deltas into a single growing entry.
 	streamingEntry    *MessageEntry  // the in-progress text message being accumulated
 	streamingText     strings.Builder // accumulated text for the current text message
-	streamingToolEntry *MessageEntry  // the in-progress tool call being accumulated
-	streamingToolArgs  strings.Builder // accumulated args for the current tool call
+	streamingToolEntry    *MessageEntry  // the in-progress tool call being accumulated
+	streamingToolArgs    strings.Builder // accumulated args for the current tool call
+	streamingReasonEntry *MessageEntry  // the in-progress reasoning message being accumulated
+	streamingReasonText  strings.Builder // accumulated text for the current reasoning message
 
 	// Cached display lines — rebuilt when mode/messages change, not every frame.
 	cachedLines      []string
@@ -540,6 +547,47 @@ func (ms *MessageStream) HandleStreamEvent(entry MessageEntry) {
 	case "TEXT_MESSAGE_END":
 		// Finalize the accumulated text message.
 		ms.streamingEntry = nil
+		ms.cachedDirty = true
+
+	// -- Reasoning accumulation --
+
+	case "REASONING_MESSAGE_START", "REASONING_START":
+		ms.streamingReasonText.Reset()
+		newEntry := MessageEntry{
+			Seq:       entry.Seq,
+			EventType: "reasoning",
+			Payload:   "",
+			Timestamp: entry.Timestamp,
+		}
+		ms.streamingReasonEntry = &newEntry
+		ms.messages = append(ms.messages, newEntry)
+		ms.evictIfNeeded()
+		ms.cachedDirty = true
+		if ms.autoScroll {
+			ms.scrollToBottom()
+		}
+
+	case "REASONING_MESSAGE_CONTENT":
+		delta := extractJSONField(entry.Payload, "delta")
+		if delta == "" {
+			return
+		}
+		ms.streamingReasonText.WriteString(delta)
+		if ms.streamingReasonEntry != nil && len(ms.messages) > 0 {
+			for i := len(ms.messages) - 1; i >= 0; i-- {
+				if ms.messages[i].Seq == ms.streamingReasonEntry.Seq {
+					ms.messages[i].Payload = ms.streamingReasonText.String()
+					break
+				}
+			}
+			ms.cachedDirty = true
+			if ms.autoScroll {
+				ms.scrollToBottom()
+			}
+		}
+
+	case "REASONING_MESSAGE_END", "REASONING_END":
+		ms.streamingReasonEntry = nil
 		ms.cachedDirty = true
 
 	// -- Tool call accumulation --

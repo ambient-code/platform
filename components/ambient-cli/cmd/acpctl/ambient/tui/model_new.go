@@ -800,7 +800,10 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.Message.EventType {
 			case "TEXT_MESSAGE_START", "TEXT_MESSAGE_CONTENT", "TEXT_MESSAGE_END",
 				"TOOL_CALL_START", "TOOL_CALL_ARGS", "TOOL_CALL_END",
-				"TOOL_CALL_RESULT":
+				"TOOL_CALL_RESULT",
+				"REASONING_START", "REASONING_MESSAGE_START",
+				"REASONING_MESSAGE_CONTENT", "REASONING_MESSAGE_END",
+				"REASONING_END":
 				m.messageStream.HandleStreamEvent(entry)
 			default:
 				m.messageStream.AddMessage(entry)
