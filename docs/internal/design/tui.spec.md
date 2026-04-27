@@ -9,7 +9,7 @@
 
 ## Overview
 
-The Ambient TUI is a full-screen terminal interface for operating the Ambient platform. It evolves the current Bubbletea-based dashboard into a k9s-inspired resource browser backed by the Ambient API (REST/gRPC), not the Kubernetes API.
+The Ambient TUI is a full-screen terminal interface for operating the Ambient platform. It is a k9s-inspired resource browser backed by the Ambient API (REST/gRPC), not the Kubernetes API.
 
 **Design intent:** k9s's interaction model — table-first resource browsing, command mode, filtering, drill-down, contextual hotkeys — applied to the Ambient data model. Not a k9s fork. Not a generic K8s browser. A purpose-built operator console for Ambient resources.
 
@@ -30,6 +30,7 @@ The Ambient TUI is a full-screen terminal interface for operating the Ambient pl
 | Offline-safe auth | The TUI reuses `acpctl login` credentials from `~/.config/ambient/config.json`. No separate auth flow. |
 | Multi-context | Operators work across local, staging, and production. The TUI saves every server the user has logged into as a named context and supports instant switching — same as k9s with kubeconfig clusters. |
 | Sanitize all external content | Agent-produced output is rendered in the terminal. All content from the API is stripped of ANSI escape sequences, terminal control characters, and framework-specific tags before display. |
+| Consistent chrome | All views use the same UI structure: hotkey hints in the header, filtering via the global `/` command bar, breadcrumbs at the bottom. No view defines its own bottom status bar or proprietary filter mechanism. Status indicators (Autoscroll, Mode, Phase) for the message stream belong in the sub-header line below the title bar, inside the bordered area. |
 
 ---
 
@@ -37,29 +38,13 @@ The Ambient TUI is a full-screen terminal interface for operating the Ambient pl
 
 ### Framework
 
-**Bubbletea + bubbles + lipgloss** (Charmbracelet stack — same as today).
-
-The existing TUI's problem is not Bubbletea. It is that tables are hand-rendered as strings instead of using `bubbles/table`, and that data fetching shells out to `kubectl` instead of using the SDK. The framework stays. The internals are rewritten.
+**Bubbletea + bubbles + lipgloss** (Charmbracelet stack).
 
 Rationale:
-- `bubbles/table` provides column sorting, selection, scrolling, and keyboard navigation — the features the TUI currently lacks.
+- `bubbles/table` provides column sorting, selection, scrolling, and keyboard navigation.
 - `bubbles/textinput` provides command bar and compose input with cursor management.
-- Bubbletea's Elm architecture (Model/Update/View) is better suited for the TUI's state-heavy navigation (command mode, filter mode, compose mode, detail mode, navigation stack) than tview's widget-callback model.
-- `teatest` provides programmatic test harness (send keystrokes, assert on output) — tview has no equivalent.
-- The dependency already exists in `go.mod`. No new terminal abstraction layer.
-- lipgloss styling carries forward directly from `view.go`.
-
-### Migration Strategy
-
-The rewrite is incremental, not blank-slate:
-
-1. **Extract reusable logic** from existing code into framework-agnostic packages before changing any rendering. Specifically:
-   - Session message streaming (`restartSessionPoll` pattern from `model.go`)
-   - Multi-project SDK fan-out (`fetchAll` from `fetch.go`)
-   - AG-UI event parsing (`tileDisplayPayload`, `extractKVField` from `dashboard.go`)
-   - Color palette (`view.go` lines 12-29)
-2. **Replace rendering** — swap hand-rendered string tables with `bubbles/table`, swap manual input handling with `bubbles/textinput`.
-3. **Remove kubectl/oc code** — delete all `exec.Command("kubectl", ...)` paths, pod/namespace views, port-forward management.
+- Bubbletea's Elm architecture (Model/Update/View) is well-suited for the TUI's state-heavy navigation (command mode, filter mode, compose mode, detail mode, navigation stack).
+- `teatest` provides a programmatic test harness (send keystrokes, assert on output).
 
 ### Package Layout
 
@@ -90,10 +75,10 @@ cmd/acpctl/ambient/
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│  Context: local [RW]                    <?> Help         _    __  __     │
-│  Server:  localhost:8000                <:> Command      /_\  |  \/  |   │
-│  User:    jsell                         <r> Rename      / _ \ | |\/| |   │
-│  Project: ambient-platform                             /_/ \_\|_|  |_|   │
+│  Context: local [RW]                    <?> Help        _    ___ ___     │
+│  Server:  localhost:8000                <:> Command     /_\  / __| _ \   │
+│  User:    jsell                         <r> Rename    / _ \| (__|  _/   │
+│  Project: ambient-platform                           /_/ \_\\___|_|     │
 │  ⟳ 3s                                                                   │
 ├──────────────────────────────────────────────────────────────────────────┤
 │  (command bar appears here on `:` or `/`, hidden by default)             │
@@ -264,11 +249,13 @@ Accessible globally (`:sessions` — all sessions across all projects) or scoped
 | `d` | Describe — show session detail (full metadata, prompt, conditions) | d |
 | `l` | Live message stream (same as Enter) | l |
 | `m` | Send message to session (`POST /sessions/{id}/messages`) | — |
+| `n` | Start a new session for the current agent (opens prompt input) | — |
 | `y` | YAML — dump session as YAML to screen | y |
 | `Ctrl-D` | Delete/cancel session (confirmation modal) | Ctrl-D |
 
 ### Message Stream View
 
+**UI consistency:** The message stream follows the same layout conventions as all other views. Keyboard shortcuts are shown in the header (not in a bottom status bar). Filtering uses the global `/` command bar. The only view-specific chrome is the status indicator line below the title bar (Autoscroll, Mode, Phase, SSE status).
 
 #### Data Source
 
@@ -297,7 +284,7 @@ The `/events` endpoint (raw runner SSE) is not used. `/messages` is the durable,
  └────────────────────────────────────────────────────────────────────┘
 ```
 
-**Raw mode** (`r` to toggle): Shows raw AG-UI events as JSON lines — useful for debugging.
+**Raw mode** (`r` to toggle): Shows AG-UI events as formatted JSON lines — useful for debugging. "Raw" refers to the unaltered JSON schema/payload structure, not raw terminal bytes. Sanitization is mandatory in all modes: control sequences, ANSI escape codes, and unsafe terminal bytes are stripped from every field value before display, identical to conversation mode.
 
 #### Event Type Rendering
 
@@ -370,6 +357,7 @@ These work on every screen:
 | `Ctrl-C` | Quit immediately | `Ctrl-C` |
 | `c` | Copy selected row's ID to clipboard (OSC 52) | — |
 | Scroll wheel | Scroll up/down in tables and message stream | Scroll wheel |
+| `0`-`9` | Switch project by number (shown in header) | — (Ambient-specific, matches k9s namespace switching) |
 | `Shift-N` | Sort by name column | `Shift-N` |
 | `Shift-A` | Sort by age column | `Shift-A` |
 
@@ -398,7 +386,27 @@ Left side — context metadata (k9s style, stacked key-value):
 - **Project** (current project context)
 - **Refresh indicator** — seconds since last successful fetch. Shows `(stale)` if >15s.
 
-Right side — ASCII art branding + top-level key hints.
+Right side — ASCII art branding + key hints.
+
+Between the left-side metadata and the right-side hotkey hints, the header shows numbered project shortcuts for quick switching (matching k9s's namespace number keys):
+
+```
+<0> all       <1> test       <2> test-jsell       <s> Start  <d> Describe     <?>  Help
+                                                    <x> Stop   <i> Inbox        <:>  Command
+                                                    <l> Logs   <n> New          </>  Filter
+```
+
+Projects are numbered in alphabetical order. `<0>` always means "all" (unscoped). Pressing a number key instantly switches the project context without entering command mode.
+
+The right side of the header shows contextual hotkeys that change based on the active view, displayed to the left of the static `<?>`, `<:>`, `</>` hints. For example, in the agents view:
+
+```
+<s> Start  <x> Stop  <i> Inbox  <d> Describe     <?>  Help
+<e> Edit   <l> Logs  <n> New    <Ctrl-D> Delete   <:>  Command
+                                                   </>  Filter
+```
+
+Each view shows only its relevant hotkeys. The hotkeys are rendered in dim text with the key in angle brackets.
 
 ### Command/Filter Bar
 
@@ -450,7 +458,7 @@ Examples:
 - `Viewing agents in project ambient-platform`
 - `Streaming messages for session 01HABC...`
 - `Switched to context staging`
-- `✗ disconnected — retrying in 5s` (persists)
+- `✗ disconnected — retrying (backoff: Xs)` (persists)
 
 ---
 
@@ -472,7 +480,7 @@ When a view is not visible (user has drilled into a child), its polling pauses. 
 
 | Scenario | Behavior |
 |----------|----------|
-| **API unreachable** | Status line: `✗ disconnected — retrying in 5s`. Tables show stale data. Header shows `(stale Ns)` with seconds since last successful fetch. No retry limit — the TUI keeps trying indefinitely with 5s backoff. |
+| **API unreachable** | Status line: `✗ disconnected — retrying (backoff: Xs)`. Tables show stale data. Header shows `(stale Ns)` with seconds since last successful fetch. Exponential backoff with jitter: start at 1s, double each attempt (1s, 2s, 4s, …), cap at 30s, reset to 1s on a successful fetch. Same algorithm as SSE stream disconnect. No retry limit — the TUI retries indefinitely. |
 | **401 Unauthorized** | Attempt to re-read token from `~/.config/ambient/config.json` (another session may have refreshed it). If still 401, status line: `✗ session expired — run 'acpctl login' in another terminal`. Stale data preserved. No modal, no forced exit. |
 | **403 Forbidden (resource)** | Inline in table: row shows `ACCESS DENIED` for the specific resource. |
 | **403 Forbidden (kind)** | Table-level message: `Insufficient permissions to list <kind>`. Distinct from empty results. |
@@ -539,7 +547,7 @@ Rules:
 - All other servers → hostname portion of the URL
 - If a context with the same name exists, `acpctl login` updates it (token, project) rather than creating a duplicate.
 - `acpctl login` sets `current_context` to the newly logged-in context.
-- `acpctl logout` removes the current context entry. If other contexts remain, `current_context` switches to the first remaining one.
+- `acpctl logout` removes the current context entry. If other contexts remain, `current_context` is set to the lexically first remaining context name (sorted ascending). This is a stable, deterministic selection — independent of insertion order or platform map iteration.
 
 In the TUI:
 - `:ctx` with no argument lists all contexts in a table (name, server, project, active indicator).
@@ -557,7 +565,7 @@ Carried forward from the existing TUI (`view.go`). These are ANSI 256-color indi
 | Phase | Color | ANSI 256 Index | Lipgloss |
 |-------|-------|----------------|----------|
 | `pending` | Yellow | 33 | `Color("33")` |
-| `running` | Green | 28 | `Color("28")` |
+| `running` | Orange | 214 | `Color("214")` |
 | `succeeded` / `completed` | Dim grey | 240 | `Color("240")` |
 | `failed` | Red | 31 | `Color("31")` |
 | `cancelled` | Dim grey | 240 | `Color("240")` |
@@ -568,12 +576,26 @@ Full palette (preserved from existing code):
 |------|----------|-------|
 | Orange | 214 | Branding, navigation highlights, selected items |
 | Cyan | 36 | Secondary accent |
-| Green | 28 | Running/success phase |
+| Green | 28 | Success indicators |
 | Red | 31 | Failed/error phase, delete confirmations |
 | Yellow | 33 | Pending phase, in-progress indicators |
 | Dim | 240 | Inactive items, separators, hints |
 | White | 255 | Primary text |
 | Blue | 69 | Command mode, links |
+
+### Row Coloring
+
+Following k9s conventions, entire table rows are colored based on resource phase/status — not just the PHASE column. This provides at-a-glance visibility into fleet health.
+
+| Phase | Row Color | ANSI 256 |
+|-------|-----------|----------|
+| `running` / `active` | Orange | 214 |
+| `pending` | Yellow | 33 |
+| `failed` | Red | 31 |
+| `succeeded` / `completed` | Dim grey | 240 |
+| `idle` / `cancelled` | Dim grey | 240 |
+
+**Selected row highlight:** The selected row uses the phase color as the **background** with black (0) foreground text. The highlight spans the full row width border-to-border. For rows without a phase (projects, contexts), the default orange (214) background is used.
 
 ---
 
@@ -617,38 +639,13 @@ These are gaps where the TUI spec requires data the API does not provide efficie
 
 ---
 
-## Migration from Existing TUI
-
-### What Carries Forward (framework-agnostic logic)
-
-| Code | Source | Destination |
-|------|--------|-------------|
-| Session message streaming (goroutine lifecycle, reconnect-with-backoff, cancellation) | `model.go` `restartSessionPoll` | `client.go` |
-| Multi-project SDK fan-out (list projects, fan out per-project fetches, mutex, error aggregation) | `fetch.go` `fetchAll` | `client.go` |
-| AG-UI event parsing (payload extraction, event type classification) | `dashboard.go` `tileDisplayPayload`, `extractKVField`, `eventTypeStyle` | `events.go` |
-| Color palette (ANSI 256 indices + lipgloss styles) | `view.go` lines 12-29 | `view.go` (unchanged) |
-| Agent CRUD operations (edit-with-dirty-tracking, confirm-delete, SDK calls) | `model.go` agent edit/delete handlers | `views/agents.go` |
-| Session message compose flow (project-scoped client resolution, PushMessage) | `model.go` compose handlers | `views/messages.go` |
-
-### What Is Dropped
-
-| Code | Reason |
-|------|--------|
-| All `kubectl`/`oc` exec calls | API-only data path |
-| Pod and Namespace views | Use k9s |
-| Port-forward management | `acpctl` subcommands / Makefile |
-| Manual string-based table rendering (`col()`, `padTo()`) | Replaced by `bubbles/table` |
-| `execCommand` shell runner | Not needed |
-
----
-
 ## Implementation Priority
 
 Each wave produces a **shippable `acpctl ambient`** — the binary is usable at the end of every wave, not just scaffolding.
 
 | Wave | Scope | Deliverable |
 |------|-------|-------------|
-| **0** | Extract reusable logic from existing code into `client.go`, `events.go`, `sanitize.go`. Replace string tables with `bubbles/table`. Remove kubectl code. Multi-context config format (`contexts` map, `current_context`). Prove architecture with project table only. | Launches, shows projects in a real table. `acpctl login` auto-creates named context. Smoke-tests pass via `teatest`. |
+| **0** | `client.go`, `events.go`, `sanitize.go` foundation modules. `bubbles/table`-based project list. Multi-context config format (`contexts` map, `current_context`). | Launches, shows projects in a real table. `acpctl login` auto-creates named context. Smoke-tests pass via `teatest`. |
 | **1** | Agent table + command mode (`:projects`, `:agents`, `:sessions`, `:aliases`, `:ctx`, `:project`, `:q`) with tab completion. `:ctx` lists/switches contexts. `/` filter (regex + inverse). Navigation stack (Enter/Esc push/pop). Breadcrumb. Column sorting (Shift-key). | Two-resource browser with full k9s navigation feel. Context switching works. |
 | **2a** | Session table (global + agent-scoped). Read-only message stream view via `/messages` SSE. Conversation + raw mode toggle. | Operators can watch agent work in real time. |
 | **2b** | Send message (`POST /sessions/{id}/messages`). Streaming partial response rendering (delta accumulation). SSE reconnect with `after_seq` replay. Copy-to-clipboard (`c`). | Full interactive session experience. |
@@ -673,4 +670,4 @@ Each wave produces a **shippable `acpctl ambient`** — the binary is usable at 
 
 | Command | Description | Status |
 |---------|-------------|--------|
-| `acpctl ambient` | Launch interactive TUI | 🔄 rewrite (exists today, replacing internals) |
+| `acpctl ambient` | Launch interactive TUI | ✅ |
