@@ -172,9 +172,8 @@ type DeleteInboxMsg struct {
 // SessionMessageEvent carries a single session message received from an SSE
 // stream. Sent to the Bubbletea program via program.Send().
 type SessionMessageEvent struct {
-	Message     *sdktypes.SessionMessage
-	Err         error
-	IsLiveEvent bool // true for AG-UI /events stream (skip seq dedup)
+	Message *sdktypes.SessionMessage
+	Err     error
 }
 
 // SessionMessagesMsg carries a batch of messages fetched via polling
@@ -901,7 +900,6 @@ func (tc *TUIClient) WatchSessionEvents(projectID, sessionID string, program *te
 		go func() {
 			defer cancel()
 
-			seq := 0
 			backoff := 1 * time.Second
 			const maxBackoff = 30 * time.Second
 			const scannerBufSize = 1 << 20
@@ -939,7 +937,6 @@ func (tc *TUIClient) WatchSessionEvents(projectID, sessionID string, program *te
 						EventType: "system",
 						Payload:   "connected to event stream",
 					},
-					IsLiveEvent: true,
 				})
 
 				// Parse SSE stream line by line.
@@ -990,14 +987,11 @@ func (tc *TUIClient) WatchSessionEvents(projectID, sessionID string, program *te
 							continue
 						}
 
-						seq++
 						program.Send(SessionMessageEvent{
 							Message: &sdktypes.SessionMessage{
-								Seq:       seq,
 								EventType: eventType,
 								Payload:   data,
 							},
-							IsLiveEvent: true,
 						})
 
 						// Close the stream on terminal events.

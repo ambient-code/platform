@@ -390,6 +390,12 @@ const defaultMaxMessages = 2000
 // MessageStream is a Bubbletea sub-model for the live session message stream.
 // It renders messages in conversation or raw mode, supports scrolling,
 // autoscroll, compose input, and search.
+//
+// The message buffer is split into two separated streams:
+//   - history: durable conversation turns from /messages polling (user + assistant)
+//   - liveOverlay: ephemeral AG-UI events from /events SSE (tool calls, reasoning, streaming text)
+//
+// View() renders history first, then a separator, then liveOverlay. No cross-stream dedup needed.
 type MessageStream struct {
 	sessionID string
 	agentName string
@@ -398,9 +404,19 @@ type MessageStream struct {
 	// SSE connection status: "", "connected", "reconnecting", "disconnected".
 	sseStatus string
 
-	// Message buffer (ring buffer, 2000 max).
-	messages    []MessageEntry
-	maxMessages int
+	// Separated message buffers.
+	history     []MessageEntry // durable conversation turns from /messages polling
+	liveOverlay []MessageEntry // ephemeral AG-UI events from /events SSE
+	maxMessages int            // ring buffer capacity for history only
+
+	// Highest seq seen in history — used for polling dedup.
+	lastHistorySeq int
+
+	// runFinished is set when RUN_FINISHED/RUN_ERROR arrives via the event stream.
+	// The overlay persists until the next AddHistoryMessage with EventType=="assistant"
+	// arrives, at which point the overlay is cleared. This avoids a visual gap where
+	// neither buffer has the response.
+	runFinished bool
 
 	// Display
 	scrollOffset  int
@@ -414,6 +430,7 @@ type MessageStream struct {
 	glamourWidth    int // width used to create the cached renderer
 
 	// Streaming accumulator — coalesces AG-UI deltas into a single growing entry.
+	// These write to liveOverlay instead of history.
 	streamingEntry    *MessageEntry  // the in-progress text message being accumulated
 	streamingText     strings.Builder // accumulated text for the current text message
 	streamingToolEntry    *MessageEntry  // the in-progress tool call being accumulated
@@ -424,7 +441,7 @@ type MessageStream struct {
 	// Cached display lines — rebuilt when mode/messages change, not every frame.
 	cachedLines      []string
 	cachedDirty      bool // true when lines need rebuilding
-	cachedMsgCount   int
+	cachedMsgCount   int  // history + overlay combined count
 	cachedRawMode    bool
 	cachedWrapMode   bool
 	cachedTsMode     int
@@ -462,7 +479,8 @@ func NewMessageStream(sessionID, agentName, phase string) MessageStream {
 		sessionID:    sessionID,
 		agentName:    agentName,
 		phase:        phase,
-		messages:     make([]MessageEntry, 0, 256),
+		history:      make([]MessageEntry, 0, 256),
+		liveOverlay:  make([]MessageEntry, 0, 64),
 		maxMessages:  defaultMaxMessages,
 		autoScroll:   true,
 		composeInput: ci,
@@ -474,24 +492,37 @@ func NewMessageStream(sessionID, agentName, phase string) MessageStream {
 // Public methods
 // ---------------------------------------------------------------------------
 
-// AddMessage appends a message to the ring buffer. When the buffer exceeds
-// maxMessages, the oldest message is evicted. If autoScroll is enabled the
-// scroll offset is advanced to keep the newest message visible.
-func (ms *MessageStream) AddMessage(entry MessageEntry) {
-	ms.messages = append(ms.messages, entry)
-	if len(ms.messages) > ms.maxMessages {
+// AddHistoryMessage appends a message to the history ring buffer. When the
+// buffer exceeds maxMessages, the oldest message is evicted. If autoScroll is
+// enabled the scroll offset is advanced to keep the newest message visible.
+//
+// When runFinished is true and an "assistant" message arrives, the live overlay
+// is cleared — the persisted assistant message in history replaces the ephemeral
+// streaming overlay.
+func (ms *MessageStream) AddHistoryMessage(entry MessageEntry) {
+	ms.history = append(ms.history, entry)
+	if len(ms.history) > ms.maxMessages {
 		// Evict oldest — shift the slice. For a 2000-entry buffer this is
 		// acceptable; a true ring buffer optimisation can come later.
-		excess := len(ms.messages) - ms.maxMessages
+		excess := len(ms.history) - ms.maxMessages
 		// Clean up glamour cache entries for evicted messages.
 		if ms.glamourCache != nil {
-			for _, evicted := range ms.messages[:excess] {
+			for _, evicted := range ms.history[:excess] {
 				delete(ms.glamourCache, evicted.Seq)
 			}
 		}
-		ms.messages = ms.messages[excess:]
+		ms.history = ms.history[excess:]
 		// Don't adjust scrollOffset here — it's a display-line offset, not a
 		// message-array index. renderContent's clamp handles any overshoot.
+	}
+	// Track highest seq for polling dedup.
+	if entry.Seq > ms.lastHistorySeq {
+		ms.lastHistorySeq = entry.Seq
+	}
+	// When the run has finished and the persisted assistant message arrives
+	// in history, clear the ephemeral overlay — history now has the response.
+	if ms.runFinished && entry.EventType == "assistant" {
+		ms.ClearLiveOverlay()
 	}
 	ms.cachedDirty = true
 	if ms.autoScroll {
@@ -499,17 +530,43 @@ func (ms *MessageStream) AddMessage(entry MessageEntry) {
 	}
 }
 
+// LastHistorySeq returns the highest seq in the history buffer. Used by the
+// polling path for dedup.
+func (ms *MessageStream) LastHistorySeq() int {
+	return ms.lastHistorySeq
+}
+
+// ClearLiveOverlay clears the live overlay buffer and all streaming
+// accumulators. Called when the overlay content has been superseded by
+// persisted history entries.
+func (ms *MessageStream) ClearLiveOverlay() {
+	ms.liveOverlay = ms.liveOverlay[:0]
+	ms.streamingEntry = nil
+	ms.streamingText.Reset()
+	ms.streamingToolEntry = nil
+	ms.streamingToolArgs.Reset()
+	ms.streamingReasonEntry = nil
+	ms.streamingReasonText.Reset()
+	ms.runFinished = false
+	ms.cachedDirty = true
+}
+
+// MessageCount returns the total number of messages across both buffers.
+func (ms *MessageStream) MessageCount() int {
+	return len(ms.history) + len(ms.liveOverlay)
+}
+
 // HandleStreamEvent processes AG-UI streaming events by accumulating deltas
-// into a single growing message entry instead of creating a separate entry per
-// delta. This produces clean output where text streams in place rather than
-// appearing as dozens of fragment lines.
+// into a single growing message entry in liveOverlay instead of creating a
+// separate entry per delta. This produces clean output where text streams in
+// place rather than appearing as dozens of fragment lines.
 func (ms *MessageStream) HandleStreamEvent(entry MessageEntry) {
 	switch entry.EventType {
 
 	// -- Text message accumulation --
 
 	case "TEXT_MESSAGE_START":
-		// Begin a new assistant message slot.
+		// Begin a new assistant message slot in liveOverlay.
 		ms.streamingText.Reset()
 		newEntry := MessageEntry{
 			Seq:       entry.Seq,
@@ -518,8 +575,7 @@ func (ms *MessageStream) HandleStreamEvent(entry MessageEntry) {
 			Timestamp: entry.Timestamp,
 		}
 		ms.streamingEntry = &newEntry
-		ms.messages = append(ms.messages, newEntry)
-		ms.evictIfNeeded()
+		ms.liveOverlay = append(ms.liveOverlay, newEntry)
 		ms.cachedDirty = true
 		if ms.autoScroll {
 			ms.scrollToBottom()
@@ -531,12 +587,12 @@ func (ms *MessageStream) HandleStreamEvent(entry MessageEntry) {
 			return
 		}
 		ms.streamingText.WriteString(delta)
-		// Update the last message entry in place.
-		if ms.streamingEntry != nil && len(ms.messages) > 0 {
-			ms.messages[len(ms.messages)-1].Payload = ms.streamingText.String()
+		// Update the last liveOverlay entry in place.
+		if ms.streamingEntry != nil && len(ms.liveOverlay) > 0 {
+			ms.liveOverlay[len(ms.liveOverlay)-1].Payload = ms.streamingText.String()
 			// Invalidate glamour cache for this entry since content changed.
 			if ms.glamourCache != nil {
-				delete(ms.glamourCache, ms.messages[len(ms.messages)-1].Seq)
+				delete(ms.glamourCache, ms.liveOverlay[len(ms.liveOverlay)-1].Seq)
 			}
 			ms.cachedDirty = true
 			if ms.autoScroll {
@@ -560,8 +616,7 @@ func (ms *MessageStream) HandleStreamEvent(entry MessageEntry) {
 			Timestamp: entry.Timestamp,
 		}
 		ms.streamingReasonEntry = &newEntry
-		ms.messages = append(ms.messages, newEntry)
-		ms.evictIfNeeded()
+		ms.liveOverlay = append(ms.liveOverlay, newEntry)
 		ms.cachedDirty = true
 		if ms.autoScroll {
 			ms.scrollToBottom()
@@ -573,10 +628,10 @@ func (ms *MessageStream) HandleStreamEvent(entry MessageEntry) {
 			return
 		}
 		ms.streamingReasonText.WriteString(delta)
-		if ms.streamingReasonEntry != nil && len(ms.messages) > 0 {
-			for i := len(ms.messages) - 1; i >= 0; i-- {
-				if ms.messages[i].Seq == ms.streamingReasonEntry.Seq {
-					ms.messages[i].Payload = ms.streamingReasonText.String()
+		if ms.streamingReasonEntry != nil && len(ms.liveOverlay) > 0 {
+			for i := len(ms.liveOverlay) - 1; i >= 0; i-- {
+				if ms.liveOverlay[i].Seq == ms.streamingReasonEntry.Seq {
+					ms.liveOverlay[i].Payload = ms.streamingReasonText.String()
 					break
 				}
 			}
@@ -612,8 +667,7 @@ func (ms *MessageStream) HandleStreamEvent(entry MessageEntry) {
 			Timestamp: entry.Timestamp,
 		}
 		ms.streamingToolEntry = &newEntry
-		ms.messages = append(ms.messages, newEntry)
-		ms.evictIfNeeded()
+		ms.liveOverlay = append(ms.liveOverlay, newEntry)
 		ms.cachedDirty = true
 		if ms.autoScroll {
 			ms.scrollToBottom()
@@ -625,15 +679,13 @@ func (ms *MessageStream) HandleStreamEvent(entry MessageEntry) {
 			return
 		}
 		ms.streamingToolArgs.WriteString(delta)
-		// Append accumulated args to the tool call entry's payload.
-		if ms.streamingToolEntry != nil && len(ms.messages) > 0 {
-			// Find the tool call entry (it may not be the very last if a text
-			// message arrived between START and ARGS, but typically it is).
-			for i := len(ms.messages) - 1; i >= 0; i-- {
-				if ms.messages[i].Seq == ms.streamingToolEntry.Seq {
+		// Append accumulated args to the tool call entry's payload in liveOverlay.
+		if ms.streamingToolEntry != nil && len(ms.liveOverlay) > 0 {
+			for i := len(ms.liveOverlay) - 1; i >= 0; i-- {
+				if ms.liveOverlay[i].Seq == ms.streamingToolEntry.Seq {
 					// Keep the tool name, append args after a space.
 					baseName := ms.streamingToolEntry.Payload
-					ms.messages[i].Payload = baseName + " " + ms.streamingToolArgs.String()
+					ms.liveOverlay[i].Payload = baseName + " " + ms.streamingToolArgs.String()
 					break
 				}
 			}
@@ -647,15 +699,29 @@ func (ms *MessageStream) HandleStreamEvent(entry MessageEntry) {
 		ms.streamingToolEntry = nil
 		ms.cachedDirty = true
 
-	// -- Non-accumulated events: add as normal entries --
+	// -- Non-accumulated events: add to liveOverlay directly --
 
 	case "TOOL_CALL_RESULT":
 		entry.EventType = "tool_result"
-		ms.AddMessage(entry)
+		ms.addLiveEvent(entry)
 
 	default:
-		// RUN_FINISHED, RUN_ERROR, and anything else — pass through.
-		ms.AddMessage(entry)
+		// RUN_FINISHED, RUN_ERROR, and anything else — add to overlay.
+		ms.addLiveEvent(entry)
+		// Mark run as finished so overlay persists until history catches up.
+		if entry.EventType == "RUN_FINISHED" || entry.EventType == "RUN_ERROR" {
+			ms.runFinished = true
+		}
+	}
+}
+
+// addLiveEvent appends an entry to the liveOverlay buffer and handles
+// autoscroll. This is a thin wrapper for non-accumulated events.
+func (ms *MessageStream) addLiveEvent(entry MessageEntry) {
+	ms.liveOverlay = append(ms.liveOverlay, entry)
+	ms.cachedDirty = true
+	if ms.autoScroll {
+		ms.scrollToBottom()
 	}
 }
 
@@ -665,16 +731,16 @@ func (ms *MessageStream) IsStreaming() bool {
 	return ms.streamingEntry != nil
 }
 
-// evictIfNeeded trims the message buffer to maxMessages if it has grown too large.
+// evictIfNeeded trims the history buffer to maxMessages if it has grown too large.
 func (ms *MessageStream) evictIfNeeded() {
-	if len(ms.messages) > ms.maxMessages {
-		excess := len(ms.messages) - ms.maxMessages
+	if len(ms.history) > ms.maxMessages {
+		excess := len(ms.history) - ms.maxMessages
 		if ms.glamourCache != nil {
-			for _, evicted := range ms.messages[:excess] {
+			for _, evicted := range ms.history[:excess] {
 				delete(ms.glamourCache, evicted.Seq)
 			}
 		}
-		ms.messages = ms.messages[excess:]
+		ms.history = ms.history[excess:]
 	}
 }
 
@@ -861,11 +927,14 @@ func (ms *MessageStream) updateNormal(msg tea.KeyMsg) (MessageStream, tea.Cmd) {
 			return *ms, nil
 		case "c":
 			// Copy the first visible message's payload to clipboard.
-			// scrollOffset is a display-line offset, so we iterate messages
-			// and count display lines to find the right one.
-			if len(ms.messages) > 0 {
+			// scrollOffset is a display-line offset, so we iterate all messages
+			// (history + overlay) and count display lines to find the right one.
+			allEntries := make([]MessageEntry, 0, len(ms.history)+len(ms.liveOverlay))
+			allEntries = append(allEntries, ms.history...)
+			allEntries = append(allEntries, ms.liveOverlay...)
+			if len(allEntries) > 0 {
 				lineCount := 0
-				for _, entry := range ms.messages {
+				for _, entry := range allEntries {
 					var entryLines []string
 					if ms.rawMode {
 						entryLines = ms.renderRawEntry(entry, max(ms.width-4, 20))
@@ -982,7 +1051,7 @@ func (ms *MessageStream) View() string {
 	titleRendered := " " +
 		kindStyle.Render("messages") +
 		dimStyle.Render("(") + scopeStyle.Render(scope) + dimStyle.Render(")") +
-		dimStyle.Render("[") + countStyle.Render(fmt.Sprintf("%d", len(ms.messages))) + dimStyle.Render("]") +
+		dimStyle.Render("[") + countStyle.Render(fmt.Sprintf("%d", ms.MessageCount())) + dimStyle.Render("]") +
 		" "
 	titleWidth := lipgloss.Width(titleRendered)
 	remaining := max(ms.width-titleWidth-2, 2)
@@ -1142,7 +1211,7 @@ func (ms *MessageStream) View() string {
 
 // renderContent produces the visible message lines for the content area.
 func (ms *MessageStream) renderContent(height int) []string {
-	if len(ms.messages) == 0 {
+	if len(ms.history) == 0 && len(ms.liveOverlay) == 0 {
 		return []string{msgDimStyle.Render("No messages yet.")}
 	}
 
@@ -1168,16 +1237,18 @@ func (ms *MessageStream) renderContent(height int) []string {
 	return allLines[start:end]
 }
 
-// buildDisplayLines converts the message buffer into styled display lines.
-// Results are cached and only rebuilt when mode/messages change.
+// buildDisplayLines converts both message buffers into styled display lines.
+// History entries are rendered first, then a dim separator, then liveOverlay
+// entries. Results are cached and only rebuilt when mode/messages change.
 func (ms *MessageStream) buildDisplayLines() []string {
 	searchStr := ""
 	if ms.searchPattern != nil {
 		searchStr = ms.searchPattern.String()
 	}
+	totalCount := ms.MessageCount()
 	// Check if cache is still valid (timestamps always invalidate since relative times change).
 	if !ms.cachedDirty &&
-		ms.cachedMsgCount == len(ms.messages) &&
+		ms.cachedMsgCount == totalCount &&
 		ms.cachedRawMode == ms.rawMode &&
 		ms.cachedWrapMode == ms.wrapMode &&
 		ms.cachedTsMode == ms.timestampMode &&
@@ -1188,28 +1259,17 @@ func (ms *MessageStream) buildDisplayLines() []string {
 
 	maxLineWidth := max(ms.width-4, 20) // 2 for borders, 2 for padding
 
-	lines := make([]string, 0, len(ms.messages))
+	lines := make([]string, 0, totalCount)
 
 	const tagPad = 14
-	separator := strings.Repeat(" ", tagPad) + msgSepStyle.Render(strings.Repeat("─", max(maxLineWidth-tagPad, 10)))
+	turnSeparator := strings.Repeat(" ", tagPad) + msgSepStyle.Render(strings.Repeat("─", max(maxLineWidth-tagPad, 10)))
 
 	now := time.Now()
-	prevWasUserOrAssistant := false
-	for _, entry := range ms.messages {
-		// Apply search filter if active.
-		if ms.searchPattern != nil {
-			text := eventSummary(entry.EventType, entry.Payload)
-			if !ms.searchPattern.MatchString(text) && !ms.searchPattern.MatchString(entry.Payload) {
-				continue
-			}
-		}
 
-		var entryLines []string
-		if ms.rawMode {
-			entryLines = ms.renderRawEntry(entry, maxLineWidth)
-		} else {
-			entryLines = ms.renderConversationEntry(entry, maxLineWidth)
-		}
+	// Render history entries.
+	prevWasUserOrAssistant := false
+	for _, entry := range ms.history {
+		entryLines := ms.renderEntry(entry, maxLineWidth, now)
 		if len(entryLines) == 0 {
 			continue
 		}
@@ -1217,41 +1277,96 @@ func (ms *MessageStream) buildDisplayLines() []string {
 		// Add dim separator between user/assistant messages in conversation mode.
 		isUserOrAssistant := entry.EventType == "user" || entry.EventType == "assistant"
 		if !ms.rawMode && isUserOrAssistant && prevWasUserOrAssistant {
-			lines = append(lines, separator)
+			lines = append(lines, turnSeparator)
 		}
 		prevWasUserOrAssistant = isUserOrAssistant
 
-		// Prepend timestamp to the first line if timestamps are enabled.
-		if ms.timestampMode > 0 && !entry.Timestamp.IsZero() {
-			tsStyle := msgDimStyle
-			var ts string
-			if ms.timestampMode == 1 {
-				d := now.Sub(entry.Timestamp)
-				if d < time.Minute {
-					ts = fmt.Sprintf("%ds", int(d.Seconds()))
-				} else if d < time.Hour {
-					ts = fmt.Sprintf("%dm", int(d.Minutes()))
-				} else if d < 24*time.Hour {
-					ts = fmt.Sprintf("%dh", int(d.Hours()))
-				} else {
-					ts = fmt.Sprintf("%dd", int(d.Hours()/24))
-				}
-			} else {
-				ts = entry.Timestamp.Format("15:04:05")
-			}
-			entryLines[0] = tsStyle.Render(fmt.Sprintf("%-8s", ts)) + entryLines[0]
-		}
 		lines = append(lines, entryLines...)
+	}
+
+	// Render liveOverlay entries with a header separator.
+	if len(ms.liveOverlay) > 0 {
+		// Check if any overlay entries pass the search filter before adding the separator.
+		hasVisible := false
+		for _, entry := range ms.liveOverlay {
+			if ms.searchPattern != nil {
+				text := eventSummary(entry.EventType, entry.Payload)
+				if !ms.searchPattern.MatchString(text) && !ms.searchPattern.MatchString(entry.Payload) {
+					continue
+				}
+			}
+			hasVisible = true
+			break
+		}
+		if hasVisible {
+			overlaySep := msgSepStyle.Render(fmt.Sprintf(
+				"── agent activity %s",
+				strings.Repeat("─", max(maxLineWidth-19, 5)),
+			))
+			lines = append(lines, overlaySep)
+
+			for _, entry := range ms.liveOverlay {
+				entryLines := ms.renderEntry(entry, maxLineWidth, now)
+				if len(entryLines) == 0 {
+					continue
+				}
+				lines = append(lines, entryLines...)
+			}
+		}
 	}
 
 	ms.cachedLines = lines
 	ms.cachedDirty = false
-	ms.cachedMsgCount = len(ms.messages)
+	ms.cachedMsgCount = totalCount
 	ms.cachedRawMode = ms.rawMode
 	ms.cachedWrapMode = ms.wrapMode
 	ms.cachedTsMode = ms.timestampMode
 	ms.cachedSearchPat = searchStr
 	return lines
+}
+
+// renderEntry renders a single message entry into display lines, applying the
+// search filter and optional timestamp prefix. Shared by history and overlay rendering.
+func (ms *MessageStream) renderEntry(entry MessageEntry, maxLineWidth int, now time.Time) []string {
+	// Apply search filter if active.
+	if ms.searchPattern != nil {
+		text := eventSummary(entry.EventType, entry.Payload)
+		if !ms.searchPattern.MatchString(text) && !ms.searchPattern.MatchString(entry.Payload) {
+			return nil
+		}
+	}
+
+	var entryLines []string
+	if ms.rawMode {
+		entryLines = ms.renderRawEntry(entry, maxLineWidth)
+	} else {
+		entryLines = ms.renderConversationEntry(entry, maxLineWidth)
+	}
+	if len(entryLines) == 0 {
+		return nil
+	}
+
+	// Prepend timestamp to the first line if timestamps are enabled.
+	if ms.timestampMode > 0 && !entry.Timestamp.IsZero() {
+		tsStyle := msgDimStyle
+		var ts string
+		if ms.timestampMode == 1 {
+			d := now.Sub(entry.Timestamp)
+			if d < time.Minute {
+				ts = fmt.Sprintf("%ds", int(d.Seconds()))
+			} else if d < time.Hour {
+				ts = fmt.Sprintf("%dm", int(d.Minutes()))
+			} else if d < 24*time.Hour {
+				ts = fmt.Sprintf("%dh", int(d.Hours()))
+			} else {
+				ts = fmt.Sprintf("%dd", int(d.Hours()/24))
+			}
+		} else {
+			ts = entry.Timestamp.Format("15:04:05")
+		}
+		entryLines[0] = tsStyle.Render(fmt.Sprintf("%-8s", ts)) + entryLines[0]
+	}
+	return entryLines
 }
 
 // getGlamourRenderer returns a cached glamour renderer, creating one lazily on
@@ -1410,7 +1525,7 @@ func (ms *MessageStream) scrollDown(n int) {
 
 func (ms *MessageStream) scrollToBottom() {
 	// Set a large value; renderContent will clamp.
-	ms.scrollOffset = len(ms.messages) * 10
+	ms.scrollOffset = ms.MessageCount() * 10
 }
 
 // contentHeight returns the usable content height given the current dimensions.

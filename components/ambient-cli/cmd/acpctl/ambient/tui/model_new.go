@@ -160,7 +160,6 @@ type AppModel struct {
 	program *tea.Program
 
 	// Message polling state (fallback when SSE is unavailable).
-	lastMessageSeq   int  // highest seq seen — poll for messages after this
 	messagePollActive bool // true when message poll tick is running
 
 	// Errors
@@ -741,7 +740,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err != nil {
 			return m, m.setInfo("Send message failed: " + msg.Err.Error())
 		}
-		// Add the user message to the stream immediately so it's visible
+		// Add the user message to history immediately so it's visible
 		// without waiting for a poll. The /events stream only carries
 		// runner AG-UI events, not echoed user messages.
 		if msg.Message != nil {
@@ -749,15 +748,12 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.Message.CreatedAt != nil {
 				ts = *msg.Message.CreatedAt
 			}
-			m.messageStream.AddMessage(views.MessageEntry{
+			m.messageStream.AddHistoryMessage(views.MessageEntry{
 				Seq:       msg.Message.Seq,
 				EventType: "user",
 				Payload:   msg.Message.Payload,
 				Timestamp: ts,
 			})
-			if msg.Message.Seq > m.lastMessageSeq {
-				m.lastMessageSeq = msg.Message.Seq
-			}
 		}
 		return m, m.setInfo("Message sent")
 
@@ -780,10 +776,10 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Inbox message deleted"))
 
 	case SessionMessageEvent:
-		// SSE message received — add to the message stream.
+		// SSE event received — route to the live overlay in the message stream.
 		if msg.Err != nil {
 			m.messageStream.SetSSEStatus("reconnecting")
-			m.messageStream.AddMessage(views.MessageEntry{
+			m.messageStream.HandleStreamEvent(views.MessageEntry{
 				EventType: "error",
 				Payload:   msg.Err.Error(),
 				Timestamp: time.Now(),
@@ -796,11 +792,6 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.Message != nil && m.activeView == "messages" {
-			// Dedup: skip messages already seen via polling (not applicable
-			// to live AG-UI events which use their own seq counter).
-			if !msg.IsLiveEvent && msg.Message.Seq <= m.lastMessageSeq {
-				return m, nil
-			}
 			m.messageStream.SetSSEStatus("connected")
 			ts := time.Now()
 			if msg.Message.CreatedAt != nil {
@@ -812,29 +803,15 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Payload:   msg.Message.Payload,
 				Timestamp: ts,
 			}
-			// Route AG-UI streaming events through the accumulator so that
-			// deltas are coalesced into a single growing message instead of
-			// appearing as dozens of fragment lines.
-			switch msg.Message.EventType {
-			case "TEXT_MESSAGE_START", "TEXT_MESSAGE_CONTENT", "TEXT_MESSAGE_END",
-				"TOOL_CALL_START", "TOOL_CALL_ARGS", "TOOL_CALL_END",
-				"TOOL_CALL_RESULT",
-				"REASONING_START", "REASONING_MESSAGE_START",
-				"REASONING_MESSAGE_CONTENT", "REASONING_MESSAGE_END",
-				"REASONING_END":
-				m.messageStream.HandleStreamEvent(entry)
-			default:
-				m.messageStream.AddMessage(entry)
-			}
-			// Track highest seq for polling.
-			if msg.Message.Seq > m.lastMessageSeq {
-				m.lastMessageSeq = msg.Message.Seq
-			}
+			// All /events SSE events go to HandleStreamEvent which writes
+			// to liveOverlay. The accumulator coalesces deltas into single
+			// growing entries; non-accumulated events are added directly.
+			m.messageStream.HandleStreamEvent(entry)
 		}
 		return m, nil
 
 	case SessionMessagesMsg:
-		// Polling fallback: batch of messages from REST ListMessages.
+		// Polling: batch of messages from REST ListMessages goes to history.
 		if msg.Err != nil {
 			// Non-fatal — polling will retry on next tick, but inform user.
 			return m, m.setInfo("Message poll error: " + msg.Err.Error())
@@ -842,36 +819,24 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.activeView != "messages" {
 			return m, nil
 		}
-		sseConnected := m.messageStream.GetSSEStatus() == "connected"
 		for _, sm := range msg.Messages {
-			if sm.Seq <= m.lastMessageSeq {
-				continue // already seen via SSE or previous poll
-			}
-			// When the event stream is connected, skip assistant messages
-			// from polling — they're DB echoes of what the event stream
-			// already delivered live. Only let user messages through.
-			if sseConnected && sm.EventType == "assistant" {
-				if sm.Seq > m.lastMessageSeq {
-					m.lastMessageSeq = sm.Seq
-				}
+			// Simple seq-based dedup on history — no cross-stream checks needed.
+			if sm.Seq <= m.messageStream.LastHistorySeq() {
 				continue
 			}
 			ts := time.Now()
 			if sm.CreatedAt != nil {
 				ts = *sm.CreatedAt
 			}
-			m.messageStream.AddMessage(views.MessageEntry{
+			m.messageStream.AddHistoryMessage(views.MessageEntry{
 				Seq:       sm.Seq,
 				EventType: sm.EventType,
 				Payload:   sm.Payload,
 				Timestamp: ts,
 			})
-			if sm.Seq > m.lastMessageSeq {
-				m.lastMessageSeq = sm.Seq
-			}
 		}
 		m.lastFetch = time.Now()
-		if len(msg.Messages) > 0 {
+		if len(msg.Messages) > 0 && m.messageStream.GetSSEStatus() != "connected" {
 			m.messageStream.SetSSEStatus("polling")
 		}
 		return m, nil
@@ -894,7 +859,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if projectID != "" {
 				cmds = append(cmds, m.client.FetchSessionMessages(
-					projectID, m.currentSession, m.lastMessageSeq,
+					projectID, m.currentSession, m.messageStream.LastHistorySeq(),
 				))
 			}
 		}
@@ -1592,7 +1557,6 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 				fullSessionID = session.ID
 			}
 			m.currentSession = fullSessionID
-			m.lastMessageSeq = 0
 
 			// Create a new message stream for this session.
 			agentName := m.currentAgent
@@ -1873,7 +1837,6 @@ func (m *AppModel) handleAgentsRune(key string) (tea.Model, tea.Cmd) {
 		m.currentAgent = agentName
 		m.currentAgentID = agent.ID
 		m.currentSession = sessionID
-		m.lastMessageSeq = 0
 		m.messageStream = views.NewMessageStream(sessionID, agentName, "active")
 		m.resizeTable()
 
