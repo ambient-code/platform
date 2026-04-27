@@ -95,21 +95,44 @@ func (m *AppModel) viewHeader() string {
 		}
 	}
 
-	// Col 3: contextual hotkey hints (up to 4 rows, ~4 per row).
+	// Col 3: contextual hotkey hints (up to 4 rows, column-aligned).
 	var col3 [5]string
 	hints := m.contextualHints()
 	perRow := 4
 	if len(hints) <= 8 {
-		perRow = (len(hints) + 3) / 4 // spread across 4 rows
+		perRow = (len(hints) + 3) / 4
 		if perRow < 2 {
 			perRow = 2
 		}
 	}
+
+	colKeyWidths := make([]int, perRow)
+	for i, h := range hints {
+		if idx := strings.Index(h, ">"); idx >= 0 {
+			if w := lipgloss.Width(h[:idx+1]); w > colKeyWidths[i%perRow] {
+				colKeyWidths[i%perRow] = w
+			}
+		}
+	}
+
+	rendered := make([]string, len(hints))
+	for i, h := range hints {
+		rendered[i] = m.renderHint(h, colKeyWidths[i%perRow])
+	}
+
+	colWidths := make([]int, perRow)
+	for i, r := range rendered {
+		if w := lipgloss.Width(r); w > colWidths[i%perRow] {
+			colWidths[i%perRow] = w
+		}
+	}
+
 	rowIdx := 0
 	var currentRow []string
-	for i, h := range hints {
-		currentRow = append(currentRow, m.renderHint(h))
-		if (i+1)%perRow == 0 || i == len(hints)-1 {
+	for i, r := range rendered {
+		pad := colWidths[i%perRow] - lipgloss.Width(r)
+		currentRow = append(currentRow, r+strings.Repeat(" ", pad))
+		if (i+1)%perRow == 0 || i == len(rendered)-1 {
 			if rowIdx < 5 {
 				col3[rowIdx] = strings.Join(currentRow, "  ")
 			}
@@ -192,8 +215,8 @@ func (m *AppModel) viewHeader() string {
 }
 
 // renderHint renders a single hotkey hint like "<d> Describe" with dim brackets
-// and white action text.
-func (m *AppModel) renderHint(hint string) string {
+// and white action text. keyWidth is the visual width to pad all keys to (0 = no padding).
+func (m *AppModel) renderHint(hint string, keyWidth int) string {
 	if strings.HasPrefix(hint, "(") {
 		return styleDim.Render(hint)
 	}
@@ -202,8 +225,13 @@ func (m *AppModel) renderHint(hint string) string {
 		return styleDim.Render(hint)
 	}
 	key := hint[:idx+1]   // e.g. "<d>"
-	action := hint[idx+1:] // e.g. " Describe"
-	return styleDim.Render(key) + styleWhite.Render(action)
+	action := hint[idx+2:] // e.g. "Describe" (skip the space after >)
+	renderedKey := styleDim.Render(key)
+	pad := keyWidth + 1 - lipgloss.Width(renderedKey)
+	if pad < 1 {
+		pad = 1
+	}
+	return renderedKey + strings.Repeat(" ", pad) + styleWhite.Render(action)
 }
 
 // viewCommandBar renders the command, filter, or prompt input bar with a border.
