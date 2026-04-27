@@ -35,6 +35,13 @@ const infoTimeout = 5 * time.Second
 // staleThreshold marks data as stale in the header when exceeded.
 const staleThreshold = 15 * time.Second
 
+// isRunningPhase returns true if the session phase indicates the session is
+// currently running and can produce live AG-UI events.
+func isRunningPhase(phase string) bool {
+	p := strings.ToLower(phase)
+	return p == "running" || p == "active" || p == "pending"
+}
+
 // ---------------------------------------------------------------------------
 // Navigation
 // ---------------------------------------------------------------------------
@@ -1567,12 +1574,17 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 				projectID = session.ProjectID
 			}
 
-			// Use polling for messages (SSE disabled — the synchronous SSE
-			// connection setup blocks the UI for several seconds).
 			if projectID != "" {
-				m.messagePollActive = true
-				cmds = append(cmds, m.messagePollTickCmd())
-				cmds = append(cmds, m.client.FetchSessionMessages(projectID, fullSessionID, 0))
+				// Use AG-UI event stream for running sessions; poll /messages
+				// for completed/stopped/failed sessions (historical replay).
+				if isRunningPhase(phase) && m.program != nil {
+					m.messageStream.SetSSEStatus("connecting")
+					cmds = append(cmds, m.client.WatchSessionEvents(projectID, fullSessionID, m.program))
+				} else {
+					m.messagePollActive = true
+					cmds = append(cmds, m.messagePollTickCmd())
+					cmds = append(cmds, m.client.FetchSessionMessages(projectID, fullSessionID, 0))
+				}
 			}
 
 			return m, tea.Batch(cmds...)
@@ -1823,12 +1835,16 @@ func (m *AppModel) handleAgentsRune(key string) (tea.Model, tea.Cmd) {
 			m.setInfo("Streaming messages for session " + sessionID),
 		}
 
-		// Use polling for messages (SSE disabled — blocks UI).
 		if m.currentProject != "" {
-			m.messagePollActive = true
-			cmds = append(cmds, m.messagePollTickCmd())
-			// Immediately fetch existing messages so the view is not empty.
-			cmds = append(cmds, m.client.FetchSessionMessages(m.currentProject, sessionID, 0))
+			// Active agent sessions are running — use the AG-UI event stream.
+			if m.program != nil {
+				m.messageStream.SetSSEStatus("connecting")
+				cmds = append(cmds, m.client.WatchSessionEvents(m.currentProject, sessionID, m.program))
+			} else {
+				m.messagePollActive = true
+				cmds = append(cmds, m.messagePollTickCmd())
+				cmds = append(cmds, m.client.FetchSessionMessages(m.currentProject, sessionID, 0))
+			}
 		}
 
 		return m, tea.Batch(cmds...)

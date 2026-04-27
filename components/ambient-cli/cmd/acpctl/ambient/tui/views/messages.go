@@ -77,8 +77,20 @@ func eventColor(eventType string) lipgloss.Color {
 		return msgColorDim // 240
 	case "system":
 		return msgColorYellow // 33
-	case "error":
+	case "error", "RUN_ERROR":
 		return msgColorRed // 31
+	case "TEXT_MESSAGE_START", "TEXT_MESSAGE_CONTENT", "TEXT_MESSAGE_END":
+		return msgColorBlue
+	case "TOOL_CALL_START", "TOOL_CALL_ARGS", "TOOL_CALL_END", "TOOL_CALL_RESULT":
+		return msgColorCyan
+	case "RUN_STARTED", "RUN_FINISHED":
+		return msgColorGreen
+	case "REASONING_START", "REASONING_MESSAGE_START",
+		"REASONING_MESSAGE_CONTENT", "REASONING_MESSAGE_END",
+		"REASONING_END":
+		return msgColorOrange
+	case "STEP_STARTED", "STEP_FINISHED":
+		return msgColorYellow
 	default:
 		return msgColorDim
 	}
@@ -151,6 +163,9 @@ func eventSummary(eventType, payload string) string {
 		if name == "" {
 			name = extractJSONField(payload, "tool_name")
 		}
+		if name == "" {
+			name = extractJSONField(payload, "toolCallName")
+		}
 		if name != "" {
 			return "⚙ " + name
 		}
@@ -167,7 +182,44 @@ func eventSummary(eventType, payload string) string {
 		return "✗ error"
 	case "TEXT_MESSAGE_START":
 		return "…"
-	case "TEXT_MESSAGE_END", "TOOL_CALL_ARGS", "TOOL_CALL_END":
+	case "TOOL_CALL_ARGS":
+		delta := extractJSONField(payload, "delta")
+		if delta != "" {
+			return truncatePayload(delta, 120)
+		}
+		return ""
+	case "TEXT_MESSAGE_END", "TOOL_CALL_END":
+		return ""
+	case "RUN_STARTED":
+		threadID := extractJSONField(payload, "threadId")
+		if threadID != "" {
+			return "run started (thread " + truncatePayload(threadID, 40) + ")"
+		}
+		return "run started"
+	case "REASONING_START", "REASONING_END",
+		"REASONING_MESSAGE_START", "REASONING_MESSAGE_END":
+		return ""
+	case "MESSAGES_SNAPSHOT":
+		return "[snapshot]"
+	case "STATE_SNAPSHOT", "STATE_DELTA":
+		return ""
+	case "STEP_STARTED":
+		name := extractJSONField(payload, "stepName")
+		if name != "" {
+			return "step: " + name
+		}
+		return ""
+	case "STEP_FINISHED":
+		return ""
+	case "ACTIVITY_SNAPSHOT", "ACTIVITY_DELTA":
+		return ""
+	case "CUSTOM":
+		name := extractJSONField(payload, "name")
+		if name != "" {
+			return "custom: " + name
+		}
+		return ""
+	case "RAW":
 		return ""
 	}
 	if payload != "" && len(payload) <= 120 {
@@ -216,8 +268,52 @@ func eventFullText(eventType, payload string) string {
 			return "✗ " + strings.TrimSpace(payload)
 		}
 		return "✗ unknown error"
+	case "TOOL_CALL_ARGS":
+		delta := extractJSONField(payload, "delta")
+		if delta != "" {
+			return strings.TrimSpace(delta)
+		}
+		return ""
+	case "TEXT_MESSAGE_CONTENT", "REASONING_MESSAGE_CONTENT":
+		delta := extractJSONField(payload, "delta")
+		if delta != "" {
+			return strings.TrimSpace(delta)
+		}
+		return ""
+	case "TOOL_CALL_START":
+		name := extractJSONField(payload, "tool_call_name")
+		if name == "" {
+			name = extractJSONField(payload, "tool_name")
+		}
+		if name == "" {
+			name = extractJSONField(payload, "toolCallName")
+		}
+		if name != "" {
+			return "⚙ " + name
+		}
+		return ""
+	case "TOOL_CALL_RESULT":
+		content := extractJSONField(payload, "content")
+		if content != "" {
+			return strings.TrimSpace(content)
+		}
+		return ""
+	case "RUN_FINISHED":
+		return "[done]"
+	case "RUN_ERROR":
+		msg := extractJSONField(payload, "message")
+		if msg != "" {
+			return "✗ " + strings.TrimSpace(msg)
+		}
+		return "✗ error"
+	case "RUN_STARTED":
+		threadID := extractJSONField(payload, "threadId")
+		if threadID != "" {
+			return "run started (thread " + strings.TrimSpace(threadID) + ")"
+		}
+		return "run started"
 	}
-	// Fallback: same as eventSummary for streaming event types.
+	// Fallback: same as eventSummary for other streaming event types.
 	return eventSummary(eventType, payload)
 }
 
@@ -758,11 +854,17 @@ func (ms *MessageStream) View() string {
 		phaseStyle.Render(ms.phase),
 		dimIndicator.Render(scrollPct),
 	)
-	if ms.sseStatus != "" && ms.sseStatus != "connected" {
+	if ms.sseStatus != "" {
 		var sseColor lipgloss.Color
 		switch ms.sseStatus {
+		case "connected":
+			sseColor = msgColorGreen
+		case "connecting":
+			sseColor = msgColorYellow
 		case "reconnecting":
 			sseColor = msgColorYellow
+		case "polling":
+			sseColor = msgColorDim
 		default:
 			sseColor = msgColorRed
 		}

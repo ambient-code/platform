@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -850,6 +853,188 @@ func (tc *TUIClient) WatchSessionMessages(projectID, sessionID string, afterSeq 
 				program.Send(SessionMessageEvent{
 					Err: fmt.Errorf("%s — falling back to polling", errMsg),
 				})
+			}
+		}()
+
+		return nil
+	}
+}
+
+// WatchSessionEvents returns a tea.Cmd that starts an SSE stream for
+// AG-UI events via the /events endpoint. Events are delivered to the Bubbletea
+// program via program.Send(SessionMessageEvent{...}).
+//
+// Unlike WatchSessionMessages (which reads /messages), this connects to
+// GET /sessions/{id}/events and receives the full AG-UI event stream:
+// TEXT_MESSAGE_CONTENT, TOOL_CALL_START, TOOL_CALL_ARGS, RUN_FINISHED, etc.
+//
+// The SSE goroutine:
+//   - Connects to GET /sessions/{id}/events via the SDK's StreamEvents.
+//   - Parses the SSE stream line by line (data: <JSON>).
+//   - Extracts the "type" field from each JSON event and maps it to a
+//     SessionMessageEvent with EventType and Payload fields.
+//   - Handles reconnection with exponential backoff (1s, 2s, 4s, max 30s).
+//   - Is cancellable via StopWatching().
+//
+// Only one watch can be active at a time. Calling WatchSessionEvents while
+// a previous watch is running cancels the old one first.
+func (tc *TUIClient) WatchSessionEvents(projectID, sessionID string, program *tea.Program) tea.Cmd {
+	return func() tea.Msg {
+		// Cancel any previously active watch.
+		tc.StopWatching()
+
+		ctx, cancel := context.WithCancel(context.Background())
+
+		tc.watchMu.Lock()
+		tc.watchCancel = cancel
+		tc.watchMu.Unlock()
+
+		client, err := tc.factory.ForProject(projectID)
+		if err != nil {
+			cancel()
+			program.Send(SessionMessageEvent{Err: err})
+			return nil
+		}
+
+		// SSE reconnection loop with exponential backoff.
+		go func() {
+			defer cancel()
+
+			seq := 0
+			backoff := 1 * time.Second
+			const maxBackoff = 30 * time.Second
+			const scannerBufSize = 1 << 20
+
+			for {
+				if ctx.Err() != nil {
+					return
+				}
+
+				body, sseErr := client.Sessions().StreamEvents(ctx, sessionID)
+				if sseErr != nil {
+					if ctx.Err() != nil {
+						return
+					}
+					program.Send(SessionMessageEvent{
+						Err: fmt.Errorf("events stream connect: %w", sseErr),
+					})
+					// Wait and retry.
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(backoff):
+					}
+					backoff *= 2
+					if backoff > maxBackoff {
+						backoff = maxBackoff
+					}
+					continue
+				}
+
+				// Connected — reset backoff and notify.
+				backoff = 1 * time.Second
+				program.Send(SessionMessageEvent{
+					Message: &sdktypes.SessionMessage{
+						EventType: "system",
+						Payload:   "connected to event stream",
+					},
+				})
+
+				// Parse SSE stream line by line.
+				scanner := bufio.NewScanner(body)
+				scanner.Buffer(make([]byte, scannerBufSize), scannerBufSize)
+
+				var dataBuf strings.Builder
+				streamDone := false
+
+				for scanner.Scan() {
+					if ctx.Err() != nil {
+						body.Close() //nolint:errcheck
+						return
+					}
+
+					line := scanner.Text()
+
+					switch {
+					case line == ": heartbeat":
+						// Ignore SSE heartbeat comments.
+						continue
+
+					case strings.HasPrefix(line, "data: "):
+						if dataBuf.Len() > 0 {
+							dataBuf.WriteByte('\n')
+						}
+						dataBuf.WriteString(strings.TrimPrefix(line, "data: "))
+
+					case line == "":
+						if dataBuf.Len() == 0 {
+							continue
+						}
+						data := dataBuf.String()
+						dataBuf.Reset()
+
+						// Parse the JSON to extract "type" field.
+						var raw map[string]json.RawMessage
+						if err := json.Unmarshal([]byte(data), &raw); err != nil {
+							continue
+						}
+
+						// Extract event type.
+						var eventType string
+						if typeField, ok := raw["type"]; ok {
+							_ = json.Unmarshal(typeField, &eventType)
+						}
+						if eventType == "" {
+							continue
+						}
+
+						seq++
+						program.Send(SessionMessageEvent{
+							Message: &sdktypes.SessionMessage{
+								Seq:       seq,
+								EventType: eventType,
+								Payload:   data,
+							},
+						})
+
+						// Close the stream on terminal events.
+						if eventType == "RUN_FINISHED" || eventType == "RUN_ERROR" {
+							streamDone = true
+						}
+					}
+
+					if streamDone {
+						break
+					}
+				}
+
+				body.Close() //nolint:errcheck
+
+				if ctx.Err() != nil {
+					return
+				}
+
+				// If the stream ended normally (RUN_FINISHED/RUN_ERROR), we're done.
+				if streamDone {
+					return
+				}
+
+				// Unexpected close — reconnect.
+				if scanErr := scanner.Err(); scanErr != nil {
+					program.Send(SessionMessageEvent{
+						Err: fmt.Errorf("events stream read: %w", scanErr),
+					})
+				}
+
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(backoff):
+				}
+				backoff *= 2
+				if backoff > maxBackoff {
+					backoff = maxBackoff
+				}
 			}
 		}()
 
