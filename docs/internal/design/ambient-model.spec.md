@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-20
 **Status:** Proposed — Pending Consensus
-**Last Updated:** 2026-04-24 — added `ScheduledSession` Kind; added session operational sub-resources (workspace, files, git, repos, tasks, runner protocol); added generic proxy surface for backend passthrough
+**Last Updated:** 2026-04-28 — added `ScheduledSession` Kind; added session operational sub-resources (workspace, files, git, repos, tasks, runner protocol); added generic proxy surface for backend passthrough; updated coverage matrix: all ScheduledSession commands implemented; session sub-resources (workspace/files/git/repos/operational/runner protocol) implemented in API server; generic proxy plugin implemented
 **Guide:** `ambient-model.guide.md` — implementation waves, gap table, build commands, run log
 **Design:** `credentials-session.md` — full Credential Kind design spec and rationale
 
@@ -94,19 +94,33 @@ erDiagram
         time   deleted_at
     }
 
-    %% ── Session (ephemeral run — started from an Agent) ────────────────────
+    %% ── Session (ephemeral run — created by user or via agent start) ─────────
 
     Session {
         string  ID PK
-        string  agent_id FK
-        string  triggered_by_user_id FK "who started the agent"
+        string  name "human-readable display name"
+        string  project_id FK "nullable — direct project context (no agent)"
+        string  agent_id FK "nullable — set when started via agent ignite"
+        string  created_by_user_id FK "who created or started the session"
+        string  assigned_user_id FK "nullable — override for session ownership"
+        string  parent_session_id FK "nullable — source session for clones"
         string  prompt "task scope for this run"
+        string  repo_url "nullable — primary repo for the session"
+        string  repos "JSON array of RepoEntry (additional attached repos)"
+        string  workflow_id "nullable — JSON-encoded workflow config"
+        string  llm_model "active LLM; default claude-sonnet-4-6"
+        float   llm_temperature "default 0.7"
+        int     llm_max_tokens "default 4000"
+        int     timeout "nullable — max session duration in seconds"
+        string  bot_account_name "nullable — service account for git ops"
+        string  resource_overrides "nullable — JSON pod resource overrides"
+        string  environment_variables "nullable — JSON extra env vars"
+        string  labels "JSON map; queryable tags"
+        string  annotations "JSON map; freeform metadata"
         string  phase
-        jsonb   labels
-        jsonb   annotations
         time    start_time
         time    completion_time
-        string  kube_cr_name
+        string  kube_cr_name "Kubernetes CR / pod name (set to session ID on create)"
         string  kube_cr_uid
         string  kube_namespace
         string  sdk_session_id
@@ -368,15 +382,15 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 
 | REST API | `acpctl` Command | Status |
 |---|---|---|
-| `GET /projects/{id}/scheduled-sessions` | `acpctl scheduled-session list` | 🔲 planned |
-| `GET /projects/{id}/scheduled-sessions/{sched_id}` | `acpctl scheduled-session get <name>` | 🔲 planned |
-| `POST /projects/{id}/scheduled-sessions` | `acpctl scheduled-session create --name <n> --agent <a> --schedule <cron> [--prompt <p>] [--timezone <tz>]` | 🔲 planned |
-| `PATCH /projects/{id}/scheduled-sessions/{sched_id}` | `acpctl scheduled-session update <name> [--schedule <cron>] [--prompt <p>] [--enabled=false]` | 🔲 planned |
-| `DELETE /projects/{id}/scheduled-sessions/{sched_id}` | `acpctl scheduled-session delete <name> --confirm` | 🔲 planned |
-| `POST .../suspend` | `acpctl scheduled-session suspend <name>` | 🔲 planned |
-| `POST .../resume` | `acpctl scheduled-session resume <name>` | 🔲 planned |
-| `POST .../trigger` | `acpctl scheduled-session trigger <name> [--prompt <p>]` | 🔲 planned |
-| `GET .../runs` | `acpctl scheduled-session runs <name>` | 🔲 planned |
+| `GET /projects/{id}/scheduled-sessions` | `acpctl scheduled-session list` | ✅ implemented |
+| `GET /projects/{id}/scheduled-sessions/{sched_id}` | `acpctl scheduled-session get <name>` | ✅ implemented |
+| `POST /projects/{id}/scheduled-sessions` | `acpctl scheduled-session create --name <n> --agent-id <a> --schedule <cron> [--prompt <p>] [--timezone <tz>]` | ✅ implemented |
+| `PATCH /projects/{id}/scheduled-sessions/{sched_id}` | `acpctl scheduled-session update <name> [--schedule <cron>] [--prompt <p>] [--enabled=false]` | ✅ implemented |
+| `DELETE /projects/{id}/scheduled-sessions/{sched_id}` | `acpctl scheduled-session delete <name> --confirm` | ✅ implemented |
+| `POST .../suspend` | `acpctl scheduled-session suspend <name>` | ✅ implemented |
+| `POST .../resume` | `acpctl scheduled-session resume <name>` | ✅ implemented |
+| `POST .../trigger` | `acpctl scheduled-session trigger <name>` | ✅ implemented |
+| `GET .../runs` | `acpctl scheduled-session runs <name>` | ✅ implemented |
 
 #### Session Operations
 
@@ -549,8 +563,8 @@ cat lead.yaml | acpctl apply -f -
 
 | Command | Status |
 |---|---|
-| `acpctl apply -f <path>` | 🔲 planned |
-| `acpctl apply -k <dir>` | 🔲 planned |
+| `acpctl apply -f <path>` | ✅ implemented |
+| `acpctl apply -k <dir>` | ✅ implemented |
 
 ### Global Flags
 
@@ -1145,7 +1159,7 @@ acpctl apply -f credential.yaml
 
 ## Implementation Coverage Matrix
 
-_Last updated: 2026-04-24. Use this as the authoritative index — click into component source to verify._
+_Last updated: 2026-04-28. Use this as the authoritative index — click into component source to verify._
 
 | Area | API Server | Go SDK | CLI (`acpctl`) | Notes |
 |---|---|---|---|---|
@@ -1154,12 +1168,12 @@ _Last updated: 2026-04-24. Use this as the authoritative index — click into co
 | **Sessions — messages (list/push/watch)** | ✅ `/messages` | ✅ `PushMessage`, `ListMessages`, `WatchSessionMessages` (gRPC) | ✅ `session messages`, `session send` | gRPC watch via `session_watch.go` |
 | **Sessions — live events (SSE proxy)** | ✅ `/events` → runner pod | ✅ `SessionAPI.StreamEvents` → `io.ReadCloser` | ✅ `session events` | Runner must be Running; 502 if unreachable |
 | **Sessions — labels/annotations** | ✅ PATCH accepts `labels`/`annotations` | ✅ fields on `Session` type; `SessionAPI.Update(patch map[string]any)` | ⚠️ no dedicated subcommand; use `acpctl get session -o json` + manual PATCH | |
-| **Sessions — workspace files** | 🔲 proxy to backend | 🔲 | 🔲 `session workspace list/get/put/delete` | Requires running session |
-| **Sessions — pre-upload files** | 🔲 proxy to backend | 🔲 | 🔲 `session files list/upload/delete` | S3-staged; available before session starts |
-| **Sessions — git** | 🔲 proxy to backend | 🔲 | 🔲 `session git status/configure-remote/branches` | |
-| **Sessions — repos** | 🔲 proxy to backend | 🔲 | 🔲 `session repos list/add/remove` | |
-| **Sessions — operational** | 🔲 proxy to backend | 🔲 | 🔲 `session clone/model/export/pod-events` | |
-| **Sessions — runner protocol** | 🔲 proxy to backend | 🔲 | 🔲 `session interrupt/feedback/capabilities/tasks` | Direct runner pod proxy; 502 if unreachable |
+| **Sessions — workspace files** | ✅ sessions plugin; stubs empty list when no runner; 503 per-file-op | 🔲 | 🔲 `session workspace list/get/put/delete` | Requires running session for file ops |
+| **Sessions — pre-upload files** | ✅ sessions plugin; stubs empty list when no runner; 503 per-file-op | 🔲 | 🔲 `session files list/upload/delete` | S3-staged; available before session starts |
+| **Sessions — git** | ✅ sessions plugin; stubs empty status/branches; configure-remote 503 if no runner | 🔲 | 🔲 `session git status/configure-remote/branches` | |
+| **Sessions — repos** | ✅ sessions plugin; repos/status stub; add/remove stored natively in session DB | 🔲 | 🔲 `session repos list/add/remove` | |
+| **Sessions — operational** | ✅ sessions plugin; clone/displayname/model/workflow/export/pod-events native; oauth 501 | 🔲 | 🔲 `session clone/model/export/pod-events` | |
+| **Sessions — runner protocol** | ✅ sessions plugin; agui/{run,events,interrupt,feedback,tasks,capabilities}, mcp/status | 🔲 | 🔲 `session interrupt/feedback/capabilities/tasks` | AGUI prefix routes; 502 if runner unreachable |
 | **Agents — CRUD** | ✅ `/projects/{id}/agents` | ✅ `ProjectAgentAPI.{ListByProject,GetByProject,GetInProject,CreateInProject,UpdateInProject,DeleteInProject}` | ✅ `agent list/get/create/update/delete` | |
 | **Agents — start/start-preview** | ✅ `/start` | ✅ `ProjectAgentAPI.{Start,GetStartPreview}` | ✅ `start <id>`, `agent start-preview` | Idempotent — returns existing session if active |
 | **Agents — sessions history** | ✅ `/sessions` sub-resource | ✅ `ProjectAgentAPI.Sessions` | ✅ `agent sessions` | Returns `SessionList` scoped to agent |
@@ -1172,12 +1186,12 @@ _Last updated: 2026-04-24. Use this as the authoritative index — click into co
 | **RBAC — role bindings** | ✅ | ✅ `RoleBindingAPI` | ✅ `create role-binding` only; list/delete not exposed | |
 | **Credentials — CRUD** | 🔲 | 🔲 | 🔲 `credential list/get/create/update/delete` | Project-scoped; not yet implemented |
 | **Credentials — token fetch (runner)** | 🔲 `GET /projects/{id}/credentials/{cred_id}/token` | 🔲 | n/a | Gated by `credential:token-reader`; granted to runner SA by operator |
-| **ScheduledSessions — CRUD** | 🔲 | 🔲 | 🔲 `scheduled-session list/get/create/update/delete` | New Kind; not yet implemented |
-| **ScheduledSessions — lifecycle** | 🔲 | 🔲 | 🔲 `scheduled-session suspend/resume/trigger/runs` | |
-| **Generic proxy — project config** | 🔲 passthrough to backend | n/a | 🔲 raw HTTP fallback | Permissions, keys, MCP servers, secrets, feature flags |
-| **Generic proxy — repo operations** | 🔲 passthrough to backend | n/a | 🔲 raw HTTP fallback | Tree, blob, branches, seed, forks |
-| **Generic proxy — auth integrations** | 🔲 passthrough to backend | n/a | n/a | GitHub/GitLab/Google/Jira/Gerrit/CodeRabbit/MCP OAuth flows |
-| **Generic proxy — cluster/platform** | 🔲 passthrough to backend | n/a | 🔲 `acpctl version`, `acpctl cluster-info` | cluster-info, version, health, LDAP, OOTB workflows |
+| **ScheduledSessions — CRUD** | ✅ scheduledSessions plugin | ✅ `ScheduledSessionAPI.{List,Get,Create,Update,Delete,GetByName}` | ✅ `scheduled-session list/get/create/update/delete` | |
+| **ScheduledSessions — lifecycle** | ✅ suspend/resume/trigger/runs handlers | ✅ `ScheduledSessionAPI.{Suspend,Resume,Trigger,Runs}` | ✅ `scheduled-session suspend/resume/trigger/runs` | |
+| **Generic proxy — project config** | ✅ proxy plugin (`plugins/proxy`); forwards non-`/api/ambient/` paths to `BACKEND_URL` | n/a | 🔲 raw HTTP fallback | Permissions, keys, MCP servers, secrets, feature flags |
+| **Generic proxy — repo operations** | ✅ proxy plugin | n/a | 🔲 raw HTTP fallback | Tree, blob, branches, seed, forks |
+| **Generic proxy — auth integrations** | ✅ proxy plugin | n/a | n/a | GitHub/GitLab/Google/Jira/Gerrit/CodeRabbit/MCP OAuth flows |
+| **Generic proxy — cluster/platform** | ✅ proxy plugin | n/a | 🔲 `acpctl version`, `acpctl cluster-info` | cluster-info, version, health, LDAP, OOTB workflows |
 | **Declarative apply** | n/a | uses SDK | ✅ `apply -f`, `apply -k` | Upsert semantics; supports inbox seeding |
 | **Declarative apply — Credential kind** | n/a | 🔲 | 🔲 | Planned; token sourced from env var in YAML |
 | **Declarative apply — ScheduledSession kind** | n/a | 🔲 | 🔲 | Planned; schedule and agent reference in YAML |
