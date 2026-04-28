@@ -65,6 +65,7 @@ var viewHintRegistry = map[string]ViewHints{
 			{Key: "l", Action: "Logs"},
 			{Key: "m", Action: "Send (via msgs)"},
 			{Key: "n", Action: "New"},
+			{Key: "x", Action: "Interrupt"},
 			{Key: "y", Action: "JSON"},
 			{Key: "ctrl-d", Action: "Delete"},
 		},
@@ -94,6 +95,7 @@ var viewHintRegistry = map[string]ViewHints{
 			{Key: "t", Action: "Timestamps"},
 			{Key: "m", Action: "Compose"},
 			{Key: "c", Action: "Copy"},
+			{Key: "x", Action: "Interrupt"},
 			{Key: "shift-g", Action: "Bottom"},
 			{Key: "g", Action: "Top"},
 		},
@@ -103,6 +105,22 @@ var viewHintRegistry = map[string]ViewHints{
 		},
 		Navigation: []views.HelpEntry{
 			{Key: "Esc", Action: "Back to sessions"},
+			{Key: "q", Action: "Back"},
+		},
+	},
+	"scheduledsessions": {
+		Resource: []views.HelpEntry{
+			{Key: "d", Action: "Describe"},
+			{Key: "n", Action: "New"},
+			{Key: "s", Action: "Suspend/Resume"},
+			{Key: "t", Action: "Trigger"},
+			{Key: "y", Action: "JSON"},
+			{Key: "ctrl-d", Action: "Delete"},
+		},
+		General: defaultGeneral(),
+		Navigation: []views.HelpEntry{
+			{Key: "Enter", Action: "Show detail"},
+			{Key: "Esc", Action: "Back"},
 			{Key: "q", Action: "Back"},
 		},
 	},

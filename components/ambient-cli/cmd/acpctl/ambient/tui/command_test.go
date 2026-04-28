@@ -208,8 +208,8 @@ func TestTabComplete_CommandNames(t *testing.T) {
 		partial string
 		want    []string
 	}{
-		// Partial "s" matches sessions
-		{"s", []string{"se", "sessions"}},
+		// Partial "s" matches sessions and scheduledsessions
+		{"s", []string{"scheduledsession", "scheduledsessions", "se", "sessions", "ss"}},
 		// Partial "a" matches agents, ag, aliases
 		{"a", []string{"ag", "agents", "aliases"}},
 		// Partial "q" matches q, quit
@@ -247,7 +247,7 @@ func TestTabComplete_EmptyInput(t *testing.T) {
 	for _, name := range got {
 		found[name] = true
 	}
-	for _, expected := range []string{"projects", "agents", "sessions", "inbox", "messages", "context", "ctx", "project", "proj", "aliases", "q", "quit", "ag", "se", "ib", "msg"} {
+	for _, expected := range []string{"projects", "agents", "sessions", "inbox", "messages", "context", "ctx", "project", "proj", "aliases", "q", "quit", "ag", "se", "ib", "msg", "scheduledsessions", "scheduledsession", "ss"} {
 		if !found[expected] {
 			t.Errorf("TabComplete(\"\") missing %q", expected)
 		}
@@ -327,8 +327,8 @@ func TestTabComplete_CaseInsensitive(t *testing.T) {
 	}
 
 	got = TabComplete("S", nil, nil)
-	if !stringSliceEqual(got, []string{"se", "sessions"}) {
-		t.Errorf("TabComplete(\"S\", nil, nil) = %v, want [se sessions]", got)
+	if !stringSliceEqual(got, []string{"scheduledsession", "scheduledsessions", "se", "sessions", "ss"}) {
+		t.Errorf("TabComplete(\"S\", nil, nil) = %v, want [scheduledsession scheduledsessions se sessions ss]", got)
 	}
 }
 

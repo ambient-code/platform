@@ -111,8 +111,10 @@ type AppModel struct {
 	contextTable  views.ResourceTable
 	messageStream views.MessageStream
 
+	scheduledSessionTable views.ResourceTable
+
 	// Current view determines which table/view is active
-	activeView string // "projects", "agents", "sessions", "messages", "inbox", "contexts"
+	activeView string // "projects", "agents", "sessions", "messages", "inbox", "contexts", "scheduledsessions"
 
 	// Context for scoped views
 	currentProject string // set when drilling into a project
@@ -147,7 +149,8 @@ type AppModel struct {
 	cachedProjects []sdktypes.Project
 	cachedAgents   []sdktypes.Agent
 	cachedSessions []sdktypes.Session
-	cachedInbox    []sdktypes.InboxMessage
+	cachedInbox              []sdktypes.InboxMessage
+	cachedScheduledSessions  []views.ScheduledSession
 
 	// Message polling state.
 	messagePollActive bool // true when message poll tick is running
@@ -234,6 +237,16 @@ func NewAppModel(factory *connection.ClientFactory) (*AppModel, error) {
 	})
 	it := views.NewInboxTable("all", views.DefaultTableStyle())
 	ct := views.NewContextTable(views.DefaultTableStyle())
+	sst := views.NewScheduledSessionTable("all", views.DefaultTableStyle())
+	// Scheduled session rows: SUSPENDED is column index 3
+	// (NAME, SCHEDULE, PROJECT, SUSPENDED, ACTIVE, LAST RUN, AGE)
+	// Dim (240) when suspended, orange (214) when active.
+	sst.SetRowColorFunc(func(row table.Row) lipgloss.Color {
+		if len(row) > 3 && row[3] == "Yes" {
+			return lipgloss.Color("240") // dim for suspended
+		}
+		return lipgloss.Color("214") // orange for active
+	})
 
 	m := &AppModel{
 		config: cfg,
@@ -245,9 +258,10 @@ func NewAppModel(factory *connection.ClientFactory) (*AppModel, error) {
 		projectTable: pt,
 		agentTable:   at,
 		sessionTable: st,
-		inboxTable:   it,
-		contextTable: ct,
-		commandInput: ci,
+		inboxTable:            it,
+		contextTable:          ct,
+		scheduledSessionTable: sst,
+		commandInput:          ci,
 		filterInput:  fi,
 		promptInput:  pi,
 	}
@@ -444,6 +458,11 @@ func (m *AppModel) fetchActiveView() tea.Cmd {
 			return m.client.FetchInbox(m.currentProject, m.currentAgentID)
 		}
 		return nil
+	case "scheduledsessions":
+		if m.currentProject != "" {
+			return m.client.FetchScheduledSessions(m.currentProject)
+		}
+		return nil
 	case "messages":
 		// Message stream uses SSE, not polling. No fetch command needed yet.
 		return nil
@@ -466,6 +485,8 @@ func (m *AppModel) activeTable() *views.ResourceTable {
 		return &m.inboxTable
 	case "contexts":
 		return &m.contextTable
+	case "scheduledsessions":
+		return &m.scheduledSessionTable
 	default:
 		return nil
 	}
@@ -545,6 +566,61 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case InboxMsg:
 		return m.handleInboxMsg(msg)
+
+	case ScheduledSessionsMsg:
+		return m.handleScheduledSessionsMsg(msg)
+
+	case CreateScheduledSessionMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Create scheduled session failed: " + msg.Err.Error())
+		}
+		name := ""
+		if msg.ScheduledSession != nil {
+			name = msg.ScheduledSession.DisplayName
+			if name == "" {
+				name = msg.ScheduledSession.Name
+			}
+		}
+		m.pollInFlight = true
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Scheduled session created: "+name))
+
+	case DeleteScheduledSessionMsg:
+		if msg.Err != nil {
+			if strings.Contains(msg.Err.Error(), "404") || strings.Contains(msg.Err.Error(), "not found") {
+				m.pollInFlight = true
+				return m, tea.Batch(m.fetchActiveView(), m.setInfo("Already deleted — refreshing"))
+			}
+			return m, m.setInfo("Delete scheduled session failed: " + msg.Err.Error())
+		}
+		m.pollInFlight = true
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Scheduled session deleted"))
+
+	case SuspendScheduledSessionMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Suspend failed: " + msg.Err.Error())
+		}
+		m.pollInFlight = true
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Scheduled session suspended"))
+
+	case ResumeScheduledSessionMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Resume failed: " + msg.Err.Error())
+		}
+		m.pollInFlight = true
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Scheduled session resumed"))
+
+	case TriggerScheduledSessionMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Trigger failed: " + msg.Err.Error())
+		}
+		m.pollInFlight = true
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Scheduled session triggered"))
+
+	case InterruptSessionMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Interrupt failed: " + msg.Err.Error())
+		}
+		return m, m.setInfo("Session interrupted")
 
 	case views.DialogCancelMsg:
 		m.dialog = nil
@@ -863,6 +939,8 @@ func (m *AppModel) resizeTable() {
 	m.inboxTable.SetWidth(m.width)
 	m.contextTable.SetHeight(tableHeight)
 	m.contextTable.SetWidth(m.width)
+	m.scheduledSessionTable.SetHeight(tableHeight)
+	m.scheduledSessionTable.SetWidth(m.width)
 
 	// Message stream and detail view get the full table area.
 	m.messageStream.SetSize(m.width, tableHeight+2)
@@ -1227,6 +1305,64 @@ func (m *AppModel) handleInboxMsg(msg InboxMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleScheduledSessionsMsg populates the scheduled session table from a fetch result.
+func (m *AppModel) handleScheduledSessionsMsg(msg ScheduledSessionsMsg) (tea.Model, tea.Cmd) {
+	m.pollInFlight = false
+	m.lastFetch = time.Now()
+
+	if msg.Err != nil {
+		errMsg, skipPoll := m.classifyAPIError(msg.Err, "scheduled sessions")
+		m.lastError = errMsg
+		m.skipNextPoll = m.skipNextPoll || skipPoll
+		return m, nil
+	}
+
+	m.lastError = ""
+	m.authExpired = false
+	m.cachedScheduledSessions = msg.ScheduledSessions
+	now := time.Now()
+
+	rows := make([]table.Row, 0, len(msg.ScheduledSessions))
+	for _, ss := range msg.ScheduledSessions {
+		row := views.ScheduledSessionRow(ss, now)
+		for i := range row {
+			row[i] = Sanitize(row[i])
+		}
+		rows = append(rows, row)
+	}
+	m.scheduledSessionTable.SetRows(rows)
+
+	// Re-apply active filter if present and we're on scheduled sessions view.
+	if m.activeView == "scheduledsessions" && m.activeFilter != nil {
+		f := m.activeFilter
+		m.scheduledSessionTable.SetFilter(func(cols []string) bool {
+			return f.MatchRow(cols)
+		})
+	}
+
+	if len(msg.ScheduledSessions) >= 200 {
+		return m, m.setInfo("Showing first 200 scheduled sessions")
+	}
+
+	return m, nil
+}
+
+// findScheduledSessionByName returns the cached ScheduledSession with the given
+// display name (or internal name), or nil.
+func (m *AppModel) findScheduledSessionByName(displayName string) *views.ScheduledSession {
+	for i := range m.cachedScheduledSessions {
+		ss := &m.cachedScheduledSessions[i]
+		name := ss.DisplayName
+		if name == "" {
+			name = ss.Name
+		}
+		if name == displayName {
+			return ss
+		}
+	}
+	return nil
+}
+
 // handleTick manages periodic polling. Skips if a fetch is already in flight
 // or if skipNextPoll is set (e.g. after a 429 rate-limit response).
 func (m *AppModel) handleTick() (tea.Model, tea.Cmd) {
@@ -1362,6 +1498,8 @@ func (m *AppModel) updateFormOverlay(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleProjectCountsMsg(typedMsg)
 	case AgentCountsMsg:
 		return m.handleAgentCountsMsg(typedMsg)
+	case ScheduledSessionsMsg:
+		return m.handleScheduledSessionsMsg(typedMsg)
 	}
 
 	// Esc dismisses the form (huh uses ctrl+c for its own abort).
@@ -1539,6 +1677,21 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 			return m, tea.Batch(cmds...)
 		}
 
+	case "scheduledsessions":
+		row := m.scheduledSessionTable.SelectedRow()
+		if len(row) > 0 {
+			displayName := row[0]
+			ss := m.findScheduledSessionByName(displayName)
+			if ss == nil {
+				return m, m.setInfo("Scheduled session not found in cache: " + displayName)
+			}
+			// Show detail view for the scheduled session.
+			m.detailView = views.NewDetailView("Scheduled: "+displayName, views.ScheduledSessionDetail(*ss))
+			m.detailView.SetSize(m.width, m.height-10)
+			cmd := m.pushView("detail", displayName, ss.Name)
+			return m, tea.Batch(cmd, m.setInfo("Scheduled session detail: "+displayName))
+		}
+
 	case "inbox":
 		row := m.inboxTable.SelectedRow()
 		if len(row) > 0 {
@@ -1646,7 +1799,7 @@ func (m *AppModel) handleRuneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if len(key) == 1 && key[0] >= '0' && key[0] <= '9' &&
 		m.activeView != "projects" && m.activeView != "contexts" &&
 		m.activeView != "messages" && m.activeView != "detail" &&
-		m.activeView != "inbox" {
+		m.activeView != "inbox" && m.activeView != "scheduledsessions" {
 		return m.handleProjectShortcut(key[0] - '0')
 	}
 
@@ -1660,6 +1813,8 @@ func (m *AppModel) handleRuneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleSessionsRune(key)
 	case "inbox":
 		return m.handleInboxRune(key)
+	case "scheduledsessions":
+		return m.handleScheduledSessionsRune(key)
 	}
 
 	return m, nil
@@ -1909,6 +2064,31 @@ func (m *AppModel) handleSessionsRune(key string) (tea.Model, tea.Cmd) {
 			)
 		}
 		return m, m.formOverlay.Init()
+	case "x":
+		// Interrupt the selected session.
+		row := m.sessionTable.SelectedRow()
+		if len(row) == 0 {
+			return m, m.setInfo("No session selected")
+		}
+		shortID := row[0]
+		session := m.findSessionByShortID(shortID)
+		if session == nil {
+			return m, m.setInfo("Session not found in cache: " + shortID)
+		}
+		projectID := m.currentProject
+		if projectID == "" {
+			projectID = session.ProjectID
+		}
+		if projectID == "" {
+			return m, m.setInfo("No project context for interrupt")
+		}
+		sessionName := session.Name
+		d := views.NewConfirmDialog("Interrupt", "Interrupt session "+session.Name+"?")
+		m.dialog = &d
+		m.dialogAction = func(_ string) tea.Cmd {
+			return m.client.InterruptSession(projectID, sessionName)
+		}
+		return m, nil
 	case "y":
 		row := m.sessionTable.SelectedRow()
 		if len(row) == 0 {
@@ -1946,6 +2126,105 @@ func (m *AppModel) handleInboxRune(key string) (tea.Model, tea.Cmd) {
 			m.client.MarkInboxRead(m.currentProject, m.currentAgentID, msgID),
 			m.setInfo("Marking as read..."),
 		)
+	}
+	return m, nil
+}
+
+// handleScheduledSessionsRune handles scheduled-session-view-specific hotkeys.
+func (m *AppModel) handleScheduledSessionsRune(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "d":
+		// Show detail view for the selected scheduled session.
+		row := m.scheduledSessionTable.SelectedRow()
+		if len(row) == 0 {
+			return m, nil
+		}
+		displayName := row[0]
+		ss := m.findScheduledSessionByName(displayName)
+		if ss == nil {
+			return m, m.setInfo("Scheduled session not found in cache: " + displayName)
+		}
+		m.detailView = views.NewDetailView("Scheduled: "+displayName, views.ScheduledSessionDetail(*ss))
+		m.detailView.SetSize(m.width, m.height-10)
+		cmd := m.pushView("detail", displayName, ss.Name)
+		return m, tea.Batch(cmd, m.setInfo("Scheduled session detail: "+displayName))
+
+	case "n":
+		// Create new scheduled session.
+		if m.currentProject == "" {
+			return m, m.setInfo("Navigate to a project first")
+		}
+		project := m.currentProject
+		var displayName, schedule string
+		form := views.NewScheduledSessionForm(&displayName, &schedule)
+		form.WithWidth(60)
+		m.formOverlay = form
+		m.formTitle = "New Scheduled Session"
+		m.formOnComplete = func() tea.Cmd {
+			return tea.Batch(
+				m.client.CreateScheduledSession(project, displayName, schedule),
+				m.setInfo("Creating scheduled session "+displayName+"..."),
+			)
+		}
+		return m, m.formOverlay.Init()
+
+	case "s":
+		// Suspend/resume toggle.
+		row := m.scheduledSessionTable.SelectedRow()
+		if len(row) == 0 {
+			return m, m.setInfo("No scheduled session selected")
+		}
+		displayName := row[0]
+		ss := m.findScheduledSessionByName(displayName)
+		if ss == nil {
+			return m, m.setInfo("Scheduled session not found in cache: " + displayName)
+		}
+		if ss.Suspend {
+			return m, tea.Batch(
+				m.client.ResumeScheduledSession(m.currentProject, ss.Name),
+				m.setInfo("Resuming "+displayName+"..."),
+			)
+		}
+		return m, tea.Batch(
+			m.client.SuspendScheduledSession(m.currentProject, ss.Name),
+			m.setInfo("Suspending "+displayName+"..."),
+		)
+
+	case "t":
+		// Trigger manual run with confirmation.
+		row := m.scheduledSessionTable.SelectedRow()
+		if len(row) == 0 {
+			return m, m.setInfo("No scheduled session selected")
+		}
+		displayName := row[0]
+		ss := m.findScheduledSessionByName(displayName)
+		if ss == nil {
+			return m, m.setInfo("Scheduled session not found in cache: " + displayName)
+		}
+		ssName := ss.Name
+		currentProject := m.currentProject
+		d := views.NewConfirmDialog("Trigger", "Trigger manual run of "+displayName+"?")
+		m.dialog = &d
+		m.dialogAction = func(_ string) tea.Cmd {
+			return m.client.TriggerScheduledSession(currentProject, ssName)
+		}
+		return m, nil
+
+	case "y":
+		// JSON view.
+		row := m.scheduledSessionTable.SelectedRow()
+		if len(row) == 0 {
+			return m, nil
+		}
+		displayName := row[0]
+		ss := m.findScheduledSessionByName(displayName)
+		if ss == nil {
+			return m, m.setInfo("Scheduled session not found in cache: " + displayName)
+		}
+		m.detailView = views.NewDetailView("JSON: "+displayName, views.ResourceJSON(*ss))
+		m.detailView.SetSize(m.width, m.height-10)
+		cmd := m.pushView("detail", displayName, ss.Name)
+		return m, tea.Batch(cmd, m.setInfo("JSON: "+displayName))
 	}
 	return m, nil
 }
@@ -2023,6 +2302,23 @@ func (m *AppModel) handleCtrlD() (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+	case "scheduledsessions":
+		row := m.scheduledSessionTable.SelectedRow()
+		if len(row) > 0 {
+			displayName := row[0]
+			ss := m.findScheduledSessionByName(displayName)
+			if ss == nil {
+				return m, m.setInfo("Scheduled session not found in cache: " + displayName)
+			}
+			ssName := ss.Name
+			currentProject := m.currentProject
+			d := views.NewDeleteDialog("scheduled session", displayName)
+			m.dialog = &d
+			m.dialogAction = func(_ string) tea.Cmd {
+				return m.client.DeleteScheduledSession(currentProject, ssName)
+			}
+			return m, nil
+		}
 	}
 	return m, nil
 }
@@ -2075,6 +2371,33 @@ func (m *AppModel) handleMessagesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.showHelp()
 		case "q":
 			return m, m.popView()
+		case "x":
+			// Interrupt the current session.
+			if m.currentSession == "" {
+				return m, m.setInfo("No session context for interrupt")
+			}
+			projectID := m.currentProject
+			if projectID == "" {
+				if s := m.findSessionByShortID(m.currentSession); s != nil {
+					projectID = s.ProjectID
+				}
+			}
+			if projectID == "" {
+				return m, m.setInfo("No project context for interrupt")
+			}
+			// Resolve session name from cache.
+			sessionName := m.currentSession
+			if s := m.findSessionByShortID(m.currentSession); s != nil {
+				sessionName = s.Name
+			}
+			capturedProject := projectID
+			capturedName := sessionName
+			d := views.NewConfirmDialog("Interrupt", "Interrupt session "+sessionName+"?")
+			m.dialog = &d
+			m.dialogAction = func(_ string) tea.Cmd {
+				return m.client.InterruptSession(capturedProject, capturedName)
+			}
+			return m, nil
 		}
 	}
 	if msg.Type == tea.KeyCtrlC {
@@ -2255,6 +2578,31 @@ func (m *AppModel) executeCommand(input string) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(
 			m.client.FetchInbox(m.currentProject, m.currentAgentID),
 			m.setInfo("Viewing inbox for agent "+m.currentAgent),
+		)
+
+	case CmdScheduledSessions:
+		// Use current project from nav stack or config.
+		project := m.currentProject
+		if project == "" {
+			if ctx := m.config.Current(); ctx != nil {
+				project = ctx.Project
+			}
+		}
+		if project == "" {
+			return m, m.setInfo("No project context — drill into a project first or set one with :project <name>")
+		}
+		m.currentProject = project
+		m.scheduledSessionTable.SetScope(project)
+		m.navStack = []NavEntry{
+			{Kind: "projects", Scope: "all"},
+			{Kind: "scheduledsessions", Scope: project},
+		}
+		m.activeView = "scheduledsessions"
+		m.activeFilter = nil
+		m.pollInFlight = true
+		return m, tea.Batch(
+			m.client.FetchScheduledSessions(project),
+			m.setInfo("Viewing scheduled sessions in project "+project),
 		)
 
 	case CmdMessages:

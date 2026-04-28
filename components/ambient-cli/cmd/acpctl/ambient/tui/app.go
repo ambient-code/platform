@@ -306,6 +306,8 @@ func (m *AppModel) viewResourceTable() string {
 		return m.inboxTable.View()
 	case "contexts":
 		return m.contextTable.View()
+	case "scheduledsessions":
+		return m.scheduledSessionTable.View()
 	case "messages":
 		return m.messageStream.View()
 	case "detail":

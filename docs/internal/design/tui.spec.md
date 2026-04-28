@@ -133,7 +133,7 @@ Polling is skip-on-inflight: if the previous poll has not returned, the next tic
                 └── m to compose
 ```
 
-Five views. `:sessions` is also accessible globally (all sessions across all projects), same as k9s's `:pods` showing all pods.
+Five views. `:sessions` is also accessible globally (all sessions across all projects), same as k9s's `:pods` showing all pods. `:scheduledsessions` (`:ss`) is accessible via command mode only — it is not part of the Enter drill-down hierarchy.
 
 ### Screen Stack
 
@@ -154,6 +154,7 @@ Projects > ambient-platform > Agents > be > Inbox
 | `:agents` | `:ag` | Switch to agent list (current project) |
 | `:sessions` | `:se` | Switch to session list (global or scoped) |
 | `:inbox` | `:ib` | Switch to inbox (requires agent context) |
+| `:scheduledsessions` | `:ss` | Switch to scheduled session list (current project) |
 | `:messages` | `:msg` | Switch to message stream (requires session context) |
 | `:aliases` | | List all available commands and aliases |
 | `:context` | `:ctx` | List all saved contexts |
@@ -250,6 +251,7 @@ Accessible globally (`:sessions` — all sessions across all projects) or scoped
 | `l` | Live message stream (same as Enter) | l |
 | `m` | Send message to session (`POST /sessions/{id}/messages`) | — |
 | `n` | Start a new session for the current agent (opens prompt input) | — |
+| `x` | Interrupt running session (confirmation dialog) | — |
 | `y` | YAML — dump session as YAML to screen | y |
 | `Ctrl-D` | Delete/cancel session (confirmation modal) | Ctrl-D |
 
@@ -330,6 +332,7 @@ Sending a message (`m` / `Enter`) while the agent is mid-response is permitted. 
 | `g` | Jump to top (oldest in buffer) |
 | `j`/`k` or `↑`/`↓` | Scroll (disables autoscroll) |
 | `/` | Search within messages (regex) |
+| `x` | Interrupt current session (confirmation dialog) |
 | `c` | Copy selected message text to clipboard (via OSC 52) |
 
 ### Inbox View
@@ -353,6 +356,32 @@ Scoped to an agent. Accessible via `i` from the agent list or `:inbox` in comman
 | `r` | Mark selected message as read |
 | `Ctrl-D` | Delete message (confirmation) |
 | `Esc` | Back to agent list |
+
+### Scheduled Session List
+
+Accessible via `:scheduledsessions` or `:ss` in command mode. Project-scoped. Not part of the Enter drill-down hierarchy (project drill-down goes to agents, not scheduled sessions).
+
+| Column | Source | Notes |
+|--------|--------|-------|
+| NAME | `scheduled_session.name` | |
+| SCHEDULE | `scheduled_session.schedule` | Cron expression |
+| AGENT | agent name | Resolved from agent_id |
+| PROJECT | `scheduled_session.project_id` | |
+| SUSPENDED | `scheduled_session.suspend` | `Yes` / `No` |
+| LAST RUN | `scheduled_session.last_schedule_time` | Relative |
+| AGE | computed from `scheduled_session.created_at` | Relative |
+
+**Hotkeys:**
+
+| Key | Action | k9s equivalent |
+|-----|--------|----------------|
+| `Enter` | Show runs (sessions created by this schedule) | Enter |
+| `d` | Describe — show detail view | d |
+| `n` | New scheduled session (name, schedule, agent) | — |
+| `s` | Suspend/resume toggle | — |
+| `t` | Trigger manual run | — |
+| `Ctrl-D` | Delete (confirmation dialog) | Ctrl-D |
+| `Esc` | Back | Esc |
 
 ---
 
@@ -644,7 +673,6 @@ These are gaps where the TUI spec requires data the API does not provide efficie
 | K8s resource browsing (pods, namespaces) | Not the TUI's job post-CRD-transition. Use k9s. | Never — not in scope. |
 | Credential view | Credential CRUD API is not yet implemented in the API server. | API lands. |
 | RBAC views (roles, rolebindings) | Low-frequency operation. `acpctl get roles` is sufficient. | User demand. |
-| ScheduledSession view | PR #1456 spec is proposed but not yet implemented. | ScheduledSession API lands — then add `:scheduledsessions` / `:ss` view. |
 | Diagnostic view for failed sessions | Requires API to surface container exit codes, OOM events, failure reasons — not just `phase=failed`. | API exposes failure diagnostics. |
 | Mouse click/drag | Keyboard-driven, consistent with k9s. | Never. |
 | Plugin/extension system | Premature. Resource kinds are still evolving. | Resource model stabilizes. |

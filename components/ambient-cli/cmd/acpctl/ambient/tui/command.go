@@ -17,6 +17,7 @@ const (
 	CmdContext
 	CmdProject
 	CmdAliases
+	CmdScheduledSessions
 	CmdQuit
 	CmdUnknown
 )
@@ -82,6 +83,11 @@ var commandDefs = []commandDef{
 		aliases:     []string{"project"},
 		description: "Switch project within current context",
 		takesArg:    true,
+	},
+	{
+		kind:        CmdScheduledSessions,
+		aliases:     []string{"scheduledsessions", "scheduledsession", "ss"},
+		description: "Switch to scheduled sessions list (current project)",
 	},
 	{
 		kind:        CmdAliases,
