@@ -133,7 +133,7 @@ erDiagram
         time    deleted_at
     }
 
-    %% ── SessionMessage (runner inbox — user message delivery queue) ──────────
+    %% ── SessionMessage (runner delivery queue — user message queue) ──────────
 
     SessionMessage {
         string ID PK
@@ -238,7 +238,7 @@ erDiagram
 
     Inbox           }o--o| Agent            : "sent_from"
 
-    Session         ||--o{ SessionMessage   : "inbox"
+    Session         ||--o{ SessionMessage   : "messages"
     Session         ||--o{ SessionEvent     : "records"
 
     Role            ||--o{ RoleBinding      : "granted_by"
@@ -301,7 +301,7 @@ All four are assembled into the start context in that order. Pokes roll downhill
 
 ---
 
-## SessionMessage — Runner Inbox (User Message Delivery Queue)
+## SessionMessage — Runner Delivery Queue (User Messages Only)
 
 SessionMessages are the delivery queue for user-to-runner messages. They carry only `event_type="user"`. The runner's `WatchSessionMessages` gRPC stream watches this table and filters to `event_type="user"` — any other event_type is discarded by the watcher.
 
@@ -313,7 +313,7 @@ SessionMessages are the delivery queue for user-to-runner messages. They carry o
 
 | Endpoint | Source | Persistence | Purpose |
 |---|---|---|---|
-| `POST /sessions/{id}/messages` | Human or system | DB append | Deliver a user message to the runner inbox |
+| `POST /sessions/{id}/messages` | Human or system | DB append | Deliver a user message to the runner |
 | `GET /sessions/{id}/messages` | API server DB | Persisted | List user messages sent to this session |
 | `GET /sessions/{id}/agui/events` | API server DB + runner | Persisted (see SessionEvent) | Durable AG-UI event replay + live stream |
 | `GET /sessions/{id}/events` | Runner pod SSE | Ephemeral; runner-local | Live AG-UI turn events during an active run |
@@ -859,8 +859,8 @@ GET    /api/ambient/v1/sessions                                              lis
 GET    /api/ambient/v1/sessions/{id}                                         read session
 DELETE /api/ambient/v1/sessions/{id}                                         cancel or delete session
 
-GET    /api/ambient/v1/sessions/{id}/messages                                list user messages sent to this session (runner inbox)
-POST   /api/ambient/v1/sessions/{id}/messages                                push a user message (enqueues to runner inbox)
+GET    /api/ambient/v1/sessions/{id}/messages                                list user messages sent to this session
+POST   /api/ambient/v1/sessions/{id}/messages                                push a user message (enqueues to runner delivery queue)
 GET    /api/ambient/v1/sessions/{id}/agui/events                             SSE durable AG-UI event stream (DB replay + live; excludes superseded rows)
 GET    /api/ambient/v1/sessions/{id}/agui/events?since=<seq>                 SSE from seq (client reconnect — no full replay)
 GET    /api/ambient/v1/sessions/{id}/agui/events?run_id=<id>                 SSE filtered to a single run
@@ -1206,7 +1206,7 @@ An `Agent` is an ID and a `prompt` string — who the agent is.
 A `Session` is an ID and a `prompt` string — what this run is focused on.
 An `InboxMessage` is an ID and a `body` string — a request addressed to an agent.
 A `SessionEvent` is an ID and a `payload` string — one AG-UI event in the conversation stream.
-A `SessionMessage` is an ID and a `payload` string — one user message in the runner inbox.
+A `SessionMessage` is an ID and a `payload` string — one user message in the runner delivery queue.
 
 Strings can be simple (`"hello world"`) or arbitrarily complex (a bookmarked system prompt, a structured markdown context block, a multi-section briefing). The model does not care. Every node is still just an ID and a string.
 
@@ -1292,7 +1292,7 @@ This structure means you can define and compose bespoke agent suites — entire 
 | `current_session_id` denormalized on Agent | Project Home reads Agent + session phase without joining through sessions |
 | Sessions created only via start | Sessions are run artifacts; direct `POST /sessions` does not exist |
 | Every layer carries a `prompt` | Project.prompt = workspace context; Agent.prompt = who the agent is; Session.prompt = what this run does; Inbox = prior requests. Pokes roll downhill. |
-| `SessionMessage` is the runner inbox only | Narrowed from "event log" to "user message delivery queue". The `WatchSessionMessages` watcher already discarded non-user events (line 215 of `grpc_transport.py`) — the table now matches that contract. Prevents dual-store confusion. |
+| `SessionMessage` is the runner delivery queue only | Narrowed from "event log" to "user message delivery queue". The `WatchSessionMessages` watcher already discarded non-user events (line 215 of `grpc_transport.py`) — the table now matches that contract. Prevents dual-store confusion. |
 | `SessionEvent` is separate from `SessionMessage` | The two stores flow in opposite directions and have different consumers. `session_messages`: user → runner (delivery queue, consumed by gRPC watch). `session_events`: runner → DB (event log, consumed by SSE replay and CLI/SDK history). Merging them required overloading one direction to serve both, which `grpc_push_middleware` did badly. |
 | `run_id` and `thread_id` are first-class columns in `SessionEvent` | The legacy `agui-events.jsonl` had no per-run filtering. `run_id` enables per-run compaction (mark streaming deltas `superseded=true`, append `MESSAGES_SNAPSHOT`) and per-run queries (`?run_id=<id>`). `thread_id` ties DB rows back to runner in-memory streams for debugging. |
 | Compaction uses `superseded` flag, not row deletion | Deleting compacted rows would require transaction coordination with concurrent readers. Marking `superseded=true` is append-safe and lets queries add `WHERE NOT superseded`. Superseded types: `TEXT_MESSAGE_CONTENT`, `TOOL_CALL_ARGS`, `REASONING_MESSAGE_CONTENT`, `STATE_DELTA`, `ACTIVITY_DELTA`. Non-delta events (`STEP_*`, `TOOL_CALL_START`, `TOOL_CALL_END`, lifecycle) are never superseded. `MESSAGES_SNAPSHOT` is appended as the canonical transcript; `STATE_SNAPSHOT` and `ACTIVITY_SNAPSHOT` are appended if state/activity were tracked. |
