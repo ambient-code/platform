@@ -15,7 +15,7 @@ The Ambient API server provides a coordination layer for orchestrating fleets of
 - **Project** — a workspace. Groups agents and provides shared context (`prompt`) injected into every agent start.
 - **Agent** — a project-scoped, mutable definition. Agents belong to exactly one Project. `prompt` defines who the agent is and is directly editable (subject to RBAC).
 - **Session** — an ephemeral Kubernetes execution run, created exclusively via agent start. Only one active Session per Agent at a time.
-- **Message** — a single AG-UI event in the LLM conversation. Append-only; the canonical record of what happened in a session.
+- **SessionEvent** — a single AG-UI protocol event in the LLM conversation. Append-only; the canonical record of what happened in a session. Stored in the `session_events` table; replaces `agui-events.jsonl`.
 - **Inbox** — a persistent message queue on an Agent. Messages survive across sessions and are drained into the start context at the next run.
 - **Credential** — a project-scoped secret. Stores a Personal Access Token or equivalent for an external provider (GitHub, GitLab, Jira, Google). Consumed by runners at session start. All agents in the project share the project's credentials automatically.
 - **RoleBinding** — binds a Resource to a Role at a given scope (`global`, `project`, `agent`, `session`). Ownership and access for all Kinds is expressed through RoleBindings.
@@ -151,8 +151,8 @@ erDiagram
         string session_id FK
         string run_id "nullable — groups events within a runner invocation"
         string thread_id "nullable — ties to runner in-memory stream"
-        bigint seq "BIGSERIAL monotonic within session"
-        string event_type "AG-UI protocol type: RUN_STARTED | TEXT_MESSAGE_START | TEXT_MESSAGE_CONTENT | TEXT_MESSAGE_END | TOOL_CALL_START | TOOL_CALL_ARGS | TOOL_CALL_END | TOOL_CALL_RESULT | MESSAGES_SNAPSHOT | STATE_SNAPSHOT | REASONING_START | REASONING_CONTENT | REASONING_END | RUN_FINISHED | RUN_ERROR | META | CUSTOM | RAW"
+        bigint seq "BIGSERIAL global — monotonically increasing; not per-session unique; (session_id, seq) index enables ordered per-session replay"
+        string event_type "AG-UI type: RUN_STARTED | RUN_FINISHED | RUN_ERROR | STEP_STARTED | STEP_FINISHED | TEXT_MESSAGE_START | TEXT_MESSAGE_CONTENT | TEXT_MESSAGE_END | TOOL_CALL_START | TOOL_CALL_ARGS | TOOL_CALL_END | REASONING_START | REASONING_END | REASONING_MESSAGE_START | REASONING_MESSAGE_CONTENT | REASONING_MESSAGE_END | MESSAGES_SNAPSHOT | STATE_SNAPSHOT | STATE_DELTA | ACTIVITY_SNAPSHOT | ACTIVITY_DELTA | META | CUSTOM | RAW"
         text   payload "raw JSON-serialized AG-UI event — piped verbatim to SSE consumers"
         bool   superseded "true = streaming delta replaced by compaction snapshot; excluded from replay"
         time   created_at
@@ -276,9 +276,9 @@ Inbox messages are addressed to an Agent (`agent_id`). They are distinct from Se
 | | Inbox | SessionMessage |
 |--|-------|----------------|
 | Scope | Agent (persists across sessions) | Session (ephemeral) |
-| Created by | Human or another Agent | LLM turn / runner gRPC push |
-| Drained | At session start | Never — append-only stream |
-| Purpose | Queued intent waiting for next run | Real LLM event stream |
+| Created by | Human or another Agent | Human user (API or CLI) |
+| Drained | At session start | Never — append-only queue |
+| Purpose | Queued intent waiting for next run | User message delivery to runner |
 
 At session start, all unread Inbox messages are drained: marked `read=true` and injected as context into the Session prompt before the first SessionMessage turn.
 
@@ -326,18 +326,41 @@ The runner's `/events/{thread_id}` endpoint registers an asyncio queue into `bri
 
 SessionEvents are the canonical append-only record of every AG-UI protocol event in a session. They replace `agui-events.jsonl` (the legacy backend PVC file) and the overloaded non-user event rows that `grpc_push_middleware` previously wrote to `session_messages`.
 
-Every AG-UI event emitted by the runner is persisted here: `RUN_STARTED`, `TEXT_MESSAGE_START`, `TEXT_MESSAGE_CONTENT`, `TEXT_MESSAGE_END`, `TOOL_CALL_START`, `TOOL_CALL_ARGS`, `TOOL_CALL_END`, `TOOL_CALL_RESULT`, `MESSAGES_SNAPSHOT`, `STATE_SNAPSHOT`, `REASONING_START`, `REASONING_CONTENT`, `REASONING_END`, `RUN_FINISHED`, `RUN_ERROR`, `CUSTOM`, `RAW`, `META`.
+Every AG-UI event emitted by the runner is persisted here. Complete event type set (authoritative source: `components/backend/types/agui.go`):
 
-`run_id` and `thread_id` are first-class columns — they group events within a runner invocation and tie back to the runner's in-memory stream. The `payload` column stores the raw AG-UI event JSON verbatim; the SSE replay endpoint pipes it directly as `data: {payload}\n\n` without transformation, producing a standards-compliant AG-UI SSE stream.
+| Category | Event Types |
+|---|---|
+| Lifecycle | `RUN_STARTED`, `RUN_FINISHED`, `RUN_ERROR` |
+| Steps | `STEP_STARTED`, `STEP_FINISHED` |
+| Text (streaming) | `TEXT_MESSAGE_START`, `TEXT_MESSAGE_CONTENT`, `TEXT_MESSAGE_END` |
+| Tool calls (streaming) | `TOOL_CALL_START`, `TOOL_CALL_ARGS`, `TOOL_CALL_END` |
+| Reasoning (streaming) | `REASONING_START`, `REASONING_END`, `REASONING_MESSAGE_START`, `REASONING_MESSAGE_CONTENT`, `REASONING_MESSAGE_END` |
+| Snapshots | `MESSAGES_SNAPSHOT`, `STATE_SNAPSHOT`, `ACTIVITY_SNAPSHOT` |
+| Deltas (streaming) | `STATE_DELTA`, `ACTIVITY_DELTA` |
+| Platform | `META`, `CUSTOM`, `RAW` |
+
+Note: `TOOL_CALL_RESULT` does **not** exist in the AG-UI protocol — tool results are carried in `TOOL_CALL_END.result`. Do not store or emit this type.
+
+`run_id` and `thread_id` are first-class columns — they group events within a runner invocation and tie back to the runner's in-memory stream. `seq` is a global BIGSERIAL (not per-session unique) — the `(session_id, seq)` index enables ordered per-session replay without a per-session sequence generator. The `payload` column stores the raw AG-UI event JSON verbatim; the SSE replay endpoint pipes it directly as `data: {payload}\n\n` without transformation, producing a standards-compliant AG-UI SSE stream.
 
 ### Compaction
 
-After `RUN_FINISHED` or `RUN_ERROR`, streaming deltas are superseded:
+After `RUN_FINISHED` or `RUN_ERROR`, streaming delta rows for that `run_id` are marked `superseded=true` and replaced by terminal snapshot rows:
 
-1. All `TEXT_MESSAGE_CONTENT` rows for that `run_id` are marked `superseded=true`.
-2. A new `MESSAGES_SNAPSHOT` row is appended with `superseded=false` — the canonical assembled transcript for the run.
+| Superseded (streaming deltas) | Snapshot that replaces it |
+|---|---|
+| `TEXT_MESSAGE_CONTENT`, `TOOL_CALL_ARGS`, `REASONING_MESSAGE_CONTENT` | `MESSAGES_SNAPSHOT` |
+| `STATE_DELTA` | `STATE_SNAPSHOT` |
+| `ACTIVITY_DELTA` | `ACTIVITY_SNAPSHOT` |
 
-SSE replay excludes `superseded=true` rows. This mirrors the `compactFinishedRun()` behavior from the legacy backend (`agui_store.go`) but operates within the database rather than on the filesystem, eliminating the atomic-rename requirement and making history queries cheap.
+Compaction steps:
+1. `UPDATE session_events SET superseded = true WHERE session_id = ? AND run_id = ? AND event_type IN ('TEXT_MESSAGE_CONTENT', 'TOOL_CALL_ARGS', 'REASONING_MESSAGE_CONTENT', 'STATE_DELTA', 'ACTIVITY_DELTA')`
+2. `INSERT` a `MESSAGES_SNAPSHOT` row with `superseded = false` — the canonical assembled transcript for the run.
+3. If state was tracked, `INSERT` a `STATE_SNAPSHOT` row; if activity was tracked, `INSERT` an `ACTIVITY_SNAPSHOT` row.
+
+SSE replay excludes `superseded=true` rows (`WHERE NOT superseded`). Non-delta events (`STEP_STARTED`, `STEP_FINISHED`, `TOOL_CALL_START`, `TOOL_CALL_END`, lifecycle events) are never marked superseded — they are always included in replay.
+
+This mirrors the `compactFinishedRun()` behavior from the legacy backend (`agui_store.go`) but operates within the database rather than on the filesystem, eliminating the atomic-rename requirement and the per-session filesystem mutex. The legacy code preserves `AskUserQuestion` TOOL_CALL_START events specifically for `DeriveAgentStatus()` — the new compaction never touches START events, so this behavior is preserved by default.
 
 ### Write Paths
 
@@ -348,6 +371,39 @@ SSE replay excludes `superseded=true` rows. This mirrors the `compactFinishedRun
 
 `grpc_push_middleware` must be updated to call `PushSessionEvent` instead of `PushSessionMessage`. The `GRPCMessageWriter` (which wrote the final assistant text to `session_messages`) is retired — the full event stream in `session_events` supersedes it.
 
+**Proto contract:** The `PushSessionEvent` RPC must be added to `sessions.proto`. The request message must include `run_id` and `thread_id` as required string fields — these are available in the runner at the point `grpc_push_middleware` fires (`grpc_transport.py` lines 281-282) but are absent from the existing `PushSessionMessageRequest`.
+
+```proto
+message PushSessionEventRequest {
+  string session_id = 1;
+  string run_id     = 2;  // required — groups events within a runner invocation
+  string thread_id  = 3;  // required — ties to runner in-memory stream
+  string event_type = 4;
+  string payload    = 5;  // raw AG-UI event JSON; must use camelCase (by_alias=True in model_dump)
+}
+message PushSessionEventResponse {}
+rpc PushSessionEvent(PushSessionEventRequest) returns (PushSessionEventResponse);
+```
+
+**Payload encoding:** `_event_to_payload()` in `grpc_push.py` currently calls `event.model_dump()` without `by_alias=True` — this produces snake_case field names instead of camelCase. Must be fixed to `event.model_dump(by_alias=True)` before `PushSessionEvent` is wired up, otherwise SSE consumers receive malformed AG-UI events.
+
+**Write throughput:** Individual row inserts are acceptable for initial implementation. At high session volume (>10 concurrent active sessions at 20 events/sec each), batch inserts via a buffered channel in the gRPC handler can be adopted without changing the proto contract.
+
+### Indexes
+
+```sql
+-- Required: ordered per-session replay (all queries use this)
+CREATE INDEX idx_session_events_session_seq ON session_events(session_id, seq);
+
+-- Required: per-run queries (?run_id= filter and compaction UPDATE)
+CREATE INDEX idx_session_events_session_run ON session_events(session_id, run_id);
+
+-- Optional: replay optimization (partial index skips superseded rows without full scan)
+CREATE INDEX idx_session_events_replay ON session_events(session_id, seq) WHERE NOT superseded;
+```
+
+`seq` is a global BIGSERIAL — no per-session UNIQUE constraint. The `(session_id, seq)` index provides ordered per-session reads. `seq` values are not contiguous within a session (global monotone), but they form a stable cursor for `?since=<seq>` reconnect.
+
 ### Read Paths
 
 | Endpoint | Behavior |
@@ -355,8 +411,35 @@ SSE replay excludes `superseded=true` rows. This mirrors the `compactFinishedRun
 | `GET /sessions/{id}/agui-events` | SSE: replay all non-superseded rows from `seq=0`, then stream live events |
 | `GET /sessions/{id}/agui-events?since=<seq>` | SSE: replay from `seq` (reconnect without full history) |
 | `GET /sessions/{id}/agui-events?run_id=<id>` | SSE: all events for a single run (debugging, per-run transcript) |
+| `GET /sessions/{id}/agui-events?limit=<n>` | SSE: cap replay to last N non-superseded rows (pagination; default unlimited) |
 
 The `since` parameter enables seamless client reconnect: the client tracks the last `seq` it received, reconnects with `?since=<seq>`, and receives only new events — no full replay.
+
+**Live-tail mechanism:** After replaying historical rows, the SSE handler subscribes to a per-session in-memory broadcast channel. The `PushSessionEvent` gRPC handler publishes each incoming event to this channel immediately after the DB insert. The SSE handler subscribes _before_ beginning the DB replay to avoid a race condition (event arrives between replay completion and subscription setup). Keepalive pings fire every 30 s to hold the SSE connection open. This is the same fan-out pattern as the legacy backend's `publishLine()` / `broadcast` channel in `agui_proxy.go`.
+
+**RBAC:** `GET /sessions/{id}/agui-events` requires at minimum `agent:observer` on the parent agent or `project:viewer` on the parent project — same as `GET /sessions/{id}`. `PushSessionEvent` gRPC is restricted to `agent:runner` — service accounts granted by the operator at session start. Human users and CLI callers cannot call `PushSessionEvent` directly.
+
+**Retention:** No automatic row deletion is defined in this spec. Table growth is bounded by session count × events per session. For high-volume deployments, a background job can delete `superseded=true` rows older than N days — the `superseded` flag enables this without API changes. This is a future operational concern.
+
+### Migration Paths
+
+**`DeriveAgentStatus()`** (`components/backend/websocket/agui_store.go`, wired at `main.go:204`): Currently tail-scans `agui-events.jsonl`. Must be ported to query `session_events`:
+```sql
+SELECT event_type, payload FROM session_events
+WHERE session_id = ? AND NOT superseded
+ORDER BY seq DESC LIMIT 50
+```
+Apply the same state machine (RUN_STARTED/FINISHED/ERROR → working/idle; TOOL_CALL_START with `AskUserQuestion` tool name → waiting_input). Until the legacy backend is removed, both paths run in parallel — the backend reads JSONL, the API server reads `session_events`.
+
+**`AGUIEvents` handler** (`handler.go:644-692`): Currently proxies the runner's live SSE stream directly with no DB backing. Must be replaced to: (1) replay non-superseded `session_events` rows ordered by `seq`, (2) subscribe to the in-memory fan-out channel for live events. Add `?since` and `?run_id` query parameter parsing. The existing ephemeral `GET /sessions/{id}/events` endpoint remains unchanged.
+
+**`StreamTextMessages()`** (`message_handler.go:144`): Currently filters `TEXT_MESSAGE_*` from `session_messages`. After `session_messages` narrowing, this returns empty. Must be updated to query `session_events WHERE event_type IN ('TEXT_MESSAGE_START', 'TEXT_MESSAGE_CONTENT', 'TEXT_MESSAGE_END') AND session_id = ?`.
+
+**`grpc_push_middleware`** (`ambient_runner/middleware/grpc_push.py`): Replace the `session_messages.push()` call with a new `session_events.push()` gRPC call. Pass `run_id` and `thread_id` from `RunAgentInput` (available at `grpc_transport.py:281-282`). Fix `_event_to_payload()` to use `event.model_dump(by_alias=True)` to produce camelCase JSON.
+
+**`GRPCMessageWriter`** (`grpc_transport.py`): Retired. The full event stream in `session_events` supersedes the final-text-only write to `session_messages`. Remove the `on_run_finished`/`on_run_error` hooks that write `event_type="assistant"` to `session_messages`.
+
+**`session_messages` narrowing:** Existing non-user rows in `session_messages` (written by `grpc_push_middleware` and `GRPCMessageWriter` before this split) should be purged or migrated during the cutover migration. A `CHECK (event_type = 'user')` constraint can then be added to enforce the new contract at the schema level.
 
 ---
 
@@ -1065,7 +1148,8 @@ A `Project` is an ID and a `prompt` string — the workspace context.
 An `Agent` is an ID and a `prompt` string — who the agent is.
 A `Session` is an ID and a `prompt` string — what this run is focused on.
 An `InboxMessage` is an ID and a `body` string — a request addressed to an agent.
-A `SessionMessage` is an ID and a `payload` string — one turn in the conversation.
+A `SessionEvent` is an ID and a `payload` string — one AG-UI event in the conversation stream.
+A `SessionMessage` is an ID and a `payload` string — one user message in the runner inbox.
 
 Strings can be simple (`"hello world"`) or arbitrarily complex (a bookmarked system prompt, a structured markdown context block, a multi-section briefing). The model does not care. Every node is still just an ID and a string.
 
@@ -1154,7 +1238,8 @@ This structure means you can define and compose bespoke agent suites — entire 
 | `SessionMessage` is the runner inbox only | Narrowed from "event log" to "user message delivery queue". The `WatchSessionMessages` watcher already discarded non-user events (line 215 of `grpc_transport.py`) — the table now matches that contract. Prevents dual-store confusion. |
 | `SessionEvent` is separate from `SessionMessage` | The two stores flow in opposite directions and have different consumers. `session_messages`: user → runner (delivery queue, consumed by gRPC watch). `session_events`: runner → DB (event log, consumed by SSE replay and CLI/SDK history). Merging them required overloading one direction to serve both, which `grpc_push_middleware` did badly. |
 | `run_id` and `thread_id` are first-class columns in `SessionEvent` | The legacy `agui-events.jsonl` had no per-run filtering. `run_id` enables per-run compaction (mark streaming deltas `superseded=true`, append `MESSAGES_SNAPSHOT`) and per-run queries (`?run_id=<id>`). `thread_id` ties DB rows back to runner in-memory streams for debugging. |
-| Compaction uses `superseded` flag, not row deletion | Deleting compacted rows would require transaction coordination with concurrent readers. Marking `superseded=true` is append-safe and lets queries add `WHERE NOT superseded`. The `MESSAGES_SNAPSHOT` row inserted at compaction is the authoritative assembled transcript for the run. |
+| Compaction uses `superseded` flag, not row deletion | Deleting compacted rows would require transaction coordination with concurrent readers. Marking `superseded=true` is append-safe and lets queries add `WHERE NOT superseded`. Superseded types: `TEXT_MESSAGE_CONTENT`, `TOOL_CALL_ARGS`, `REASONING_MESSAGE_CONTENT`, `STATE_DELTA`, `ACTIVITY_DELTA`. Non-delta events (`STEP_*`, `TOOL_CALL_START`, `TOOL_CALL_END`, lifecycle) are never superseded. `MESSAGES_SNAPSHOT` is appended as the canonical transcript; `STATE_SNAPSHOT` and `ACTIVITY_SNAPSHOT` are appended if state/activity were tracked. |
+| `session_events.seq` is a global BIGSERIAL, not per-session | Per-session sequences require either a transaction-level sequence generator per session or application-level locking. A global BIGSERIAL with a `(session_id, seq)` index provides ordered per-session reads without any locking overhead. `seq` values are globally unique and monotonically increasing — they are not contiguous within a session, but they form a stable cursor for `?since=<seq>` reconnect. |
 | `payload` is raw AG-UI JSON piped verbatim | The legacy backend's `GET /sessions/{id}/messages` SSE wrapped DB records in a custom envelope — wrong format for AG-UI protocol consumers. `session_events.payload` stores the original JSON; SSE emits `data: {payload}\n\n` directly. Zero transformation means any AG-UI client can consume the stream without adapter code. |
 | `SessionEvent` replaces `agui-events.jsonl` entirely | The JSONL was durable (PVC-backed) but lost on PVC deletion, required O(file-size) reads for history, and could not serve multiple readers without an in-memory broadcast pipe. A DB table gives durability, indexed queries, multi-reader fan-out via gRPC watch, and compaction without atomic-rename hacks. |
 | `SessionMessage` is append-only | Canonical record of user messages sent to the session; never edited or deleted |
