@@ -163,7 +163,8 @@ type AppModel struct {
 	messagePollActive bool // true when message poll tick is running
 
 	// Errors
-	lastError string
+	lastError   string
+	authExpired bool // set on 401 — renders logo red + "Session Expired" badge
 
 	// Dialog overlay for confirm/delete prompts.
 	dialog       *views.Dialog
@@ -931,6 +932,7 @@ func (m *AppModel) classifyAPIError(err error, resourceKind string) (string, boo
 	errStr := err.Error()
 	switch {
 	case strings.Contains(errStr, "401") || strings.Contains(errStr, "Unauthorized"):
+		m.authExpired = true
 		return "Session expired — run 'acpctl login' in another terminal", false
 	case strings.Contains(errStr, "403") || strings.Contains(errStr, "Forbidden"):
 		return "Insufficient permissions to list " + resourceKind, false
@@ -955,6 +957,7 @@ func (m *AppModel) handleProjectsMsg(msg ProjectsMsg) (tea.Model, tea.Cmd) {
 	}
 
 	m.lastError = ""
+	m.authExpired = false
 	m.cachedProjects = msg.Projects
 
 	// Refresh project shortcuts (alphabetically sorted names for number-key switching).
@@ -1088,6 +1091,7 @@ func (m *AppModel) handleAgentsMsg(msg AgentsMsg) (tea.Model, tea.Cmd) {
 	}
 
 	m.lastError = ""
+	m.authExpired = false
 	m.cachedAgents = msg.Agents
 	now := time.Now()
 
@@ -1181,6 +1185,7 @@ func (m *AppModel) handleSessionsMsg(msg SessionsMsg) (tea.Model, tea.Cmd) {
 	}
 
 	m.lastError = ""
+	m.authExpired = false
 	m.cachedSessions = msg.Sessions
 	now := time.Now()
 
@@ -1250,6 +1255,7 @@ func (m *AppModel) handleInboxMsg(msg InboxMsg) (tea.Model, tea.Cmd) {
 	}
 
 	m.lastError = ""
+	m.authExpired = false
 	m.cachedInbox = msg.Messages
 	now := time.Now()
 

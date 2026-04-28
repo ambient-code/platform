@@ -202,9 +202,13 @@ func (m *AppModel) viewHeader() string {
 		w = lipgloss.Width(line)
 
 		// Right-align col4 (static hints + brand).
+		brandStyle := styleOrange
+		if m.authExpired {
+			brandStyle = styleRed
+		}
 		brand := ""
 		if i < len(brandLines) {
-			brand = styleOrange.Render(brandLines[i])
+			brand = brandStyle.Render(brandLines[i])
 		}
 		right := ""
 		if col4[i] != "" && brand != "" {
@@ -224,6 +228,21 @@ func (m *AppModel) viewHeader() string {
 
 	// Server URL on its own full-width row below the grid to avoid pushing columns.
 	serverLine := fmt.Sprintf(" %s %s", styleDim.Render("Server:"), styleDim.Render(serverURL))
+	if m.authExpired {
+		badge := lipgloss.NewStyle().
+			Background(lipgloss.Color("31")).
+			Foreground(lipgloss.Color("255")).
+			Bold(true).
+			Padding(0, 1).
+			Render("Session Expired")
+		badgeW := lipgloss.Width(badge)
+		serverW := lipgloss.Width(serverLine)
+		pad := m.width - serverW - badgeW
+		if pad < 1 {
+			pad = 1
+		}
+		serverLine += strings.Repeat(" ", pad) + badge
+	}
 	return strings.Join(lines, "\n") + "\n" + serverLine
 }
 
