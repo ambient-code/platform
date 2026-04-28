@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -12,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/ambient/tui/views"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
 	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	tea "github.com/charmbracelet/bubbletea"
@@ -783,7 +781,7 @@ func (tc *TUIClient) DeleteInboxMessage(projectID, agentID, msgID string) tea.Cm
 
 // ScheduledSessionsMsg carries the result of a scheduled session list fetch.
 type ScheduledSessionsMsg struct {
-	ScheduledSessions []views.ScheduledSession
+	ScheduledSessions []sdktypes.ScheduledSession
 	Err               error
 }
 
@@ -794,13 +792,13 @@ type DeleteScheduledSessionMsg struct {
 
 // SuspendScheduledSessionMsg carries the result of suspending a scheduled session.
 type SuspendScheduledSessionMsg struct {
-	ScheduledSession *views.ScheduledSession
+	ScheduledSession *sdktypes.ScheduledSession
 	Err              error
 }
 
 // ResumeScheduledSessionMsg carries the result of resuming a scheduled session.
 type ResumeScheduledSessionMsg struct {
-	ScheduledSession *views.ScheduledSession
+	ScheduledSession *sdktypes.ScheduledSession
 	Err              error
 }
 
@@ -811,7 +809,7 @@ type TriggerScheduledSessionMsg struct {
 
 // CreateScheduledSessionMsg carries the result of creating a scheduled session.
 type CreateScheduledSessionMsg struct {
-	ScheduledSession *views.ScheduledSession
+	ScheduledSession *sdktypes.ScheduledSession
 	Err              error
 }
 
@@ -821,199 +819,173 @@ type InterruptSessionMsg struct {
 }
 
 // FetchScheduledSessions returns a tea.Cmd that lists scheduled sessions in the
-// given project. The backend's /api/projects/{project}/scheduled-sessions endpoint
-// is called directly since the SDK does not cover scheduled sessions.
+// given project via the SDK's ScheduledSessionAPI.
 func (tc *TUIClient) FetchScheduledSessions(projectID string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 		defer cancel()
 
-		body, err := tc.backendGet(ctx, projectID, "/scheduled-sessions")
+		client, err := tc.factory.ForProject(projectID)
 		if err != nil {
 			return ScheduledSessionsMsg{Err: err}
 		}
 
-		var resp struct {
-			Items []views.ScheduledSession `json:"items"`
+		list, err := client.ScheduledSessions().List(ctx, projectID, defaultListOpts())
+		if err != nil {
+			return ScheduledSessionsMsg{Err: err}
 		}
-		if err := json.Unmarshal(body, &resp); err != nil {
-			return ScheduledSessionsMsg{Err: fmt.Errorf("unmarshal scheduled sessions: %w", err)}
-		}
-		return ScheduledSessionsMsg{ScheduledSessions: resp.Items}
+		return ScheduledSessionsMsg{ScheduledSessions: list.Items}
 	}
 }
 
-// DeleteScheduledSession returns a tea.Cmd that deletes a scheduled session.
-func (tc *TUIClient) DeleteScheduledSession(projectID, name string) tea.Cmd {
+// DeleteScheduledSession returns a tea.Cmd that deletes a scheduled session by ID.
+func (tc *TUIClient) DeleteScheduledSession(projectID, id string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 		defer cancel()
 
-		_, err := tc.backendRequest(ctx, "DELETE", projectID, "/scheduled-sessions/"+name, nil)
+		client, err := tc.factory.ForProject(projectID)
+		if err != nil {
+			return DeleteScheduledSessionMsg{Err: err}
+		}
+
+		err = client.ScheduledSessions().Delete(ctx, projectID, id)
 		return DeleteScheduledSessionMsg{Err: err}
 	}
 }
 
-// SuspendScheduledSession returns a tea.Cmd that suspends a scheduled session.
-func (tc *TUIClient) SuspendScheduledSession(projectID, name string) tea.Cmd {
+// SuspendScheduledSession returns a tea.Cmd that suspends a scheduled session by ID.
+func (tc *TUIClient) SuspendScheduledSession(projectID, id string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 		defer cancel()
 
-		body, err := tc.backendRequest(ctx, "POST", projectID, "/scheduled-sessions/"+name+"/suspend", nil)
+		client, err := tc.factory.ForProject(projectID)
 		if err != nil {
 			return SuspendScheduledSessionMsg{Err: err}
 		}
 
-		var ss views.ScheduledSession
-		if err := json.Unmarshal(body, &ss); err != nil {
-			return SuspendScheduledSessionMsg{Err: fmt.Errorf("unmarshal: %w", err)}
+		ss, err := client.ScheduledSessions().Suspend(ctx, projectID, id)
+		if err != nil {
+			return SuspendScheduledSessionMsg{Err: err}
 		}
-		return SuspendScheduledSessionMsg{ScheduledSession: &ss}
+		return SuspendScheduledSessionMsg{ScheduledSession: ss}
 	}
 }
 
-// ResumeScheduledSession returns a tea.Cmd that resumes a scheduled session.
-func (tc *TUIClient) ResumeScheduledSession(projectID, name string) tea.Cmd {
+// ResumeScheduledSession returns a tea.Cmd that resumes a scheduled session by ID.
+func (tc *TUIClient) ResumeScheduledSession(projectID, id string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 		defer cancel()
 
-		body, err := tc.backendRequest(ctx, "POST", projectID, "/scheduled-sessions/"+name+"/resume", nil)
+		client, err := tc.factory.ForProject(projectID)
 		if err != nil {
 			return ResumeScheduledSessionMsg{Err: err}
 		}
 
-		var ss views.ScheduledSession
-		if err := json.Unmarshal(body, &ss); err != nil {
-			return ResumeScheduledSessionMsg{Err: fmt.Errorf("unmarshal: %w", err)}
+		ss, err := client.ScheduledSessions().Resume(ctx, projectID, id)
+		if err != nil {
+			return ResumeScheduledSessionMsg{Err: err}
 		}
-		return ResumeScheduledSessionMsg{ScheduledSession: &ss}
+		return ResumeScheduledSessionMsg{ScheduledSession: ss}
 	}
 }
 
-// TriggerScheduledSession returns a tea.Cmd that manually triggers a scheduled session.
-func (tc *TUIClient) TriggerScheduledSession(projectID, name string) tea.Cmd {
+// TriggerScheduledSession returns a tea.Cmd that manually triggers a scheduled session by ID.
+func (tc *TUIClient) TriggerScheduledSession(projectID, id string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 		defer cancel()
 
-		_, err := tc.backendRequest(ctx, "POST", projectID, "/scheduled-sessions/"+name+"/trigger", nil)
+		client, err := tc.factory.ForProject(projectID)
+		if err != nil {
+			return TriggerScheduledSessionMsg{Err: err}
+		}
+
+		err = client.ScheduledSessions().Trigger(ctx, projectID, id)
 		return TriggerScheduledSessionMsg{Err: err}
 	}
 }
 
 // CreateScheduledSession returns a tea.Cmd that creates a new scheduled session.
-func (tc *TUIClient) CreateScheduledSession(projectID, displayName, schedule string) tea.Cmd {
+func (tc *TUIClient) CreateScheduledSession(projectID, name, schedule string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 		defer cancel()
 
-		reqBody := views.CreateScheduledSessionRequest{
-			Schedule:        schedule,
-			DisplayName:     displayName,
-			SessionTemplate: map[string]interface{}{},
-		}
-		bodyBytes, err := json.Marshal(reqBody)
-		if err != nil {
-			return CreateScheduledSessionMsg{Err: fmt.Errorf("marshal request: %w", err)}
-		}
-
-		respBody, err := tc.backendRequest(ctx, "POST", projectID, "/scheduled-sessions", bodyBytes)
+		client, err := tc.factory.ForProject(projectID)
 		if err != nil {
 			return CreateScheduledSessionMsg{Err: err}
 		}
 
-		var ss views.ScheduledSession
-		if err := json.Unmarshal(respBody, &ss); err != nil {
-			return CreateScheduledSessionMsg{Err: fmt.Errorf("unmarshal: %w", err)}
+		ss := &sdktypes.ScheduledSession{
+			Name:     name,
+			Schedule: schedule,
+			Enabled:  true,
 		}
-		return CreateScheduledSessionMsg{ScheduledSession: &ss}
+
+		result, err := client.ScheduledSessions().Create(ctx, projectID, ss)
+		if err != nil {
+			return CreateScheduledSessionMsg{Err: err}
+		}
+		return CreateScheduledSessionMsg{ScheduledSession: result}
 	}
 }
 
 // InterruptSession returns a tea.Cmd that sends an interrupt signal to a
-// running session via the AG-UI interrupt endpoint.
-func (tc *TUIClient) InterruptSession(projectID, sessionName string) tea.Cmd {
+// running session via the AG-UI interrupt endpoint. This uses a raw HTTP call
+// because the SDK does not have an interrupt method.
+func (tc *TUIClient) InterruptSession(sessionID string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 		defer cancel()
 
-		_, err := tc.backendRequest(ctx, "POST", projectID,
-			"/agentic-sessions/"+sessionName+"/agui/interrupt", nil)
-		return InterruptSessionMsg{Err: err}
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Backend HTTP helpers — raw HTTP calls to the old K8s-proxy backend for
-// endpoints that are not (yet) in the ambient-api-server SDK.
-// ---------------------------------------------------------------------------
-
-// backendGet performs a GET request to the backend's /api/projects/{project}{path}.
-func (tc *TUIClient) backendGet(ctx context.Context, projectID, path string) ([]byte, error) {
-	return tc.backendRequest(ctx, "GET", projectID, path, nil)
-}
-
-// backendRequest performs an HTTP request to the backend's
-// /api/projects/{project}{path}. It uses the factory's token and base URL.
-func (tc *TUIClient) backendRequest(ctx context.Context, method, projectID, path string, body []byte) ([]byte, error) {
-	token, err := tc.factory.TokenFunc()
-	if err != nil {
-		return nil, fmt.Errorf("get token: %w", err)
-	}
-
-	url := strings.TrimSuffix(tc.factory.APIURL, "/") + "/api/projects/" + projectID + path
-
-	var reqBody io.Reader
-	if body != nil {
-		reqBody = bytes.NewReader(body)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/json")
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	httpClient := &http.Client{Timeout: fetchTimeout}
-	if tc.factory.Insecure {
-		httpClient.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{
-				MinVersion:         tls.VersionTLS12,
-				InsecureSkipVerify: true, //nolint:gosec
-			},
+		token, err := tc.factory.TokenFunc()
+		if err != nil {
+			return InterruptSessionMsg{Err: fmt.Errorf("get token: %w", err)}
 		}
-	}
 
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
-	}
-	defer resp.Body.Close()
+		url := strings.TrimSuffix(tc.factory.APIURL, "/") +
+			"/api/ambient/v1/sessions/" + sessionID + "/agui/interrupt"
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		// Try to extract error message from JSON response.
-		var errResp struct {
-			Error string `json:"error"`
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+		if err != nil {
+			return InterruptSessionMsg{Err: fmt.Errorf("create request: %w", err)}
 		}
-		if json.Unmarshal(respBody, &errResp) == nil && errResp.Error != "" {
-			return nil, fmt.Errorf("%d: %s", resp.StatusCode, errResp.Error)
-		}
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
-	}
 
-	return respBody, nil
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Accept", "application/json")
+
+		httpClient := &http.Client{Timeout: fetchTimeout}
+		if tc.factory.Insecure {
+			httpClient.Transport = &http.Transport{
+				TLSClientConfig: &tls.Config{
+					MinVersion:         tls.VersionTLS12,
+					InsecureSkipVerify: true, //nolint:gosec
+				},
+			}
+		}
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return InterruptSessionMsg{Err: fmt.Errorf("HTTP request failed: %w", err)}
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			respBody, _ := io.ReadAll(resp.Body)
+			var errResp struct {
+				Error string `json:"error"`
+			}
+			if json.Unmarshal(respBody, &errResp) == nil && errResp.Error != "" {
+				return InterruptSessionMsg{Err: fmt.Errorf("%d: %s", resp.StatusCode, errResp.Error)}
+			}
+			return InterruptSessionMsg{Err: fmt.Errorf("HTTP %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))}
+		}
+
+		return InterruptSessionMsg{}
+	}
 }
 
 // FetchSessionMessages returns a tea.Cmd that polls session messages via the

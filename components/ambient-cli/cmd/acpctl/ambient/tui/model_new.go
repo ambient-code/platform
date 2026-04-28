@@ -150,7 +150,7 @@ type AppModel struct {
 	cachedAgents   []sdktypes.Agent
 	cachedSessions []sdktypes.Session
 	cachedInbox              []sdktypes.InboxMessage
-	cachedScheduledSessions  []views.ScheduledSession
+	cachedScheduledSessions  []sdktypes.ScheduledSession
 
 	// Message polling state.
 	messagePollActive bool // true when message poll tick is running
@@ -576,10 +576,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		name := ""
 		if msg.ScheduledSession != nil {
-			name = msg.ScheduledSession.DisplayName
-			if name == "" {
-				name = msg.ScheduledSession.Name
-			}
+			name = msg.ScheduledSession.Name
 		}
 		m.pollInFlight = true
 		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Scheduled session created: "+name))
@@ -1348,16 +1345,11 @@ func (m *AppModel) handleScheduledSessionsMsg(msg ScheduledSessionsMsg) (tea.Mod
 }
 
 // findScheduledSessionByName returns the cached ScheduledSession with the given
-// display name (or internal name), or nil.
-func (m *AppModel) findScheduledSessionByName(displayName string) *views.ScheduledSession {
+// name, or nil.
+func (m *AppModel) findScheduledSessionByName(name string) *sdktypes.ScheduledSession {
 	for i := range m.cachedScheduledSessions {
-		ss := &m.cachedScheduledSessions[i]
-		name := ss.DisplayName
-		if name == "" {
-			name = ss.Name
-		}
-		if name == displayName {
-			return ss
+		if m.cachedScheduledSessions[i].Name == name {
+			return &m.cachedScheduledSessions[i]
 		}
 	}
 	return nil
@@ -1680,16 +1672,16 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 	case "scheduledsessions":
 		row := m.scheduledSessionTable.SelectedRow()
 		if len(row) > 0 {
-			displayName := row[0]
-			ss := m.findScheduledSessionByName(displayName)
+			name := row[0]
+			ss := m.findScheduledSessionByName(name)
 			if ss == nil {
-				return m, m.setInfo("Scheduled session not found in cache: " + displayName)
+				return m, m.setInfo("Scheduled session not found in cache: " + name)
 			}
 			// Show detail view for the scheduled session.
-			m.detailView = views.NewDetailView("Scheduled: "+displayName, views.ScheduledSessionDetail(*ss))
+			m.detailView = views.NewDetailView("Scheduled: "+name, views.ScheduledSessionDetail(*ss))
 			m.detailView.SetSize(m.width, m.height-10)
-			cmd := m.pushView("detail", displayName, ss.Name)
-			return m, tea.Batch(cmd, m.setInfo("Scheduled session detail: "+displayName))
+			cmd := m.pushView("detail", name, ss.ID)
+			return m, tea.Batch(cmd, m.setInfo("Scheduled session detail: "+name))
 		}
 
 	case "inbox":
@@ -2075,18 +2067,11 @@ func (m *AppModel) handleSessionsRune(key string) (tea.Model, tea.Cmd) {
 		if session == nil {
 			return m, m.setInfo("Session not found in cache: " + shortID)
 		}
-		projectID := m.currentProject
-		if projectID == "" {
-			projectID = session.ProjectID
-		}
-		if projectID == "" {
-			return m, m.setInfo("No project context for interrupt")
-		}
-		sessionName := session.Name
+		capturedSessionID := session.ID
 		d := views.NewConfirmDialog("Interrupt", "Interrupt session "+session.Name+"?")
 		m.dialog = &d
 		m.dialogAction = func(_ string) tea.Cmd {
-			return m.client.InterruptSession(projectID, sessionName)
+			return m.client.InterruptSession(capturedSessionID)
 		}
 		return m, nil
 	case "y":
@@ -2139,15 +2124,15 @@ func (m *AppModel) handleScheduledSessionsRune(key string) (tea.Model, tea.Cmd) 
 		if len(row) == 0 {
 			return m, nil
 		}
-		displayName := row[0]
-		ss := m.findScheduledSessionByName(displayName)
+		name := row[0]
+		ss := m.findScheduledSessionByName(name)
 		if ss == nil {
-			return m, m.setInfo("Scheduled session not found in cache: " + displayName)
+			return m, m.setInfo("Scheduled session not found in cache: " + name)
 		}
-		m.detailView = views.NewDetailView("Scheduled: "+displayName, views.ScheduledSessionDetail(*ss))
+		m.detailView = views.NewDetailView("Scheduled: "+name, views.ScheduledSessionDetail(*ss))
 		m.detailView.SetSize(m.width, m.height-10)
-		cmd := m.pushView("detail", displayName, ss.Name)
-		return m, tea.Batch(cmd, m.setInfo("Scheduled session detail: "+displayName))
+		cmd := m.pushView("detail", name, ss.ID)
+		return m, tea.Batch(cmd, m.setInfo("Scheduled session detail: "+name))
 
 	case "n":
 		// Create new scheduled session.
@@ -2155,15 +2140,15 @@ func (m *AppModel) handleScheduledSessionsRune(key string) (tea.Model, tea.Cmd) 
 			return m, m.setInfo("Navigate to a project first")
 		}
 		project := m.currentProject
-		var displayName, schedule string
-		form := views.NewScheduledSessionForm(&displayName, &schedule)
+		var name, schedule string
+		form := views.NewScheduledSessionForm(&name, &schedule)
 		form.WithWidth(60)
 		m.formOverlay = form
 		m.formTitle = "New Scheduled Session"
 		m.formOnComplete = func() tea.Cmd {
 			return tea.Batch(
-				m.client.CreateScheduledSession(project, displayName, schedule),
-				m.setInfo("Creating scheduled session "+displayName+"..."),
+				m.client.CreateScheduledSession(project, name, schedule),
+				m.setInfo("Creating scheduled session "+name+"..."),
 			)
 		}
 		return m, m.formOverlay.Init()
@@ -2174,20 +2159,20 @@ func (m *AppModel) handleScheduledSessionsRune(key string) (tea.Model, tea.Cmd) 
 		if len(row) == 0 {
 			return m, m.setInfo("No scheduled session selected")
 		}
-		displayName := row[0]
-		ss := m.findScheduledSessionByName(displayName)
+		name := row[0]
+		ss := m.findScheduledSessionByName(name)
 		if ss == nil {
-			return m, m.setInfo("Scheduled session not found in cache: " + displayName)
+			return m, m.setInfo("Scheduled session not found in cache: " + name)
 		}
-		if ss.Suspend {
+		if !ss.Enabled {
 			return m, tea.Batch(
-				m.client.ResumeScheduledSession(m.currentProject, ss.Name),
-				m.setInfo("Resuming "+displayName+"..."),
+				m.client.ResumeScheduledSession(m.currentProject, ss.ID),
+				m.setInfo("Resuming "+name+"..."),
 			)
 		}
 		return m, tea.Batch(
-			m.client.SuspendScheduledSession(m.currentProject, ss.Name),
-			m.setInfo("Suspending "+displayName+"..."),
+			m.client.SuspendScheduledSession(m.currentProject, ss.ID),
+			m.setInfo("Suspending "+name+"..."),
 		)
 
 	case "t":
@@ -2196,17 +2181,17 @@ func (m *AppModel) handleScheduledSessionsRune(key string) (tea.Model, tea.Cmd) 
 		if len(row) == 0 {
 			return m, m.setInfo("No scheduled session selected")
 		}
-		displayName := row[0]
-		ss := m.findScheduledSessionByName(displayName)
+		name := row[0]
+		ss := m.findScheduledSessionByName(name)
 		if ss == nil {
-			return m, m.setInfo("Scheduled session not found in cache: " + displayName)
+			return m, m.setInfo("Scheduled session not found in cache: " + name)
 		}
-		ssName := ss.Name
+		ssID := ss.ID
 		currentProject := m.currentProject
-		d := views.NewConfirmDialog("Trigger", "Trigger manual run of "+displayName+"?")
+		d := views.NewConfirmDialog("Trigger", "Trigger manual run of "+name+"?")
 		m.dialog = &d
 		m.dialogAction = func(_ string) tea.Cmd {
-			return m.client.TriggerScheduledSession(currentProject, ssName)
+			return m.client.TriggerScheduledSession(currentProject, ssID)
 		}
 		return m, nil
 
@@ -2216,15 +2201,15 @@ func (m *AppModel) handleScheduledSessionsRune(key string) (tea.Model, tea.Cmd) 
 		if len(row) == 0 {
 			return m, nil
 		}
-		displayName := row[0]
-		ss := m.findScheduledSessionByName(displayName)
+		name := row[0]
+		ss := m.findScheduledSessionByName(name)
 		if ss == nil {
-			return m, m.setInfo("Scheduled session not found in cache: " + displayName)
+			return m, m.setInfo("Scheduled session not found in cache: " + name)
 		}
-		m.detailView = views.NewDetailView("JSON: "+displayName, views.ResourceJSON(*ss))
+		m.detailView = views.NewDetailView("JSON: "+name, views.ResourceJSON(*ss))
 		m.detailView.SetSize(m.width, m.height-10)
-		cmd := m.pushView("detail", displayName, ss.Name)
-		return m, tea.Batch(cmd, m.setInfo("JSON: "+displayName))
+		cmd := m.pushView("detail", name, ss.ID)
+		return m, tea.Batch(cmd, m.setInfo("JSON: "+name))
 	}
 	return m, nil
 }
@@ -2305,17 +2290,17 @@ func (m *AppModel) handleCtrlD() (tea.Model, tea.Cmd) {
 	case "scheduledsessions":
 		row := m.scheduledSessionTable.SelectedRow()
 		if len(row) > 0 {
-			displayName := row[0]
-			ss := m.findScheduledSessionByName(displayName)
+			name := row[0]
+			ss := m.findScheduledSessionByName(name)
 			if ss == nil {
-				return m, m.setInfo("Scheduled session not found in cache: " + displayName)
+				return m, m.setInfo("Scheduled session not found in cache: " + name)
 			}
-			ssName := ss.Name
+			ssID := ss.ID
 			currentProject := m.currentProject
-			d := views.NewDeleteDialog("scheduled session", displayName)
+			d := views.NewDeleteDialog("scheduled session", name)
 			m.dialog = &d
 			m.dialogAction = func(_ string) tea.Cmd {
-				return m.client.DeleteScheduledSession(currentProject, ssName)
+				return m.client.DeleteScheduledSession(currentProject, ssID)
 			}
 			return m, nil
 		}
@@ -2376,26 +2361,17 @@ func (m *AppModel) handleMessagesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.currentSession == "" {
 				return m, m.setInfo("No session context for interrupt")
 			}
-			projectID := m.currentProject
-			if projectID == "" {
-				if s := m.findSessionByShortID(m.currentSession); s != nil {
-					projectID = s.ProjectID
-				}
-			}
-			if projectID == "" {
-				return m, m.setInfo("No project context for interrupt")
-			}
-			// Resolve session name from cache.
-			sessionName := m.currentSession
+			// Resolve session display name from cache for the dialog.
+			sessionLabel := m.currentSession
+			capturedSessionID := m.currentSession
 			if s := m.findSessionByShortID(m.currentSession); s != nil {
-				sessionName = s.Name
+				sessionLabel = s.Name
+				capturedSessionID = s.ID
 			}
-			capturedProject := projectID
-			capturedName := sessionName
-			d := views.NewConfirmDialog("Interrupt", "Interrupt session "+sessionName+"?")
+			d := views.NewConfirmDialog("Interrupt", "Interrupt session "+sessionLabel+"?")
 			m.dialog = &d
 			m.dialogAction = func(_ string) tea.Cmd {
-				return m.client.InterruptSession(capturedProject, capturedName)
+				return m.client.InterruptSession(capturedSessionID)
 			}
 			return m, nil
 		}

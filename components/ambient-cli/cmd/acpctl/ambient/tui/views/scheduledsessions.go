@@ -1,38 +1,13 @@
 package views
 
 import (
-	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/huh"
+
+	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 )
-
-// ScheduledSession mirrors the backend ScheduledSession response type.
-// Defined locally because the backend types are not importable from the CLI module.
-type ScheduledSession struct {
-	Name              string            `json:"name"`
-	Namespace         string            `json:"namespace"`
-	CreationTimestamp string            `json:"creationTimestamp"`
-	Schedule          string            `json:"schedule"`
-	Suspend           bool              `json:"suspend"`
-	DisplayName       string            `json:"displayName"`
-	SessionTemplate   json.RawMessage   `json:"sessionTemplate"`
-	LastScheduleTime  *string           `json:"lastScheduleTime,omitempty"`
-	ActiveCount       int               `json:"activeCount"`
-	Labels            map[string]string `json:"labels,omitempty"`
-	Annotations       map[string]string `json:"annotations,omitempty"`
-	ReuseLastSession  bool              `json:"reuseLastSession"`
-}
-
-// CreateScheduledSessionRequest is the request body for creating a scheduled session.
-type CreateScheduledSessionRequest struct {
-	Schedule        string                 `json:"schedule"`
-	DisplayName     string                 `json:"displayName"`
-	SessionTemplate map[string]interface{} `json:"sessionTemplate"`
-	Suspend         bool                   `json:"suspend,omitempty"`
-}
 
 // ScheduledSessionColumns returns the column definitions for the scheduled
 // session list view.
@@ -42,45 +17,36 @@ func ScheduledSessionColumns() []table.Column {
 		{Title: "SCHEDULE", Width: 16},
 		{Title: "PROJECT", Width: 15},
 		{Title: "SUSPENDED", Width: 10},
-		{Title: "ACTIVE", Width: 7},
-		{Title: "LAST RUN", Width: 10},
+		{Title: "LAST RUN", Width: 12},
 		{Title: "AGE", Width: 8},
 	}
 }
 
 // ScheduledSessionRow converts a ScheduledSession into a table row suitable for
 // the scheduled session list view.
-func ScheduledSessionRow(ss ScheduledSession, now time.Time) table.Row {
-	name := ss.DisplayName
-	if name == "" {
-		name = ss.Name
-	}
+func ScheduledSessionRow(ss sdktypes.ScheduledSession, now time.Time) table.Row {
+	name := ss.Name
 
 	suspended := "No"
-	if ss.Suspend {
+	if !ss.Enabled {
 		suspended = "Yes"
 	}
 
 	lastRun := ""
-	if ss.LastScheduleTime != nil && *ss.LastScheduleTime != "" {
-		if t, err := time.Parse(time.RFC3339, *ss.LastScheduleTime); err == nil {
-			lastRun = FormatAge(now.Sub(t))
-		}
+	if ss.LastRunAt != nil {
+		lastRun = FormatAge(now.Sub(*ss.LastRunAt))
 	}
 
 	age := ""
-	if ss.CreationTimestamp != "" {
-		if t, err := time.Parse(time.RFC3339, ss.CreationTimestamp); err == nil {
-			age = FormatAge(now.Sub(t))
-		}
+	if ss.CreatedAt != nil {
+		age = FormatAge(now.Sub(*ss.CreatedAt))
 	}
 
 	return table.Row{
 		name,
 		ss.Schedule,
-		ss.Namespace,
+		ss.ProjectID,
 		suspended,
-		fmt.Sprintf("%d", ss.ActiveCount),
 		lastRun,
 		age,
 	}
@@ -94,58 +60,46 @@ func NewScheduledSessionTable(scope string, style TableStyle) ResourceTable {
 
 // ScheduledSessionDetail returns detail lines for all fields of a
 // ScheduledSession resource.
-func ScheduledSessionDetail(ss ScheduledSession) []DetailLine {
+func ScheduledSessionDetail(ss sdktypes.ScheduledSession) []DetailLine {
 	suspended := "No"
-	if ss.Suspend {
+	if !ss.Enabled {
 		suspended = "Yes"
-	}
-	reuseLastSession := "No"
-	if ss.ReuseLastSession {
-		reuseLastSession = "Yes"
 	}
 
 	lastRun := ""
-	if ss.LastScheduleTime != nil {
-		lastRun = *ss.LastScheduleTime
+	if ss.LastRunAt != nil {
+		lastRun = ss.LastRunAt.Format(time.RFC3339)
 	}
 
-	templateJSON := ""
-	if len(ss.SessionTemplate) > 0 {
-		var obj interface{}
-		if err := json.Unmarshal(ss.SessionTemplate, &obj); err == nil {
-			if data, err := json.MarshalIndent(obj, "", "  "); err == nil {
-				templateJSON = string(data)
-			}
-		}
+	nextRun := ""
+	if ss.NextRunAt != nil {
+		nextRun = ss.NextRunAt.Format(time.RFC3339)
 	}
 
-	labelsJSON := ""
-	if len(ss.Labels) > 0 {
-		if data, err := json.MarshalIndent(ss.Labels, "", "  "); err == nil {
-			labelsJSON = string(data)
-		}
+	createdAt := ""
+	if ss.CreatedAt != nil {
+		createdAt = ss.CreatedAt.Format(time.RFC3339)
 	}
 
-	annotationsJSON := ""
-	if len(ss.Annotations) > 0 {
-		if data, err := json.MarshalIndent(ss.Annotations, "", "  "); err == nil {
-			annotationsJSON = string(data)
-		}
+	updatedAt := ""
+	if ss.UpdatedAt != nil {
+		updatedAt = ss.UpdatedAt.Format(time.RFC3339)
 	}
 
 	return []DetailLine{
+		{Key: "ID", Value: ss.ID},
 		{Key: "Name", Value: ss.Name},
-		{Key: "Display Name", Value: ss.DisplayName},
-		{Key: "Namespace", Value: ss.Namespace},
+		{Key: "Description", Value: ss.Description},
+		{Key: "Project ID", Value: ss.ProjectID},
+		{Key: "Agent ID", Value: ss.AgentID},
 		{Key: "Schedule", Value: ss.Schedule},
+		{Key: "Timezone", Value: ss.Timezone},
 		{Key: "Suspended", Value: suspended},
-		{Key: "Reuse Last Session", Value: reuseLastSession},
-		{Key: "Active Count", Value: fmt.Sprintf("%d", ss.ActiveCount)},
-		{Key: "Last Schedule Time", Value: lastRun},
-		{Key: "Created At", Value: ss.CreationTimestamp},
-		{Key: "Labels", Value: labelsJSON},
-		{Key: "Annotations", Value: annotationsJSON},
-		{Key: "Session Template", Value: templateJSON},
+		{Key: "Session Prompt", Value: ss.SessionPrompt},
+		{Key: "Last Run At", Value: lastRun},
+		{Key: "Next Run At", Value: nextRun},
+		{Key: "Created At", Value: createdAt},
+		{Key: "Updated At", Value: updatedAt},
 	}
 }
 
