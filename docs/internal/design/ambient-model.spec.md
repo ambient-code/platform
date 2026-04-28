@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-20
 **Status:** Proposed — Pending Consensus
-**Last Updated:** 2026-04-28 — added `ScheduledSession` Kind; added session operational sub-resources (workspace, files, git, repos, tasks, runner protocol); added generic proxy surface for backend passthrough; updated coverage matrix: all ScheduledSession commands implemented; session sub-resources (workspace/files/git/repos/operational/runner protocol) implemented in API server; generic proxy plugin implemented
+**Last Updated:** 2026-04-28 — added `ScheduledSession` Kind; added session operational sub-resources (workspace, files, git, repos, tasks, runner protocol); added generic proxy surface for backend passthrough; updated coverage matrix: all ScheduledSession commands implemented; session sub-resources (workspace/files/git/repos/operational/runner protocol) implemented in API server; generic proxy plugin implemented; added `SessionEvent` Kind (durable AG-UI event store replacing `agui-events.jsonl`); clarified `SessionMessage` as runner inbox only; added `/agui-events` SSE endpoint with compaction and `since`/`run_id` filters
 **Guide:** `ambient-model.guide.md` — implementation waves, gap table, build commands, run log
 **Design:** `credentials-session.md` — full Credential Kind design spec and rationale
 
@@ -133,14 +133,28 @@ erDiagram
         time    deleted_at
     }
 
-    %% ── SessionMessage (AG-UI event stream — real LLM turns) ─────────────────
+    %% ── SessionMessage (runner inbox — user message delivery queue) ──────────
 
     SessionMessage {
         string ID PK
         string session_id FK
         int    seq "monotonic within session"
-        string event_type "user | assistant | tool_use | tool_result | system | error"
-        string payload "message body or JSON-encoded event"
+        string event_type "user (only; runner ignores all other event_types)"
+        string payload "message body"
+        time   created_at
+    }
+
+    %% ── SessionEvent (durable AG-UI event store — replaces agui-events.jsonl) ─
+
+    SessionEvent {
+        string ID PK "KSUID"
+        string session_id FK
+        string run_id "nullable — groups events within a runner invocation"
+        string thread_id "nullable — ties to runner in-memory stream"
+        bigint seq "BIGSERIAL monotonic within session"
+        string event_type "AG-UI protocol type: RUN_STARTED | TEXT_MESSAGE_START | TEXT_MESSAGE_CONTENT | TEXT_MESSAGE_END | TOOL_CALL_START | TOOL_CALL_ARGS | TOOL_CALL_END | TOOL_CALL_RESULT | MESSAGES_SNAPSHOT | STATE_SNAPSHOT | REASONING_START | REASONING_CONTENT | REASONING_END | RUN_FINISHED | RUN_ERROR | META | CUSTOM | RAW"
+        text   payload "raw JSON-serialized AG-UI event — piped verbatim to SSE consumers"
+        bool   superseded "true = streaming delta replaced by compaction snapshot; excluded from replay"
         time   created_at
     }
 
@@ -224,7 +238,8 @@ erDiagram
 
     Inbox           }o--o| Agent            : "sent_from"
 
-    Session         ||--o{ SessionMessage   : "streams"
+    Session         ||--o{ SessionMessage   : "inbox"
+    Session         ||--o{ SessionEvent     : "records"
 
     Role            ||--o{ RoleBinding      : "granted_by"
 ```
@@ -286,22 +301,62 @@ All four are assembled into the start context in that order. Pokes roll downhill
 
 ---
 
-## SessionMessage — AG-UI Event Stream
+## SessionMessage — Runner Inbox (User Message Delivery Queue)
 
-SessionMessages are the real LLM conversation. They are appended by the runner via gRPC `PushSessionMessage` and streamed to clients via SSE.
+SessionMessages are the delivery queue for user-to-runner messages. They carry only `event_type="user"`. The runner's `WatchSessionMessages` gRPC stream watches this table and filters to `event_type="user"` — any other event_type is discarded by the watcher.
 
-`seq` is monotonically increasing within a session. `event_type` follows the AG-UI protocol: `user`, `assistant`, `tool_use`, `tool_result`, `system`, `error`.
+`seq` is monotonically increasing within a session. SessionMessages are append-only and never deleted.
 
-SessionMessages are never deleted or edited. They are the canonical record of what happened in a session.
+**SessionMessages do not store assistant outputs, tool calls, or any other AG-UI events.** Those are stored in `SessionEvent`. The overloading of `session_messages` as both a delivery queue and an event log is superseded by this separation — `grpc_push_middleware` and `GRPCMessageWriter` must write to `SessionEvent`, not `SessionMessage`.
 
-### Two Event Streams
+### Event Streams
 
 | Endpoint | Source | Persistence | Purpose |
 |---|---|---|---|
-| `GET /sessions/{id}/messages` | API server gRPC fan-out | Persisted in DB (replay from `seq=0`) | Durable stream; supports replay and history |
-| `GET /sessions/{id}/events` | Runner pod SSE (`GET /events/{thread_id}`) | Ephemeral; runner-local in-memory queue | Live AG-UI turn events during an active run |
+| `POST /sessions/{id}/messages` | Human or system | DB append | Deliver a user message to the runner inbox |
+| `GET /sessions/{id}/messages` | API server DB | Persisted | List user messages sent to this session |
+| `GET /sessions/{id}/agui-events` | API server DB + runner | Persisted (see SessionEvent) | Durable AG-UI event replay + live stream |
+| `GET /sessions/{id}/events` | Runner pod SSE | Ephemeral; runner-local | Live AG-UI turn events during an active run |
 
-The runner's `/events/{thread_id}` endpoint registers an asyncio queue into `bridge._active_streams[thread_id]` and streams every AG-UI event as SSE until `RUN_FINISHED` / `RUN_ERROR` or client disconnect. The API server's `/sessions/{id}/events` proxies this from the runner pod for the active session, routing via pod IP or session service. Keepalive pings fire every 30s to hold the connection open.
+The runner's `/events/{thread_id}` endpoint registers an asyncio queue into `bridge._active_streams[thread_id]` and streams every AG-UI event as SSE until `RUN_FINISHED` / `RUN_ERROR` or client disconnect. The API server's `/sessions/{id}/events` proxies this from the runner pod for the active session, routing via pod IP or session service. Keepalive pings fire every 30s to hold the connection open. The `/sessions/{id}/agui-events` endpoint provides the same stream with durable replay — see `SessionEvent` below.
+
+---
+
+## SessionEvent — Durable AG-UI Event Store
+
+SessionEvents are the canonical append-only record of every AG-UI protocol event in a session. They replace `agui-events.jsonl` (the legacy backend PVC file) and the overloaded non-user event rows that `grpc_push_middleware` previously wrote to `session_messages`.
+
+Every AG-UI event emitted by the runner is persisted here: `RUN_STARTED`, `TEXT_MESSAGE_START`, `TEXT_MESSAGE_CONTENT`, `TEXT_MESSAGE_END`, `TOOL_CALL_START`, `TOOL_CALL_ARGS`, `TOOL_CALL_END`, `TOOL_CALL_RESULT`, `MESSAGES_SNAPSHOT`, `STATE_SNAPSHOT`, `REASONING_START`, `REASONING_CONTENT`, `REASONING_END`, `RUN_FINISHED`, `RUN_ERROR`, `CUSTOM`, `RAW`, `META`.
+
+`run_id` and `thread_id` are first-class columns — they group events within a runner invocation and tie back to the runner's in-memory stream. The `payload` column stores the raw AG-UI event JSON verbatim; the SSE replay endpoint pipes it directly as `data: {payload}\n\n` without transformation, producing a standards-compliant AG-UI SSE stream.
+
+### Compaction
+
+After `RUN_FINISHED` or `RUN_ERROR`, streaming deltas are superseded:
+
+1. All `TEXT_MESSAGE_CONTENT` rows for that `run_id` are marked `superseded=true`.
+2. A new `MESSAGES_SNAPSHOT` row is appended with `superseded=false` — the canonical assembled transcript for the run.
+
+SSE replay excludes `superseded=true` rows. This mirrors the `compactFinishedRun()` behavior from the legacy backend (`agui_store.go`) but operates within the database rather than on the filesystem, eliminating the atomic-rename requirement and making history queries cheap.
+
+### Write Paths
+
+| Source | Mechanism | Scope |
+|---|---|---|
+| Backend AG-UI proxy | Writes one row per event as it proxies the runner SSE stream | Operator-based sessions |
+| Runner (control-plane sessions) | gRPC `PushSessionEvent` — all events via `grpc_push_middleware` | Control-plane sessions |
+
+`grpc_push_middleware` must be updated to call `PushSessionEvent` instead of `PushSessionMessage`. The `GRPCMessageWriter` (which wrote the final assistant text to `session_messages`) is retired — the full event stream in `session_events` supersedes it.
+
+### Read Paths
+
+| Endpoint | Behavior |
+|---|---|
+| `GET /sessions/{id}/agui-events` | SSE: replay all non-superseded rows from `seq=0`, then stream live events |
+| `GET /sessions/{id}/agui-events?since=<seq>` | SSE: replay from `seq` (reconnect without full history) |
+| `GET /sessions/{id}/agui-events?run_id=<id>` | SSE: all events for a single run (debugging, per-run transcript) |
+
+The `since` parameter enables seamless client reconnect: the client tracks the last `seq` it received, reconnects with `?since=<seq>`, and receives only new events — no full replay.
 
 ---
 
@@ -374,9 +429,12 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | `DELETE /sessions/{id}` | `acpctl delete session <id>` | ✅ implemented |
 | `GET /sessions/{id}/messages` | `acpctl session messages <id>` | ✅ implemented |
 | `POST /sessions/{id}/messages` | `acpctl session send <id> <message>` | ✅ implemented |
-| `POST /sessions/{id}/messages` + `GET /sessions/{id}/events` | `acpctl session send <id> <message> -f` | ✅ implemented |
-| `POST /sessions/{id}/messages` + `GET /sessions/{id}/events` | `acpctl session send <id> <message> -f --json` | ✅ implemented |
-| `GET /sessions/{id}/events` | `acpctl session events <id>` | ✅ implemented |
+| `POST /sessions/{id}/messages` + `GET /sessions/{id}/agui-events` | `acpctl session send <id> <message> -f` | 🔲 planned (migrate from /events) |
+| `POST /sessions/{id}/messages` + `GET /sessions/{id}/agui-events` | `acpctl session send <id> <message> -f --json` | 🔲 planned (migrate from /events) |
+| `GET /sessions/{id}/agui-events` | `acpctl session agui-events <id>` | 🔲 planned |
+| `GET /sessions/{id}/agui-events?since=<seq>` | `acpctl session agui-events <id> --since <seq>` | 🔲 planned |
+| `GET /sessions/{id}/agui-events?run_id=<id>` | `acpctl session agui-events <id> --run-id <id>` | 🔲 planned |
+| `GET /sessions/{id}/events` | `acpctl session events <id>` | ✅ implemented (ephemeral; no replay) |
 
 #### ScheduledSessions (Project-Scoped)
 
@@ -661,9 +719,12 @@ GET    /api/ambient/v1/sessions                                              lis
 GET    /api/ambient/v1/sessions/{id}                                         read session
 DELETE /api/ambient/v1/sessions/{id}                                         cancel or delete session
 
-GET    /api/ambient/v1/sessions/{id}/messages                                list messages (history)
-POST   /api/ambient/v1/sessions/{id}/messages                                push a message (human turn)
-GET    /api/ambient/v1/sessions/{id}/events                                  SSE live event stream from runner pod
+GET    /api/ambient/v1/sessions/{id}/messages                                list user messages sent to this session (runner inbox)
+POST   /api/ambient/v1/sessions/{id}/messages                                push a user message (enqueues to runner inbox)
+GET    /api/ambient/v1/sessions/{id}/agui-events                             SSE durable AG-UI event stream (DB replay + live; excludes superseded rows)
+GET    /api/ambient/v1/sessions/{id}/agui-events?since=<seq>                 SSE from seq (client reconnect — no full replay)
+GET    /api/ambient/v1/sessions/{id}/agui-events?run_id=<id>                 SSE filtered to a single run
+GET    /api/ambient/v1/sessions/{id}/events                                  SSE live event stream proxied from runner pod (ephemeral — no replay)
 GET    /api/ambient/v1/sessions/{id}/role_bindings                           RBAC bindings
 ```
 
@@ -1090,7 +1151,13 @@ This structure means you can define and compose bespoke agent suites — entire 
 | `current_session_id` denormalized on Agent | Project Home reads Agent + session phase without joining through sessions |
 | Sessions created only via start | Sessions are run artifacts; direct `POST /sessions` does not exist |
 | Every layer carries a `prompt` | Project.prompt = workspace context; Agent.prompt = who the agent is; Session.prompt = what this run does; Inbox = prior requests. Pokes roll downhill. |
-| `SessionMessage` is append-only | Canonical record of the LLM conversation; never edited or deleted |
+| `SessionMessage` is the runner inbox only | Narrowed from "event log" to "user message delivery queue". The `WatchSessionMessages` watcher already discarded non-user events (line 215 of `grpc_transport.py`) — the table now matches that contract. Prevents dual-store confusion. |
+| `SessionEvent` is separate from `SessionMessage` | The two stores flow in opposite directions and have different consumers. `session_messages`: user → runner (delivery queue, consumed by gRPC watch). `session_events`: runner → DB (event log, consumed by SSE replay and CLI/SDK history). Merging them required overloading one direction to serve both, which `grpc_push_middleware` did badly. |
+| `run_id` and `thread_id` are first-class columns in `SessionEvent` | The legacy `agui-events.jsonl` had no per-run filtering. `run_id` enables per-run compaction (mark streaming deltas `superseded=true`, append `MESSAGES_SNAPSHOT`) and per-run queries (`?run_id=<id>`). `thread_id` ties DB rows back to runner in-memory streams for debugging. |
+| Compaction uses `superseded` flag, not row deletion | Deleting compacted rows would require transaction coordination with concurrent readers. Marking `superseded=true` is append-safe and lets queries add `WHERE NOT superseded`. The `MESSAGES_SNAPSHOT` row inserted at compaction is the authoritative assembled transcript for the run. |
+| `payload` is raw AG-UI JSON piped verbatim | The legacy backend's `GET /sessions/{id}/messages` SSE wrapped DB records in a custom envelope — wrong format for AG-UI protocol consumers. `session_events.payload` stores the original JSON; SSE emits `data: {payload}\n\n` directly. Zero transformation means any AG-UI client can consume the stream without adapter code. |
+| `SessionEvent` replaces `agui-events.jsonl` entirely | The JSONL was durable (PVC-backed) but lost on PVC deletion, required O(file-size) reads for history, and could not serve multiple readers without an in-memory broadcast pipe. A DB table gives durability, indexed queries, multi-reader fan-out via gRPC watch, and compaction without atomic-rename hacks. |
+| `SessionMessage` is append-only | Canonical record of user messages sent to the session; never edited or deleted |
 | `agent:editor` role | Allows prompt updates without full operator access |
 | `agent:runner` role | Pods get minimum viable credential: read agent definition, push session messages, send inbox |
 | Union-only permissions | No deny rules — simpler mental model for fleet operators |
@@ -1165,8 +1232,9 @@ _Last updated: 2026-04-28. Use this as the authoritative index — click into co
 |---|---|---|---|---|
 | **Sessions — CRUD** | ✅ | ✅ `SessionAPI.{Get,List,Create,Update,Delete}` | ✅ `get/create/delete session` | |
 | **Sessions — start/stop** | ✅ `/start` `/stop` | ✅ `SessionAPI.{Start,Stop}` | ✅ `start`/`stop` commands | |
-| **Sessions — messages (list/push/watch)** | ✅ `/messages` | ✅ `PushMessage`, `ListMessages`, `WatchSessionMessages` (gRPC) | ✅ `session messages`, `session send` | gRPC watch via `session_watch.go` |
-| **Sessions — live events (SSE proxy)** | ✅ `/events` → runner pod | ✅ `SessionAPI.StreamEvents` → `io.ReadCloser` | ✅ `session events` | Runner must be Running; 502 if unreachable |
+| **Sessions — messages (list/push/watch)** | ✅ `/messages` | ✅ `PushMessage`, `ListMessages`, `WatchSessionMessages` (gRPC) | ✅ `session messages`, `session send` | gRPC watch via `session_watch.go`; user messages only after SessionEvent split |
+| **Sessions — AG-UI event store** | 🔲 `/agui-events` → `session_events` table | 🔲 `SessionAPI.StreamAGUIEvents` | 🔲 `session agui-events` | New; replaces `agui-events.jsonl`; compaction on RUN_FINISHED; `since`/`run_id` filters |
+| **Sessions — live events (SSE proxy)** | ✅ `/events` → runner pod | ✅ `SessionAPI.StreamEvents` → `io.ReadCloser` | ✅ `session events` | Ephemeral; no replay; runner must be Running; 502 if unreachable |
 | **Sessions — labels/annotations** | ✅ PATCH accepts `labels`/`annotations` | ✅ fields on `Session` type; `SessionAPI.Update(patch map[string]any)` | ⚠️ no dedicated subcommand; use `acpctl get session -o json` + manual PATCH | |
 | **Sessions — workspace files** | ✅ sessions plugin; stubs empty list when no runner; 503 per-file-op | 🔲 | 🔲 `session workspace list/get/put/delete` | Requires running session for file ops |
 | **Sessions — pre-upload files** | ✅ sessions plugin; stubs empty list when no runner; 503 per-file-op | 🔲 | 🔲 `session files list/upload/delete` | S3-staged; available before session starts |
