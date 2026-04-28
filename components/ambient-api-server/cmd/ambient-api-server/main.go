@@ -22,6 +22,8 @@ import (
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/rbac"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/roleBindings"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/roles"
+	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/proxy"
+	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/scheduledSessions"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/users"
 )

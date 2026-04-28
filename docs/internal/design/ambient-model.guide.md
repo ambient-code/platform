@@ -226,7 +226,7 @@ http://session-{KubeCrName}.{KubeNamespace}.svc.cluster.local:8001
 
 The `Session` model stores `KubeCrName` and `KubeNamespace` — both are available from the DB. The runner listens on port `8001` (set via `AGUI_PORT` env var by the operator; default in runner code is `8000` but the operator overrides it).
 
-This pattern is used by `components/backend/websocket/agui_proxy.go` (the V1 backend). The ambient-api-server does not currently proxy to runner pods — any new proxy endpoint must add this logic.
+This pattern is used by `components/backend/websocket/agui_proxy.go` (the V1 backend) and by `plugins/sessions/handler.go` in the ambient-api-server. The sessions plugin implements `proxyToRunner(w, r, url)` which copies method, headers, body, and response verbatim. All workspace, files, git, repos/status, and AGUI sub-resource endpoints use this pattern. When the runner is unavailable, handlers return a stub (empty body) or `503 Service Unavailable`.
 
 ### Implementing `GET /sessions/{id}/events` (Runner SSE Proxy)
 
@@ -496,6 +496,12 @@ This means `StreamEvents` needs access to `a.client.baseURL`, `a.client.token`, 
 The `apply` command imported `yaml.v3` but the CLI `go.mod` didn't declare it. The build failure message (`missing go.sum entry`) was clear but required running `go get gopkg.in/yaml.v3` to resolve. The dependency was already transitively available (via the SDK), but Go modules require explicit declaration for direct imports.
 
 **Rule:** When adding a new file to the CLI that imports a new package, run `go build ./...` immediately. Fix `go.mod` before committing.
+
+### Generic Proxy Is a Pre-Auth Middleware, Not a Route
+
+`plugins/proxy/plugin.go` forwards all non-`/api/ambient/` requests to `BACKEND_URL` (default `http://localhost:8080`). It must use `pkgserver.RegisterPreAuthMiddleware` — the plugin's `RegisterRoutes` callback only receives the `/api/ambient/v1` subrouter and cannot intercept paths outside that prefix. Pre-auth middleware wraps the entire HTTP server before gorilla mux routing, so it sees every path.
+
+**Rule:** Any endpoint that lives outside `/api/ambient/v1/` (e.g. `/health`, `/api/projects/...`, `/api/auth/...`) must be handled via `RegisterPreAuthMiddleware`. It cannot be registered as a route in a plugin's `RegisterRoutes`.
 
 ### Spec Coverage Matrix Is the Right Indexing Artifact
 
