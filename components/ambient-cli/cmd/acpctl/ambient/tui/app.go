@@ -68,11 +68,8 @@ func (m *AppModel) View() string {
 //
 //	Col1: Metadata    Col2: Project shortcuts    Col3: Hotkey hints    Col4: Logo+refresh
 func (m *AppModel) viewHeader() string {
-	contextName, serverURL, project := "none", "unknown", "none"
+	serverURL, project := "unknown", "none"
 	if m.config != nil {
-		if m.config.CurrentContext != "" {
-			contextName = m.config.CurrentContext
-		}
 		if ctx := m.config.Current(); ctx != nil {
 			if ctx.Server != "" {
 				serverURL = ctx.Server
@@ -82,9 +79,8 @@ func (m *AppModel) viewHeader() string {
 			}
 		}
 	}
-	// Col 1: metadata (server is rendered on its own line below the header grid).
+	// Col 1: metadata (context URL on its own row below the grid).
 	col1 := [5]string{
-		fmt.Sprintf(" %s %s %s", styleDim.Render("Context:"), styleOrange.Render(contextName), styleDim.Render("[RW]")),
 		fmt.Sprintf(" %s %s", styleDim.Render("User:   "), styleWhite.Render(m.currentUser())),
 		fmt.Sprintf(" %s %s", styleDim.Render("Project:"), styleOrange.Render(project)),
 	}
@@ -204,7 +200,7 @@ func (m *AppModel) viewHeader() string {
 		// Right-align col4 (static hints + brand).
 		brandStyle := styleOrange
 		if m.authExpired {
-			brandStyle = styleRed
+			brandStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("69"))
 		}
 		brand := ""
 		if i < len(brandLines) {
@@ -226,24 +222,24 @@ func (m *AppModel) viewHeader() string {
 		lines[i] = line + strings.Repeat(" ", gap) + right
 	}
 
-	// Server URL on its own full-width row below the grid to avoid pushing columns.
-	serverLine := fmt.Sprintf(" %s %s", styleDim.Render("Server:"), styleDim.Render(serverURL))
+	// Context URL on its own full-width row below the grid.
+	contextLine := fmt.Sprintf(" %s %s %s", styleDim.Render("Context:"), styleDim.Render(serverURL), styleDim.Render("[RW]"))
 	if m.authExpired {
 		badge := lipgloss.NewStyle().
-			Background(lipgloss.Color("196")).
+			Background(lipgloss.Color("69")).
 			Foreground(lipgloss.Color("255")).
 			Bold(true).
 			Padding(0, 1).
 			Render("Session Expired")
 		badgeW := lipgloss.Width(badge)
-		serverW := lipgloss.Width(serverLine)
-		pad := m.width - serverW - badgeW
+		ctxW := lipgloss.Width(contextLine)
+		pad := m.width - ctxW - badgeW
 		if pad < 1 {
 			pad = 1
 		}
-		serverLine += strings.Repeat(" ", pad) + badge
+		contextLine += strings.Repeat(" ", pad) + badge
 	}
-	return strings.Join(lines, "\n") + "\n" + serverLine
+	return strings.Join(lines, "\n") + "\n" + contextLine
 }
 
 // renderHint renders a single hotkey hint like "<d> Describe" with dim brackets
@@ -359,7 +355,13 @@ func (m *AppModel) viewBreadcrumb() string {
 func (m *AppModel) viewInfoLine() string {
 	// Error takes priority over info.
 	if m.lastError != "" {
-		return "  " + styleRed.Render("✗ "+m.lastError)
+		errText := styleRed.Render("✗ " + m.lastError)
+		errWidth := lipgloss.Width(errText)
+		pad := (m.width - errWidth) / 2
+		if pad < 0 {
+			pad = 0
+		}
+		return strings.Repeat(" ", pad) + errText
 	}
 
 	if m.infoMessage != "" {
