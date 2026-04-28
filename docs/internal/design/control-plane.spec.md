@@ -332,7 +332,17 @@ The proposed `GET /api/ambient/v1/sessions/{id}/events` endpoint on the api-serv
 5. Passes keepalive pings through unchanged
 6. Closes the client stream when the runner closes or client disconnects
 
-This endpoint is already spec'd in `ambient-model.spec.md` as `GET /sessions/{id}/events` (status: 🔲 planned).
+This endpoint is implemented in `plugins/sessions/plugin.go` as `GET /sessions/{id}/events` → `sessionHandler.StreamRunnerEvents` (status: ✅ implemented).
+
+---
+
+## Generic Backend Proxy
+
+`plugins/proxy/plugin.go` (ambient-api-server) forwards every request whose path does NOT start with `/api/ambient/` verbatim to `BACKEND_URL` (default `http://localhost:8080`). Method, path, query string, headers (including `Authorization`), and body are forwarded unchanged. The response — headers, status code, body — is copied back unchanged.
+
+Implementation: `pkgserver.RegisterPreAuthMiddleware` wraps the entire HTTP server before routing. Native paths (`/api/ambient/...`, `/metrics`, `/favicon.ico`) fall through to the next handler; all others are proxied.
+
+Status: ✅ implemented — `plugins/proxy/plugin.go`; blank-imported in `cmd/ambient-api-server/main.go`.
 
 ---
 
