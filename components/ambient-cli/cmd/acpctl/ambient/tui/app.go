@@ -230,7 +230,7 @@ func (m *AppModel) viewHeader() string {
 	serverLine := fmt.Sprintf(" %s %s", styleDim.Render("Server:"), styleDim.Render(serverURL))
 	if m.authExpired {
 		badge := lipgloss.NewStyle().
-			Background(lipgloss.Color("31")).
+			Background(lipgloss.Color("196")).
 			Foreground(lipgloss.Color("255")).
 			Bold(true).
 			Padding(0, 1).

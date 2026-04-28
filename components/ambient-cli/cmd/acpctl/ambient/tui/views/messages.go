@@ -43,7 +43,7 @@ var (
 	msgColorGreen  = lipgloss.Color("28")
 	msgColorDim    = lipgloss.Color("240")
 	msgColorYellow = lipgloss.Color("33")
-	msgColorRed    = lipgloss.Color("31")
+	msgColorRed    = lipgloss.Color("196")
 	msgColorOrange = lipgloss.Color("214")
 	msgColorCyan   = lipgloss.Color("36")
 	msgColorBlue   = lipgloss.Color("69")
