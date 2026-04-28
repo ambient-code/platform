@@ -378,13 +378,6 @@ type MessageEntry struct {
 	EventType string
 	Payload   string
 	Timestamp time.Time
-
-	// entryID is a unique monotonic identifier assigned by the MessageStream
-	// when the entry is added to history or liveOverlay. It is used as the
-	// glamour render cache key instead of Seq because SSE-derived events all
-	// have Seq=0, which causes cache collisions and makes every entry render
-	// the same cached output (e.g. "connected to event stream").
-	entryID int
 }
 
 // ---------------------------------------------------------------------------
@@ -398,32 +391,18 @@ const defaultMaxMessages = 2000
 // It renders messages in conversation or raw mode, supports scrolling,
 // autoscroll, compose input, and search.
 //
-// The message buffer is split into two separated streams:
-//   - history: durable conversation turns from /messages polling (user + assistant)
-//   - liveOverlay: ephemeral AG-UI events from /events SSE (tool calls, reasoning, streaming text)
-//
-// View() renders history first, then a separator, then liveOverlay. No cross-stream dedup needed.
+// Messages arrive via 1-second REST polling of /messages.
 type MessageStream struct {
 	sessionID string
 	agentName string
 	phase     string
 
-	// SSE connection status: "", "connected", "reconnecting", "disconnected".
-	sseStatus string
+	// Single message buffer.
+	messages    []MessageEntry
+	maxMessages int // ring buffer capacity
 
-	// Separated message buffers.
-	history     []MessageEntry // durable conversation turns from /messages polling
-	liveOverlay []MessageEntry // ephemeral AG-UI events from /events SSE
-	maxMessages int            // ring buffer capacity for history only
-
-	// Highest seq seen in history — used for polling dedup.
-	lastHistorySeq int
-
-	// runFinished is set when RUN_FINISHED/RUN_ERROR arrives via the event stream.
-	// The overlay persists until the next AddHistoryMessage with EventType=="assistant"
-	// arrives, at which point the overlay is cleared. This avoids a visual gap where
-	// neither buffer has the response.
-	runFinished bool
+	// Highest seq seen — used for polling dedup.
+	lastSeq int
 
 	// Display
 	scrollOffset  int
@@ -436,30 +415,16 @@ type MessageStream struct {
 	glamourRenderer *glamour.TermRenderer
 	glamourWidth    int // width used to create the cached renderer
 
-	// Streaming accumulator — coalesces AG-UI deltas into a single growing entry.
-	// These write to liveOverlay instead of history.
-	streamingEntry    *MessageEntry  // the in-progress text message being accumulated
-	streamingText     strings.Builder // accumulated text for the current text message
-	streamingToolEntry    *MessageEntry  // the in-progress tool call being accumulated
-	streamingToolArgs    strings.Builder // accumulated args for the current tool call
-	streamingReasonEntry *MessageEntry  // the in-progress reasoning message being accumulated
-	streamingReasonText  strings.Builder // accumulated text for the current reasoning message
-
 	// Cached display lines — rebuilt when mode/messages change, not every frame.
 	cachedLines      []string
 	cachedDirty      bool // true when lines need rebuilding
-	cachedMsgCount   int  // history + overlay combined count
+	cachedMsgCount   int
 	cachedRawMode    bool
 	cachedWrapMode   bool
 	cachedTsMode     int
 	cachedSearchPat  string
 
-	// nextEntryID is a monotonically incrementing counter used to assign unique
-	// entryID values to each MessageEntry. This avoids glamour cache collisions
-	// when multiple entries share the same Seq value (e.g. all SSE events have Seq=0).
-	nextEntryID int
-
-	// Per-message glamour render cache (key = entryID, not Seq).
+	// Per-message glamour render cache (key = Seq).
 	glamourCache     map[int]string
 
 	// Compose
@@ -491,8 +456,7 @@ func NewMessageStream(sessionID, agentName, phase string) MessageStream {
 		sessionID:    sessionID,
 		agentName:    agentName,
 		phase:        phase,
-		history:      make([]MessageEntry, 0, 256),
-		liveOverlay:  make([]MessageEntry, 0, 64),
+		messages:     make([]MessageEntry, 0, 256),
 		maxMessages:  defaultMaxMessages,
 		autoScroll:   true,
 		composeInput: ci,
@@ -504,39 +468,28 @@ func NewMessageStream(sessionID, agentName, phase string) MessageStream {
 // Public methods
 // ---------------------------------------------------------------------------
 
-// AddHistoryMessage appends a message to the history ring buffer. When the
-// buffer exceeds maxMessages, the oldest message is evicted. If autoScroll is
-// enabled the scroll offset is advanced to keep the newest message visible.
-//
-// When runFinished is true and an "assistant" message arrives, the live overlay
-// is cleared — the persisted assistant message in history replaces the ephemeral
-// streaming overlay.
-func (ms *MessageStream) AddHistoryMessage(entry MessageEntry) {
-	ms.nextEntryID++
-	entry.entryID = ms.nextEntryID
-	ms.history = append(ms.history, entry)
-	if len(ms.history) > ms.maxMessages {
+// AddMessage appends a message to the ring buffer. When the buffer exceeds
+// maxMessages, the oldest message is evicted. If autoScroll is enabled the
+// scroll offset is advanced to keep the newest message visible.
+func (ms *MessageStream) AddMessage(entry MessageEntry) {
+	ms.messages = append(ms.messages, entry)
+	if len(ms.messages) > ms.maxMessages {
 		// Evict oldest — shift the slice. For a 2000-entry buffer this is
 		// acceptable; a true ring buffer optimisation can come later.
-		excess := len(ms.history) - ms.maxMessages
+		excess := len(ms.messages) - ms.maxMessages
 		// Clean up glamour cache entries for evicted messages.
 		if ms.glamourCache != nil {
-			for _, evicted := range ms.history[:excess] {
-				delete(ms.glamourCache, evicted.entryID)
+			for _, evicted := range ms.messages[:excess] {
+				delete(ms.glamourCache, evicted.Seq)
 			}
 		}
-		ms.history = ms.history[excess:]
+		ms.messages = ms.messages[excess:]
 		// Don't adjust scrollOffset here — it's a display-line offset, not a
 		// message-array index. renderContent's clamp handles any overshoot.
 	}
 	// Track highest seq for polling dedup.
-	if entry.Seq > ms.lastHistorySeq {
-		ms.lastHistorySeq = entry.Seq
-	}
-	// When the run has finished and the persisted assistant message arrives
-	// in history, clear the ephemeral overlay — history now has the response.
-	if ms.runFinished && entry.EventType == "assistant" {
-		ms.ClearLiveOverlay()
+	if entry.Seq > ms.lastSeq {
+		ms.lastSeq = entry.Seq
 	}
 	ms.cachedDirty = true
 	if ms.autoScroll {
@@ -544,226 +497,10 @@ func (ms *MessageStream) AddHistoryMessage(entry MessageEntry) {
 	}
 }
 
-// LastHistorySeq returns the highest seq in the history buffer. Used by the
-// polling path for dedup.
-func (ms *MessageStream) LastHistorySeq() int {
-	return ms.lastHistorySeq
-}
-
-// ClearLiveOverlay clears the live overlay buffer and all streaming
-// accumulators. Called when the overlay content has been superseded by
-// persisted history entries.
-func (ms *MessageStream) ClearLiveOverlay() {
-	ms.liveOverlay = ms.liveOverlay[:0]
-	ms.streamingEntry = nil
-	ms.streamingText.Reset()
-	ms.streamingToolEntry = nil
-	ms.streamingToolArgs.Reset()
-	ms.streamingReasonEntry = nil
-	ms.streamingReasonText.Reset()
-	ms.runFinished = false
-	ms.cachedDirty = true
-}
-
-// MessageCount returns the total number of messages across both buffers.
-func (ms *MessageStream) MessageCount() int {
-	return len(ms.history) + len(ms.liveOverlay)
-}
-
-// HandleStreamEvent processes AG-UI streaming events by accumulating deltas
-// into a single growing message entry in liveOverlay instead of creating a
-// separate entry per delta. This produces clean output where text streams in
-// place rather than appearing as dozens of fragment lines.
-func (ms *MessageStream) HandleStreamEvent(entry MessageEntry) {
-	switch entry.EventType {
-
-	// -- Text message accumulation --
-
-	case "TEXT_MESSAGE_START":
-		// Begin a new assistant message slot in liveOverlay.
-		ms.streamingText.Reset()
-		ms.nextEntryID++
-		newEntry := MessageEntry{
-			Seq:       entry.Seq,
-			EventType: "assistant",
-			Payload:   "",
-			Timestamp: entry.Timestamp,
-			entryID:   ms.nextEntryID,
-		}
-		ms.streamingEntry = &newEntry
-		ms.liveOverlay = append(ms.liveOverlay, newEntry)
-		ms.cachedDirty = true
-		if ms.autoScroll {
-			ms.scrollToBottom()
-		}
-
-	case "TEXT_MESSAGE_CONTENT":
-		delta := extractJSONField(entry.Payload, "delta")
-		if delta == "" {
-			return
-		}
-		ms.streamingText.WriteString(delta)
-		// Update the last liveOverlay entry in place.
-		if ms.streamingEntry != nil && len(ms.liveOverlay) > 0 {
-			ms.liveOverlay[len(ms.liveOverlay)-1].Payload = ms.streamingText.String()
-			// Invalidate glamour cache for this entry since content changed.
-			if ms.glamourCache != nil {
-				delete(ms.glamourCache, ms.liveOverlay[len(ms.liveOverlay)-1].entryID)
-			}
-			ms.cachedDirty = true
-			if ms.autoScroll {
-				ms.scrollToBottom()
-			}
-		}
-
-	case "TEXT_MESSAGE_END":
-		// Finalize the accumulated text message.
-		ms.streamingEntry = nil
-		ms.cachedDirty = true
-
-	// -- Reasoning accumulation --
-
-	case "REASONING_MESSAGE_START", "REASONING_START":
-		ms.streamingReasonText.Reset()
-		ms.nextEntryID++
-		newEntry := MessageEntry{
-			Seq:       entry.Seq,
-			EventType: "reasoning",
-			Payload:   "",
-			Timestamp: entry.Timestamp,
-			entryID:   ms.nextEntryID,
-		}
-		ms.streamingReasonEntry = &newEntry
-		ms.liveOverlay = append(ms.liveOverlay, newEntry)
-		ms.cachedDirty = true
-		if ms.autoScroll {
-			ms.scrollToBottom()
-		}
-
-	case "REASONING_MESSAGE_CONTENT":
-		delta := extractJSONField(entry.Payload, "delta")
-		if delta == "" {
-			return
-		}
-		ms.streamingReasonText.WriteString(delta)
-		if ms.streamingReasonEntry != nil && len(ms.liveOverlay) > 0 {
-			for i := len(ms.liveOverlay) - 1; i >= 0; i-- {
-				if ms.liveOverlay[i].entryID == ms.streamingReasonEntry.entryID {
-					ms.liveOverlay[i].Payload = ms.streamingReasonText.String()
-					break
-				}
-			}
-			ms.cachedDirty = true
-			if ms.autoScroll {
-				ms.scrollToBottom()
-			}
-		}
-
-	case "REASONING_MESSAGE_END", "REASONING_END":
-		ms.streamingReasonEntry = nil
-		ms.cachedDirty = true
-
-	// -- Tool call accumulation --
-
-	case "TOOL_CALL_START":
-		ms.streamingToolArgs.Reset()
-		// Extract the tool name from the payload.
-		toolName := extractJSONField(entry.Payload, "tool_call_name")
-		if toolName == "" {
-			toolName = extractJSONField(entry.Payload, "tool_name")
-		}
-		if toolName == "" {
-			toolName = extractJSONField(entry.Payload, "toolCallName")
-		}
-		if toolName == "" {
-			toolName = extractJSONField(entry.Payload, "name")
-		}
-		ms.nextEntryID++
-		newEntry := MessageEntry{
-			Seq:       entry.Seq,
-			EventType: "tool_use",
-			Payload:   toolName,
-			Timestamp: entry.Timestamp,
-			entryID:   ms.nextEntryID,
-		}
-		ms.streamingToolEntry = &newEntry
-		ms.liveOverlay = append(ms.liveOverlay, newEntry)
-		ms.cachedDirty = true
-		if ms.autoScroll {
-			ms.scrollToBottom()
-		}
-
-	case "TOOL_CALL_ARGS":
-		delta := extractJSONField(entry.Payload, "delta")
-		if delta == "" {
-			return
-		}
-		ms.streamingToolArgs.WriteString(delta)
-		// Append accumulated args to the tool call entry's payload in liveOverlay.
-		if ms.streamingToolEntry != nil && len(ms.liveOverlay) > 0 {
-			for i := len(ms.liveOverlay) - 1; i >= 0; i-- {
-				if ms.liveOverlay[i].entryID == ms.streamingToolEntry.entryID {
-					// Keep the tool name, append args after a space.
-					baseName := ms.streamingToolEntry.Payload
-					ms.liveOverlay[i].Payload = baseName + " " + ms.streamingToolArgs.String()
-					break
-				}
-			}
-			ms.cachedDirty = true
-			if ms.autoScroll {
-				ms.scrollToBottom()
-			}
-		}
-
-	case "TOOL_CALL_END":
-		ms.streamingToolEntry = nil
-		ms.cachedDirty = true
-
-	// -- Non-accumulated events: add to liveOverlay directly --
-
-	case "TOOL_CALL_RESULT":
-		entry.EventType = "tool_result"
-		ms.addLiveEvent(entry)
-
-	default:
-		// RUN_FINISHED, RUN_ERROR, and anything else — add to overlay.
-		ms.addLiveEvent(entry)
-		// Mark run as finished so overlay persists until history catches up.
-		if entry.EventType == "RUN_FINISHED" || entry.EventType == "RUN_ERROR" {
-			ms.runFinished = true
-		}
-	}
-}
-
-// addLiveEvent appends an entry to the liveOverlay buffer and handles
-// autoscroll. This is a thin wrapper for non-accumulated events.
-func (ms *MessageStream) addLiveEvent(entry MessageEntry) {
-	ms.nextEntryID++
-	entry.entryID = ms.nextEntryID
-	ms.liveOverlay = append(ms.liveOverlay, entry)
-	ms.cachedDirty = true
-	if ms.autoScroll {
-		ms.scrollToBottom()
-	}
-}
-
-// IsStreaming returns true when a text message is actively being accumulated
-// from AG-UI deltas. Used by View() to show the streaming cursor.
-func (ms *MessageStream) IsStreaming() bool {
-	return ms.streamingEntry != nil
-}
-
-// evictIfNeeded trims the history buffer to maxMessages if it has grown too large.
-func (ms *MessageStream) evictIfNeeded() {
-	if len(ms.history) > ms.maxMessages {
-		excess := len(ms.history) - ms.maxMessages
-		if ms.glamourCache != nil {
-			for _, evicted := range ms.history[:excess] {
-				delete(ms.glamourCache, evicted.entryID)
-			}
-		}
-		ms.history = ms.history[excess:]
-	}
+// LastSeq returns the highest seq in the buffer. Used by the polling path
+// for dedup.
+func (ms *MessageStream) LastSeq() int {
+	return ms.lastSeq
 }
 
 // SetSize updates the viewport dimensions and invalidates caches that depend
@@ -785,14 +522,6 @@ func (ms *MessageStream) SetSize(w, h int) {
 // whether to render the streaming cursor).
 func (ms *MessageStream) SetPhase(phase string) {
 	ms.phase = phase
-}
-
-// SetSSEStatus updates the SSE connection status indicator shown in the header.
-// Valid values: "", "connected", "reconnecting", "disconnected".
-func (ms MessageStream) GetSSEStatus() string { return ms.sseStatus }
-
-func (ms *MessageStream) SetSSEStatus(status string) {
-	ms.sseStatus = status
 }
 
 // ComposeValue returns the current text in the compose input.
@@ -950,13 +679,10 @@ func (ms *MessageStream) updateNormal(msg tea.KeyMsg) (MessageStream, tea.Cmd) {
 		case "c":
 			// Copy the first visible message's payload to clipboard.
 			// scrollOffset is a display-line offset, so we iterate all messages
-			// (history + overlay) and count display lines to find the right one.
-			allEntries := make([]MessageEntry, 0, len(ms.history)+len(ms.liveOverlay))
-			allEntries = append(allEntries, ms.history...)
-			allEntries = append(allEntries, ms.liveOverlay...)
-			if len(allEntries) > 0 {
+			// and count display lines to find the right one.
+			if len(ms.messages) > 0 {
 				lineCount := 0
-				for _, entry := range allEntries {
+				for _, entry := range ms.messages {
 					var entryLines []string
 					if ms.rawMode {
 						entryLines = ms.renderRawEntry(entry, max(ms.width-4, 20))
@@ -1073,7 +799,7 @@ func (ms *MessageStream) View() string {
 	titleRendered := " " +
 		kindStyle.Render("messages") +
 		dimStyle.Render("(") + scopeStyle.Render(scope) + dimStyle.Render(")") +
-		dimStyle.Render("[") + countStyle.Render(fmt.Sprintf("%d", ms.MessageCount())) + dimStyle.Render("]") +
+		dimStyle.Render("[") + countStyle.Render(fmt.Sprintf("%d", len(ms.messages))) + dimStyle.Render("]") +
 		" "
 	titleWidth := lipgloss.Width(titleRendered)
 	remaining := max(ms.width-titleWidth-2, 2)
@@ -1139,24 +865,6 @@ func (ms *MessageStream) View() string {
 		phaseStyle.Render(ms.phase),
 		dimIndicator.Render(scrollPct),
 	)
-	if ms.sseStatus != "" {
-		var sseColor lipgloss.Color
-		switch ms.sseStatus {
-		case "connected":
-			sseColor = msgColorGreen
-		case "connecting":
-			sseColor = msgColorYellow
-		case "reconnecting":
-			sseColor = msgColorYellow
-		case "polling":
-			sseColor = msgColorDim
-		default:
-			sseColor = msgColorRed
-		}
-		sseStyle := lipgloss.NewStyle().Foreground(sseColor)
-		indicators += fmt.Sprintf("     SSE:%s",
-			sseStyle.Render(ms.sseStatus))
-	}
 	// Center the indicators line.
 	indWidth := lipgloss.Width(indicators)
 	indPad := max((ms.width-2-indWidth)/2, 0)
@@ -1182,9 +890,8 @@ func (ms *MessageStream) View() string {
 		bottomLines = append([]string{composeSep, composeLine}, bottomLines...)
 	}
 
-	// Streaming cursor — shown when phase is running OR when actively
-	// accumulating AG-UI deltas (IsStreaming).
-	if strings.ToLower(ms.phase) == "running" || ms.IsStreaming() {
+	// Streaming cursor — shown when phase is running.
+	if strings.ToLower(ms.phase) == "running" {
 		cursorStyle := msgCursorStyle
 		frames := []string{"▌", "▐", "█", "▐"}
 		frame := frames[time.Now().UnixMilli()/300%4]
@@ -1233,7 +940,7 @@ func (ms *MessageStream) View() string {
 
 // renderContent produces the visible message lines for the content area.
 func (ms *MessageStream) renderContent(height int) []string {
-	if len(ms.history) == 0 && len(ms.liveOverlay) == 0 {
+	if len(ms.messages) == 0 {
 		return []string{msgDimStyle.Render("No messages yet.")}
 	}
 
@@ -1259,15 +966,14 @@ func (ms *MessageStream) renderContent(height int) []string {
 	return allLines[start:end]
 }
 
-// buildDisplayLines converts both message buffers into styled display lines.
-// History entries are rendered first, then a dim separator, then liveOverlay
-// entries. Results are cached and only rebuilt when mode/messages change.
+// buildDisplayLines converts messages into styled display lines.
+// Results are cached and only rebuilt when mode/messages change.
 func (ms *MessageStream) buildDisplayLines() []string {
 	searchStr := ""
 	if ms.searchPattern != nil {
 		searchStr = ms.searchPattern.String()
 	}
-	totalCount := ms.MessageCount()
+	totalCount := len(ms.messages)
 	// Check if cache is still valid (timestamps always invalidate since relative times change).
 	if !ms.cachedDirty &&
 		ms.cachedMsgCount == totalCount &&
@@ -1288,9 +994,8 @@ func (ms *MessageStream) buildDisplayLines() []string {
 
 	now := time.Now()
 
-	// Render history entries.
 	prevWasUserOrAssistant := false
-	for _, entry := range ms.history {
+	for _, entry := range ms.messages {
 		entryLines := ms.renderEntry(entry, maxLineWidth, now)
 		if len(entryLines) == 0 {
 			continue
@@ -1304,37 +1009,6 @@ func (ms *MessageStream) buildDisplayLines() []string {
 		prevWasUserOrAssistant = isUserOrAssistant
 
 		lines = append(lines, entryLines...)
-	}
-
-	// Render liveOverlay entries with a header separator.
-	if len(ms.liveOverlay) > 0 {
-		// Check if any overlay entries pass the search filter before adding the separator.
-		hasVisible := false
-		for _, entry := range ms.liveOverlay {
-			if ms.searchPattern != nil {
-				text := eventSummary(entry.EventType, entry.Payload)
-				if !ms.searchPattern.MatchString(text) && !ms.searchPattern.MatchString(entry.Payload) {
-					continue
-				}
-			}
-			hasVisible = true
-			break
-		}
-		if hasVisible {
-			overlaySep := msgSepStyle.Render(fmt.Sprintf(
-				"── agent activity %s",
-				strings.Repeat("─", max(maxLineWidth-19, 5)),
-			))
-			lines = append(lines, overlaySep)
-
-			for _, entry := range ms.liveOverlay {
-				entryLines := ms.renderEntry(entry, maxLineWidth, now)
-				if len(entryLines) == 0 {
-					continue
-				}
-				lines = append(lines, entryLines...)
-			}
-		}
 	}
 
 	ms.cachedLines = lines
@@ -1452,7 +1126,7 @@ func (ms *MessageStream) renderConversationEntry(entry MessageEntry, maxWidth in
 			ms.glamourCache = make(map[int]string)
 		}
 		var rendered string
-		if cached, ok := ms.glamourCache[entry.entryID]; ok {
+		if cached, ok := ms.glamourCache[entry.Seq]; ok {
 			rendered = cached
 		} else {
 			glamourWidth := max(ms.width-20, 20)
@@ -1460,7 +1134,7 @@ func (ms *MessageStream) renderConversationEntry(entry MessageEntry, maxWidth in
 				out, err := r.Render(strings.TrimSpace(displayText))
 				if err == nil {
 					rendered = strings.TrimSpace(out)
-					ms.glamourCache[entry.entryID] = rendered
+					ms.glamourCache[entry.Seq] = rendered
 				}
 			}
 		}
@@ -1549,7 +1223,7 @@ func (ms *MessageStream) scrollDown(n int) {
 
 func (ms *MessageStream) scrollToBottom() {
 	// Set a large value; renderContent will clamp.
-	ms.scrollOffset = ms.MessageCount() * 10
+	ms.scrollOffset = len(ms.messages) * 10
 }
 
 // contentHeight returns the usable content height given the current dimensions.
@@ -1562,7 +1236,7 @@ func (ms *MessageStream) contentHeight() int {
 	if ms.composeMode {
 		bottomLines += 2 // compose separator + compose line
 	}
-	if strings.ToLower(ms.phase) == "running" || ms.IsStreaming() {
+	if strings.ToLower(ms.phase) == "running" {
 		bottomLines++ // streaming cursor line
 	}
 	h := ms.height - topLines - bottomLines
@@ -1637,15 +1311,6 @@ func wrapText(s string, maxWidth int) []string {
 	}
 
 	return result
-}
-
-// ansiRe matches ANSI CSI escape sequences for stripping before search.
-var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
-
-// stripANSI removes ANSI escape sequences from a string so that search
-// matching operates on visible text only.
-func stripANSI(s string) string {
-	return ansiRe.ReplaceAllString(s, "")
 }
 
 // padToWidth pads a styled string to exactly w visual characters.

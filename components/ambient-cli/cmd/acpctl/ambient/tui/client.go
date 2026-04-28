@@ -1,11 +1,7 @@
 package tui
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
-	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -169,15 +165,8 @@ type DeleteInboxMsg struct {
 	Err error
 }
 
-// SessionMessageEvent carries a single session message received from an SSE
-// stream. Sent to the Bubbletea program via program.Send().
-type SessionMessageEvent struct {
-	Message *sdktypes.SessionMessage
-	Err     error
-}
-
 // SessionMessagesMsg carries a batch of messages fetched via polling
-// (ListMessages). Used as a fallback when SSE is unavailable or stalled.
+// (ListMessages).
 type SessionMessagesMsg struct {
 	Messages []sdktypes.SessionMessage
 	Err      error
@@ -198,10 +187,6 @@ type SessionMessagesMsg struct {
 // asynchronously.
 type TUIClient struct {
 	factory *connection.ClientFactory
-
-	// watchMu protects watchCancel.
-	watchMu     sync.Mutex
-	watchCancel context.CancelFunc
 }
 
 // NewTUIClient creates a TUIClient from the given ClientFactory.
@@ -703,9 +688,8 @@ func (tc *TUIClient) DeleteSession(projectID, sessionID string) tea.Cmd {
 }
 
 // SendSessionMessage returns a tea.Cmd that sends a user message to a
-// session. This supports the "Send-While-Streaming" pattern: the call is
-// non-blocking and the message appears in the SSE stream when the server
-// echoes it back.
+// session. The call is non-blocking and the message appears in the next
+// poll cycle when the server echoes it back.
 func (tc *TUIClient) SendSessionMessage(projectID, sessionID, body string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
@@ -784,271 +768,8 @@ func (tc *TUIClient) DeleteInboxMessage(projectID, agentID, msgID string) tea.Cm
 	}
 }
 
-// ---------------------------------------------------------------------------
-// SSE streaming
-// ---------------------------------------------------------------------------
-
-// WatchSessionMessages returns a tea.Cmd that starts an SSE stream for
-// session messages. Messages are delivered to the Bubbletea program via
-// program.Send(SessionMessageEvent{...}).
-//
-// The SSE goroutine:
-//   - Connects to GET /sessions/{id}/messages via the SDK's WatchMessages.
-//   - Forwards each message as a SessionMessageEvent to the program.
-//   - Handles reconnection with exponential backoff (1s, 2s, 4s, max 30s)
-//     internally via the SDK's WatchMessages implementation.
-//   - Is cancellable via StopWatching().
-//   - Sends an error event if the channel closes without context cancellation,
-//     signalling a silent SSE failure so the TUI can fall back to polling.
-//
-// Only one watch can be active at a time. Calling WatchSessionMessages while
-// a previous watch is running cancels the old one first.
-func (tc *TUIClient) WatchSessionMessages(projectID, sessionID string, afterSeq int, program *tea.Program) tea.Cmd {
-	return func() tea.Msg {
-		// Cancel any previously active watch.
-		tc.StopWatching()
-
-		ctx, cancel := context.WithCancel(context.Background())
-
-		tc.watchMu.Lock()
-		tc.watchCancel = cancel
-		tc.watchMu.Unlock()
-
-		client, err := tc.factory.ForProject(projectID)
-		if err != nil {
-			cancel()
-			program.Send(SessionMessageEvent{Err: err})
-			return nil
-		}
-
-		// The SDK's WatchMessages handles SSE connection, parsing, and
-		// reconnection with exponential backoff (1s, 2s, 4s, max 30s).
-		// It returns a channel of *SessionMessage and a stop function.
-		msgs, _, sseErr := client.Sessions().WatchMessages(ctx, sessionID, afterSeq)
-		if sseErr != nil {
-			cancel()
-			program.Send(SessionMessageEvent{Err: sseErr})
-			return nil
-		}
-
-		// Forward messages from the SDK channel to the Bubbletea program.
-		// This goroutine exits when the channel closes (on context
-		// cancellation or stream end). If the channel closes without
-		// cancellation, it means the SSE stream died silently -- notify
-		// the TUI so it can fall back to polling.
-		go func() {
-			defer cancel()
-			receivedAny := false
-			for msg := range msgs {
-				receivedAny = true
-				program.Send(SessionMessageEvent{Message: msg})
-			}
-			// Channel closed. If the context was not cancelled by us
-			// (StopWatching or view change), this is an unexpected close.
-			if ctx.Err() == nil {
-				errMsg := "SSE stream closed"
-				if !receivedAny {
-					errMsg = "SSE connection failed (no messages received)"
-				}
-				program.Send(SessionMessageEvent{
-					Err: fmt.Errorf("%s — falling back to polling", errMsg),
-				})
-			}
-		}()
-
-		return nil
-	}
-}
-
-// WatchSessionEvents returns a tea.Cmd that starts an SSE stream for
-// AG-UI events via the /events endpoint. Events are delivered to the Bubbletea
-// program via program.Send(SessionMessageEvent{...}).
-//
-// Unlike WatchSessionMessages (which reads /messages), this connects to
-// GET /sessions/{id}/events and receives the full AG-UI event stream:
-// TEXT_MESSAGE_CONTENT, TOOL_CALL_START, TOOL_CALL_ARGS, RUN_FINISHED, etc.
-//
-// The SSE goroutine:
-//   - Connects to GET /sessions/{id}/events via the SDK's StreamEvents.
-//   - Parses the SSE stream line by line (data: <JSON>).
-//   - Extracts the "type" field from each JSON event and maps it to a
-//     SessionMessageEvent with EventType and Payload fields.
-//   - Handles reconnection with exponential backoff (1s, 2s, 4s, max 30s).
-//   - Is cancellable via StopWatching().
-//
-// Only one watch can be active at a time. Calling WatchSessionEvents while
-// a previous watch is running cancels the old one first.
-func (tc *TUIClient) WatchSessionEvents(projectID, sessionID string, program *tea.Program) tea.Cmd {
-	return func() tea.Msg {
-		// Cancel any previously active watch.
-		tc.StopWatching()
-
-		ctx, cancel := context.WithCancel(context.Background())
-
-		tc.watchMu.Lock()
-		tc.watchCancel = cancel
-		tc.watchMu.Unlock()
-
-		client, err := tc.factory.ForProject(projectID)
-		if err != nil {
-			cancel()
-			program.Send(SessionMessageEvent{Err: err})
-			return nil
-		}
-
-		// SSE reconnection loop with exponential backoff.
-		go func() {
-			defer cancel()
-
-			backoff := 1 * time.Second
-			const maxBackoff = 30 * time.Second
-			const scannerBufSize = 1 << 20
-
-			for {
-				if ctx.Err() != nil {
-					return
-				}
-
-				body, sseErr := client.Sessions().StreamEvents(ctx, sessionID)
-				if sseErr != nil {
-					if ctx.Err() != nil {
-						return
-					}
-					program.Send(SessionMessageEvent{
-						Err: fmt.Errorf("events stream connect: %w", sseErr),
-					})
-					// Wait and retry.
-					select {
-					case <-ctx.Done():
-						return
-					case <-time.After(backoff):
-					}
-					backoff *= 2
-					if backoff > maxBackoff {
-						backoff = maxBackoff
-					}
-					continue
-				}
-
-				// Connected — reset backoff and notify.
-				backoff = 1 * time.Second
-				program.Send(SessionMessageEvent{
-					Message: &sdktypes.SessionMessage{
-						EventType: "system",
-						Payload:   "connected to event stream",
-					},
-				})
-
-				// Parse SSE stream line by line.
-				scanner := bufio.NewScanner(body)
-				scanner.Buffer(make([]byte, scannerBufSize), scannerBufSize)
-
-				var dataBuf strings.Builder
-				streamDone := false
-
-				for scanner.Scan() {
-					if ctx.Err() != nil {
-						body.Close() //nolint:errcheck
-						return
-					}
-
-					line := scanner.Text()
-
-					switch {
-					case line == ": heartbeat":
-						// Ignore SSE heartbeat comments.
-						continue
-
-					case strings.HasPrefix(line, "data: "):
-						if dataBuf.Len() > 0 {
-							dataBuf.WriteByte('\n')
-						}
-						dataBuf.WriteString(strings.TrimPrefix(line, "data: "))
-
-					case line == "":
-						if dataBuf.Len() == 0 {
-							continue
-						}
-						data := dataBuf.String()
-						dataBuf.Reset()
-
-						// Parse the JSON to extract "type" field.
-						var raw map[string]json.RawMessage
-						if err := json.Unmarshal([]byte(data), &raw); err != nil {
-							continue
-						}
-
-						// Extract event type.
-						var eventType string
-						if typeField, ok := raw["type"]; ok {
-							_ = json.Unmarshal(typeField, &eventType)
-						}
-						if eventType == "" {
-							continue
-						}
-
-						program.Send(SessionMessageEvent{
-							Message: &sdktypes.SessionMessage{
-								EventType: eventType,
-								Payload:   data,
-							},
-						})
-
-						// Close the stream on terminal events.
-						if eventType == "RUN_FINISHED" || eventType == "RUN_ERROR" {
-							streamDone = true
-						}
-					}
-
-					if streamDone {
-						break
-					}
-				}
-
-				body.Close() //nolint:errcheck
-
-				if ctx.Err() != nil {
-					return
-				}
-
-				// If the stream ended normally (RUN_FINISHED/RUN_ERROR), the current
-				// run is done but another may start when the user sends a message.
-				// Reconnect after a short delay to pick up the next run.
-				if streamDone {
-					select {
-					case <-ctx.Done():
-						return
-					case <-time.After(1 * time.Second):
-					}
-					continue
-				}
-
-				// Unexpected close — reconnect.
-				if scanErr := scanner.Err(); scanErr != nil {
-					program.Send(SessionMessageEvent{
-						Err: fmt.Errorf("events stream read: %w", scanErr),
-					})
-				}
-
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(backoff):
-				}
-				backoff *= 2
-				if backoff > maxBackoff {
-					backoff = maxBackoff
-				}
-			}
-		}()
-
-		return nil
-	}
-}
-
 // FetchSessionMessages returns a tea.Cmd that polls session messages via the
-// REST ListMessages endpoint. This is used as a fallback when SSE streaming is
-// unavailable or stalled. Only messages with seq > afterSeq are returned.
+// REST ListMessages endpoint. Only messages with seq > afterSeq are returned.
 func (tc *TUIClient) FetchSessionMessages(projectID, sessionID string, afterSeq int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
@@ -1067,14 +788,3 @@ func (tc *TUIClient) FetchSessionMessages(projectID, sessionID string, afterSeq 
 	}
 }
 
-// StopWatching cancels any active SSE watch goroutine started by
-// WatchSessionMessages.
-func (tc *TUIClient) StopWatching() {
-	tc.watchMu.Lock()
-	defer tc.watchMu.Unlock()
-
-	if tc.watchCancel != nil {
-		tc.watchCancel()
-		tc.watchCancel = nil
-	}
-}

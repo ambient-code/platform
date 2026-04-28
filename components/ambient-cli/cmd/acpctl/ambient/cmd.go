@@ -38,7 +38,6 @@ Data refreshes automatically every 5 seconds.`,
 			return fmt.Errorf("init TUI: %w", err)
 		}
 		p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
-		m.SetProgram(p)
 		if _, err := p.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
 			return err

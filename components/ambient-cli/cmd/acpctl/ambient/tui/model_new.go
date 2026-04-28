@@ -27,20 +27,13 @@ const pollInterval = 5 * time.Second
 
 // messagePollInterval is the polling interval for session messages when the
 // messages view is active. Faster than the table poll to keep messages fresh.
-const messagePollInterval = 2 * time.Second
+const messagePollInterval = 1 * time.Second
 
 // infoTimeout is how long ephemeral info messages are displayed.
 const infoTimeout = 5 * time.Second
 
 // staleThreshold marks data as stale in the header when exceeded.
 const staleThreshold = 15 * time.Second
-
-// isRunningPhase returns true if the session phase indicates the session is
-// currently running and can produce live AG-UI events.
-func isRunningPhase(phase string) bool {
-	p := strings.ToLower(phase)
-	return p == "running" || p == "active" || p == "pending"
-}
 
 // ---------------------------------------------------------------------------
 // Navigation
@@ -156,10 +149,7 @@ type AppModel struct {
 	cachedSessions []sdktypes.Session
 	cachedInbox    []sdktypes.InboxMessage
 
-	// SSE program reference (set via SetProgram after tea.NewProgram).
-	program *tea.Program
-
-	// Message polling state (fallback when SSE is unavailable).
+	// Message polling state.
 	messagePollActive bool // true when message poll tick is running
 
 	// Errors
@@ -263,12 +253,6 @@ func NewAppModel(factory *connection.ClientFactory) (*AppModel, error) {
 	}
 
 	return m, nil
-}
-
-// SetProgram stores a reference to the tea.Program so the model can pass it to
-// WatchSessionMessages for SSE delivery. Call this after tea.NewProgram returns.
-func (m *AppModel) SetProgram(p *tea.Program) {
-	m.program = p
 }
 
 // findAgentByName returns the cached Agent with the given name, or nil.
@@ -403,10 +387,9 @@ func (m *AppModel) popView() tea.Cmd {
 	if len(m.navStack) <= 1 {
 		return nil
 	}
-	// If we're leaving the messages view, stop SSE and polling.
+	// If we're leaving the messages view, stop polling.
 	poppedKind := m.navStack[len(m.navStack)-1].Kind
 	if poppedKind == "messages" {
-		m.client.StopWatching()
 		m.messagePollActive = false
 	}
 
@@ -584,7 +567,6 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case views.MsgStreamBackMsg:
 		// User pressed Esc in the message stream — pop back.
-		m.client.StopWatching()
 		cmd := m.popView()
 		return m, tea.Batch(cmd, m.setInfo("Back to "+m.currentNav().Kind))
 
@@ -741,15 +723,14 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err != nil {
 			return m, m.setInfo("Send message failed: " + msg.Err.Error())
 		}
-		// Add the user message to history immediately so it's visible
-		// without waiting for a poll. The /events stream only carries
-		// runner AG-UI events, not echoed user messages.
+		// Add the user message immediately so it's visible without
+		// waiting for the next poll cycle.
 		if msg.Message != nil {
 			ts := time.Now()
 			if msg.Message.CreatedAt != nil {
 				ts = *msg.Message.CreatedAt
 			}
-			m.messageStream.AddHistoryMessage(views.MessageEntry{
+			m.messageStream.AddMessage(views.MessageEntry{
 				Seq:       msg.Message.Seq,
 				EventType: "user",
 				Payload:   msg.Message.Payload,
@@ -776,43 +757,8 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Inbox message deleted"))
 
-	case SessionMessageEvent:
-		// SSE event received — route to the live overlay in the message stream.
-		if msg.Err != nil {
-			m.messageStream.SetSSEStatus("reconnecting")
-			m.messageStream.HandleStreamEvent(views.MessageEntry{
-				EventType: "error",
-				Payload:   msg.Err.Error(),
-				Timestamp: time.Now(),
-			})
-			// SSE failed — ensure polling fallback is running.
-			if m.activeView == "messages" && !m.messagePollActive {
-				m.messagePollActive = true
-				return m, m.messagePollTickCmd()
-			}
-			return m, nil
-		}
-		if msg.Message != nil && m.activeView == "messages" {
-			m.messageStream.SetSSEStatus("connected")
-			ts := time.Now()
-			if msg.Message.CreatedAt != nil {
-				ts = *msg.Message.CreatedAt
-			}
-			entry := views.MessageEntry{
-				Seq:       msg.Message.Seq,
-				EventType: msg.Message.EventType,
-				Payload:   msg.Message.Payload,
-				Timestamp: ts,
-			}
-			// All /events SSE events go to HandleStreamEvent which writes
-			// to liveOverlay. The accumulator coalesces deltas into single
-			// growing entries; non-accumulated events are added directly.
-			m.messageStream.HandleStreamEvent(entry)
-		}
-		return m, nil
-
 	case SessionMessagesMsg:
-		// Polling: batch of messages from REST ListMessages goes to history.
+		// Polling: batch of messages from REST ListMessages.
 		if msg.Err != nil {
 			// Non-fatal — polling will retry on next tick, but inform user.
 			return m, m.setInfo("Message poll error: " + msg.Err.Error())
@@ -821,15 +767,15 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		for _, sm := range msg.Messages {
-			// Simple seq-based dedup on history — no cross-stream checks needed.
-			if sm.Seq <= m.messageStream.LastHistorySeq() {
+			// Simple seq-based dedup.
+			if sm.Seq <= m.messageStream.LastSeq() {
 				continue
 			}
 			ts := time.Now()
 			if sm.CreatedAt != nil {
 				ts = *sm.CreatedAt
 			}
-			m.messageStream.AddHistoryMessage(views.MessageEntry{
+			m.messageStream.AddMessage(views.MessageEntry{
 				Seq:       sm.Seq,
 				EventType: sm.EventType,
 				Payload:   sm.Payload,
@@ -837,9 +783,6 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			})
 		}
 		m.lastFetch = time.Now()
-		if len(msg.Messages) > 0 && m.messageStream.GetSSEStatus() != "connected" {
-			m.messageStream.SetSSEStatus("polling")
-		}
 		return m, nil
 
 	case messagePollTickMsg:
@@ -860,7 +803,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if projectID != "" {
 				cmds = append(cmds, m.client.FetchSessionMessages(
-					projectID, m.currentSession, m.messageStream.LastHistorySeq(),
+					projectID, m.currentSession, m.messageStream.LastSeq(),
 				))
 			}
 		}
@@ -1313,9 +1256,8 @@ func (m *AppModel) handleTick() (tea.Model, tea.Cmd) {
 
 // handleKey dispatches key events based on the current mode.
 func (m *AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Ctrl-C always quits — clean up SSE goroutines first.
+	// Ctrl-C always quits.
 	if msg.Type == tea.KeyCtrlC {
-		m.client.StopWatching()
 		m.messagePollActive = false
 		return m, tea.Quit
 	}
@@ -1578,7 +1520,7 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 
 			cmds := []tea.Cmd{
 				m.pushView("messages", fullSessionID, fullSessionID),
-				m.setInfo("Streaming messages for session " + shortID),
+				m.setInfo("Viewing messages for session " + shortID),
 			}
 
 			// Resolve project ID — may be empty if reached from global sessions.
@@ -1588,20 +1530,10 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 			}
 
 			if projectID != "" {
-				// Always fetch historical messages first for context.
+				// Fetch initial messages and start 1-second polling.
 				cmds = append(cmds, m.client.FetchSessionMessages(projectID, fullSessionID, 0))
-
-				// Always run message polling for DB-persisted user/assistant
-				// messages (the /events stream only carries AG-UI runner events).
 				m.messagePollActive = true
 				cmds = append(cmds, m.messagePollTickCmd())
-
-				if isRunningPhase(phase) && m.program != nil {
-					// For running sessions, also start the AG-UI event stream
-					// for live tool calls and text deltas.
-					m.messageStream.SetSSEStatus("connecting")
-					cmds = append(cmds, m.client.WatchSessionEvents(projectID, fullSessionID, m.program))
-				}
 			}
 
 			return m, tea.Batch(cmds...)
@@ -1650,7 +1582,6 @@ func (m *AppModel) handleRuneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "q":
 		if len(m.navStack) <= 1 {
-			m.client.StopWatching()
 			m.messagePollActive = false
 			return m, tea.Quit
 		}
@@ -1848,17 +1779,13 @@ func (m *AppModel) handleAgentsRune(key string) (tea.Model, tea.Cmd) {
 
 		cmds := []tea.Cmd{
 			m.pushView("messages", sessionID, sessionID),
-			m.setInfo("Streaming messages for session " + sessionID),
+			m.setInfo("Viewing messages for session " + sessionID),
 		}
 
 		if m.currentProject != "" {
 			cmds = append(cmds, m.client.FetchSessionMessages(m.currentProject, sessionID, 0))
 			m.messagePollActive = true
 			cmds = append(cmds, m.messagePollTickCmd())
-			if m.program != nil {
-				m.messageStream.SetSSEStatus("connecting")
-				cmds = append(cmds, m.client.WatchSessionEvents(m.currentProject, sessionID, m.program))
-			}
 		}
 
 		return m, tea.Batch(cmds...)
@@ -2222,9 +2149,8 @@ func (m *AppModel) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // executeCommand parses and dispatches a command-mode input.
 func (m *AppModel) executeCommand(input string) (tea.Model, tea.Cmd) {
-	// If we're leaving the messages view via a command, stop SSE and polling.
+	// If we're leaving the messages view via a command, stop polling.
 	if m.activeView == "messages" {
-		m.client.StopWatching()
 		m.messagePollActive = false
 	}
 
@@ -2232,7 +2158,6 @@ func (m *AppModel) executeCommand(input string) (tea.Model, tea.Cmd) {
 
 	switch cmd.Kind {
 	case CmdQuit:
-		m.client.StopWatching()
 		return m, tea.Quit
 
 	case CmdProjects:
