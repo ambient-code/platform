@@ -378,6 +378,13 @@ type MessageEntry struct {
 	EventType string
 	Payload   string
 	Timestamp time.Time
+
+	// entryID is a unique monotonic identifier assigned by the MessageStream
+	// when the entry is added to history or liveOverlay. It is used as the
+	// glamour render cache key instead of Seq because SSE-derived events all
+	// have Seq=0, which causes cache collisions and makes every entry render
+	// the same cached output (e.g. "connected to event stream").
+	entryID int
 }
 
 // ---------------------------------------------------------------------------
@@ -447,7 +454,12 @@ type MessageStream struct {
 	cachedTsMode     int
 	cachedSearchPat  string
 
-	// Per-message glamour render cache (key = seq number).
+	// nextEntryID is a monotonically incrementing counter used to assign unique
+	// entryID values to each MessageEntry. This avoids glamour cache collisions
+	// when multiple entries share the same Seq value (e.g. all SSE events have Seq=0).
+	nextEntryID int
+
+	// Per-message glamour render cache (key = entryID, not Seq).
 	glamourCache     map[int]string
 
 	// Compose
@@ -500,6 +512,8 @@ func NewMessageStream(sessionID, agentName, phase string) MessageStream {
 // is cleared — the persisted assistant message in history replaces the ephemeral
 // streaming overlay.
 func (ms *MessageStream) AddHistoryMessage(entry MessageEntry) {
+	ms.nextEntryID++
+	entry.entryID = ms.nextEntryID
 	ms.history = append(ms.history, entry)
 	if len(ms.history) > ms.maxMessages {
 		// Evict oldest — shift the slice. For a 2000-entry buffer this is
@@ -508,7 +522,7 @@ func (ms *MessageStream) AddHistoryMessage(entry MessageEntry) {
 		// Clean up glamour cache entries for evicted messages.
 		if ms.glamourCache != nil {
 			for _, evicted := range ms.history[:excess] {
-				delete(ms.glamourCache, evicted.Seq)
+				delete(ms.glamourCache, evicted.entryID)
 			}
 		}
 		ms.history = ms.history[excess:]
@@ -568,11 +582,13 @@ func (ms *MessageStream) HandleStreamEvent(entry MessageEntry) {
 	case "TEXT_MESSAGE_START":
 		// Begin a new assistant message slot in liveOverlay.
 		ms.streamingText.Reset()
+		ms.nextEntryID++
 		newEntry := MessageEntry{
 			Seq:       entry.Seq,
 			EventType: "assistant",
 			Payload:   "",
 			Timestamp: entry.Timestamp,
+			entryID:   ms.nextEntryID,
 		}
 		ms.streamingEntry = &newEntry
 		ms.liveOverlay = append(ms.liveOverlay, newEntry)
@@ -592,7 +608,7 @@ func (ms *MessageStream) HandleStreamEvent(entry MessageEntry) {
 			ms.liveOverlay[len(ms.liveOverlay)-1].Payload = ms.streamingText.String()
 			// Invalidate glamour cache for this entry since content changed.
 			if ms.glamourCache != nil {
-				delete(ms.glamourCache, ms.liveOverlay[len(ms.liveOverlay)-1].Seq)
+				delete(ms.glamourCache, ms.liveOverlay[len(ms.liveOverlay)-1].entryID)
 			}
 			ms.cachedDirty = true
 			if ms.autoScroll {
@@ -609,11 +625,13 @@ func (ms *MessageStream) HandleStreamEvent(entry MessageEntry) {
 
 	case "REASONING_MESSAGE_START", "REASONING_START":
 		ms.streamingReasonText.Reset()
+		ms.nextEntryID++
 		newEntry := MessageEntry{
 			Seq:       entry.Seq,
 			EventType: "reasoning",
 			Payload:   "",
 			Timestamp: entry.Timestamp,
+			entryID:   ms.nextEntryID,
 		}
 		ms.streamingReasonEntry = &newEntry
 		ms.liveOverlay = append(ms.liveOverlay, newEntry)
@@ -630,7 +648,7 @@ func (ms *MessageStream) HandleStreamEvent(entry MessageEntry) {
 		ms.streamingReasonText.WriteString(delta)
 		if ms.streamingReasonEntry != nil && len(ms.liveOverlay) > 0 {
 			for i := len(ms.liveOverlay) - 1; i >= 0; i-- {
-				if ms.liveOverlay[i].Seq == ms.streamingReasonEntry.Seq {
+				if ms.liveOverlay[i].entryID == ms.streamingReasonEntry.entryID {
 					ms.liveOverlay[i].Payload = ms.streamingReasonText.String()
 					break
 				}
@@ -660,11 +678,13 @@ func (ms *MessageStream) HandleStreamEvent(entry MessageEntry) {
 		if toolName == "" {
 			toolName = extractJSONField(entry.Payload, "name")
 		}
+		ms.nextEntryID++
 		newEntry := MessageEntry{
 			Seq:       entry.Seq,
 			EventType: "tool_use",
 			Payload:   toolName,
 			Timestamp: entry.Timestamp,
+			entryID:   ms.nextEntryID,
 		}
 		ms.streamingToolEntry = &newEntry
 		ms.liveOverlay = append(ms.liveOverlay, newEntry)
@@ -682,7 +702,7 @@ func (ms *MessageStream) HandleStreamEvent(entry MessageEntry) {
 		// Append accumulated args to the tool call entry's payload in liveOverlay.
 		if ms.streamingToolEntry != nil && len(ms.liveOverlay) > 0 {
 			for i := len(ms.liveOverlay) - 1; i >= 0; i-- {
-				if ms.liveOverlay[i].Seq == ms.streamingToolEntry.Seq {
+				if ms.liveOverlay[i].entryID == ms.streamingToolEntry.entryID {
 					// Keep the tool name, append args after a space.
 					baseName := ms.streamingToolEntry.Payload
 					ms.liveOverlay[i].Payload = baseName + " " + ms.streamingToolArgs.String()
@@ -718,6 +738,8 @@ func (ms *MessageStream) HandleStreamEvent(entry MessageEntry) {
 // addLiveEvent appends an entry to the liveOverlay buffer and handles
 // autoscroll. This is a thin wrapper for non-accumulated events.
 func (ms *MessageStream) addLiveEvent(entry MessageEntry) {
+	ms.nextEntryID++
+	entry.entryID = ms.nextEntryID
 	ms.liveOverlay = append(ms.liveOverlay, entry)
 	ms.cachedDirty = true
 	if ms.autoScroll {
@@ -737,7 +759,7 @@ func (ms *MessageStream) evictIfNeeded() {
 		excess := len(ms.history) - ms.maxMessages
 		if ms.glamourCache != nil {
 			for _, evicted := range ms.history[:excess] {
-				delete(ms.glamourCache, evicted.Seq)
+				delete(ms.glamourCache, evicted.entryID)
 			}
 		}
 		ms.history = ms.history[excess:]
@@ -1430,7 +1452,7 @@ func (ms *MessageStream) renderConversationEntry(entry MessageEntry, maxWidth in
 			ms.glamourCache = make(map[int]string)
 		}
 		var rendered string
-		if cached, ok := ms.glamourCache[entry.Seq]; ok {
+		if cached, ok := ms.glamourCache[entry.entryID]; ok {
 			rendered = cached
 		} else {
 			glamourWidth := max(ms.width-20, 20)
@@ -1438,7 +1460,7 @@ func (ms *MessageStream) renderConversationEntry(entry MessageEntry, maxWidth in
 				out, err := r.Render(strings.TrimSpace(displayText))
 				if err == nil {
 					rendered = strings.TrimSpace(out)
-					ms.glamourCache[entry.Seq] = rendered
+					ms.glamourCache[entry.entryID] = rendered
 				}
 			}
 		}
