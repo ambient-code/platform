@@ -679,13 +679,15 @@ objects:
           - --http-address=:8443
           - --https-address=
           - --provider=openshift
-          - --openshift-service-account=frontend
+          - --client-id=ambient-code
+          - --client-secret-file=/etc/oauth-client/client_secret
           - --upstream=http://localhost:3000
           - --openshift-delegate-urls={"/api":{"resource":"projects","verb":"list"}}
           - --tls-cert=/etc/tls/private/tls.crt
           - --tls-key=/etc/tls/private/tls.key
           - --cookie-secret-file=/etc/oauth-cookie/cookie_secret
           - --pass-access-token
+          - --scope=user:full
           - --upstream-timeout=5m
           - --skip-auth-regex=^/metrics
           image: ${OAUTH_PROXY_IMAGE_NAME}:${OAUTH_PROXY_IMAGE_TAG}
@@ -726,6 +728,8 @@ objects:
             name: frontend-proxy-tls
           - mountPath: /etc/oauth-cookie
             name: oauth-cookie-secret
+          - mountPath: /etc/oauth-client
+            name: oauth-client-secret
         serviceAccountName: frontend
         volumes:
         - name: frontend-proxy-tls
@@ -734,6 +738,9 @@ objects:
         - name: oauth-cookie-secret
           secret:
             secretName: stage-cookie-secret
+        - name: oauth-client-secret
+          secret:
+            secretName: stage-sso-client
 - apiVersion: apps/v1
   kind: Deployment
   metadata:
