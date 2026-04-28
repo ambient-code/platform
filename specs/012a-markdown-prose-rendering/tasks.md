@@ -1,6 +1,6 @@
 # Tasks: Fix Core Markdown Layout Bugs
 
-**Input**: Design documents from `/specs/012a-markdown-layout-bugs/`
+**Input**: Design documents from `/specs/012a-markdown-prose-rendering/`
 
 ## Phase 1: Structural Wrapper Fixes
 

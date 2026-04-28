@@ -1,6 +1,6 @@
 # Tasks: Complete GFM Element Support
 
-**Input**: Design documents from `/specs/012c-markdown-gfm-elements/`
+**Input**: Design documents from `/specs/012c-markdown-gfm-rendering/`
 **Prerequisite**: Spec 012a (`feat/markdown-layout-bugs`) merged to main and this branch rebased on it
 **Coordination with 012b**: Both 012b and 012c write to `components/frontend/src/lib/markdown-components.ts` and export `sharedMarkdownComponents`.
 

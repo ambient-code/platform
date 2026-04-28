@@ -1,6 +1,6 @@
 # Tasks: Markdown Table Rendering
 
-**Input**: Design documents from `/specs/012b-markdown-tables/`
+**Input**: Design documents from `/specs/012b-markdown-table-rendering/`
 **Prerequisite**: Spec 012a (`feat/markdown-layout-bugs`) merged to main and this branch rebased on it
 
 ## Phase 1: Shared Component File
