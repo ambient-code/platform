@@ -3,18 +3,18 @@
 **Feature Branch**: `feat/markdown-gfm-elements`
 **Created**: 2026-04-28
 **Status**: Draft
-**Input**: Four GFM markdown elements — blockquotes, horizontal rules, images, and H4–H6 headings — have no component overrides in `message.tsx` or `tool-message.tsx`, rendering with browser defaults that are unstyled or layout-breaking. Depends on spec 012a (layout bugs) being merged first.
+**Input**: Visual styling requirements for blockquotes, horizontal rules, images, and extended heading levels in bot messages. Depends on spec 012a being merged first.
 
 ## Overview
 
-After specs 012a and 012b, `defaultComponents` in `message.tsx` will handle: code, p, h1–h3, ul, ol, li, a, strong, em, del, table, thead, tbody, tr, th, td. This spec adds the remaining common GFM elements:
+Bot messages containing blockquotes, horizontal rules, images, or extended heading levels render with appropriate visual treatment consistent with the rest of the message design:
 
-- **`blockquote`**: No override — renders as browser-default indented block with no visual distinction from prose
-- **`hr`**: No override — renders as browser-default `<hr>` with potentially incorrect color in dark mode
-- **`img`**: No override — images have no `max-width` constraint and can break the message layout
-- **`h4`/`h5`/`h6`**: Only h1–h3 are styled; lower heading levels fall back to browser defaults that may be larger than h3 in some resets
+- **`blockquote`** (P1): Themed left border (`border-l-4 border-border`) with indented italic text in `text-muted-foreground`, making quoted content immediately distinguishable from prose. Elevated to P1 because AI responses use `>` quoting frequently — citations, emphasis, user input echoes.
+- **`hr`** (P2): Full-width line in the theme's border color (`border-t border-border`) with vertical margin, providing visual section separation in dark and light mode.
+- **`img`** (P2): Constrained to container width (`max-w-full`) with rounded corners, preventing layout overflow regardless of source image dimensions.
+- **`h4`/`h5`/`h6`** (P3): Follow the established heading scale — progressively smaller than H3 (`text-sm font-medium`). May be cut if the team confirms LLM output does not generate these levels.
 
-Blockquotes are elevated to P1 because AI responses use `>` quoting frequently (citations, emphasis, user input echoes). Images and horizontal rules are P2. H4–H6 are P3 and may be cut if the team determines LLM output rarely generates them.
+All overrides apply identically to `tool-message.tsx` via the shared `sharedMarkdownComponents` constant from spec 012b. After this spec, `sharedMarkdownComponents` covers all common GFM elements: tables, blockquote, hr, img, and h4–h6.
 
 **Prerequisite**: Spec 012a must be merged. The `font-mono` and `inline` wrapper fixes in 012a are required for blockquotes and other block-level elements to render in proper block flow with correct typography.
 

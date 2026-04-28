@@ -3,33 +3,29 @@
 **Feature Branch**: `feat/markdown-layout-bugs`
 **Created**: 2026-04-28
 **Status**: Draft
-**Input**: Three structural bugs in `message.tsx` that break all markdown rendering: an inline wrapper forcing block content into inline flow, `font-mono` applied to all prose, and a near-zero paragraph margin. Prerequisite for specs 012b and 012c.
+**Input**: Desired prose rendering for bot messages: block layout, proportional typography, paragraph spacing, and inline element styling. Prerequisite for specs 012b and 012c.
 
 ## Overview
 
-`components/frontend/src/components/ui/message.tsx` has three bugs that degrade every bot message regardless of content:
+Bot message prose renders in the application's proportional sans-serif font with clear vertical rhythm. All block-level elements — paragraphs, headings, lists, tables — stack vertically in normal document flow and occupy the full message container width. Paragraph spacing is visually distinct. Bold, italic, and strikethrough text carry the correct weight, style, and `text-foreground` color. Inline code is the only monospace element in a message.
 
-1. **`className="inline"` on the ReactMarkdown wrapper** (line 321) — a `<div>` with `display:inline` wraps all `<ReactMarkdown>` output. Block-level elements (paragraphs, tables, lists, headings) collapse into inline flow, breaking margins, table row layout, and list indentation. The streaming cursor `<span>` on line 329 is already `inline-block` with `align-middle` and positions correctly in either inline or block context — the wrapper's `inline` class serves no purpose.
+The animated streaming cursor appears at the text baseline of the last rendered character, staying on the same line via `inline-block` and `align-middle`.
 
-2. **`font-mono` on the message content wrapper** (line 314) — applies monospace to all prose: headings, paragraphs, bold, and italic. Only `<code>` and `<pre>` should be monospace. The existing `code` component override (line 56) already sets `font-mono`; the wrapper-level class is redundant and harmful.
+Explicit component overrides for `<strong>`, `<em>`, and `<del>` ensure these elements receive the correct Tailwind color utilities rather than relying on browser defaults. List item gap (`space-y-1.5`) is harmonized with paragraph spacing (`mb-2`) for consistent vertical rhythm throughout a message.
 
-3. **`mb-[0.2rem]` on the paragraph override** (line 78) — 3.2px between paragraphs at `text-sm` (14px line height ~22.75px). The margin is 14% of one line height, visually indistinguishable from no margin at all. Standard readable prose uses `mb-2` (8px, ~35%).
-
-Two additional gaps surface once the `font-mono` bug is fixed: `<strong>` and `<em>` have no component overrides, so while browser defaults render them correctly in a sans-serif context, they need explicit overrides to receive the correct color (`text-foreground`) and confirm the intended weight/style. The `<ul>`/`<ol>` item gap (`space-y-1`, 4px) is also tighter than the corrected paragraph spacing and should be harmonized.
-
-This spec must be merged before 012b (tables) or 012c (GFM elements), both of which depend on block-level markdown working correctly.
+This spec is prerequisite for specs 012b (table rendering) and 012c (GFM elements) — block-level elements require vertical document flow to render correctly.
 
 ---
 
 ## User Scenarios & Testing
 
-### Prerequisite Fix — Remove Inline Wrapper (Blocking All Markdown)
+### Block Layout for ReactMarkdown Output
 
-This is not a user story with business value of its own; it is a structural fix that unblocks all other markdown user stories. Without it, block-level elements (paragraphs with correct margins, tables, lists, blockquotes) cannot render correctly.
+The `<ReactMarkdown>` output wrapper uses block layout (`w-full`) so that block-level elements — paragraphs, tables, lists, headings — stack vertically and fill the container. This is the structural foundation that all other markdown rendering (tables, blockquotes, list indentation) depends on.
 
-**Fix**: Change `message.tsx:321` from `<div className="inline">` to `<div className="w-full">`. The streaming cursor `<span>` (line 329) requires no changes — its `inline-block` and `align-middle` classes keep it at the text baseline regardless of parent display type.
+The streaming cursor `<span>` uses `inline-block` and `align-middle`, which positions it at the text baseline regardless of the parent wrapper's display type — no special handling is required.
 
-**Acceptance**: Given any bot message with multiple block-level markdown elements, when rendered, the elements stack vertically (block flow), table rows are horizontal, and the streaming cursor appears at the text baseline of the last rendered character.
+**Acceptance**: Given any bot message with multiple block-level markdown elements, when rendered, the elements stack vertically, table rows are horizontal, and the streaming cursor appears at the text baseline of the last rendered character.
 
 ---
 

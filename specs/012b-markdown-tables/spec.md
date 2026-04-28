@@ -3,13 +3,13 @@
 **Feature Branch**: `feat/markdown-tables`
 **Created**: 2026-04-28
 **Status**: Draft
-**Input**: GFM tables render as completely unstyled HTML in session messages — no borders, no padding, no header distinction. Depends on spec 012a (layout bugs) being merged first.
+**Input**: GFM table rendering requirements for bot messages and tool results. Depends on spec 012a being merged first.
 
 ## Overview
 
-`react-markdown` with `remark-gfm` emits standard `<table>`, `<thead>`, `<tbody>`, `<tr>`, `<th>`, `<td>` elements for GFM tables. Neither `message.tsx`'s `defaultComponents` nor `tool-message.tsx`'s `markdownComponents` define overrides for any of these elements. The result is bare, browser-default table rendering: no borders, zero padding, headers indistinguishable from data cells, no overflow protection.
+GFM tables in bot messages and tool results render with visible borders on all cells, padded content, a visually distinct header row, and horizontal overflow protection for wide tables. All colors use theme-aware Tailwind utilities (`border-border`, `bg-muted`, `text-foreground`, `text-muted-foreground`) so tables adapt automatically to light and dark mode without hardcoded values.
 
-The fix is custom component overrides using theme-aware Tailwind utilities (`border-border`, `bg-muted`, `text-muted-foreground`) so tables adapt to light and dark mode automatically. Wide tables must be wrapped in `overflow-x-auto` to prevent horizontal page scroll.
+Both `message.tsx` and `tool-message.tsx` share identical table component overrides via `sharedMarkdownComponents` in `src/lib/markdown-components.ts`, ensuring consistent table rendering wherever markdown appears in the UI.
 
 **Prerequisite**: Spec 012a must be merged. The `className="inline"` wrapper removed in 012a is what allows tables to render in block flow — without that fix, table rows collapse into inline content regardless of component overrides.
 
