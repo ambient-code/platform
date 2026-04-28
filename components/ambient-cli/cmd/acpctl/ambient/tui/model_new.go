@@ -57,9 +57,6 @@ type appTickMsg struct{ t time.Time }
 // active, triggering a REST poll for new session messages.
 type messagePollTickMsg struct{ t time.Time }
 
-// uiTickMsg fires every second to refresh cosmetic elements (e.g. the
-// stale-data counter in the header) without waiting for a keypress.
-type uiTickMsg struct{}
 
 // infoExpiredMsg signals the ephemeral info line should be cleared.
 type infoExpiredMsg struct{}
@@ -317,7 +314,6 @@ func (m *AppModel) Init() tea.Cmd {
 		tea.WindowSize(),
 		m.client.FetchProjects(),
 		m.tickCmd(),
-		m.uiTickCmd(),
 	)
 }
 
@@ -333,13 +329,6 @@ func (m *AppModel) tickCmd() tea.Cmd {
 func (m *AppModel) messagePollTickCmd() tea.Cmd {
 	return tea.Tick(messagePollInterval, func(t time.Time) tea.Msg {
 		return messagePollTickMsg{t: t}
-	})
-}
-
-// uiTickCmd returns a tea.Cmd that sends a uiTickMsg after 1 second.
-func (m *AppModel) uiTickCmd() tea.Cmd {
-	return tea.Tick(time.Second, func(_ time.Time) tea.Msg {
-		return uiTickMsg{}
 	})
 }
 
@@ -881,9 +870,6 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, tea.Batch(cmds...)
-
-	case uiTickMsg:
-		return m, m.uiTickCmd()
 
 	case appTickMsg:
 		return m.handleTick()
@@ -1472,10 +1458,6 @@ func (m *AppModel) updateFormOverlay(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if _, ok := msg.(appTickMsg); ok {
 		return m.handleTick()
 	}
-	if _, ok := msg.(uiTickMsg); ok {
-		return m, m.uiTickCmd()
-	}
-
 	// Don't swallow data-fetch responses — they clear pollInFlight and update caches.
 	switch typedMsg := msg.(type) {
 	case ProjectsMsg:

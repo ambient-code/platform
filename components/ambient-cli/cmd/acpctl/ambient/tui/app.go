@@ -153,11 +153,9 @@ func (m *AppModel) viewHeader() string {
 	col4[2] = styleDim.Render("</>") + " " + styleWhite.Render("Filter ")
 	if !m.lastFetch.IsZero() {
 		elapsed := time.Since(m.lastFetch)
-		ind := fmt.Sprintf("⟳ %ds", int(elapsed.Seconds()))
 		if elapsed > staleThreshold {
-			col4[3] = styleRed.Render(ind + " (stale)")
-		} else {
-			col4[3] = styleDim.Render(ind)
+			ind := fmt.Sprintf("⟳ %ds (stale)", int(elapsed.Seconds()))
+			col4[3] = styleRed.Render(ind)
 		}
 	}
 
