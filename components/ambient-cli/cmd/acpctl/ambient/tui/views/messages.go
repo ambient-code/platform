@@ -890,18 +890,6 @@ func (ms *MessageStream) View() string {
 		bottomLines = append([]string{composeSep, composeLine}, bottomLines...)
 	}
 
-	// Streaming cursor — shown when phase is running.
-	if strings.ToLower(ms.phase) == "running" {
-		cursorStyle := msgCursorStyle
-		frames := []string{"▌", "▐", "█", "▐"}
-		frame := frames[time.Now().UnixMilli()/300%4]
-		cursor := cursorStyle.Render(" " + frame + " streaming…")
-		cursorLine := borderStyle.Render("│") +
-			padToWidth(cursor, ms.width-2) +
-			borderStyle.Render("│")
-		// Prepend cursor above compose/status.
-		bottomLines = append([]string{cursorLine}, bottomLines...)
-	}
 
 
 	// -- Content area --
@@ -1235,9 +1223,6 @@ func (ms *MessageStream) contentHeight() int {
 	bottomLines := 1
 	if ms.composeMode {
 		bottomLines += 2 // compose separator + compose line
-	}
-	if strings.ToLower(ms.phase) == "running" {
-		bottomLines++ // streaming cursor line
 	}
 	h := ms.height - topLines - bottomLines
 	if h < 1 {
