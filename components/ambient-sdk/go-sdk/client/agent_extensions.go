@@ -59,7 +59,7 @@ func (a *AgentAPI) DeleteInProject(ctx context.Context, projectID, agentID strin
 	return a.client.do(ctx, http.MethodDelete, path, nil, http.StatusNoContent, nil)
 }
 
-func (a *AgentAPI) Start(ctx context.Context, projectID, agentID, prompt string) (*types.StartResponse, error) {
+func (a *AgentAPI) StartInProject(ctx context.Context, projectID, agentID, prompt string) (*types.StartResponse, error) {
 	req := types.StartRequest{Prompt: prompt}
 	body, err := json.Marshal(req)
 	if err != nil {

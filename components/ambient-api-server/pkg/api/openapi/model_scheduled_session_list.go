@@ -22,11 +22,11 @@ var _ MappedNullable = &ScheduledSessionList{}
 
 // ScheduledSessionList struct for ScheduledSessionList
 type ScheduledSessionList struct {
-	Kind  string              `json:"kind"`
-	Page  int32               `json:"page"`
-	Size  int32               `json:"size"`
-	Total int32               `json:"total"`
-	Items []ScheduledSession  `json:"items"`
+	Kind  string             `json:"kind"`
+	Page  int32              `json:"page"`
+	Size  int32              `json:"size"`
+	Total int32              `json:"total"`
+	Items []ScheduledSession `json:"items"`
 }
 
 type _ScheduledSessionList ScheduledSessionList
