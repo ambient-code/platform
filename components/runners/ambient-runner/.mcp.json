@@ -10,11 +10,15 @@
     },
     "webfetch": {
       "command": "uvx",
-      "args": ["mcp-server-fetch"]
+      "args": [
+        "mcp-server-fetch"
+      ]
     },
     "mcp-atlassian": {
       "command": "uvx",
-      "args": ["mcp-atlassian"],
+      "args": [
+        "mcp-atlassian"
+      ],
       "env": {
         "JIRA_URL": "${JIRA_URL}",
         "JIRA_USERNAME": "${JIRA_EMAIL}",
@@ -27,7 +31,8 @@
       "command": "uvx",
       "args": [
         "kubernetes-mcp-server@latest",
-        "--kubeconfig", "/tmp/.ambient_kubeconfig",
+        "--kubeconfig",
+        "/tmp/.ambient_kubeconfig",
         "--disable-multi-cluster"
       ]
     },
@@ -44,6 +49,7 @@
         "MCP_SINGLE_USER_MODE": "1",
         "GOOGLE_OAUTH_CLIENT_ID": "${GOOGLE_OAUTH_CLIENT_ID}",
         "GOOGLE_OAUTH_CLIENT_SECRET": "${GOOGLE_OAUTH_CLIENT_SECRET}",
+        "GOOGLE_OAUTH_REDIRECT_URI": "${GOOGLE_OAUTH_REDIRECT_URI}",
         "USER_GOOGLE_EMAIL": "${USER_GOOGLE_EMAIL:-user@example.com}"
       }
     }
