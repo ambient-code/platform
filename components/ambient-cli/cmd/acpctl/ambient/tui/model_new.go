@@ -2024,7 +2024,8 @@ func (m *AppModel) handleSessionsRune(key string) (tea.Model, tea.Cmd) {
 			}
 			agentOpts = append(agentOpts, huh.NewOption(a.Name, a.ID))
 		}
-		form := views.NewSessionForm(&name, &prompt, &projectID, projectOpts, &agentID, agentOpts)
+		var repoURL string
+		form := views.NewSessionForm(&name, &prompt, &repoURL, &projectID, projectOpts, &agentID, agentOpts)
 		form.WithWidth(60)
 		m.formOverlay = form
 		m.formTitle = "New Session"
@@ -2033,7 +2034,7 @@ func (m *AppModel) handleSessionsRune(key string) (tea.Model, tea.Cmd) {
 				return m.setInfo("Project is required")
 			}
 			return tea.Batch(
-				m.client.CreateSession(projectID, name, prompt, agentID),
+				m.client.CreateSession(projectID, name, prompt, agentID, repoURL),
 				m.setInfo("Creating session "+name+"..."),
 			)
 		}

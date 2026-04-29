@@ -629,7 +629,7 @@ func (tc *TUIClient) DeleteProject(projectID string) tea.Cmd {
 
 // CreateSession returns a tea.Cmd that creates a standalone session. The session
 // is not tied to an agent unless agentID is provided. Only name is required.
-func (tc *TUIClient) CreateSession(projectID, name, prompt, agentID string) tea.Cmd {
+func (tc *TUIClient) CreateSession(projectID, name, prompt, agentID, repoURL string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 		defer cancel()
@@ -648,6 +648,7 @@ func (tc *TUIClient) CreateSession(projectID, name, prompt, agentID string) tea.
 			ProjectID: projectID,
 			Prompt:    prompt,
 			AgentID:   agentID,
+			RepoURL:   repoURL,
 		}
 
 		result, err := client.Sessions().Create(ctx, session)

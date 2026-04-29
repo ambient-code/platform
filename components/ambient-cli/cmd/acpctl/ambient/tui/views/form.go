@@ -92,7 +92,7 @@ func NewAgentForm(name, prompt *string) *huh.Form {
 // projectOptions must have at least one entry. agentOptions should include a
 // "(none)" entry for standalone sessions; the agent Select is only shown when
 // there are 2+ options.
-func NewSessionForm(name, prompt, projectID *string, projectOptions []huh.Option[string], agentID *string, agentOptions []huh.Option[string]) *huh.Form {
+func NewSessionForm(name, prompt, repoURL, projectID *string, projectOptions []huh.Option[string], agentID *string, agentOptions []huh.Option[string]) *huh.Form {
 	fields := []huh.Field{
 		huh.NewSelect[string]().
 			Key("project").
@@ -110,6 +110,11 @@ func NewSessionForm(name, prompt, projectID *string, projectOptions []huh.Option
 			Title("Prompt").
 			Placeholder("(optional)").
 			Value(prompt),
+		huh.NewInput().
+			Key("repo_url").
+			Title("Repo URL").
+			Placeholder("https://github.com/org/repo (optional)").
+			Value(repoURL),
 	}
 	if len(agentOptions) > 1 {
 		fields = append(fields,
