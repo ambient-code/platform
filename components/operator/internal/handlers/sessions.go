@@ -1078,6 +1078,15 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 					{Name: "GOOGLE_OAUTH_CLIENT_SECRET", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET")},
 				}
 
+				// Set the OAuth redirect URI for workspace-mcp so it uses the Ambient backend
+				// callback endpoint instead of defaulting to http://localhost:8000/oauth2callback.
+				if appConfig.BackendPublicURL != "" {
+					base = append(base, corev1.EnvVar{
+						Name:  "GOOGLE_OAUTH_REDIRECT_URI",
+						Value: fmt.Sprintf("%s/oauth2callback", appConfig.BackendPublicURL),
+					})
+				}
+
 				// For e2e: use minimal MCP config (webfetch only, no credentials needed)
 				if mcpConfigFile := os.Getenv("MCP_CONFIG_FILE"); strings.TrimSpace(mcpConfigFile) != "" {
 					base = append(base, corev1.EnvVar{Name: "MCP_CONFIG_FILE", Value: mcpConfigFile})
