@@ -8,14 +8,14 @@ import (
 
 func TestNeedsWorkflowReconciliation(t *testing.T) {
 	tests := []struct {
-		name   string
+		name    string
 		session *unstructured.Unstructured
-		want   bool
+		want    bool
 	}{
 		{
-			name:   "no activeWorkflow in spec",
+			name:    "no activeWorkflow in spec",
 			session: makeSession(nil, nil),
-			want:   false,
+			want:    false,
 		},
 		{
 			name: "activeWorkflow with empty gitUrl",
