@@ -8,8 +8,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func strPtr(s string) *string    { return &s }
-func int32Ptr(i int32) *int32    { return &i }
+func strPtr(s string) *string       { return &s }
+func int32Ptr(i int32) *int32       { return &i }
 func float64Ptr(f float64) *float64 { return &f }
 
 func TestProtoSessionToSDK_NilReturnsZero(t *testing.T) {
@@ -21,9 +21,9 @@ func TestProtoSessionToSDK_NilReturnsZero(t *testing.T) {
 
 func TestProtoSessionToSDK_StandaloneSession(t *testing.T) {
 	proto := &pb.Session{
-		Metadata: &pb.ObjectReference{Id: "session-standalone"},
-		Name:     "no-agent-session",
-		Prompt:   strPtr("just do the thing"),
+		Metadata:  &pb.ObjectReference{Id: "session-standalone"},
+		Name:      "no-agent-session",
+		Prompt:    strPtr("just do the thing"),
 		ProjectId: strPtr("my-project"),
 	}
 
