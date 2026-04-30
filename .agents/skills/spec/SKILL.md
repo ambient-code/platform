@@ -20,30 +20,30 @@ $ARGUMENTS
 
 ## Before Anything Else
 
-Read `specs/index.spec.md` in full. It defines what a spec is, the required format, naming conventions, and what does and does not belong. Do not proceed until you have read it.
+Read these two files in full before proceeding:
+
+1. `specs/index.spec.md` — what a spec is, the required format, naming conventions, and what does and does not belong
+2. `.agents/workflows/specs/spec-change.workflow.md` — the full spec change workflow (framing, drafting, critic passes, synthesis)
 
 ## Steps
 
-### 1. Understand the Desired Behavior
+Follow the phases defined in `.agents/workflows/specs/spec-change.workflow.md`:
 
-Ask the user what behavior they want to describe. Focus on:
-- What should the system do? (not how it should be built)
-- Who or what observes this behavior? (user, API consumer, downstream system)
-- What are the constraints? (security, performance, compatibility)
+### Phase 1 — Frame
 
-If the user describes implementation details (class names, library choices, execution steps), redirect: those belong in `.agents/workflows/`, not in a spec.
+Establish the framing before writing anything:
 
-### 2. Identify the Domain
+- **Desired state only.** Ask the user what the system should do, not what's currently broken. If they describe a bug, redirect: "What should the correct behavior be?"
+- **Scope boundary.** Which components does this change touch? (schema, gRPC, runner, operator, CLI, frontend, SDK, RBAC)
+- **Reserved terms check.** Verify no collision with Ambient domain model terms (Inbox, Session, Agent, Project, Credential, SessionMessage, etc.)
+
+### Phase 2 — Identify Domain and Discover Context
 
 Determine which capability domain this spec belongs to:
 
 ```bash
 ls -d specs/*/
 ```
-
-If no existing domain fits, propose a new one — but only if existing domains are genuinely too broad.
-
-### 3. Discover Domain Context
 
 `cd` into the target domain and check for existing specs and skills:
 
@@ -53,9 +53,9 @@ ls *.spec.md 2>/dev/null
 ls .claude/skills/ 2>/dev/null
 ```
 
-Read any existing specs in the domain to understand what's already covered and avoid duplication.
+Read existing specs in the domain to understand what's already covered and avoid duplication. If no existing domain fits, propose a new one — but only if existing domains are genuinely too broad.
 
-### 4. Write the Spec
+### Phase 3 — Draft the Spec
 
 Follow the format from `specs/index.spec.md`:
 
@@ -63,21 +63,33 @@ Follow the format from `specs/index.spec.md`:
 - **Requirements** — each states an observable behavior using RFC 2119 keywords (SHALL, MUST, SHOULD, MAY)
 - **Scenarios** — concrete Given/When/Then examples for each requirement that could be turned into tests
 
+Include: data model, write paths, read paths, RBAC, migration plan for all existing consumers.
+
 Quick checks before writing:
 - Every requirement describes externally observable behavior
 - Every scenario is testable
 - No implementation details leaked in (class names, frameworks, step-by-step plans)
 - RFC 2119 keywords are used deliberately, not decoratively
 
-### 5. Name and Place the File
+### Phase 4 — Critic Pass
+
+Spawn critics in parallel per the workflow. Standard critics (every spec change):
+- Schema / migration
+- RBAC / auth
+- Ambient terminology
+
+Plus scope-driven critics based on the components identified in Phase 1.
+
+### Phase 5 — Synthesize and Present
+
+Separate findings into factual errors (fix directly) and design decisions (present to user). Present design decisions one at a time with 2–3 concrete options and tradeoffs.
+
+### Phase 6 — Apply and Verify
+
+Apply all fixes. Run a second critic pass. Stop when the second pass produces only MINORs.
+
+### Phase 7 — Name and Place the File
 
 - Filename: `<descriptive-title>.spec.md`
 - If the spec exceeds ~300 words or covers multiple distinct topics, split into a directory with multiple files
 - Place in `specs/{domain}/`
-
-### 6. Review with the User
-
-Present the spec and ask:
-- Does this capture the desired behavior?
-- Are any scenarios missing (edge cases, error conditions)?
-- Is the requirement strength right (MUST vs SHOULD vs MAY)?
