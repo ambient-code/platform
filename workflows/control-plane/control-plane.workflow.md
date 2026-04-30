@@ -845,7 +845,7 @@ GET /sessions/{id}/events (proxy)            api-server   open
 acpctl session events <id>                   CLI          open
 ```
 
-**Next:** Investigate `WatchSessionMessages` authorization in api-server — check `@.claude/skills/ambient-api-server/` or `components/ambient-api-server/plugins/sessions/` for watch auth logic. The push succeeds with the same token so the issue is specific to the watch handler's authorization check.
+**Next:** Investigate `WatchSessionMessages` authorization in api-server — check `@skills/sessions/ambient-api-server/` or `components/ambient-api-server/plugins/sessions/` for watch auth logic. The push succeeds with the same token so the issue is specific to the watch handler's authorization check.
 
 ---
 

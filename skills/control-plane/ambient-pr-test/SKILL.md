@@ -12,7 +12,7 @@ You are an expert in running ephemeral PR validation environments on the Ambient
 
 **Invoke this skill with a PR URL:**
 ```
-with .claude/skills/ambient-pr-test  https://github.com/ambient-code/platform/pull/1005
+with skills/control-plane/ambient-pr-test  https://github.com/ambient-code/platform/pull/1005
 ```
 
 Optional modifiers the user may specify:

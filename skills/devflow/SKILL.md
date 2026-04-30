@@ -23,7 +23,7 @@ You are executing the Ambient Code Platform development workflow. This skill is 
 
 **Remind the human every 10 turns to re-read this skill.** Context compaction can lose workflow state. At turns 10, 20, 30, etc., say:
 
-> "Reminder: we are on turn N. Re-reading `.claude/skills/devflow/SKILL.md` to refresh workflow state."
+> "Reminder: we are on turn N. Re-reading `skills/devflow/SKILL.md` to refresh workflow state."
 
 Then re-read this file before continuing.
 
@@ -111,13 +111,13 @@ After spec acceptance (or in parallel for human workflow), load the implementati
 
 | Component | Guide | Context |
 |-----------|-------|---------|
-| Data Model / API | `workflows/sessions/ambient-model.workflow.md` | `.claude/context/api-server-development.md` |
-| SDK | (workflow section in ambient-model.workflow.md Wave 3) | `.claude/context/sdk-development.md` |
-| CLI | (guide section Wave 5) | `.claude/context/cli-development.md` |
-| Control Plane | (guide section Wave 4) | `.claude/context/control-plane-development.md` |
-| Operator | (guide section Wave 5) | `.claude/context/operator-development.md` |
-| Frontend | (guide section Wave 6) | `.claude/context/frontend-development.md` |
-| Backend (V1) | — | `.claude/context/backend-development.md` |
+| Data Model / API | `workflows/sessions/ambient-model.workflow.md` | `specs/standards/backend/conventions.spec.md` |
+| SDK | (workflow section in ambient-model.workflow.md Wave 3) | `specs/standards/backend/conventions.spec.md` |
+| CLI | (guide section Wave 5) | `specs/standards/backend/conventions.spec.md` |
+| Control Plane | (guide section Wave 4) | `specs/standards/control-plane/conventions.spec.md` |
+| Operator | (guide section Wave 5) | `specs/standards/control-plane/conventions.spec.md` |
+| Frontend | (guide section Wave 6) | `specs/standards/frontend/conventions.spec.md` |
+| Backend (V1) | — | `specs/standards/backend/conventions.spec.md` |
 
 ### 3b. Create Implementation Branch
 
@@ -345,15 +345,15 @@ But prefer fixing the lint/format issue instead.
 
 | Skill/Context | When to use |
 |---------------|-------------|
-| `.claude/skills/ambient-api-server/SKILL.md` | Working in `components/ambient-api-server/` |
-| `.claude/skills/dev-cluster/SKILL.md` | Managing kind clusters for testing |
-| `.claude/skills/grpc-dev/SKILL.md` | gRPC streaming, AG-UI events |
-| `.claude/skills/ambient-pr-test/SKILL.md` | PR validation on MPP dev cluster |
-| `.claude/context/api-server-development.md` | API server plugin architecture, OpenAPI, testing |
-| `.claude/context/cli-development.md` | CLI command patterns |
-| `.claude/context/sdk-development.md` | SDK generation |
-| `.claude/context/control-plane-development.md` | CP fan-out, runner contract |
-| `.claude/context/frontend-development.md` | Frontend build, React Query |
+| `skills/sessions/ambient-api-server/SKILL.md` | Working in `components/ambient-api-server/` |
+| `skills/control-plane/dev-cluster/SKILL.md` | Managing kind clusters for testing |
+| `skills/integrations/grpc-dev/SKILL.md` | gRPC streaming, AG-UI events |
+| `skills/control-plane/ambient-pr-test/SKILL.md` | PR validation on MPP dev cluster |
+| `specs/standards/backend/conventions.spec.md` | API server plugin architecture, OpenAPI, testing |
+| `specs/standards/backend/conventions.spec.md` | CLI command patterns |
+| `specs/standards/backend/conventions.spec.md` | SDK generation |
+| `specs/standards/control-plane/conventions.spec.md` | CP fan-out, runner contract |
+| `specs/standards/frontend/conventions.spec.md` | Frontend build, React Query |
 | `specs/sessions/ambient-model.spec.md` | Data model spec (source of truth) |
 | `workflows/sessions/ambient-model.workflow.md` | Implementation workflow (wave-based) |
 
