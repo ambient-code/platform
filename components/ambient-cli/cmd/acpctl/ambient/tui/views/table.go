@@ -1,3 +1,4 @@
+// Package views provides reusable UI components for the TUI resource browser.
 package views
 
 import (

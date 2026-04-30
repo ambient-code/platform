@@ -58,7 +58,6 @@ var (
 	msgDimStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	msgDimIndicator    = lipgloss.NewStyle().Foreground(msgColorDim)
 	msgActiveIndicator = lipgloss.NewStyle().Foreground(msgColorBlue)
-	msgCursorStyle     = lipgloss.NewStyle().Foreground(msgColorOrange)
 	msgSepStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("236"))
 )
 
@@ -421,7 +420,7 @@ type MessageStream struct {
 	cachedMsgCount  int
 	cachedRawMode   bool
 	cachedWrapMode  bool
-	cachedTsMode    int
+	cachedTSMode    int
 	cachedSearchPat string
 
 	// Per-message glamour render cache (key = Seq).
@@ -524,7 +523,6 @@ func (ms *MessageStream) SetPhase(phase string) {
 	ms.phase = phase
 }
 
-// ComposeValue returns the current text in the compose input.
 // IsComposeMode returns true when the compose input is active.
 func (ms MessageStream) IsComposeMode() bool {
 	return ms.composeMode
@@ -534,7 +532,7 @@ func (ms MessageStream) ComposeValue() string {
 	return ms.composeInput.Value()
 }
 
-// Toggle state getters — used by the header to highlight active toggles.
+// IsAutoScroll returns true when auto-scroll is enabled.
 func (ms MessageStream) IsAutoScroll() bool { return ms.autoScroll }
 func (ms MessageStream) IsRawMode() bool    { return ms.rawMode }
 func (ms MessageStream) IsWrapMode() bool   { return ms.wrapMode }
@@ -965,7 +963,7 @@ func (ms *MessageStream) buildDisplayLines() []string {
 		ms.cachedMsgCount == totalCount &&
 		ms.cachedRawMode == ms.rawMode &&
 		ms.cachedWrapMode == ms.wrapMode &&
-		ms.cachedTsMode == ms.timestampMode &&
+		ms.cachedTSMode == ms.timestampMode &&
 		ms.cachedSearchPat == searchStr &&
 		ms.timestampMode == 0 {
 		return ms.cachedLines
@@ -1002,7 +1000,7 @@ func (ms *MessageStream) buildDisplayLines() []string {
 	ms.cachedMsgCount = totalCount
 	ms.cachedRawMode = ms.rawMode
 	ms.cachedWrapMode = ms.wrapMode
-	ms.cachedTsMode = ms.timestampMode
+	ms.cachedTSMode = ms.timestampMode
 	ms.cachedSearchPat = searchStr
 	return lines
 }

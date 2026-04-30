@@ -16,11 +16,11 @@ func TestEventColor(t *testing.T) {
 		want      lipgloss.Color
 	}{
 		{"user", lipgloss.Color("255")},
-		{"assistant", lipgloss.Color("28")},
+		{"assistant", lipgloss.Color("255")},
 		{"tool_use", lipgloss.Color("240")},
 		{"tool_result", lipgloss.Color("240")},
 		{"system", lipgloss.Color("33")},
-		{"error", lipgloss.Color("31")},
+		{"error", lipgloss.Color("196")},
 		{"unknown_type", lipgloss.Color("240")},
 		{"", lipgloss.Color("240")},
 	}

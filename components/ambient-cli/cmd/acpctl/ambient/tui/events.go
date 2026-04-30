@@ -13,11 +13,11 @@ import (
 // Mapping follows the TUI spec's "Event Type Rendering" table:
 //
 //	user        -> white (255)
-//	assistant   -> green (28)
+//	assistant   -> white (255)
 //	tool_use    -> dim   (240)
 //	tool_result -> dim   (240)
 //	system      -> yellow (33)
-//	error       -> red   (31)
+//	error       -> red   (196)
 func EventColor(eventType string) lipgloss.Color {
 	switch eventType {
 	case "user":

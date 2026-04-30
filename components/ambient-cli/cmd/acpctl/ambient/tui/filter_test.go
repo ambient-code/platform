@@ -156,16 +156,24 @@ func TestParseFilter_InverseEmptyString(t *testing.T) {
 }
 
 func TestParseFilter_InvalidRegex(t *testing.T) {
-	_, err := ParseFilter("[invalid")
-	if err == nil {
-		t.Fatal("expected error for invalid regex")
+	// Invalid regex falls back to literal match via QuoteMeta.
+	f, err := ParseFilter("[invalid")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if f.Pattern == nil {
+		t.Fatal("expected non-nil pattern")
 	}
 }
 
 func TestParseFilter_InvalidRegexInverse(t *testing.T) {
-	_, err := ParseFilter("![invalid")
-	if err == nil {
-		t.Fatal("expected error for invalid inverse regex")
+	// Invalid regex falls back to literal match via QuoteMeta.
+	f, err := ParseFilter("![invalid")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !f.Inverse {
+		t.Fatal("expected inverse flag")
 	}
 }
 
