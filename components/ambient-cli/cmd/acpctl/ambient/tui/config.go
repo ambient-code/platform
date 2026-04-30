@@ -21,14 +21,14 @@ type TUIConfig struct {
 }
 
 // String implements fmt.Stringer. All context tokens are redacted.
-func (tc *TUIConfig) String() string {
-	names := tc.ContextNames()
-	return fmt.Sprintf("TUIConfig{CurrentContext:%q, Contexts:[%s]}", tc.CurrentContext, strings.Join(names, ", "))
+func (c *TUIConfig) String() string {
+	names := c.ContextNames()
+	return fmt.Sprintf("TUIConfig{CurrentContext:%q, Contexts:[%s]}", c.CurrentContext, strings.Join(names, ", "))
 }
 
 // GoString implements fmt.GoStringer. All context tokens are redacted.
-func (tc *TUIConfig) GoString() string {
-	return tc.String()
+func (c *TUIConfig) GoString() string {
+	return c.String()
 }
 
 // Context represents a single server connection with its credentials and project scope.
