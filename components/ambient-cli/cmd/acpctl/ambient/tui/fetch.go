@@ -160,7 +160,9 @@ func kubectlGetPods() []PodRow {
 		"-o", "wide",
 	)
 	if err != nil {
-		out2, err2 := runCmd(ctx, "oc", "get", "pods",
+		ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel2()
+		out2, err2 := runCmd(ctx2, "oc", "get", "pods",
 			"-n", "ambient-code",
 			"--no-headers",
 			"-o", "wide",
@@ -178,7 +180,9 @@ func kubectlGetNamespaces() []NamespaceRow {
 	defer cancel()
 	out, err := runCmd(ctx, "kubectl", "get", "namespaces", "--no-headers")
 	if err != nil {
-		out2, err2 := runCmd(ctx, "oc", "get", "namespaces", "--no-headers")
+		ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel2()
+		out2, err2 := runCmd(ctx2, "oc", "get", "namespaces", "--no-headers")
 		if err2 != nil {
 			return nil
 		}

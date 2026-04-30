@@ -1013,7 +1013,7 @@ func (tc *TUIClient) InterruptSession(sessionID string) tea.Cmd {
 		defer resp.Body.Close()
 
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			respBody, _ := io.ReadAll(resp.Body)
+			respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 			var errResp struct {
 				Error string `json:"error"`
 			}

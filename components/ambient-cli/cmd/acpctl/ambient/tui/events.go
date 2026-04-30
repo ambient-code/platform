@@ -271,8 +271,12 @@ func ExtractField(payload string, key string) string {
 // truncatePayload trims whitespace and truncates a string to max length.
 func truncatePayload(s string, max int) string {
 	s = strings.TrimSpace(s)
-	if len(s) <= max {
+	r := []rune(s)
+	if len(r) <= max {
 		return s
 	}
-	return s[:max-1] + "…"
+	if max <= 1 {
+		return "…"
+	}
+	return string(r[:max-1]) + "…"
 }
