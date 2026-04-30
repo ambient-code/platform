@@ -112,7 +112,7 @@ After spec acceptance (or in parallel for human workflow), load the implementati
 | Component | Guide | Context |
 |-----------|-------|---------|
 | Data Model / API | `workflows/sessions/ambient-model.workflow.md` | `.claude/context/api-server-development.md` |
-| SDK | (guide section in ambient-model.guide.md Wave 3) | `.claude/context/sdk-development.md` |
+| SDK | (workflow section in ambient-model.workflow.md Wave 3) | `.claude/context/sdk-development.md` |
 | CLI | (guide section Wave 5) | `.claude/context/cli-development.md` |
 | Control Plane | (guide section Wave 4) | `.claude/context/control-plane-development.md` |
 | Operator | (guide section Wave 5) | `.claude/context/operator-development.md` |
@@ -368,7 +368,7 @@ Record every correction here with a date stamp. This section grows over time.
 - Established devflow skill from user requirements.
 - Seeded Known Pitfalls from existing context files and guide lessons learned.
 - Documented TESTCONTAINERS_RYUK_DISABLED requirement (discovered in api-server-development.md).
-- Documented podman `--no-cache` and `ctr import` workarounds (discovered in ambient-model.guide.md).
-- Documented gRPC port 19000 workaround (discovered in ambient-model.guide.md).
+- Documented podman `--no-cache` and `ctr import` workarounds (discovered in ambient-model.workflow.md).
+- Documented gRPC port 19000 workaround (discovered in ambient-model.workflow.md).
 - GitOps deployment step marked as TBD — will be formalized as the workflow runs.
 - E2E test suite marked as TBD.
