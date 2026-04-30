@@ -53,6 +53,14 @@ func InitMetrics(ctx context.Context) (func(), error) {
 	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 	if endpoint == "" {
 		log.Println("OTEL_EXPORTER_OTLP_ENDPOINT not set, metrics export disabled")
+
+		// Initialize no-op meter to prevent nil pointer panics
+		meter = otel.GetMeterProvider().Meter("ambient-code-operator-noop")
+		if err := initInstruments(); err != nil {
+			return nil, fmt.Errorf("failed to initialize no-op instruments: %w", err)
+		}
+		log.Println("OpenTelemetry metrics initialized with no-op provider (metrics not exported)")
+
 		return func() {}, nil
 	}
 
