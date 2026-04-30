@@ -78,7 +78,7 @@ Every component has a spec file. Load the spec for the component being changed:
 
 | Component | Spec | Guide |
 |-----------|------|-------|
-| Data Model / API / CLI / RBAC | `docs/internal/design/ambient-model.spec.md` | `docs/internal/design/ambient-model.guide.md` |
+| Data Model / API / CLI / RBAC | `specs/sessions/ambient-model.spec.md` | `workflows/sessions/ambient-model.workflow.md` |
 
 ### 2b. Modify the Spec
 
@@ -87,7 +87,7 @@ Edit the spec to reflect the desired change. The spec is the source of truth —
 ### 2c. Commit Spec Change
 
 ```bash
-git add docs/internal/design/
+git add specs/
 git commit -m "spec(<component>): <description of spec change>"
 ```
 
@@ -111,7 +111,7 @@ After spec acceptance (or in parallel for human workflow), load the implementati
 
 | Component | Guide | Context |
 |-----------|-------|---------|
-| Data Model / API | `docs/internal/design/ambient-model.guide.md` | `.claude/context/api-server-development.md` |
+| Data Model / API | `workflows/sessions/ambient-model.workflow.md` | `.claude/context/api-server-development.md` |
 | SDK | (guide section in ambient-model.guide.md Wave 3) | `.claude/context/sdk-development.md` |
 | CLI | (guide section Wave 5) | `.claude/context/cli-development.md` |
 | Control Plane | (guide section Wave 4) | `.claude/context/control-plane-development.md` |
@@ -134,7 +134,7 @@ Commits are ordered deliberately:
 
 1. **Self-improvement commit (first).** Any changes to guides, skills, workflows, or this devflow skill. Group all such changes into one commit:
    ```bash
-   git add .claude/skills/ .claude/context/ docs/internal/design/*.guide.md
+   git add skills/ workflows/
    git commit -m "chore(skills): self-improvement updates from <context>"
    ```
    - Agentic workflow: this is the first commit on the branch.
@@ -354,8 +354,8 @@ But prefer fixing the lint/format issue instead.
 | `.claude/context/sdk-development.md` | SDK generation |
 | `.claude/context/control-plane-development.md` | CP fan-out, runner contract |
 | `.claude/context/frontend-development.md` | Frontend build, React Query |
-| `docs/internal/design/ambient-model.spec.md` | Data model spec (source of truth) |
-| `docs/internal/design/ambient-model.guide.md` | Implementation guide (wave-based workflow) |
+| `specs/sessions/ambient-model.spec.md` | Data model spec (source of truth) |
+| `workflows/sessions/ambient-model.workflow.md` | Implementation workflow (wave-based) |
 
 ---
 

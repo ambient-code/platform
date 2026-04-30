@@ -255,7 +255,7 @@ Checklist:
 
 ### Step 2 — Read the Full Tool Spec
 
-Read `docs/internal/design/mcp-server.spec.md` in full for the complete per-tool input schemas, return shapes, and error tables.
+Read `specs/integrations/mcp-server.spec.md` in full for the complete per-tool input schemas, return shapes, and error tables.
 
 Read `docs/internal/proposals/agent-fleet-state-schema.md` for the annotation key conventions that all `patch_*_annotations` tools must honor.
 
@@ -458,8 +458,8 @@ Lessons learned:
 
 ## References
 
-- Full per-tool schemas, return shapes, and error tables: `docs/internal/design/mcp-server.spec.md`
+- Full per-tool schemas, return shapes, and error tables: `specs/integrations/mcp-server.spec.md`
 - Annotation key conventions and fleet state protocol: `docs/internal/proposals/agent-fleet-state-schema.md`
 - Agent visual language (how purple SEND/WAIT blocks map to MCP tools): `docs/internal/proposals/agent-script-visual-language.md`
 - Platform data model: `docs/internal/design/ambient-data-model.md`
-- Component pipeline and wave pattern: `docs/internal/design/ambient-model.guide.md`
+- Component pipeline and wave pattern: `workflows/sessions/ambient-model.workflow.md`

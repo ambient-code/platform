@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-22
 **Status:** Design
-**Guide:** `mcp-server.guide.md` — implementation waves, gap table, build commands, run log
+**Workflow:** `../../workflows/integrations/mcp-server.workflow.md` — implementation waves, gap table, build commands, run log
 
 ---
 

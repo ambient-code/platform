@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-05
 **Status:** Living Document — current state documented
-**Related:** `control-plane.spec.md` — CP provisioning, token endpoint, start context assembly
+**Related:** `../control-plane/control-plane.spec.md` — CP provisioning, token endpoint, start context assembly
 
 ---
 

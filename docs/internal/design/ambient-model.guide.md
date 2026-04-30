@@ -64,7 +64,7 @@ Checklist:
 
 ### Step 2 — Read the Spec
 
-Read `docs/internal/design/ambient-model.spec.md` in full.
+Read `specs/sessions/ambient-model.spec.md` in full.
 
 Extract and hold in working memory:
 
@@ -453,8 +453,8 @@ The old Gin/K8s backend (`components/backend/`) is covered by `.claude/context/b
 
 | Artifact              | Location                                             | Owner             |
 | --------------------- | ---------------------------------------------------- | ----------------- |
-| Spec                  | `docs/internal/design/ambient-model.spec.md`         | Human / consensus |
-| This guide            | `docs/internal/design/ambient-model.guide.md`        | Updated each run  |
+| Spec                  | `specs/sessions/ambient-model.spec.md`               | Human / consensus |
+| This workflow         | `workflows/sessions/ambient-model.workflow.md`       | Updated each run  |
 | OpenAPI spec          | `components/ambient-api-server/openapi/openapi.yaml` | API wave          |
 | Generated SDK         | `components/ambient-sdk/go-sdk/`                     | SDK wave          |
 | Wave PRs              | GitHub, tagged by wave and component                 | Per wave          |
