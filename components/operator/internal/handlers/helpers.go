@@ -217,6 +217,31 @@ func clearAnnotation(sessionNamespace, name, annotationKey string) error {
 	return nil
 }
 
+// NeedsWorkflowReconciliation returns true if the session has an active workflow
+// in its spec but the WorkflowReconciled condition is not True.
+func NeedsWorkflowReconciliation(session *unstructured.Unstructured) bool {
+	spec, _, _ := unstructured.NestedMap(session.Object, "spec")
+	workflow, found, _ := unstructured.NestedMap(spec, "activeWorkflow")
+	if !found || len(workflow) == 0 {
+		return false
+	}
+	gitURL, _ := workflow["gitUrl"].(string)
+	if strings.TrimSpace(gitURL) == "" {
+		return false
+	}
+
+	status, _, _ := unstructured.NestedMap(session.Object, "status")
+	conditions, _ := status["conditions"].([]interface{})
+	for _, c := range conditions {
+		if cond, ok := c.(map[string]interface{}); ok {
+			if condType, _ := cond["type"].(string); strings.EqualFold(condType, conditionWorkflowReconciled) {
+				return cond["status"] != "True"
+			}
+		}
+	}
+	return true
+}
+
 // setCondition upserts a condition entry on the provided status map.
 func setCondition(status map[string]interface{}, update conditionUpdate) {
 	now := time.Now().UTC().Format(time.RFC3339)

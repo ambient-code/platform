@@ -187,7 +187,9 @@ func ReconcileSpecChanges(ctx context.Context, session *unstructured.Unstructure
 			Reason:  "RepoReconciliationFailed",
 			Message: fmt.Sprintf("Failed to reconcile repos: %v", err),
 		})
-		_ = statusPatch.Apply()
+		if applyErr := statusPatch.Apply(); applyErr != nil {
+			log.Printf("[Reconcile] Failed to apply repo error status for %s/%s: %v", namespace, name, applyErr)
+		}
 		return err
 	}
 
@@ -200,7 +202,9 @@ func ReconcileSpecChanges(ctx context.Context, session *unstructured.Unstructure
 			Reason:  "WorkflowReconciliationFailed",
 			Message: fmt.Sprintf("Failed to reconcile workflow: %v", err),
 		})
-		_ = statusPatch.Apply()
+		if applyErr := statusPatch.Apply(); applyErr != nil {
+			log.Printf("[Reconcile] Failed to apply workflow error status for %s/%s: %v", namespace, name, applyErr)
+		}
 		return err
 	}
 
@@ -212,6 +216,26 @@ func ReconcileSpecChanges(ctx context.Context, session *unstructured.Unstructure
 		Reason:  "SpecApplied",
 		Message: fmt.Sprintf("Successfully reconciled generation %d", session.GetGeneration()),
 	})
+
+	return statusPatch.Apply()
+}
+
+// ReconcileWorkflow reconciles just the active workflow for a session.
+// Called from the Running phase when WorkflowReconciled condition is not True.
+func ReconcileWorkflow(ctx context.Context, session *unstructured.Unstructured) error {
+	namespace := session.GetNamespace()
+	name := session.GetName()
+
+	spec, _, _ := unstructured.NestedMap(session.Object, "spec")
+	statusPatch := NewStatusPatch(namespace, name)
+
+	if err := reconcileActiveWorkflowWithPatch(namespace, name, spec, session, statusPatch); err != nil {
+		log.Printf("[Reconcile] Failed to reconcile workflow for %s/%s: %v", namespace, name, err)
+		if applyErr := statusPatch.Apply(); applyErr != nil {
+			log.Printf("[Reconcile] Failed to apply workflow error status for %s/%s: %v", namespace, name, applyErr)
+		}
+		return err
+	}
 
 	return statusPatch.Apply()
 }
