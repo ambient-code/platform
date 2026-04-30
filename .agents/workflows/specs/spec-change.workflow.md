@@ -14,7 +14,7 @@ Write the spec. Include: data model, write paths, read paths, RBAC, migration pl
 
 ## Phase 3 — Critic pass
 
-Spawn critics in parallel. Critics are always evidence-based (read actual code, cite file:line) and assigned narrow mandates. Two categories of critics:
+Spawn subagents as critics in parallel. Critics are always evidence-based (read actual code, cite file:line) and assigned narrow mandates. Two categories of critics:
 
 ### Standard critics (every spec change)
 
