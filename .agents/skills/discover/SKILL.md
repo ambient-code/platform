@@ -88,7 +88,7 @@ Summarize what you found:
 - Which specs describe the area being changed
 - Which standards apply
 
-Do not output irrelivant context. Be extremely brief, like:
+Do not output irrelevant context. Be extremely brief, like:
 > I will use skills `x` and `y` for this task.
 
 Then proceed with the task, using the discovered skills and context.
