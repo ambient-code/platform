@@ -331,6 +331,16 @@ func (r *AgenticSessionReconciler) reconcileRunning(ctx context.Context, session
 		// Handle spec updates while running
 		if err := handlers.ReconcileSpecChanges(ctx, session); err != nil {
 			logger.Error(err, "Failed to reconcile running session spec", "name", name)
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+	}
+
+	// Retry workflow reconciliation if it failed during session creation
+	if handlers.NeedsWorkflowReconciliation(session) {
+		logger.Info("WorkflowReconciled is not True, retrying workflow reconciliation", "name", name)
+		if err := handlers.ReconcileWorkflow(ctx, session); err != nil {
+			logger.Error(err, "Failed to reconcile workflow", "name", name)
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 	}
 

@@ -675,8 +675,9 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 
 	// Extract spec information from the fresh object
 	spec, _, _ := unstructured.NestedMap(currentObj.Object, "spec")
-	_ = reconcileSpecReposWithPatch(sessionNamespace, name, spec, currentObj, statusPatch)
-	_ = reconcileActiveWorkflowWithPatch(sessionNamespace, name, spec, currentObj, statusPatch)
+	if err := reconcileSpecReposWithPatch(sessionNamespace, name, spec, currentObj, statusPatch); err != nil {
+		log.Printf("[Reconcile] Failed to reconcile repos during pending phase for %s/%s: %v", sessionNamespace, name, err)
+	}
 	prompt, _, _ := unstructured.NestedString(spec, "initialPrompt")
 	timeout, _, _ := unstructured.NestedInt64(spec, "timeout")
 	llmSettings, _, _ := unstructured.NestedMap(spec, "llmSettings")
