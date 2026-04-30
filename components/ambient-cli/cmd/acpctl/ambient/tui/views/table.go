@@ -10,7 +10,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-
 // SortDirection represents the sort order for a column.
 type SortDirection int
 

@@ -78,7 +78,6 @@ type appTickMsg struct{ t time.Time }
 // active, triggering a REST poll for new session messages.
 type messagePollTickMsg struct{ t time.Time }
 
-
 // infoExpiredMsg signals the ephemeral info line should be cleared.
 type infoExpiredMsg struct{}
 
@@ -164,11 +163,11 @@ type AppModel struct {
 	helpView views.HelpView
 
 	// Cached resource data for CRUD lookups (maps name/ID -> full resource).
-	cachedProjects []sdktypes.Project
-	cachedAgents   []sdktypes.Agent
-	cachedSessions []sdktypes.Session
-	cachedInbox              []sdktypes.InboxMessage
-	cachedScheduledSessions  []sdktypes.ScheduledSession
+	cachedProjects          []sdktypes.Project
+	cachedAgents            []sdktypes.Agent
+	cachedSessions          []sdktypes.Session
+	cachedInbox             []sdktypes.InboxMessage
+	cachedScheduledSessions []sdktypes.ScheduledSession
 
 	// Message polling state.
 	messagePollActive bool // true when message poll tick is running
@@ -272,16 +271,16 @@ func NewAppModel(factory *connection.ClientFactory) (*AppModel, error) {
 		navStack: []NavEntry{
 			{Kind: "projects", Scope: "all"},
 		},
-		activeView:   "projects",
-		projectTable: pt,
-		agentTable:   at,
-		sessionTable: st,
+		activeView:            "projects",
+		projectTable:          pt,
+		agentTable:            at,
+		sessionTable:          st,
 		inboxTable:            it,
 		contextTable:          ct,
 		scheduledSessionTable: sst,
 		commandInput:          ci,
-		filterInput:  fi,
-		promptInput:  pi,
+		filterInput:           fi,
+		promptInput:           pi,
 	}
 
 	return m, nil
@@ -1598,7 +1597,7 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 		if len(row) > 1 {
 			contextName := row[1] // NAME column (index 1, after ACTIVE)
 			if err := m.config.SwitchContext(contextName); err != nil {
-				return m, m.setInfo("Error: "+err.Error())
+				return m, m.setInfo("Error: " + err.Error())
 			}
 			m.navStack = []NavEntry{{Kind: "projects", Scope: "all"}}
 			m.activeView = "projects"
@@ -2621,7 +2620,7 @@ func (m *AppModel) executeCommand(input string) (tea.Model, tea.Cmd) {
 		}
 		// Switch context.
 		if err := m.config.SwitchContext(cmd.Arg); err != nil {
-			return m, m.setInfo("Error: "+err.Error())
+			return m, m.setInfo("Error: " + err.Error())
 		}
 		// Reset everything on context switch.
 		m.navStack = []NavEntry{{Kind: "projects", Scope: "all"}}
@@ -2631,7 +2630,7 @@ func (m *AppModel) executeCommand(input string) (tea.Model, tea.Cmd) {
 		m.currentAgentID = ""
 		m.currentSession = ""
 		m.activeFilter = nil
-		return m, m.setInfo("Switched to context "+cmd.Arg)
+		return m, m.setInfo("Switched to context " + cmd.Arg)
 
 	case CmdProject:
 		if cmd.Arg != "" {
@@ -2640,7 +2639,7 @@ func (m *AppModel) executeCommand(input string) (tea.Model, tea.Cmd) {
 				ctx.Project = cmd.Arg
 			}
 			m.currentProject = cmd.Arg
-			return m, m.setInfo("Switched to project "+cmd.Arg)
+			return m, m.setInfo("Switched to project " + cmd.Arg)
 		}
 		return m, nil
 
@@ -2721,12 +2720,12 @@ func (m *AppModel) handleFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		f, err := ParseFilter(input)
 		if err != nil {
-			return m, m.setInfo("Invalid filter: "+err.Error())
+			return m, m.setInfo("Invalid filter: " + err.Error())
 		}
 
 		m.activeFilter = f
 		m.applyFilterToActiveTable(f)
-		return m, m.setInfo("Filter applied: "+f.String())
+		return m, m.setInfo("Filter applied: " + f.String())
 
 	default:
 		var cmd tea.Cmd

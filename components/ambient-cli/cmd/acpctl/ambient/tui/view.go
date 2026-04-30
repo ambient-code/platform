@@ -307,4 +307,3 @@ func truncateLine(s string, w int) string {
 	}
 	return s
 }
-

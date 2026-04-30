@@ -250,7 +250,7 @@ func (m *AppModel) renderHint(hint string, keyWidth int) string {
 	if idx < 0 {
 		return styleDim.Render(hint)
 	}
-	key := hint[:idx+1]   // e.g. "<d>"
+	key := hint[:idx+1]    // e.g. "<d>"
 	action := hint[idx+2:] // e.g. "Describe" (skip the space after >)
 	renderedKey := styleDim.Render(key)
 	pad := keyWidth + 1 - lipgloss.Width(renderedKey)

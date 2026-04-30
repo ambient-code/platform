@@ -73,9 +73,9 @@ func NewDeleteDialog(kind, name string) Dialog {
 // NewErrorDialog creates a single-button dialog with ASCII art and an error message.
 func NewErrorDialog(title, message, ascii string) Dialog {
 	return Dialog{
-		Title:   title,
-		Message: ascii + "\n" + message,
-		Buttons: []string{"Dismiss"},
+		Title:    title,
+		Message:  ascii + "\n" + message,
+		Buttons:  []string{"Dismiss"},
 		Selected: 0,
 		Width:    50,
 	}

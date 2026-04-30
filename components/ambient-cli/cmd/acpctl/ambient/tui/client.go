@@ -1046,4 +1046,3 @@ func (tc *TUIClient) FetchSessionMessages(projectID, sessionID string, afterSeq 
 		return SessionMessagesMsg{Messages: msgs}
 	}
 }
-

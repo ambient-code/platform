@@ -51,15 +51,15 @@ var (
 
 // Hoisted styles for the message stream View to avoid allocations on every frame.
 var (
-	msgBorderStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	msgKindStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
-	msgScopeStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("69")).Bold(true)
-	msgCountStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Bold(true)
-	msgDimStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	msgDimIndicator   = lipgloss.NewStyle().Foreground(msgColorDim)
+	msgBorderStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	msgKindStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
+	msgScopeStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("69")).Bold(true)
+	msgCountStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Bold(true)
+	msgDimStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	msgDimIndicator    = lipgloss.NewStyle().Foreground(msgColorDim)
 	msgActiveIndicator = lipgloss.NewStyle().Foreground(msgColorBlue)
-	msgCursorStyle    = lipgloss.NewStyle().Foreground(msgColorOrange)
-	msgSepStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("236"))
+	msgCursorStyle     = lipgloss.NewStyle().Foreground(msgColorOrange)
+	msgSepStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("236"))
 )
 
 // eventColor returns the lipgloss color for a semantic event type.
@@ -416,16 +416,16 @@ type MessageStream struct {
 	glamourWidth    int // width used to create the cached renderer
 
 	// Cached display lines — rebuilt when mode/messages change, not every frame.
-	cachedLines      []string
-	cachedDirty      bool // true when lines need rebuilding
-	cachedMsgCount   int
-	cachedRawMode    bool
-	cachedWrapMode   bool
-	cachedTsMode     int
-	cachedSearchPat  string
+	cachedLines     []string
+	cachedDirty     bool // true when lines need rebuilding
+	cachedMsgCount  int
+	cachedRawMode   bool
+	cachedWrapMode  bool
+	cachedTsMode    int
+	cachedSearchPat string
 
 	// Per-message glamour render cache (key = Seq).
-	glamourCache     map[int]string
+	glamourCache map[int]string
 
 	// Compose
 	composeMode  bool
@@ -535,10 +535,10 @@ func (ms MessageStream) ComposeValue() string {
 }
 
 // Toggle state getters — used by the header to highlight active toggles.
-func (ms MessageStream) IsAutoScroll() bool    { return ms.autoScroll }
-func (ms MessageStream) IsRawMode() bool       { return ms.rawMode }
-func (ms MessageStream) IsWrapMode() bool      { return ms.wrapMode }
-func (ms MessageStream) TimestampMode() int    { return ms.timestampMode }
+func (ms MessageStream) IsAutoScroll() bool { return ms.autoScroll }
+func (ms MessageStream) IsRawMode() bool    { return ms.rawMode }
+func (ms MessageStream) IsWrapMode() bool   { return ms.wrapMode }
+func (ms MessageStream) TimestampMode() int { return ms.timestampMode }
 
 // SetSearchPattern sets or clears the message filter pattern.
 func (ms *MessageStream) SetSearchPattern(pat *regexp.Regexp) {
@@ -890,8 +890,6 @@ func (ms *MessageStream) View() string {
 		bottomLines = append([]string{composeSep, composeLine}, bottomLines...)
 	}
 
-
-
 	// -- Content area --
 	// 3 = header bar + header line + header separator
 	topLines := 3
@@ -1070,7 +1068,6 @@ func (ms *MessageStream) getGlamourRenderer(wrapWidth int) *glamour.TermRenderer
 	ms.glamourWidth = wrapWidth
 	return r
 }
-
 
 // renderConversationEntry renders a single message in conversation mode.
 // Format: [event_type]  summary text (wrapped)
