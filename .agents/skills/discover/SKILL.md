@@ -40,6 +40,7 @@ Map the work to one or more capability domains:
 | `auth` | OAuth, credentials, RBAC, tokens |
 | `projects` | Project management, settings, workspaces |
 | `cli` | TUI, acpctl commands |
+| `specs` | specs |
 
 If unsure, check which `specs/` subdirectories exist:
 
@@ -86,5 +87,8 @@ Summarize what you found:
 - Which domain skills were discovered (if any)
 - Which specs describe the area being changed
 - Which standards apply
+
+Do not output irrelivant context. Be extremely brief, like:
+> I will use skills `x` and `y` for this task.
 
 Then proceed with the task, using the discovered skills and context.

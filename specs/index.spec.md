@@ -8,7 +8,7 @@ Specs describe the **desired state** of the system. Code is the actual state. De
 
 2. **Living documents.** Specs are never archived or superseded. They are amended, replaced, or deleted. A spec that no longer reflects desired behavior is removed, not moved to a graveyard.
 
-3. **Behavior contracts, not implementation plans.** Specs describe observable behavior — inputs, outputs, error conditions, constraints. Implementation details (class names, library choices, execution plans) belong in `.agents/workflows/`.
+3. **Behavior contracts, not implementation plans.** Specs describe observable behavior — inputs, outputs, error conditions, constraints. Implementation invariants, such as library choices, etc. (NOTE: NOT IMPLEMENTATION PLANS. THIS IS A DEVELOPMENT CONCERN.) belong in `.agents/workflows/`.
 
 4. **Organized by capability domain.** Add domains when existing ones become too broad, not preemptively.
 
@@ -59,7 +59,6 @@ The system SHALL <observable behavior>.
 - Internal class/function names
 - Library or framework choices
 - Step-by-step implementation details
-- Execution plans (those belong in `.agents/workflows/`)
 
 **Quick test:** if the implementation can change without changing externally visible behavior, it does not belong in the spec.
 
