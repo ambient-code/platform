@@ -462,4 +462,4 @@ Lessons learned:
 - Annotation key conventions and fleet state protocol: `docs/internal/proposals/agent-fleet-state-schema.md`
 - Agent visual language (how purple SEND/WAIT blocks map to MCP tools): `docs/internal/proposals/agent-script-visual-language.md`
 - Platform data model: `specs/sessions/ambient-model.spec.md`
-- Component pipeline and wave pattern: `workflows/sessions/ambient-model.workflow.md`
+- Component pipeline and wave pattern: `.agents/workflows/sessions/ambient-model.workflow.md`
