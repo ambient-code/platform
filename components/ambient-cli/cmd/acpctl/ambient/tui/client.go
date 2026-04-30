@@ -814,6 +814,12 @@ type CreateScheduledSessionMsg struct {
 	Err              error
 }
 
+// UpdateScheduledSessionMsg carries the result of patching a scheduled session.
+type UpdateScheduledSessionMsg struct {
+	ScheduledSession *sdktypes.ScheduledSession
+	Err              error
+}
+
 // InterruptSessionMsg carries the result of interrupting a session.
 type InterruptSessionMsg struct {
 	Err error
@@ -910,7 +916,7 @@ func (tc *TUIClient) TriggerScheduledSession(projectID, id string) tea.Cmd {
 }
 
 // CreateScheduledSession returns a tea.Cmd that creates a new scheduled session.
-func (tc *TUIClient) CreateScheduledSession(projectID, name, schedule string) tea.Cmd {
+func (tc *TUIClient) CreateScheduledSession(projectID, name, agentID, schedule, timezone, sessionPrompt, description string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 		defer cancel()
@@ -921,9 +927,13 @@ func (tc *TUIClient) CreateScheduledSession(projectID, name, schedule string) te
 		}
 
 		ss := &sdktypes.ScheduledSession{
-			Name:     name,
-			Schedule: schedule,
-			Enabled:  true,
+			Name:          name,
+			AgentID:       agentID,
+			Schedule:      schedule,
+			Timezone:      timezone,
+			SessionPrompt: sessionPrompt,
+			Description:   description,
+			Enabled:       true,
 		}
 
 		result, err := client.ScheduledSessions().Create(ctx, projectID, ss)
@@ -931,6 +941,34 @@ func (tc *TUIClient) CreateScheduledSession(projectID, name, schedule string) te
 			return CreateScheduledSessionMsg{Err: err}
 		}
 		return CreateScheduledSessionMsg{ScheduledSession: result}
+	}
+}
+
+// UpdateScheduledSession returns a tea.Cmd that patches a scheduled session.
+func (tc *TUIClient) UpdateScheduledSession(projectID, id string, patch map[string]any) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject(projectID)
+		if err != nil {
+			return UpdateScheduledSessionMsg{Err: err}
+		}
+
+		patchJSON, err := json.Marshal(patch)
+		if err != nil {
+			return UpdateScheduledSessionMsg{Err: fmt.Errorf("marshal patch: %w", err)}
+		}
+		var typedPatch sdktypes.ScheduledSessionPatch
+		if err := json.Unmarshal(patchJSON, &typedPatch); err != nil {
+			return UpdateScheduledSessionMsg{Err: fmt.Errorf("unmarshal patch: %w", err)}
+		}
+
+		result, err := client.ScheduledSessions().Update(ctx, projectID, id, &typedPatch)
+		if err != nil {
+			return UpdateScheduledSessionMsg{Err: err}
+		}
+		return UpdateScheduledSessionMsg{ScheduledSession: result}
 	}
 }
 

@@ -111,6 +111,7 @@ var viewHintRegistry = map[string]ViewHints{
 	"scheduledsessions": {
 		Resource: []views.HelpEntry{
 			{Key: "d", Action: "Describe"},
+			{Key: "e", Action: "Edit"},
 			{Key: "n", Action: "New"},
 			{Key: "s", Action: "Suspend/Resume"},
 			{Key: "t", Action: "Trigger"},

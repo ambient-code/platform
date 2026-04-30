@@ -35,6 +35,27 @@ const infoTimeout = 5 * time.Second
 // staleThreshold marks data as stale in the header when exceeded.
 const staleThreshold = 15 * time.Second
 
+// numberKeyExcludedViews are views where digit keys do NOT trigger project
+// switching (e.g. overlay views, the projects list itself).
+var numberKeyExcludedViews = map[string]bool{
+	"projects": true,
+	"contexts": true,
+	"messages": true,
+	"detail":   true,
+	"inbox":    true,
+	"help":     true,
+}
+
+// projectShortcutHandledViews are the views explicitly handled in
+// handleProjectShortcut's digit-1-9 switch. Every view reachable by number
+// keys that is NOT in numberKeyExcludedViews must appear here, or it will
+// silently fall through to the agents view.
+var projectShortcutHandledViews = map[string]bool{
+	"agents":            true,
+	"sessions":          true,
+	"scheduledsessions": true,
+}
+
 // ---------------------------------------------------------------------------
 // Navigation
 // ---------------------------------------------------------------------------
@@ -777,6 +798,17 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.pollInFlight = true
 		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Session updated: "+name))
+
+	case UpdateScheduledSessionMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Update scheduled session failed: " + msg.Err.Error())
+		}
+		name := ""
+		if msg.ScheduledSession != nil {
+			name = msg.ScheduledSession.Name
+		}
+		m.pollInFlight = true
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Scheduled session updated: "+name))
 
 	case editCompleteMsg:
 		return m.handleEditComplete(msg)
@@ -1771,9 +1803,7 @@ func (m *AppModel) handleRuneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Number-key project shortcuts (0-9) — only active on table views below project level.
 	if len(key) == 1 && key[0] >= '0' && key[0] <= '9' &&
-		m.activeView != "projects" && m.activeView != "contexts" &&
-		m.activeView != "messages" && m.activeView != "detail" &&
-		m.activeView != "inbox" && m.activeView != "scheduledsessions" {
+		!numberKeyExcludedViews[m.activeView] {
 		return m.handleProjectShortcut(key[0] - '0')
 	}
 
@@ -2101,6 +2131,8 @@ func (m *AppModel) handleInboxRune(key string) (tea.Model, tea.Cmd) {
 // handleScheduledSessionsRune handles scheduled-session-view-specific hotkeys.
 func (m *AppModel) handleScheduledSessionsRune(key string) (tea.Model, tea.Cmd) {
 	switch key {
+	case "e":
+		return m.openEditorForScheduledSession()
 	case "d":
 		// Show detail view for the selected scheduled session.
 		row := m.scheduledSessionTable.SelectedRow()
@@ -2123,14 +2155,25 @@ func (m *AppModel) handleScheduledSessionsRune(key string) (tea.Model, tea.Cmd) 
 			return m, m.setInfo("Navigate to a project first")
 		}
 		project := m.currentProject
-		var name, schedule string
-		form := views.NewScheduledSessionForm(&name, &schedule)
+		var agentOpts []huh.Option[string]
+		for _, a := range m.cachedAgents {
+			if a.ProjectID != project {
+				continue
+			}
+			agentOpts = append(agentOpts, huh.NewOption(a.Name, a.ID))
+		}
+		if len(agentOpts) == 0 {
+			return m, m.setInfo("No agents found — create an agent first")
+		}
+		var name, schedule, description, sessionPrompt, timezone, agentID string
+		agentID = agentOpts[0].Value
+		form := views.NewScheduledSessionForm(&name, &schedule, &description, &sessionPrompt, &timezone, &agentID, agentOpts)
 		form.WithWidth(60)
 		m.formOverlay = form
 		m.formTitle = "New Scheduled Session"
 		m.formOnComplete = func() tea.Cmd {
 			return tea.Batch(
-				m.client.CreateScheduledSession(project, name, schedule),
+				m.client.CreateScheduledSession(project, name, agentID, schedule, timezone, sessionPrompt, description),
 				m.setInfo("Creating scheduled session "+name+"..."),
 			)
 		}
@@ -2793,6 +2836,10 @@ func (m *AppModel) handleProjectShortcut(digit byte) (tea.Model, tea.Cmd) {
 			m.navStack = []NavEntry{{Kind: "projects", Scope: "all"}}
 			m.activeView = "projects"
 			return m, tea.Batch(m.client.FetchProjects(), m.setInfo("Viewing all projects"))
+		case "scheduledsessions":
+			m.navStack = []NavEntry{{Kind: "scheduledsessions", Scope: "all"}}
+			m.scheduledSessionTable.SetScope("all")
+			return m, tea.Batch(m.client.FetchScheduledSessions(""), m.setInfo("Viewing all scheduled sessions"))
 		default:
 			m.navStack = []NavEntry{{Kind: "projects", Scope: "all"}}
 			m.activeView = "projects"
@@ -2826,6 +2873,16 @@ func (m *AppModel) handleProjectShortcut(digit byte) (tea.Model, tea.Cmd) {
 		m.activeView = "sessions"
 		return m, tea.Batch(
 			m.client.FetchSessions(projectName),
+			m.setInfo("Switched to project "+projectName),
+		)
+	case "scheduledsessions":
+		m.scheduledSessionTable.SetScope(projectName)
+		m.navStack = []NavEntry{
+			{Kind: "scheduledsessions", Scope: projectName},
+		}
+		m.activeView = "scheduledsessions"
+		return m, tea.Batch(
+			m.client.FetchScheduledSessions(projectName),
 			m.setInfo("Switched to project "+projectName),
 		)
 	default:
@@ -2904,6 +2961,26 @@ func (m *AppModel) openEditorForSession() (tea.Model, tea.Cmd) {
 	}
 
 	return m.openEditorForResource("session", session.ID, projectID, *session)
+}
+
+// openEditorForScheduledSession serializes the selected scheduled session as
+// JSON, writes it to a temp file, and suspends the TUI to open the user's
+// $EDITOR.
+func (m *AppModel) openEditorForScheduledSession() (tea.Model, tea.Cmd) {
+	row := m.scheduledSessionTable.SelectedRow()
+	if len(row) == 0 {
+		return m, m.setInfo("No scheduled session selected")
+	}
+	name := row[0]
+	ss := m.findScheduledSessionByName(name)
+	if ss == nil {
+		return m, m.setInfo("Scheduled session not found in cache: " + name)
+	}
+	if m.currentProject == "" {
+		return m, m.setInfo("No project context for edit")
+	}
+
+	return m.openEditorForResource("scheduledsession", ss.ID, m.currentProject, *ss)
 }
 
 // openEditorForResource is the shared implementation that writes JSON to a temp
@@ -3028,6 +3105,11 @@ func (m *AppModel) handleEditComplete(msg editCompleteMsg) (tea.Model, tea.Cmd) 
 			"repo_url", "repos", "resource_overrides", "timeout",
 			"environment_variables",
 		}
+	case "scheduledsession":
+		editableFields = []string{
+			"name", "description", "schedule", "timezone",
+			"session_prompt", "agent_id", "enabled",
+		}
 	}
 
 	// Build patch with only changed editable fields.
@@ -3086,6 +3168,11 @@ func (m *AppModel) handleEditComplete(msg editCompleteMsg) (tea.Model, tea.Cmd) 
 		return m, tea.Batch(
 			m.client.UpdateSession(msg.ProjectID, msg.ResourceID, patch),
 			m.setInfo("Updating session ("+summary+")..."),
+		)
+	case "scheduledsession":
+		return m, tea.Batch(
+			m.client.UpdateScheduledSession(msg.ProjectID, msg.ResourceID, patch),
+			m.setInfo("Updating scheduled session ("+summary+")..."),
 		)
 	default:
 		return m, m.setInfo("Unknown resource kind: " + msg.ResourceKind)

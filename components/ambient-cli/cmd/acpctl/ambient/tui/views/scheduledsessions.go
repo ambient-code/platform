@@ -103,22 +103,47 @@ func ScheduledSessionDetail(ss sdktypes.ScheduledSession) []DetailLine {
 	}
 }
 
-// NewScheduledSessionForm creates a huh form for creating a new scheduled session.
-func NewScheduledSessionForm(displayName, schedule *string) *huh.Form {
+// NewScheduledSessionForm creates a huh form for creating a new scheduled
+// session. agentOptions must have at least one entry (agent is required).
+func NewScheduledSessionForm(
+	displayName, schedule, description, sessionPrompt, timezone, agentID *string,
+	agentOptions []huh.Option[string],
+) *huh.Form {
+	fields := []huh.Field{
+		huh.NewInput().
+			Key("displayName").
+			Title("Name").
+			Placeholder("my-scheduled-session").
+			Validate(huh.ValidateNotEmpty()).
+			Value(displayName),
+		huh.NewSelect[string]().
+			Key("agent").
+			Title("Agent").
+			Options(agentOptions...).
+			Value(agentID),
+		huh.NewInput().
+			Key("schedule").
+			Title("Schedule (cron)").
+			Placeholder("*/30 * * * *").
+			Validate(huh.ValidateNotEmpty()).
+			Value(schedule),
+		huh.NewInput().
+			Key("timezone").
+			Title("Timezone").
+			Placeholder("UTC").
+			Value(timezone),
+		huh.NewInput().
+			Key("sessionPrompt").
+			Title("Session Prompt").
+			Placeholder("(optional)").
+			Value(sessionPrompt),
+		huh.NewInput().
+			Key("description").
+			Title("Description").
+			Placeholder("(optional)").
+			Value(description),
+	}
 	return huh.NewForm(
-		huh.NewGroup(
-			huh.NewInput().
-				Key("displayName").
-				Title("Display Name").
-				Placeholder("my-scheduled-session").
-				Validate(huh.ValidateNotEmpty()).
-				Value(displayName),
-			huh.NewInput().
-				Key("schedule").
-				Title("Schedule (cron)").
-				Placeholder("*/30 * * * *").
-				Validate(huh.ValidateNotEmpty()).
-				Value(schedule),
-		),
+		huh.NewGroup(fields...),
 	).WithTheme(ACPTheme()).WithShowHelp(false)
 }

@@ -192,10 +192,12 @@ func (rt *ResourceTable) SetRows(rows []table.Row) {
 		for i, row := range visibleRows {
 			if len(row) > 0 && row[0] == selectedKey {
 				rt.inner.SetCursor(i)
-				return
+				break
 			}
 		}
 	}
+
+	rt.updateSelectedStyle()
 }
 
 // SetRowColorFunc sets a function that determines the foreground color for each
