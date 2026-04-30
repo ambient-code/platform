@@ -8,11 +8,22 @@ Before drafting, establish:
 - **Scope boundary.** Which components does this change touch? (schema, gRPC, runner, operator, CLI, frontend, SDK, RBAC) — this drives which critics to spawn.
 - **Reserved terms check.** Ambient has a specific domain model (Inbox, Session, Agent, Project, Credential, SessionMessage, etc.). Don't repurpose these terms.
 
-## Phase 2 — Draft
+## Phase 2 — Ground in the codebase
+
+Before drafting, read the actual code and specs in the affected areas. The goal is to confirm your understanding of the user's intent without wasting their time on things you can answer yourself.
+
+1. **Read existing specs** in the target domain — what's already specified? Is this an amendment to an existing spec or a new one?
+2. **Read the current implementation** — grep for the components identified in Phase 1. Understand what exists today so the spec's migration plan is grounded in reality.
+3. **Summarize back to the user** in 3–5 sentences: what you found, what you believe they want to change, and what you're unsure about. Be specific — cite files and current behavior.
+4. **Ask only where the codebase is ambiguous.** If the code answers a question, don't ask the user. If two valid interpretations exist, surface it now — not after a full draft.
+
+Do not proceed to drafting until the user confirms the framing is right.
+
+## Phase 3 — Draft
 
 Write the spec. Include: data model, write paths, read paths, RBAC, migration plan for all existing consumers.
 
-## Phase 3 — Critic pass
+## Phase 4 — Critic pass
 
 Spawn subagents as critics in parallel. Critics are always evidence-based (read actual code, cite file:line) and assigned narrow mandates. Two categories of critics:
 
@@ -29,22 +40,22 @@ Spawn subagents as critics in parallel. Critics are always evidence-based (read 
 
 Each critic reports **BLOCKER** / **MAJOR** / **MINOR** with citations.
 
-## Phase 4 — Synthesize and separate
+## Phase 5 — Synthesize and separate
 
 Collapse duplicates. Split findings:
 
 - **Factual errors** — one right answer (wrong SQL semantics, wrong path, wrong auth mechanism, missing enum value) → fix directly
 - **Design decisions** — valid tradeoffs exist → ask the author
 
-## Phase 5 — Design questions to author
+## Phase 6 — Design questions to author
 
 Present only design decisions. For each: 2–3 concrete options with tradeoffs, one question at a time. Do not ask the author to validate factual correctness.
 
-## Phase 6 — Apply fixes
+## Phase 7 — Apply fixes
 
 One pass: all factual corrections + design decisions resolved. Commit with a category-per-line message so the diff is auditable.
 
-## Phase 7 — Second critic pass
+## Phase 8 — Second critic pass
 
 Run the same critics again against the updated spec. First-round fixes introduce new surface; the second pass catches what the first missed or created. Stop when the second pass produces only MINORs.
 
