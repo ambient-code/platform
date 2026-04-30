@@ -8,8 +8,7 @@ metadata:
     pipelinesascode.tekton.dev/cancel-in-progress: "false"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
-      == "main" && ( "./components/ambient-api-server/***".pathChanged() || ".tekton/ambient-code-ambient-api-server-main-push.yaml".pathChanged()
-      || "Dockerfile".pathChanged() )
+      == "main" && ( "components/ambient-api-server/**".pathChanged() || ".tekton/ambient-code-ambient-api-server-main-push.yaml".pathChanged() )
   creationTimestamp: null
   labels:
     appstudio.openshift.io/application: ambient-code-main
