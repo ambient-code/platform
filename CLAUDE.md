@@ -123,10 +123,10 @@ component DEVELOPMENT.md files (see [BOOKMARKS.md](BOOKMARKS.md) > Component Dev
 - **Restricted SecurityContext on all containers**: `runAsNonRoot`, drop `ALL` capabilities, `readOnlyRootFilesystem`
 
 Component-specific conventions:
-- Backend: [DEVELOPMENT.md](components/backend/DEVELOPMENT.md), [ERROR_PATTERNS.md](components/backend/ERROR_PATTERNS.md), [K8S_CLIENT_PATTERNS.md](components/backend/K8S_CLIENT_PATTERNS.md)
-- Frontend: [DEVELOPMENT.md](components/frontend/DEVELOPMENT.md), [REACT_QUERY_PATTERNS.md](components/frontend/REACT_QUERY_PATTERNS.md)
-- Operator: [DEVELOPMENT.md](components/operator/DEVELOPMENT.md)
-- Security: [security-standards.md](docs/security-standards.md)
+- Backend: [conventions](specs/standards/backend/conventions.spec.md), [error handling](specs/standards/backend/error-handling.spec.md), [K8s client](specs/standards/backend/k8s-client.spec.md)
+- Frontend: [conventions](specs/standards/frontend/conventions.spec.md), [React Query](specs/standards/frontend/react-query.spec.md)
+- Operator: [conventions](specs/standards/control-plane/conventions.spec.md)
+- Security: [security standards](specs/standards/security/security.spec.md)
 
 ## Pre-commit Hooks
 

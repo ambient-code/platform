@@ -26,13 +26,13 @@ Consider the user input before proceeding (if not empty). The input may specify 
 Read all of the following files to build your review context. Do not skip any.
 
 1. `CLAUDE.md` (master project instructions)
-2. `components/backend/DEVELOPMENT.md` (Go backend, Gin, K8s integration)
-3. `components/frontend/DEVELOPMENT.md` (NextJS, Shadcn UI, React Query)
-4. `docs/security-standards.md` (auth, RBAC, token handling, container security)
-5. `components/backend/K8S_CLIENT_PATTERNS.md` (user token vs service account)
-6. `components/backend/ERROR_PATTERNS.md` (consistent error patterns)
-7. `components/frontend/REACT_QUERY_PATTERNS.md` (data fetching patterns)
-8. `components/operator/DEVELOPMENT.md` (K8s operator, reconciliation, OwnerReferences)
+2. `specs/standards/backend/conventions.spec.md` (Go backend, Gin, K8s integration)
+3. `specs/standards/frontend/conventions.spec.md` (NextJS, Shadcn UI, React Query)
+4. `specs/standards/security/security.spec.md` (auth, RBAC, token handling, container security)
+5. `specs/standards/backend/k8s-client.spec.md` (user token vs service account)
+6. `specs/standards/backend/error-handling.spec.md` (consistent error patterns)
+7. `specs/standards/frontend/react-query.spec.md` (data fetching patterns)
+8. `specs/standards/control-plane/conventions.spec.md` (K8s operator, reconciliation, OwnerReferences)
 
 ### 2. Identify Changes to Review
 

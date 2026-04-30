@@ -43,7 +43,7 @@ Progressive disclosure for task-specific documentation and references.
 
 | Document | Purpose |
 |----------|---------|
-| [CodeRabbit-Derived Conventions](docs/coderabbit-derived-conventions.md) | Image consistency, reconciliation patterns, error propagation, namespace-scoped keys, SecurityContext — derived from 971 CodeRabbit review comments |
+| [CodeRabbit-Derived Conventions](specs/standards/platform/cross-cutting.spec.md) | Image consistency, reconciliation patterns, error propagation, namespace-scoped keys, SecurityContext — derived from 971 CodeRabbit review comments |
 
 ## Component Development Guides
 
@@ -51,13 +51,13 @@ Convention documentation for each component. Loaded by review agents on demand.
 
 | Guide | Scope |
 |-------|-------|
-| [Backend Development](components/backend/DEVELOPMENT.md) | Go patterns, K8s integration, handler conventions, user-scoped clients |
-| [Backend Error Patterns](components/backend/ERROR_PATTERNS.md) | Consistent error patterns across backend and operator |
-| [Backend K8s Client Patterns](components/backend/K8S_CLIENT_PATTERNS.md) | User token vs. service account — critical for RBAC compliance |
-| [Frontend Development](components/frontend/DEVELOPMENT.md) | NextJS patterns, Shadcn, React Query, component guidelines |
-| [Frontend React Query Patterns](components/frontend/REACT_QUERY_PATTERNS.md) | Data fetching hooks, mutations, cache invalidation |
-| [Operator Development](components/operator/DEVELOPMENT.md) | OwnerReferences, reconciliation patterns, SecurityContext, resource limits |
-| [Security Standards](docs/security-standards.md) | Auth flows, RBAC, token handling, container security |
+| [Backend Conventions](specs/standards/backend/conventions.spec.md) | Go patterns, K8s integration, handler conventions, user-scoped clients |
+| [Backend Error Handling](specs/standards/backend/error-handling.spec.md) | Consistent error patterns across backend and operator |
+| [Backend K8s Client](specs/standards/backend/k8s-client.spec.md) | User token vs. service account — critical for RBAC compliance |
+| [Frontend Conventions](specs/standards/frontend/conventions.spec.md) | NextJS patterns, Shadcn, React Query, component guidelines |
+| [Frontend React Query](specs/standards/frontend/react-query.spec.md) | Data fetching hooks, mutations, cache invalidation |
+| [Operator Conventions](specs/standards/control-plane/conventions.spec.md) | OwnerReferences, reconciliation patterns, SecurityContext, resource limits |
+| [Security Standards](specs/standards/security/security.spec.md) | Auth flows, RBAC, token handling, container security |
 
 ## Component Guides
 
