@@ -6,7 +6,6 @@ import (
 
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/agent"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/ambient"
-	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/scheduledsession"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/apply"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/completion"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/config"
@@ -19,6 +18,7 @@ import (
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/login"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/logout"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/project"
+	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/scheduledsession"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/session"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/start"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/stop"
