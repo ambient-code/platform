@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useMemo, useLayoutEffect, useCallback } from "react";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, ChevronUp } from "lucide-react";
 import { StreamMessage } from "@/components/ui/stream-message";
 import { LoadingDots } from "@/components/ui/message";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,9 @@ import type { QueuedMessageItem } from "@/hooks/use-session-queue";
 
 /** Maximum number of messages rendered at once. Older messages are loaded on demand. */
 const MAX_VISIBLE_MESSAGES = 100;
+
+/** Scroll distance (px) from the top before the scroll-to-top button appears. */
+const SCROLL_TO_TOP_THRESHOLD = 300;
 
 /** Derive a stable React key for any message variant. */
 function getMessageKey(m: MessageObject | ToolUseMessages | HierarchicalToolMessage, idx: number): string {
@@ -66,6 +69,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const [showScrollToTop, setShowScrollToTop] = useState(false);
   // How many messages (counting from the end) are currently rendered.
   const [loadedMessageCount, setLoadedMessageCount] = useState(MAX_VISIBLE_MESSAGES);
   // Refs for scroll-position preservation when loading earlier messages.
@@ -100,9 +104,11 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
   };
 
   const handleScroll = () => {
+    const container = messagesContainerRef.current;
     const bottom = checkIfAtBottom();
-    // Avoid a re-render when the value hasn't changed.
     setIsAtBottom((prev) => (prev === bottom ? prev : bottom));
+    const scrolledPastThreshold = !!container && container.scrollTop > SCROLL_TO_TOP_THRESHOLD;
+    setShowScrollToTop((prev) => (prev === scrolledPastThreshold ? prev : scrolledPastThreshold));
   };
 
   const scrollToBottom = () => {
@@ -111,6 +117,13 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
       container.scrollTop = container.scrollHeight;
     }
   };
+
+  const scrollToTop = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, []);
 
   // Load earlier messages and preserve the user's visual scroll position.
   const loadEarlierMessages = useCallback(() => {
@@ -193,10 +206,11 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
 
   return (
     <div className="flex flex-col h-full">
+      <div className="relative flex-1 min-h-0">
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="flex-1 flex flex-col gap-2 overflow-y-auto p-3 scrollbar-thin"
+        className="h-full flex flex-col gap-2 overflow-y-auto p-3 scrollbar-thin"
       >
         {showWelcomeExperience && welcomeExperienceComponent}
 
@@ -271,6 +285,19 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
             </p>
           </div>
         )}
+      </div>
+
+      {showScrollToTop && (
+        <Button
+          variant="outline"
+          size="icon-sm"
+          onClick={scrollToTop}
+          aria-label="Scroll to top"
+          className="absolute bottom-3 right-5 z-10 rounded-full shadow-md transition-opacity duration-200"
+        >
+          <ChevronUp className="h-4 w-4" />
+        </Button>
+      )}
       </div>
 
       <ChatInputBox

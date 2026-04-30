@@ -675,8 +675,9 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 
 	// Extract spec information from the fresh object
 	spec, _, _ := unstructured.NestedMap(currentObj.Object, "spec")
-	_ = reconcileSpecReposWithPatch(sessionNamespace, name, spec, currentObj, statusPatch)
-	_ = reconcileActiveWorkflowWithPatch(sessionNamespace, name, spec, currentObj, statusPatch)
+	if err := reconcileSpecReposWithPatch(sessionNamespace, name, spec, currentObj, statusPatch); err != nil {
+		log.Printf("[Reconcile] Failed to reconcile repos during pending phase for %s/%s: %v", sessionNamespace, name, err)
+	}
 	prompt, _, _ := unstructured.NestedString(spec, "initialPrompt")
 	timeout, _, _ := unstructured.NestedInt64(spec, "timeout")
 	llmSettings, _, _ := unstructured.NestedMap(spec, "llmSettings")
@@ -1076,6 +1077,15 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 					{Name: "GOOGLE_MCP_CREDENTIALS_DIR", Value: "/workspace/.google_workspace_mcp/credentials"},
 					{Name: "GOOGLE_OAUTH_CLIENT_ID", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_ID")},
 					{Name: "GOOGLE_OAUTH_CLIENT_SECRET", Value: os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET")},
+				}
+
+				// Set the OAuth redirect URI for workspace-mcp so it uses the Ambient backend
+				// callback endpoint instead of defaulting to http://localhost:8000/oauth2callback.
+				if appConfig.BackendPublicURL != "" {
+					base = append(base, corev1.EnvVar{
+						Name:  "GOOGLE_OAUTH_REDIRECT_URI",
+						Value: fmt.Sprintf("%s/oauth2callback", appConfig.BackendPublicURL),
+					})
 				}
 
 				// For e2e: use minimal MCP config (webfetch only, no credentials needed)
