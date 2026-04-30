@@ -6,13 +6,15 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/ambient/tui/views"
 )
 
 var (
 	colorOrange = lipgloss.Color("214")
 	colorCyan   = lipgloss.Color("36")
 	colorGreen  = lipgloss.Color("28")
-	colorRed    = lipgloss.Color("31")
+	colorRed    = lipgloss.Color("196")
 	colorYellow = lipgloss.Color("33")
 	colorDim    = lipgloss.Color("240")
 	colorWhite  = lipgloss.Color("255")
@@ -52,7 +54,7 @@ func (m *Model) View() string {
 func (m *Model) renderHeader() string {
 	age := ""
 	if !m.lastFetch.IsZero() {
-		age = styleDim.Render("  refreshed " + fmtAge(time.Since(m.lastFetch)) + " ago")
+		age = styleDim.Render("  refreshed " + views.FormatAge(time.Since(m.lastFetch)) + " ago")
 	}
 	spin := ""
 	if m.refreshing {
@@ -304,15 +306,4 @@ func truncateLine(s string, w int) string {
 		return string(runes[:w-1]) + "…"
 	}
 	return s
-}
-
-func fmtAge(d time.Duration) string {
-	d = d.Round(time.Second)
-	if d < time.Minute {
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	}
-	if d < time.Hour {
-		return fmt.Sprintf("%dm", int(d.Minutes()))
-	}
-	return fmt.Sprintf("%dh", int(d.Hours()))
 }

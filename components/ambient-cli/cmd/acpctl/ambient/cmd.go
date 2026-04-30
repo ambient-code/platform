@@ -14,41 +14,29 @@ import (
 
 var Cmd = &cobra.Command{
 	Use:   "ambient",
-	Short: "Strategic dashboard — live view of your entire Ambient platform",
-	Long: `Launches an interactive terminal dashboard for the Ambient platform.
+	Short: "Interactive TUI — k9s-style resource browser for the Ambient platform",
+	Long: `Launches an interactive terminal UI for the Ambient platform.
 
-Navigate with ↑↓ (or j/k) to switch sections:
-  Cluster Pods   system pods in the ambient-code namespace
-  Namespaces     all cluster namespaces (fleet-* highlighted)
-  Projects       all projects via SDK
-  Sessions       all sessions with phase status
-  Agents         all agents with current session
-  Stats          summary counts and phase breakdown
+Navigation (k9s-style):
+  :         command mode (tab-complete resource kinds)
+  /         filter mode (regex, /! inverse, /-l label)
+  Enter     drill into selected resource
+  Esc       back / cancel
+  d         describe selected resource
+  q         quit (or back from child view)
+  ?         help overlay
 
-Controls:
-  ↑↓ / j/k       navigate sections
-  Tab            focus command bar
-  Esc            unfocus command bar
-  r              force refresh
-  PgUp/PgDn      scroll main panel
-  q / Ctrl+C     quit
-
-Command bar accepts any shell command (kubectl, oc, acpctl, etc.)
-Output streams line-by-line into the main panel.
-
-Data refreshes automatically every 10 seconds.`,
+Data refreshes automatically every 5 seconds.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		factory, err := connection.NewClientFactory()
 		if err != nil {
 			return fmt.Errorf("connect: %w", err)
 		}
 
-		client, err := connection.NewClientFromConfig()
+		m, err := tui.NewAppModel(factory)
 		if err != nil {
-			return fmt.Errorf("connect: %w", err)
+			return fmt.Errorf("init TUI: %w", err)
 		}
-
-		m := tui.NewModel(client, factory)
 		p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 		if _, err := p.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
