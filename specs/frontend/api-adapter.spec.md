@@ -162,8 +162,8 @@ The adapter layer SHALL be testable in isolation without a running backend or Ne
 #### Scenario: Port interface testing
 
 - GIVEN the port interface for sessions
-- WHEN a test provides a mock adapter implementation
-- THEN React Query hooks can be tested against the mock
+- WHEN a test provides a fake adapter implementation
+- THEN React Query hooks can be tested against the fake
 - AND the test verifies the contract (input types, output types, error types) without network calls
 
 #### Scenario: Adapter unit testing

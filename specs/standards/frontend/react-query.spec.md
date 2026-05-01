@@ -34,7 +34,7 @@ src/services/
 └── queries/                # React Query hooks (consume ports, not api/ directly)
     ├── sessions.ts         # useSessions(), useCreateSession()
     ├── projects.ts
-    ├── __tests__/           # Hook tests against mock adapters
+    ├── __tests__/           # Hook tests against fake adapters
     │   ├── sessions.test.ts
     │   └── projects.test.ts
     └── common.ts           # Query client config
@@ -45,7 +45,7 @@ src/services/
 - `ports/`: Typed contracts — what operations exist and what types they use. No implementation.
 - `adapters/`: Implementations of ports — call `api/` functions, transform responses to canonical types. Fully unit tested.
 - `api/`: Low-level backend API calls (pure functions, no React). Used by adapters only.
-- `queries/`: React Query hooks that consume port interfaces. Tested against mock adapters.
+- `queries/`: React Query hooks that consume port interfaces. Tested against fake adapters.
 
 ## Pattern 1: Query Hook (List Resources)
 
@@ -449,7 +449,7 @@ it('normalizes backend error to ApiError', () => {
 
 Every React Query hook MUST have a test that:
 
-1. Provides a mock adapter implementation
+1. Provides a fake adapter implementation
 2. Verifies the hook returns the correct canonical types
 3. Verifies cache invalidation after mutations
 4. Runs without a backend
@@ -478,5 +478,5 @@ Before merging frontend code:
 - [ ] Optimistic updates for create/delete (where appropriate)
 - [ ] API client layer is pure functions (no hooks)
 - [ ] Every new adapter function has a unit test
-- [ ] Adapter tests use recorded responses, not mocked fetch
-- [ ] Hook tests use mock adapters, not real backends
+- [ ] Adapter tests use recorded responses, not mocked fetch (use fakes)
+- [ ] Hook tests use fake adapters, not real backends
