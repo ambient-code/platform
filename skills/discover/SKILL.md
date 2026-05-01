@@ -36,11 +36,12 @@ Map the work to one or more capability domains:
 | `control-plane` | Operator, reconciliation, scheduling, runner provisioning |
 | `agents` | Agent model, runner, runtime registry, prompts |
 | `integrations` | MCP server, Gerrit, external services, feature flags |
-| `frontend` | UI components, pages, React Query hooks |
+| `frontend` | UI components, pages, React Query hooks. **Always invoke `frontend-development` skill.** |
 | `auth` | OAuth, credentials, RBAC, tokens |
 | `projects` | Project management, settings, workspaces |
 | `cli` | TUI, acpctl commands |
 | `specs` | specs |
+| `frontend` | frontend work |
 
 If unsure, check which `specs/` subdirectories exist:
 
