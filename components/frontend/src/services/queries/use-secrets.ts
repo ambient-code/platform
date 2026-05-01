@@ -1,31 +1,33 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import * as secretsApi from '../api/secrets';
+import { secretsAdapter } from '../adapters/secrets';
+import type { SecretsPort } from '../ports/secrets';
+import type { Secret } from '../ports/types';
 
-export function useSecretsList(projectName: string) {
+export function useSecretsList(projectName: string, port: SecretsPort = secretsAdapter) {
   return useQuery({
     queryKey: ['secrets', 'list', projectName],
-    queryFn: () => secretsApi.getSecretsList(projectName),
+    queryFn: () => port.getSecretsList(projectName),
     enabled: !!projectName,
   });
 }
 
-export function useSecretsConfig(projectName: string) {
+export function useSecretsConfig(projectName: string, port: SecretsPort = secretsAdapter) {
   return useQuery({
     queryKey: ['secrets', 'config', projectName],
-    queryFn: () => secretsApi.getSecretsConfig(projectName),
+    queryFn: () => port.getSecretsConfig(projectName),
     enabled: !!projectName,
   });
 }
 
-export function useSecretsValues(projectName: string) {
+export function useSecretsValues(projectName: string, port: SecretsPort = secretsAdapter) {
   return useQuery({
     queryKey: ['secrets', 'values', projectName],
-    queryFn: () => secretsApi.getSecretsValues(projectName),
+    queryFn: () => port.getSecretsValues(projectName),
     enabled: !!projectName,
   });
 }
 
-export function useUpdateSecretsConfig() {
+export function useUpdateSecretsConfig(port: SecretsPort = secretsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -35,16 +37,15 @@ export function useUpdateSecretsConfig() {
     }: {
       projectName: string;
       secretName: string;
-    }) => secretsApi.updateSecretsConfig(projectName, secretName),
+    }) => port.updateSecretsConfig(projectName, secretName),
     onSuccess: (_, { projectName }) => {
       queryClient.invalidateQueries({ queryKey: ['secrets', 'config', projectName] });
-      // Also invalidate values since they come from the configured secret
       queryClient.invalidateQueries({ queryKey: ['secrets', 'values', projectName] });
     },
   });
 }
 
-export function useUpdateSecrets() {
+export function useUpdateSecrets(port: SecretsPort = secretsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -53,25 +54,23 @@ export function useUpdateSecrets() {
       secrets,
     }: {
       projectName: string;
-      secrets: secretsApi.Secret[];
-    }) => secretsApi.updateSecrets(projectName, secrets),
+      secrets: Secret[];
+    }) => port.updateSecrets(projectName, secrets),
     onSuccess: (_, { projectName }) => {
       queryClient.invalidateQueries({ queryKey: ['secrets', 'values', projectName] });
     },
   });
 }
 
-// Integration secrets hooks (ambient-non-vertex-integrations)
-
-export function useIntegrationSecrets(projectName: string) {
+export function useIntegrationSecrets(projectName: string, port: SecretsPort = secretsAdapter) {
   return useQuery({
     queryKey: ['integration-secrets', projectName],
-    queryFn: () => secretsApi.getIntegrationSecrets(projectName),
+    queryFn: () => port.getIntegrationSecrets(projectName),
     enabled: !!projectName,
   });
 }
 
-export function useUpdateIntegrationSecrets() {
+export function useUpdateIntegrationSecrets(port: SecretsPort = secretsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -80,8 +79,8 @@ export function useUpdateIntegrationSecrets() {
       secrets,
     }: {
       projectName: string;
-      secrets: secretsApi.Secret[];
-    }) => secretsApi.updateIntegrationSecrets(projectName, secrets),
+      secrets: Secret[];
+    }) => port.updateIntegrationSecrets(projectName, secrets),
     onSuccess: (_, { projectName }) => {
       queryClient.invalidateQueries({ queryKey: ['integration-secrets', projectName] });
     },

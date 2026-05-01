@@ -25,8 +25,12 @@ vi.mock('@/services/api/projects', () => ({
     { name: 'other', displayName: 'Other' },
   ]),
   listProjectsPaginated: vi.fn().mockResolvedValue({
-    items: [{ name: 'test-project', displayName: 'Test Project' }],
-    totalCount: 1,
+    items: [
+      { name: 'test-project', displayName: 'Test Project' },
+      { name: 'other', displayName: 'Other' },
+    ],
+    totalCount: 2,
+    hasMore: false,
   }),
   getProject: vi.fn().mockResolvedValue({ name: 'test-project', displayName: 'Test Project' }),
   createProject: vi.fn().mockResolvedValue({ name: 'new-project', displayName: 'New' }),
@@ -36,6 +40,9 @@ vi.mock('@/services/api/projects', () => ({
   addProjectPermission: vi.fn().mockResolvedValue(undefined),
   removeProjectPermission: vi.fn().mockResolvedValue(undefined),
   getProjectIntegrationStatus: vi.fn().mockResolvedValue({ github: { connected: true } }),
+  getProjectMcpServers: vi.fn().mockResolvedValue({}),
+  updateProjectMcpServers: vi.fn().mockResolvedValue(undefined),
+  getProjectAccess: vi.fn().mockResolvedValue({ project: 'test-project', allowed: true, userRole: 'admin' }),
 }));
 
 function createWrapper() {
@@ -70,7 +77,8 @@ describe('useProjectsPaginated', () => {
     const wrapper = createWrapper();
     const { result } = renderHook(() => useProjectsPaginated({ limit: 10 }), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual({ items: [{ name: 'test-project', displayName: 'Test Project' }], totalCount: 1 });
+    expect(result.current.data?.items).toHaveLength(2);
+    expect(result.current.data?.totalCount).toBe(2);
   });
 });
 
