@@ -1,9 +1,6 @@
-/**
- * React Query hooks for scheduled sessions
- */
-
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import * as scheduledSessionsApi from '../api/scheduled-sessions';
+import { scheduledSessionsAdapter } from '../adapters/scheduled-sessions';
+import type { ScheduledSessionsPort } from '../ports/scheduled-sessions';
 import type {
   CreateScheduledSessionRequest,
   UpdateScheduledSessionRequest,
@@ -21,32 +18,32 @@ export const scheduledSessionKeys = {
     [...scheduledSessionKeys.detail(projectName, name), 'runs'] as const,
 };
 
-export function useScheduledSessions(projectName: string) {
+export function useScheduledSessions(projectName: string, port: ScheduledSessionsPort = scheduledSessionsAdapter) {
   return useQuery({
     queryKey: scheduledSessionKeys.list(projectName),
-    queryFn: () => scheduledSessionsApi.listScheduledSessions(projectName),
+    queryFn: () => port.listScheduledSessions(projectName),
     enabled: !!projectName,
     placeholderData: keepPreviousData,
   });
 }
 
-export function useScheduledSession(projectName: string, name: string) {
+export function useScheduledSession(projectName: string, name: string, port: ScheduledSessionsPort = scheduledSessionsAdapter) {
   return useQuery({
     queryKey: scheduledSessionKeys.detail(projectName, name),
-    queryFn: () => scheduledSessionsApi.getScheduledSession(projectName, name),
+    queryFn: () => port.getScheduledSession(projectName, name),
     enabled: !!projectName && !!name,
   });
 }
 
-export function useScheduledSessionRuns(projectName: string, name: string) {
+export function useScheduledSessionRuns(projectName: string, name: string, port: ScheduledSessionsPort = scheduledSessionsAdapter) {
   return useQuery({
     queryKey: scheduledSessionKeys.runs(projectName, name),
-    queryFn: () => scheduledSessionsApi.listScheduledSessionRuns(projectName, name),
+    queryFn: () => port.listScheduledSessionRuns(projectName, name),
     enabled: !!projectName && !!name,
   });
 }
 
-export function useCreateScheduledSession() {
+export function useCreateScheduledSession(port: ScheduledSessionsPort = scheduledSessionsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -56,7 +53,7 @@ export function useCreateScheduledSession() {
     }: {
       projectName: string;
       data: CreateScheduledSessionRequest;
-    }) => scheduledSessionsApi.createScheduledSession(projectName, data),
+    }) => port.createScheduledSession(projectName, data),
     onSuccess: (_result, { projectName }) => {
       queryClient.invalidateQueries({
         queryKey: scheduledSessionKeys.list(projectName),
@@ -66,7 +63,7 @@ export function useCreateScheduledSession() {
   });
 }
 
-export function useUpdateScheduledSession() {
+export function useUpdateScheduledSession(port: ScheduledSessionsPort = scheduledSessionsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -78,7 +75,7 @@ export function useUpdateScheduledSession() {
       projectName: string;
       name: string;
       data: UpdateScheduledSessionRequest;
-    }) => scheduledSessionsApi.updateScheduledSession(projectName, name, data),
+    }) => port.updateScheduledSession(projectName, name, data),
     onSuccess: (_result, { projectName, name }) => {
       queryClient.invalidateQueries({
         queryKey: scheduledSessionKeys.detail(projectName, name),
@@ -92,7 +89,7 @@ export function useUpdateScheduledSession() {
   });
 }
 
-export function useDeleteScheduledSession() {
+export function useDeleteScheduledSession(port: ScheduledSessionsPort = scheduledSessionsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -102,7 +99,7 @@ export function useDeleteScheduledSession() {
     }: {
       projectName: string;
       name: string;
-    }) => scheduledSessionsApi.deleteScheduledSession(projectName, name),
+    }) => port.deleteScheduledSession(projectName, name),
     onSuccess: (_data, { projectName, name }) => {
       queryClient.removeQueries({
         queryKey: scheduledSessionKeys.detail(projectName, name),
@@ -115,7 +112,7 @@ export function useDeleteScheduledSession() {
   });
 }
 
-export function useSuspendScheduledSession() {
+export function useSuspendScheduledSession(port: ScheduledSessionsPort = scheduledSessionsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -125,7 +122,7 @@ export function useSuspendScheduledSession() {
     }: {
       projectName: string;
       name: string;
-    }) => scheduledSessionsApi.suspendScheduledSession(projectName, name),
+    }) => port.suspendScheduledSession(projectName, name),
     onSuccess: (_result, { projectName, name }) => {
       queryClient.invalidateQueries({
         queryKey: scheduledSessionKeys.detail(projectName, name),
@@ -139,7 +136,7 @@ export function useSuspendScheduledSession() {
   });
 }
 
-export function useResumeScheduledSession() {
+export function useResumeScheduledSession(port: ScheduledSessionsPort = scheduledSessionsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -149,7 +146,7 @@ export function useResumeScheduledSession() {
     }: {
       projectName: string;
       name: string;
-    }) => scheduledSessionsApi.resumeScheduledSession(projectName, name),
+    }) => port.resumeScheduledSession(projectName, name),
     onSuccess: (_result, { projectName, name }) => {
       queryClient.invalidateQueries({
         queryKey: scheduledSessionKeys.detail(projectName, name),
@@ -163,7 +160,7 @@ export function useResumeScheduledSession() {
   });
 }
 
-export function useTriggerScheduledSession() {
+export function useTriggerScheduledSession(port: ScheduledSessionsPort = scheduledSessionsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -173,7 +170,7 @@ export function useTriggerScheduledSession() {
     }: {
       projectName: string;
       name: string;
-    }) => scheduledSessionsApi.triggerScheduledSession(projectName, name),
+    }) => port.triggerScheduledSession(projectName, name),
     onSuccess: (_result, { projectName, name }) => {
       queryClient.invalidateQueries({
         queryKey: scheduledSessionKeys.runs(projectName, name),

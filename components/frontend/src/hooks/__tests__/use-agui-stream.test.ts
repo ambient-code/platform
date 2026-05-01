@@ -267,7 +267,7 @@ describe('useAGUIStream', () => {
         }
       });
 
-      expect(error?.message).toContain('Failed to send message');
+      expect(error?.message).toContain('Server error');
       expect(result.current.state.status).toBe('error');
       consoleSpy.mockRestore();
     });

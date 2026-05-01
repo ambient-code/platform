@@ -38,6 +38,9 @@ vi.mock('@/services/api/sessions', () => ({
   updateSessionDisplayName: vi.fn().mockResolvedValue(undefined),
   getSessionExport: vi.fn().mockResolvedValue({ events: [], messages: [] }),
   getReposStatus: vi.fn().mockResolvedValue({ repos: [] }),
+  updateSessionMcpServers: vi.fn().mockResolvedValue(undefined),
+  switchSessionModel: vi.fn().mockResolvedValue(undefined),
+  saveToGoogleDrive: vi.fn().mockResolvedValue(undefined),
 }));
 
 function createWrapper() {

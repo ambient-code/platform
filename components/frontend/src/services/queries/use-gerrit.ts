@@ -1,18 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import * as gerritAuthApi from '../api/gerrit-auth'
+import { gerritAdapter } from '../adapters/gerrit'
+import type { GerritPort } from '../ports/gerrit'
 
-export function useGerritInstances() {
+export function useGerritInstances(port: GerritPort = gerritAdapter) {
   return useQuery({
     queryKey: ['gerrit', 'instances'],
-    queryFn: () => gerritAuthApi.getGerritInstances(),
+    queryFn: () => port.getGerritInstances(),
   })
 }
 
-export function useConnectGerrit() {
+export function useConnectGerrit(port: GerritPort = gerritAdapter) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: gerritAuthApi.connectGerrit,
+    mutationFn: port.connectGerrit,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] })
       queryClient.invalidateQueries({ queryKey: ['gerrit', 'instances'] })
@@ -20,11 +21,11 @@ export function useConnectGerrit() {
   })
 }
 
-export function useDisconnectGerrit() {
+export function useDisconnectGerrit(port: GerritPort = gerritAdapter) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: gerritAuthApi.disconnectGerrit,
+    mutationFn: port.disconnectGerrit,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] })
       queryClient.invalidateQueries({ queryKey: ['gerrit', 'instances'] })
@@ -32,8 +33,8 @@ export function useDisconnectGerrit() {
   })
 }
 
-export function useTestGerritConnection() {
+export function useTestGerritConnection(port: GerritPort = gerritAdapter) {
   return useMutation({
-    mutationFn: gerritAuthApi.testGerritConnection,
+    mutationFn: port.testGerritConnection,
   })
 }

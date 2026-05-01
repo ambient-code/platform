@@ -1,11 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import * as codeRabbitAuthApi from '../api/coderabbit-auth'
+import { coderabbitAdapter } from '../adapters/coderabbit'
+import type { CodeRabbitPort } from '../ports/coderabbit'
 
-export function useConnectCodeRabbit() {
+export function useConnectCodeRabbit(port: CodeRabbitPort = coderabbitAdapter) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: codeRabbitAuthApi.connectCodeRabbit,
+    mutationFn: port.connectCodeRabbit,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['coderabbit', 'status'] })
       queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] })
@@ -13,11 +14,11 @@ export function useConnectCodeRabbit() {
   })
 }
 
-export function useDisconnectCodeRabbit() {
+export function useDisconnectCodeRabbit(port: CodeRabbitPort = coderabbitAdapter) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: codeRabbitAuthApi.disconnectCodeRabbit,
+    mutationFn: port.disconnectCodeRabbit,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['coderabbit', 'status'] })
       queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] })

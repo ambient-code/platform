@@ -1,19 +1,12 @@
-/**
- * React Query hooks for cluster information
- */
-
 import { useQuery } from '@tanstack/react-query';
-import { getClusterInfo } from '@/services/api/cluster';
+import { clusterAdapter } from '../adapters/cluster';
+import type { ClusterPort } from '../ports/cluster';
 
-/**
- * Hook to get cluster information (OpenShift vs Kubernetes)
- * Detects cluster type by calling /api/cluster-info endpoint
- */
-export function useClusterInfo() {
+export function useClusterInfo(port: ClusterPort = clusterAdapter) {
   return useQuery({
     queryKey: ['cluster-info'],
-    queryFn: getClusterInfo,
-    staleTime: Infinity, // Cluster type doesn't change, cache forever
-    retry: 3, // Retry a few times on failure
+    queryFn: port.getClusterInfo,
+    staleTime: Infinity,
+    retry: 3,
   });
 }
