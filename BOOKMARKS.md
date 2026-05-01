@@ -38,9 +38,9 @@ Agent-consumable procedures — step-by-step implementation workflows.
 
 | Workflow | Domain | Purpose |
 |----------|--------|---------|
-| [Ambient Model](.agents/workflows/sessions/ambient-model.workflow.md) | sessions | Spec-driven implementation pipeline for data model changes |
-| [Control Plane](.agents/workflows/control-plane/control-plane.workflow.md) | control-plane | CP + Runner implementation workflow |
-| [MCP Server](.agents/workflows/integrations/mcp-server.workflow.md) | integrations | MCP server implementation workflow |
+| [Ambient Model](workflows/sessions/ambient-model.workflow.md) | sessions | Spec-driven implementation pipeline for data model changes |
+| [Control Plane](workflows/control-plane/control-plane.workflow.md) | control-plane | CP + Runner implementation workflow |
+| [MCP Server](workflows/integrations/mcp-server.workflow.md) | integrations | MCP server implementation workflow |
 
 ## Standards
 

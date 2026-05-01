@@ -23,7 +23,7 @@ $ARGUMENTS
 Read these two files in full before proceeding:
 
 1. `specs/index.spec.md` — what a spec is, the required format, naming conventions, and what does and does not belong
-2. `.agents/workflows/specs/spec-change.workflow.md` — the full spec change workflow (framing, grounding, drafting, critic passes, synthesis)
+2. `workflows/specs/spec-change.workflow.md` — the full spec change workflow (framing, grounding, drafting, critic passes, synthesis)
 
 Then follow the workflow phases in order.
 

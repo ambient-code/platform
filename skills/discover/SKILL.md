@@ -55,7 +55,7 @@ For every relevant domain, `cd` into its spec directory and list available skill
 ```bash
 cd specs/{domain}
 ls .claude/skills/ 2>/dev/null
-ls .agents/skills/ 2>/dev/null
+ls skills/ 2>/dev/null
 ```
 
 Read the SKILL.md of any discovered skill that looks relevant to the task at hand.

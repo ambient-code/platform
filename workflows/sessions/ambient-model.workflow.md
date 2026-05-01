@@ -454,7 +454,7 @@ The old Gin/K8s backend (`components/backend/`) is covered by `.claude/context/b
 | Artifact              | Location                                             | Owner             |
 | --------------------- | ---------------------------------------------------- | ----------------- |
 | Spec                  | `specs/sessions/ambient-model.spec.md`               | Human / consensus |
-| This workflow         | `.agents/workflows/sessions/ambient-model.workflow.md` | Updated each run  |
+| This workflow         | `workflows/sessions/ambient-model.workflow.md` | Updated each run  |
 | OpenAPI spec          | `components/ambient-api-server/openapi/openapi.yaml` | API wave          |
 | Generated SDK         | `components/ambient-sdk/go-sdk/`                     | SDK wave          |
 | Wave PRs              | GitHub, tagged by wave and component                 | Per wave          |

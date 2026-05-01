@@ -23,7 +23,7 @@ You are executing the Ambient Code Platform development workflow. This skill is 
 
 **Remind the human every 10 turns to re-read this skill.** Context compaction can lose workflow state. At turns 10, 20, 30, etc., say:
 
-> "Reminder: we are on turn N. Re-reading `.agents/skills/devflow/SKILL.md` to refresh workflow state."
+> "Reminder: we are on turn N. Re-reading `skills/devflow/SKILL.md` to refresh workflow state."
 
 Then re-read this file before continuing.
 
@@ -78,7 +78,7 @@ Every component has a spec file. Load the spec for the component being changed:
 
 | Component | Spec | Guide |
 |-----------|------|-------|
-| Data Model / API / CLI / RBAC | `specs/sessions/ambient-model.spec.md` | `.agents/workflows/sessions/ambient-model.workflow.md` |
+| Data Model / API / CLI / RBAC | `specs/sessions/ambient-model.spec.md` | `workflows/sessions/ambient-model.workflow.md` |
 
 ### 2b. Modify the Spec
 
@@ -111,7 +111,7 @@ After spec acceptance (or in parallel for human workflow), load the implementati
 
 | Component | Guide | Context |
 |-----------|-------|---------|
-| Data Model / API | `.agents/workflows/sessions/ambient-model.workflow.md` | `specs/standards/backend/conventions.spec.md` |
+| Data Model / API | `workflows/sessions/ambient-model.workflow.md` | `specs/standards/backend/conventions.spec.md` |
 | SDK | (workflow section in ambient-model.workflow.md Wave 3) | `specs/standards/backend/conventions.spec.md` |
 | CLI | (guide section Wave 5) | `specs/standards/backend/conventions.spec.md` |
 | Control Plane | (guide section Wave 4) | `specs/standards/control-plane/conventions.spec.md` |
@@ -134,7 +134,7 @@ Commits are ordered deliberately:
 
 1. **Self-improvement commit (first).** Any changes to guides, skills, workflows, or this devflow skill. Group all such changes into one commit:
    ```bash
-   git add .agents/skills/ .agents/workflows/
+   git add skills/ workflows/
    git commit -m "chore(skills): self-improvement updates from <context>"
    ```
    - Agentic workflow: this is the first commit on the branch.
@@ -345,17 +345,17 @@ But prefer fixing the lint/format issue instead.
 
 | Skill/Context | When to use |
 |---------------|-------------|
-| `.agents/skills/sessions/ambient-api-server/SKILL.md` | Working in `components/ambient-api-server/` |
-| `.agents/skills/control-plane/dev-cluster/SKILL.md` | Managing kind clusters for testing |
-| `.agents/skills/integrations/grpc-dev/SKILL.md` | gRPC streaming, AG-UI events |
-| `.agents/skills/control-plane/ambient-pr-test/SKILL.md` | PR validation on MPP dev cluster |
+| `skills/sessions/ambient-api-server/SKILL.md` | Working in `components/ambient-api-server/` |
+| `skills/control-plane/dev-cluster/SKILL.md` | Managing kind clusters for testing |
+| `skills/integrations/grpc-dev/SKILL.md` | gRPC streaming, AG-UI events |
+| `skills/control-plane/ambient-pr-test/SKILL.md` | PR validation on MPP dev cluster |
 | `specs/standards/backend/conventions.spec.md` | API server plugin architecture, OpenAPI, testing |
 | `specs/standards/backend/conventions.spec.md` | CLI command patterns |
 | `specs/standards/backend/conventions.spec.md` | SDK generation |
 | `specs/standards/control-plane/conventions.spec.md` | CP fan-out, runner contract |
 | `specs/standards/frontend/conventions.spec.md` | Frontend build, React Query |
 | `specs/sessions/ambient-model.spec.md` | Data model spec (source of truth) |
-| `.agents/workflows/sessions/ambient-model.workflow.md` | Implementation workflow (wave-based) |
+| `workflows/sessions/ambient-model.workflow.md` | Implementation workflow (wave-based) |
 
 ---
 

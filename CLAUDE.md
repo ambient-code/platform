@@ -19,8 +19,8 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 - `e2e/` - Cypress end-to-end tests
 - `docs/` - Astro Starlight documentation site
 - `specs/` - Desired state of the system ([sessions](specs/sessions/), [agents](specs/agents/), [control-plane](specs/control-plane/), [integrations](specs/integrations/), [standards](specs/standards/))
-- `.agents/workflows/` - Agent-consumable procedures ([sessions](.agents/workflows/sessions/), [control-plane](.agents/workflows/control-plane/), [integrations](.agents/workflows/integrations/))
-- `.agents/skills/` - [Agent Skills](https://agentskills.io) (`.claude/skills` symlinks here; domain symlinks in `specs/{domain}/.agents/skills`)
+- `workflows/` - Agent-consumable procedures ([sessions](workflows/sessions/), [control-plane](workflows/control-plane/), [integrations](workflows/integrations/))
+- `skills/` - [Agent Skills](https://agentskills.io) (`.claude/skills` symlinks here; domain symlinks in `specs/{domain}/.agents/skills`)
 
 ## Key Files
 

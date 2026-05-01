@@ -3,7 +3,7 @@
 **Date:** 2026-03-20
 **Status:** Proposed — Pending Consensus
 **Last Updated:** 2026-04-28 — added `ScheduledSession` Kind; added session operational sub-resources (workspace, files, git, repos, tasks, runner protocol); added generic proxy surface for backend passthrough; updated coverage matrix: all ScheduledSession commands implemented; session sub-resources (workspace/files/git/repos/operational/runner protocol) implemented in API server; generic proxy plugin implemented
-**Workflow:** `../../.agents/workflows/sessions/ambient-model.workflow.md` — implementation waves, gap table, build commands, run log
+**Workflow:** `../../workflows/sessions/ambient-model.workflow.md` — implementation waves, gap table, build commands, run log
 **Design:** `credentials-session.md` — full Credential Kind design spec and rationale
 
 ---
