@@ -1113,6 +1113,23 @@ objects:
     - selfsubjectaccessreviews
     verbs:
     - create
+  # MLflow experiment tracking permissions (namespace-scoped CRDs)
+  # Required to grant MLflow access to session runner service accounts
+  # Sessions need these permissions to log experiments/runs to MLflow tracking server
+  # Uses Kubeflow MLflow Operator CRDs for Kubernetes-native RBAC authentication
+  - apiGroups:
+    - mlflow.kubeflow.org
+    resources:
+    - experiments
+    - runs
+    verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: ClusterRole
   metadata:
