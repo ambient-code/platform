@@ -181,7 +181,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions, port: SessionEvents
         }, delay)
       }
     },
-    [projectName, sessionName, onConnected, onError, onDisconnected],
+    [projectName, sessionName, port, onConnected, onError, onDisconnected],
   )
 
   // Disconnect from the event stream
@@ -221,7 +221,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions, port: SessionEvents
         throw error
       }
     },
-    [projectName, sessionName],
+    [projectName, sessionName, port],
   )
 
   // Send a message to start/continue the conversation

@@ -18,8 +18,9 @@ export function createSessionEventsAdapter(): SessionEventsPort {
         body: JSON.stringify(payload),
       })
       if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(errorText)
+        let errorText = ''
+        try { errorText = await response.text() } catch { /* ignore */ }
+        throw new Error(`Failed to send message: ${errorText || response.statusText}`)
       }
       return response.json()
     },
@@ -32,7 +33,9 @@ export function createSessionEventsAdapter(): SessionEventsPort {
         body: JSON.stringify({ runId }),
       })
       if (!response.ok) {
-        throw new Error(`Failed to interrupt: ${response.statusText}`)
+        let errorText = ''
+        try { errorText = await response.text() } catch { /* ignore */ }
+        throw new Error(`Failed to interrupt: ${errorText || response.statusText}`)
       }
     },
   }

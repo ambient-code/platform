@@ -6,7 +6,7 @@ export function toPaginatedResult<T>(
   response: PaginatedResponse<T>,
   fetchPage: (params: PaginationParams) => Promise<PaginatedResponse<T>>,
 ): PaginatedResult<T> {
-  const limit = response.limit || DEFAULT_PAGE_SIZE
+  const limit = response.limit ?? DEFAULT_PAGE_SIZE
   const nextOffset = (response.offset ?? 0) + limit
 
   return {
@@ -15,7 +15,11 @@ export function toPaginatedResult<T>(
     hasMore: response.hasMore,
     nextPage: response.hasMore
       ? async () => {
-          const next = await fetchPage({ offset: nextOffset, limit })
+          const params: PaginationParams = { offset: nextOffset, limit }
+          if (response.continue) {
+            params.continue = response.continue
+          }
+          const next = await fetchPage(params)
           return toPaginatedResult(next, fetchPage)
         }
       : undefined,

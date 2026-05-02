@@ -1,4 +1,3 @@
-export type { PaginatedResult } from './types'
 export * from './types'
 
 export type { SessionsPort } from './sessions'

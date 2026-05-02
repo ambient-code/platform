@@ -18,7 +18,6 @@ export function createSessionsAdapter(api: SessionsApi): SessionsPort {
     deleteSession: api.deleteSession,
     getSessionPodEvents: api.getSessionPodEvents,
     updateSessionDisplayName: api.updateSessionDisplayName,
-    updateSessionMcpServers: api.updateSessionMcpServers,
     getSessionExport: api.getSessionExport,
     switchSessionModel: api.switchSessionModel,
     saveToGoogleDrive: api.saveToGoogleDrive,
