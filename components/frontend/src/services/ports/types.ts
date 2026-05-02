@@ -1,7 +1,7 @@
 export type { AgenticSession, AgenticSessionSpec, AgenticSessionStatus, AgenticSessionPhase, LLMSettings, SessionRepo, ReconciledRepo, ReconciledWorkflow, SessionCondition, CreateAgenticSessionRequest, CreateAgenticSessionResponse, StopAgenticSessionRequest, CloneAgenticSessionRequest, Message, ContentBlock, TextBlock, ReasoningBlock, ToolUseBlock, ToolResultBlock, UserMessage, AgentMessage, SystemMessage, ResultMessage, ToolUseMessages, StoredAgentStatus, BotAccountRef, ResourceOverrides } from '@/types/api/sessions'
 export type { Project, ProjectStatus, CreateProjectRequest, UpdateProjectRequest, PermissionAssignment, PermissionRole, SubjectType } from '@/types/api/projects'
 export type { PaginationParams, PaginatedResponse, ApiError } from '@/types/api/common'
-export { ApiClientError, DEFAULT_PAGE_SIZE } from '@/types/api/common'
+export type { ApiClientError } from '@/types/api/common'
 export type { ScheduledSession, CreateScheduledSessionRequest, UpdateScheduledSessionRequest } from '@/types/api/scheduled-sessions'
 export type { GitHubStatus, GitHubFork, CreateForkRequest, PRDiff, CreatePRRequest, GitHubConnectRequest, ListBranchesResponse } from '@/types/api/github'
 export type { LLMModel, ListModelsResponse } from '@/types/api/models'
