@@ -18,7 +18,8 @@ export function createSessionEventsAdapter(): SessionEventsPort {
         body: JSON.stringify(payload),
       })
       if (!response.ok) {
-        const errorText = await response.text()
+        let errorText = ''
+        try { errorText = await response.text() } catch { /* ignore */ }
         throw new Error(`Failed to send message: ${errorText || response.statusText}`)
       }
       return response.json()

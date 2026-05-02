@@ -177,6 +177,7 @@ export type ListAgenticSessionsPaginatedResponse = {
   offset: number;
   hasMore: boolean;
   nextOffset?: number;
+  continue?: string;
 };
 
 export type StopAgenticSessionRequest = {
