@@ -1,59 +1,36 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createSessionEventsAdapter } from '../session-events'
 
+const fakeEventSource = {} as EventSource
+
+const fakeApi = {
+  createEventSource: vi.fn().mockReturnValue(fakeEventSource),
+  sendMessage: vi.fn().mockResolvedValue({ runId: 'run-abc' }),
+  interrupt: vi.fn().mockResolvedValue(undefined),
+}
+
 describe('sessionEventsAdapter', () => {
-  const adapter = createSessionEventsAdapter()
+  const adapter = createSessionEventsAdapter(fakeApi)
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
 
   describe('createEventSource', () => {
-    it('creates EventSource with correct URL', () => {
-      const MockEventSource = vi.fn()
-      vi.stubGlobal('EventSource', MockEventSource)
-
-      adapter.createEventSource('my-project', 'my-session')
-      expect(MockEventSource).toHaveBeenCalledWith(
-        '/api/projects/my-project/agentic-sessions/my-session/agui/events'
-      )
-
-      vi.unstubAllGlobals()
+    it('delegates to api.createEventSource', () => {
+      const result = adapter.createEventSource('my-project', 'my-session')
+      expect(fakeApi.createEventSource).toHaveBeenCalledWith('my-project', 'my-session')
+      expect(result).toBe(fakeEventSource)
     })
 
-    it('appends runId as query parameter', () => {
-      const MockEventSource = vi.fn()
-      vi.stubGlobal('EventSource', MockEventSource)
-
+    it('forwards runId parameter', () => {
       adapter.createEventSource('proj', 'sess', 'run-123')
-      expect(MockEventSource).toHaveBeenCalledWith(
-        '/api/projects/proj/agentic-sessions/sess/agui/events?runId=run-123'
-      )
-
-      vi.unstubAllGlobals()
-    })
-
-    it('encodes special characters in project and session names', () => {
-      const MockEventSource = vi.fn()
-      vi.stubGlobal('EventSource', MockEventSource)
-
-      adapter.createEventSource('my project', 'my session')
-      expect(MockEventSource).toHaveBeenCalledWith(
-        '/api/projects/my%20project/agentic-sessions/my%20session/agui/events'
-      )
-
-      vi.unstubAllGlobals()
+      expect(fakeApi.createEventSource).toHaveBeenCalledWith('proj', 'sess', 'run-123')
     })
   })
 
   describe('sendMessage', () => {
-    beforeEach(() => {
-      vi.restoreAllMocks()
-    })
-
-    it('sends POST request with payload', async () => {
-      const mockFetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ runId: 'run-abc' }),
-      })
-      vi.stubGlobal('fetch', mockFetch)
-
+    it('delegates to api.sendMessage', async () => {
       const payload = {
         threadId: 'thread-1',
         messages: [{ id: '1', role: 'user' as const, content: 'Hello' }],
@@ -61,24 +38,12 @@ describe('sessionEventsAdapter', () => {
       }
 
       const result = await adapter.sendMessage('proj', 'sess', payload)
+      expect(fakeApi.sendMessage).toHaveBeenCalledWith('proj', 'sess', payload)
       expect(result).toEqual({ runId: 'run-abc' })
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/projects/proj/agentic-sessions/sess/agui/run',
-        expect.objectContaining({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        })
-      )
-
-      vi.unstubAllGlobals()
     })
 
-    it('throws on non-ok response', async () => {
-      const mockFetch = vi.fn().mockResolvedValue({
-        ok: false,
-        text: () => Promise.resolve('Bad request'),
-      })
-      vi.stubGlobal('fetch', mockFetch)
+    it('propagates errors from api', async () => {
+      fakeApi.sendMessage.mockRejectedValueOnce(new Error('Server error'))
 
       const payload = {
         threadId: 'thread-1',
@@ -86,43 +51,20 @@ describe('sessionEventsAdapter', () => {
         tools: [],
       }
 
-      await expect(adapter.sendMessage('proj', 'sess', payload)).rejects.toThrow('Bad request')
-
-      vi.unstubAllGlobals()
+      await expect(adapter.sendMessage('proj', 'sess', payload)).rejects.toThrow('Server error')
     })
   })
 
   describe('interrupt', () => {
-    beforeEach(() => {
-      vi.restoreAllMocks()
-    })
-
-    it('sends POST to interrupt endpoint', async () => {
-      const mockFetch = vi.fn().mockResolvedValue({ ok: true })
-      vi.stubGlobal('fetch', mockFetch)
-
+    it('delegates to api.interrupt', async () => {
       await adapter.interrupt('proj', 'sess', 'run-123')
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/projects/proj/agentic-sessions/sess/agui/interrupt',
-        expect.objectContaining({
-          method: 'POST',
-          body: JSON.stringify({ runId: 'run-123' }),
-        })
-      )
-
-      vi.unstubAllGlobals()
+      expect(fakeApi.interrupt).toHaveBeenCalledWith('proj', 'sess', 'run-123')
     })
 
-    it('throws on non-ok response', async () => {
-      const mockFetch = vi.fn().mockResolvedValue({
-        ok: false,
-        statusText: 'Internal Server Error',
-      })
-      vi.stubGlobal('fetch', mockFetch)
+    it('propagates errors from api', async () => {
+      fakeApi.interrupt.mockRejectedValueOnce(new Error('Failed to interrupt'))
 
       await expect(adapter.interrupt('proj', 'sess', 'run-123')).rejects.toThrow('Failed to interrupt')
-
-      vi.unstubAllGlobals()
     })
   })
 })
