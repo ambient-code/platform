@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { repoAdapter } from '../adapters/repo';
 import type { RepoPort } from '../ports/repo';
+import { BACKEND_VERSION } from './query-keys';
 
 type RepoParams = {
   repo: string;
@@ -9,7 +10,7 @@ type RepoParams = {
 };
 
 export const repoKeys = {
-  all: ['repo'] as const,
+  all: [BACKEND_VERSION, 'repo'] as const,
   blobs: () => [...repoKeys.all, 'blob'] as const,
   blob: (projectName: string, params: RepoParams) =>
     [...repoKeys.blobs(), projectName, params.repo, params.ref, params.path] as const,

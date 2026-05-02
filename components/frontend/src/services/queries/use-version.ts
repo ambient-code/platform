@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { versionAdapter } from '../adapters/version';
 import type { VersionPort } from '../ports/version';
+import { BACKEND_VERSION } from './query-keys';
 
 export const versionKeys = {
-  all: ['version'] as const,
+  all: [BACKEND_VERSION, 'version'] as const,
   current: () => [...versionKeys.all, 'current'] as const,
 };
 

@@ -43,11 +43,11 @@ function createWrapper() {
 
 describe('workspaceKeys', () => {
   it('generates correct query keys', () => {
-    expect(workspaceKeys.all).toEqual(['workspace']);
-    expect(workspaceKeys.list('proj', 'sess')).toEqual(['workspace', 'list', 'proj', 'sess', undefined]);
-    expect(workspaceKeys.list('proj', 'sess', '/src')).toEqual(['workspace', 'list', 'proj', 'sess', '/src']);
-    expect(workspaceKeys.file('proj', 'sess', 'f.txt')).toEqual(['workspace', 'file', 'proj', 'sess', 'f.txt']);
-    expect(workspaceKeys.diff('proj', 'sess', 0)).toEqual(['workspace', 'diff', 'proj', 'sess', 0]);
+    expect(workspaceKeys.all).toEqual(['v1', 'workspace']);
+    expect(workspaceKeys.list('proj', 'sess')).toEqual(['v1', 'workspace', 'list', 'proj', 'sess', undefined]);
+    expect(workspaceKeys.list('proj', 'sess', '/src')).toEqual(['v1', 'workspace', 'list', 'proj', 'sess', '/src']);
+    expect(workspaceKeys.file('proj', 'sess', 'f.txt')).toEqual(['v1', 'workspace', 'file', 'proj', 'sess', 'f.txt']);
+    expect(workspaceKeys.diff('proj', 'sess', 0)).toEqual(['v1', 'workspace', 'diff', 'proj', 'sess', 0]);
   });
 });
 

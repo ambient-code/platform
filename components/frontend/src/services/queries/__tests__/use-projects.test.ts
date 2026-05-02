@@ -55,11 +55,11 @@ function createWrapper() {
 
 describe('projectKeys', () => {
   it('generates correct query keys', () => {
-    expect(projectKeys.all).toEqual(['projects']);
-    expect(projectKeys.lists()).toEqual(['projects', 'list']);
-    expect(projectKeys.detail('proj')).toEqual(['projects', 'detail', 'proj']);
-    expect(projectKeys.permissions('proj')).toEqual(['projects', 'detail', 'proj', 'permissions']);
-    expect(projectKeys.integrationStatus('proj')).toEqual(['projects', 'detail', 'proj', 'integration-status']);
+    expect(projectKeys.all).toEqual(['v1', 'projects']);
+    expect(projectKeys.lists()).toEqual(['v1', 'projects', 'list']);
+    expect(projectKeys.detail('proj')).toEqual(['v1', 'projects', 'detail', 'proj']);
+    expect(projectKeys.permissions('proj')).toEqual(['v1', 'projects', 'detail', 'proj', 'permissions']);
+    expect(projectKeys.integrationStatus('proj')).toEqual(['v1', 'projects', 'detail', 'proj', 'integration-status']);
   });
 });
 

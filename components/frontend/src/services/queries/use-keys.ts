@@ -2,9 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { keysAdapter } from '../adapters/keys';
 import type { KeysPort } from '../ports/keys';
 import type { CreateKeyRequest } from '../ports/types';
+import { BACKEND_VERSION } from './query-keys';
 
 export const keysKeys = {
-  all: ['keys'] as const,
+  all: [BACKEND_VERSION, 'keys'] as const,
   lists: () => [...keysKeys.all, 'list'] as const,
   list: (projectName: string) => [...keysKeys.lists(), projectName] as const,
 };

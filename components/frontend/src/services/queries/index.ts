@@ -3,6 +3,7 @@
  * Re-exports all query hook modules
  */
 
+export * from './query-keys';
 export * from './use-auth';
 export * from './use-capabilities';
 export * from './use-cluster';

@@ -11,9 +11,10 @@ import type {
   PaginationParams,
 } from '@/types/api';
 import type { MCPServersConfig } from '@/types/agentic-session';
+import { BACKEND_VERSION } from './query-keys';
 
 export const projectKeys = {
-  all: ['projects'] as const,
+  all: [BACKEND_VERSION, 'projects'] as const,
   lists: () => [...projectKeys.all, 'list'] as const,
   list: (params?: PaginationParams) => [...projectKeys.lists(), params ?? {}] as const,
   details: () => [...projectKeys.all, 'detail'] as const,

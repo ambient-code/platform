@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { googleAdapter } from '../adapters/google';
 import type { GooglePort } from '../ports/google';
+import { BACKEND_VERSION } from './query-keys';
 
 export const googleKeys = {
-  all: ['google'] as const,
+  all: [BACKEND_VERSION, 'google'] as const,
   status: () => [...googleKeys.all, 'status'] as const,
 };
 

@@ -5,9 +5,10 @@ import type {
   CreateScheduledSessionRequest,
   UpdateScheduledSessionRequest,
 } from '@/types/api';
+import { BACKEND_VERSION } from './query-keys';
 
 export const scheduledSessionKeys = {
-  all: ['scheduled-sessions'] as const,
+  all: [BACKEND_VERSION, 'scheduled-sessions'] as const,
   lists: () => [...scheduledSessionKeys.all, 'list'] as const,
   list: (projectName: string) =>
     [...scheduledSessionKeys.lists(), projectName] as const,

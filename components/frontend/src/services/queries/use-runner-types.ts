@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { runnerTypesAdapter } from '../adapters/runner-types';
 import type { RunnerTypesPort } from '../ports/runner-types';
+import { BACKEND_VERSION } from './query-keys';
 
 export const runnerTypeKeys = {
-  all: ['runner-types'] as const,
+  all: [BACKEND_VERSION, 'runner-types'] as const,
   global: () => [...runnerTypeKeys.all, 'global'] as const,
   forProject: (projectName: string) => [...runnerTypeKeys.all, projectName] as const,
 };
