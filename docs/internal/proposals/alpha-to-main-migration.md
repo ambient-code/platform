@@ -40,7 +40,7 @@ removes this file.
 
 - [x] Analyze alpha→main delta and component dependencies
 - [x] Write migration plan (`docs/internal/proposals/alpha-to-main-migration.md`)
-- [x] Fix alpha→main branch references in `.claude/skills/devflow/SKILL.md`
+- [x] Fix alpha→main branch references in `skills/devflow/SKILL.md`
 - [x] Merge to main
 
 ### PR 2 — ambient-api-server: OpenAPI Specs, Generated Client, New Kinds ✅ Merged

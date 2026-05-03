@@ -4,9 +4,11 @@ Progressive disclosure for task-specific documentation and references.
 
 ## Table of Contents
 
+- [Specs](#specs)
+- [Workflows](#workflows)
+- [Standards](#standards)
 - [Governance](#governance)
 - [Architecture Decisions](#architecture-decisions)
-- [Component Development Guides](#component-development-guides)
 - [Component Guides](#component-guides)
 - [Development Environment](#development-environment)
 - [Testing](#testing)
@@ -16,6 +18,44 @@ Progressive disclosure for task-specific documentation and references.
 - [Amber Automation](#amber-automation)
 
 ---
+
+## Specs
+
+Desired state of the system, organized by capability domain.
+
+| Spec | Domain | Purpose |
+|------|--------|---------|
+| [Ambient Data Model](specs/sessions/ambient-model.spec.md) | sessions | Platform-wide data model: projects, agents, sessions, credentials, RBAC |
+| [Control Plane](specs/control-plane/control-plane.spec.md) | control-plane | CP architecture, runner structure, K8s provisioning |
+| [Runner](specs/agents/runner.spec.md) | agents | Runner subprocess lifecycle, bridges, gRPC/HTTP endpoints |
+| [MCP Server](specs/integrations/mcp-server.spec.md) | integrations | MCP tool definitions, sidecar and public endpoint modes |
+
+Feature specs remain in numbered directories under `specs/` (e.g., `specs/001-*/spec.md`).
+
+## Workflows
+
+Agent-consumable procedures — step-by-step implementation workflows.
+
+| Workflow | Domain | Purpose |
+|----------|--------|---------|
+| [Ambient Model](workflows/sessions/ambient-model.workflow.md) | sessions | Spec-driven implementation pipeline for data model changes |
+| [Control Plane](workflows/control-plane/control-plane.workflow.md) | control-plane | CP + Runner implementation workflow |
+| [MCP Server](workflows/integrations/mcp-server.workflow.md) | integrations | MCP server implementation workflow |
+
+## Standards
+
+Component-specific conventions loaded by review agents on demand.
+
+| Standard | Domain | Scope |
+|----------|--------|-------|
+| [Backend Conventions](specs/standards/backend/conventions.spec.md) | backend | Go patterns, K8s integration, handler conventions, user-scoped clients |
+| [Backend Error Handling](specs/standards/backend/error-handling.spec.md) | backend | Consistent error patterns across backend and operator |
+| [Backend K8s Client](specs/standards/backend/k8s-client.spec.md) | backend | User token vs. service account — critical for RBAC compliance |
+| [Frontend Conventions](specs/standards/frontend/conventions.spec.md) | frontend | NextJS patterns, Shadcn, React Query, component guidelines |
+| [Frontend React Query](specs/standards/frontend/react-query.spec.md) | frontend | Data fetching hooks, mutations, cache invalidation |
+| [Operator Conventions](specs/standards/control-plane/conventions.spec.md) | control-plane | OwnerReferences, reconciliation patterns, SecurityContext, resource limits |
+| [Security Standards](specs/standards/security/security.spec.md) | security | Auth flows, RBAC, token handling, container security |
+| [Cross-Cutting Conventions](specs/standards/platform/cross-cutting.spec.md) | platform | Image consistency, reconciliation, error propagation, namespace-scoped keys |
 
 ## Governance
 
@@ -38,26 +78,6 @@ Progressive disclosure for task-specific documentation and references.
 | [ADR-0007](docs/internal/adr/0007-unleash-feature-flags.md) | Unleash with workspace-scoped overrides |
 | [ADR-0008](docs/internal/adr/0008-automate-code-reviews.md) | Automated inner-loop code review |
 | [ADR-0009](docs/internal/adr/0009-rest-api-postgresql-trex-foundation.md) | REST API + PostgreSQL via rh-trex-ai |
-
-## Cross-Cutting Conventions
-
-| Document | Purpose |
-|----------|---------|
-| [CodeRabbit-Derived Conventions](docs/coderabbit-derived-conventions.md) | Image consistency, reconciliation patterns, error propagation, namespace-scoped keys, SecurityContext — derived from 971 CodeRabbit review comments |
-
-## Component Development Guides
-
-Convention documentation for each component. Loaded by review agents on demand.
-
-| Guide | Scope |
-|-------|-------|
-| [Backend Development](components/backend/DEVELOPMENT.md) | Go patterns, K8s integration, handler conventions, user-scoped clients |
-| [Backend Error Patterns](components/backend/ERROR_PATTERNS.md) | Consistent error patterns across backend and operator |
-| [Backend K8s Client Patterns](components/backend/K8S_CLIENT_PATTERNS.md) | User token vs. service account — critical for RBAC compliance |
-| [Frontend Development](components/frontend/DEVELOPMENT.md) | NextJS patterns, Shadcn, React Query, component guidelines |
-| [Frontend React Query Patterns](components/frontend/REACT_QUERY_PATTERNS.md) | Data fetching hooks, mutations, cache invalidation |
-| [Operator Development](components/operator/DEVELOPMENT.md) | OwnerReferences, reconciliation patterns, SecurityContext, resource limits |
-| [Security Standards](docs/security-standards.md) | Auth flows, RBAC, token handling, container security |
 
 ## Component Guides
 
