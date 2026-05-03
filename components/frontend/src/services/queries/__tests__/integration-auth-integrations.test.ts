@@ -1,14 +1,14 @@
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { createAuthAdapter } from '../../adapters/v1/auth';
-import { createGitHubAdapter } from '../../adapters/v1/github';
-import { createGitLabAdapter } from '../../adapters/v1/gitlab';
-import { createGoogleAdapter } from '../../adapters/v1/google';
-import { createGerritAdapter } from '../../adapters/v1/gerrit';
-import { createJiraAdapter } from '../../adapters/v1/jira';
-import { createCodeRabbitAdapter } from '../../adapters/v1/coderabbit';
-import { createMcpCredentialsAdapter } from '../../adapters/v1/mcp-credentials';
-import { createIntegrationsAdapter } from '../../adapters/v1/integrations';
+import { createAuthAdapter } from '../../adapters/auth';
+import { createGitHubAdapter } from '../../adapters/github';
+import { createGitLabAdapter } from '../../adapters/gitlab';
+import { createGoogleAdapter } from '../../adapters/google';
+import { createGerritAdapter } from '../../adapters/gerrit';
+import { createJiraAdapter } from '../../adapters/jira';
+import { createCodeRabbitAdapter } from '../../adapters/coderabbit';
+import { createMcpCredentialsAdapter } from '../../adapters/mcp-credentials';
+import { createIntegrationsAdapter } from '../../adapters/integrations';
 import { useCurrentUser } from '../use-auth';
 import {
   useGitHubStatus,

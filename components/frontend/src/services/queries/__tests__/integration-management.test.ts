@@ -1,16 +1,16 @@
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { createKeysAdapter } from '../../adapters/v1/keys';
-import { createSecretsAdapter } from '../../adapters/v1/secrets';
-import { createModelsAdapter } from '../../adapters/v1/models';
-import { createRunnerTypesAdapter } from '../../adapters/v1/runner-types';
-import { createWorkflowsAdapter } from '../../adapters/v1/workflows';
-import { createFeatureFlagsAdapter } from '../../adapters/v1/feature-flags';
-import { createLdapAdapter } from '../../adapters/v1/ldap';
-import { createRepoAdapter } from '../../adapters/v1/repo';
-import { createClusterAdapter } from '../../adapters/v1/cluster';
-import { createVersionAdapter } from '../../adapters/v1/version';
-import { createConfigAdapter } from '../../adapters/v1/config';
+import { createKeysAdapter } from '../../adapters/keys';
+import { createSecretsAdapter } from '../../adapters/secrets';
+import { createModelsAdapter } from '../../adapters/models';
+import { createRunnerTypesAdapter } from '../../adapters/runner-types';
+import { createWorkflowsAdapter } from '../../adapters/workflows';
+import { createFeatureFlagsAdapter } from '../../adapters/feature-flags';
+import { createLdapAdapter } from '../../adapters/ldap';
+import { createRepoAdapter } from '../../adapters/repo';
+import { createClusterAdapter } from '../../adapters/cluster';
+import { createVersionAdapter } from '../../adapters/version';
+import { createConfigAdapter } from '../../adapters/config';
 import { useKeys, useCreateKey, useDeleteKey } from '../use-keys';
 import {
   useSecretsList,

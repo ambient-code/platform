@@ -1,6 +1,6 @@
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { createScheduledSessionsAdapter } from '../../adapters/v1/scheduled-sessions';
+import { createScheduledSessionsAdapter } from '../../adapters/scheduled-sessions';
 import {
   useScheduledSessions,
   useScheduledSession,

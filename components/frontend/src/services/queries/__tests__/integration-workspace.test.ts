@@ -1,6 +1,6 @@
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { createSessionWorkspaceAdapter } from '../../adapters/v1/session-workspace';
+import { createSessionWorkspaceAdapter } from '../../adapters/session-workspace';
 import {
   useWorkspaceList,
   useWorkspaceFile,
