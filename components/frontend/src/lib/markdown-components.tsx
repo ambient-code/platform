@@ -15,7 +15,7 @@ import {
  * CopyButton -- appears on hover/focus inside code blocks.
  * Uses navigator.clipboard with a copied-state timeout.
  */
-function CopyButton({ text }: { text: string }) {
+function CopyButton({ text, inline }: { text: string; inline?: boolean }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
@@ -37,7 +37,11 @@ function CopyButton({ text }: { text: string }) {
             size="icon-xs"
             onClick={handleCopy}
             aria-label={copied ? "Copied" : "Copy code to clipboard"}
-            className="absolute top-2 right-2 cursor-pointer bg-muted/80 hover:bg-muted border border-border text-muted-foreground hover:text-foreground opacity-0 group-hover/codeblock:opacity-100 focus:opacity-100 transition-opacity"
+            className={
+              inline
+                ? "cursor-pointer bg-transparent hover:bg-muted border-0 text-muted-foreground hover:text-foreground opacity-0 group-hover/codeblock:opacity-100 focus:opacity-100 transition-opacity"
+                : "absolute top-2 right-2 cursor-pointer bg-muted/80 hover:bg-muted border border-border text-muted-foreground hover:text-foreground opacity-0 group-hover/codeblock:opacity-100 focus:opacity-100 transition-opacity"
+            }
           >
             {copied ? (
               <Check className="w-3.5 h-3.5 text-green-500" />
@@ -47,7 +51,7 @@ function CopyButton({ text }: { text: string }) {
           </Button>
         </TooltipTrigger>
         <TooltipContent side="left">
-          {copied ? "Copied!" : "Copy code"}
+          {copied ? "Copied!" : "Copy"}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -111,7 +115,8 @@ export const sharedMarkdownComponents: Components = {
         {language && (
           <div className="flex items-center gap-1.5 bg-muted/80 text-muted-foreground text-xs px-3 py-1.5 rounded-t border border-b-0 font-mono">
             <Code2 className="w-3.5 h-3.5" />
-            {language}
+            <span className="flex-1">{language}</span>
+            <CopyButton text={text} inline />
           </div>
         )}
         <pre
@@ -120,7 +125,7 @@ export const sharedMarkdownComponents: Components = {
         >
           {children}
         </pre>
-        <CopyButton text={text} />
+        {!language && <CopyButton text={text} />}
       </div>
     );
   },
