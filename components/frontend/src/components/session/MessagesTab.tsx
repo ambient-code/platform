@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useMemo, useLayoutEffect, useCallback } from "react";
-import { MessageSquare, ChevronUp } from "lucide-react";
+import { MessageSquare, ChevronUp, ChevronDown } from "lucide-react";
 import { StreamMessage } from "@/components/ui/stream-message";
 import { LoadingDots } from "@/components/ui/message";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChatInputBox } from "@/components/chat/ChatInputBox";
 import { QueuedMessageBubble } from "@/components/chat/QueuedMessageBubble";
 import { useCurrentUser } from "@/services/queries/use-auth";
@@ -99,6 +100,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
   const checkIfAtBottom = () => {
     const container = messagesContainerRef.current;
     if (!container) return true;
+    if (container.scrollHeight <= container.clientHeight) return true;
     const threshold = 50;
     return container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
   };
@@ -287,17 +289,42 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
         )}
       </div>
 
-      {showScrollToTop && (
-        <Button
-          variant="outline"
-          size="icon-sm"
-          onClick={scrollToTop}
-          aria-label="Scroll to top"
-          className="absolute bottom-3 right-5 z-10 rounded-full shadow-md transition-opacity duration-200"
-        >
-          <ChevronUp className="h-4 w-4" />
-        </Button>
-      )}
+      <TooltipProvider>
+        <div className="absolute bottom-3 right-5 z-10 flex flex-col gap-1">
+          <div className={`transition-all duration-200 ${showScrollToTop ? "opacity-100 scale-100" : "opacity-0 scale-75 pointer-events-none"}`}>
+            <Tooltip open={showScrollToTop ? undefined : false}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={scrollToTop}
+                  aria-label="Scroll to top"
+                  className="rounded-full shadow-md cursor-pointer"
+                >
+                  <ChevronUp className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">Scroll to top</TooltipContent>
+            </Tooltip>
+          </div>
+          <div className={`transition-all duration-200 ${!isAtBottom ? "opacity-100 scale-100" : "opacity-0 scale-75 pointer-events-none"}`}>
+            <Tooltip open={isAtBottom ? false : undefined}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={() => messagesContainerRef.current?.scrollTo({ top: messagesContainerRef.current.scrollHeight, behavior: "smooth" })}
+                  aria-label="Scroll to bottom"
+                  className="rounded-full shadow-md cursor-pointer"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">Scroll to bottom</TooltipContent>
+            </Tooltip>
+          </div>
+        </div>
+      </TooltipProvider>
       </div>
 
       <ChatInputBox

@@ -2,9 +2,9 @@
 
 This guide covers deploying Ambient Code on an OpenShift cluster using the **OpenShift internal image registry**. This is useful when iterating on local builds against a dev cluster without pushing to quay.io.
 
-> **Standard deployment (quay.io images):** See the [Ambient installer skill](../../../../.claude/skills/ambient/SKILL.md) — it covers secrets, kustomize deploy, rollout verification, and troubleshooting for any OpenShift namespace.
+> **Standard deployment (quay.io images):** See the [Ambient installer skill](../../../../skills/control-plane/ambient/SKILL.md) — it covers secrets, kustomize deploy, rollout verification, and troubleshooting for any OpenShift namespace.
 
-> **PR test instances:** See the [ambient-pr-test skill](../../../../.claude/skills/ambient-pr-test/SKILL.md).
+> **PR test instances:** See the [ambient-pr-test skill](../../../../skills/control-plane/ambient-pr-test/SKILL.md).
 
 ---
 
@@ -109,4 +109,4 @@ Without this, runner pods fail with `ErrImagePull` / `authentication required`.
 
 ## Next Steps
 
-Once deployed, follow the verification and access steps in the [ambient skill](../../../../.claude/skills/ambient/SKILL.md#step-6-verify-installation).
+Once deployed, follow the verification and access steps in the [ambient skill](../../../../skills/control-plane/ambient/SKILL.md#step-6-verify-installation).
