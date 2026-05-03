@@ -82,5 +82,6 @@ specs/
 | `sessions/` | Lifecycle, initialization, status, messages, events, data model |
 | `agents/` | Agent model, runtime registry, prompts, runners |
 | `control-plane/` | Reconciliation, operator, scheduling |
+| `frontend/` | UI rendering, session views, markdown, navigation |
 | `integrations/` | MCP, Gerrit, external services |
 | `standards/` | Cross-cutting engineering constraints by component |
