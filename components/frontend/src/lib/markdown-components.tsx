@@ -2,8 +2,14 @@
 
 import React, { useState, useCallback } from "react";
 import type { Components } from "react-markdown";
-import { Check, Copy } from "lucide-react";
+import { Check, Code2, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 /**
  * CopyButton -- appears on hover/focus inside code blocks.
@@ -23,19 +29,28 @@ function CopyButton({ text }: { text: string }) {
   }, [text]);
 
   return (
-    <Button
-      variant="ghost"
-      size="icon-xs"
-      onClick={handleCopy}
-      aria-label={copied ? "Copied" : "Copy code to clipboard"}
-      className="absolute top-2 right-2 bg-muted/80 hover:bg-muted border border-border text-muted-foreground hover:text-foreground opacity-0 group-hover/codeblock:opacity-100 focus:opacity-100 transition-opacity"
-    >
-      {copied ? (
-        <Check className="w-3.5 h-3.5 text-green-500" />
-      ) : (
-        <Copy className="w-3.5 h-3.5" />
-      )}
-    </Button>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={handleCopy}
+            aria-label={copied ? "Copied" : "Copy code to clipboard"}
+            className="absolute top-2 right-2 cursor-pointer bg-muted/80 hover:bg-muted border border-border text-muted-foreground hover:text-foreground opacity-0 group-hover/codeblock:opacity-100 focus:opacity-100 transition-opacity"
+          >
+            {copied ? (
+              <Check className="w-3.5 h-3.5 text-green-500" />
+            ) : (
+              <Copy className="w-3.5 h-3.5" />
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="left">
+          {copied ? "Copied!" : "Copy code"}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -55,6 +70,26 @@ function extractText(node: React.ReactNode): string {
 }
 
 /**
+ * Extract the language name from a <code> element's className.
+ * rehype-highlight adds classes like "language-python" or "hljs language-typescript".
+ * Returns the capitalised language name, or null when no language tag is present.
+ */
+function extractLanguage(children: React.ReactNode): string | null {
+  const child = React.Children.toArray(children)[0];
+  if (!React.isValidElement(child)) return null;
+
+  const className = (child.props as { className?: string }).className;
+  if (!className) return null;
+
+  const match = className.match(/language-(\S+)/);
+  if (!match) return null;
+
+  const lang = match[1];
+  // Capitalise first letter for display
+  return lang.charAt(0).toUpperCase() + lang.slice(1);
+}
+
+/**
  * Shared ReactMarkdown component overrides used by both message.tsx and tool-message.tsx.
  * All colors use Tailwind theme utilities for theme-awareness -- no hardcoded hex/rgba.
  *
@@ -70,10 +105,17 @@ export const sharedMarkdownComponents: Components = {
   // We wrap with a group for hover-visible copy button.
   pre: ({ children, ...props }: React.HTMLAttributes<HTMLPreElement>) => {
     const text = extractText(children);
+    const language = extractLanguage(children);
     return (
       <div className="relative group/codeblock my-2">
+        {language && (
+          <div className="flex items-center gap-1.5 bg-muted/80 text-muted-foreground text-xs px-3 py-1.5 rounded-t border border-b-0 font-mono">
+            <Code2 className="w-3.5 h-3.5" />
+            {language}
+          </div>
+        )}
         <pre
-          className="bg-muted text-foreground rounded text-xs overflow-x-auto border"
+          className={`bg-muted text-foreground text-xs overflow-x-auto border ${language ? "rounded-b" : "rounded"}`}
           {...props}
         >
           {children}
