@@ -15,6 +15,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
 import { formatTimestamp } from "@/lib/format-timestamp";
 import { sharedMarkdownComponents } from "@/lib/markdown-components";
 
@@ -68,7 +69,7 @@ const ExpandableMarkdown: React.FC<ExpandableMarkdownProps> = ({
 
   return (
     <div className={cn("max-w-none", className)}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={markdownComponents}>
         {display}
       </ReactMarkdown>
       {shouldTruncate && (

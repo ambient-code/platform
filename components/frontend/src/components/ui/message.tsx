@@ -4,6 +4,7 @@ import React from "react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
 import type { Components } from "react-markdown";
 import { formatTimestamp } from "@/lib/format-timestamp";
 import { useLoadingTips } from "@/services/queries/use-loading-tips";
@@ -252,6 +253,7 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
                   <div className="w-full">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[rehypeHighlight]}
                       components={components || defaultComponents}
                     >
                       {content}

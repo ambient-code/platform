@@ -1,31 +1,108 @@
-import React from "react";
+"use client";
+
+import React, { useState, useCallback } from "react";
 import type { Components } from "react-markdown";
+import { Check, Copy } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+/**
+ * CopyButton -- appears on hover/focus inside code blocks.
+ * Uses navigator.clipboard with a copied-state timeout.
+ */
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API may be unavailable in some contexts; fail silently.
+    }
+  }, [text]);
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon-xs"
+      onClick={handleCopy}
+      aria-label={copied ? "Copied" : "Copy code to clipboard"}
+      className="absolute top-2 right-2 bg-muted/80 hover:bg-muted border border-border text-muted-foreground hover:text-foreground opacity-0 group-hover/codeblock:opacity-100 focus:opacity-100 transition-opacity"
+    >
+      {copied ? (
+        <Check className="w-3.5 h-3.5 text-green-500" />
+      ) : (
+        <Copy className="w-3.5 h-3.5" />
+      )}
+    </Button>
+  );
+}
+
+/**
+ * Extract plain text from React children for the copy button.
+ */
+function extractText(node: React.ReactNode): string {
+  if (typeof node === "string") return node;
+  if (typeof node === "number") return String(node);
+  if (node == null || typeof node === "boolean") return "";
+  if (Array.isArray(node)) return node.map(extractText).join("");
+  if (React.isValidElement(node)) {
+    const props = node.props as { children?: React.ReactNode };
+    return extractText(props.children);
+  }
+  return "";
+}
 
 /**
  * Shared ReactMarkdown component overrides used by both message.tsx and tool-message.tsx.
  * All colors use Tailwind theme utilities for theme-awareness -- no hardcoded hex/rgba.
  *
+ * Syntax highlighting is provided by rehype-highlight (highlight.js) which must be
+ * passed as a rehypePlugin on each ReactMarkdown instance. Theme adaptation between
+ * light/dark mode is handled by SyntaxThemeProvider + syntax-highlighting.css.
+ *
  * Spec: specs/frontend/sessions/messages/markdown-rendering.spec.md
  */
 export const sharedMarkdownComponents: Components = {
-  // --- Inline code vs block code ---
+  // --- Block code container (fenced code blocks) ---
+  // rehype-highlight adds hljs classes to <code> inside <pre>.
+  // We wrap with a group for hover-visible copy button.
+  pre: ({ children, ...props }: React.HTMLAttributes<HTMLPreElement>) => {
+    const text = extractText(children);
+    return (
+      <div className="relative group/codeblock my-2">
+        <pre
+          className="bg-muted text-foreground rounded text-xs overflow-x-auto border"
+          {...props}
+        >
+          {children}
+        </pre>
+        <CopyButton text={text} />
+      </div>
+    );
+  },
+
+  // --- Inline code ---
+  // Fenced code blocks are handled by the `pre` override above;
+  // the `code` override only styles inline code snippets.
   code: ({
-    inline,
     className,
     children,
     ...props
   }: {
-    inline?: boolean;
     className?: string;
     children?: React.ReactNode;
   } & React.HTMLAttributes<HTMLElement>) => {
-    const codeContent = String(children || "");
-    const isShortCode = codeContent.length <= 50 && !codeContent.includes("\n");
+    // When inside a <pre> (fenced block), className contains "hljs" or "language-*".
+    // Let rehype-highlight's classes pass through untouched.
+    const isHighlighted =
+      className && (className.includes("hljs") || className.includes("language-"));
 
-    if (inline || isShortCode) {
+    if (isHighlighted) {
       return (
         <code
-          className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono"
+          className={className}
           {...(props as React.HTMLAttributes<HTMLElement>)}
         >
           {children}
@@ -33,15 +110,14 @@ export const sharedMarkdownComponents: Components = {
       );
     }
 
+    // Inline code styling
     return (
-      <pre className="bg-muted text-foreground py-3 rounded text-xs overflow-x-auto border my-2">
-        <code
-          className={className}
-          {...(props as React.HTMLAttributes<HTMLElement>)}
-        >
-          {children}
-        </code>
-      </pre>
+      <code
+        className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono"
+        {...(props as React.HTMLAttributes<HTMLElement>)}
+      >
+        {children}
+      </code>
     );
   },
 
