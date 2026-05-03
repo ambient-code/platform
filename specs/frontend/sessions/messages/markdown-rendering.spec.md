@@ -229,6 +229,42 @@ Markdown rendering SHALL be visually consistent between bot messages and tool re
 - WHEN rendered
 - THEN the border, indentation, and text styling match the same blockquote in a bot message
 
+### Requirement: Code Block Syntax Highlighting
+
+Fenced code blocks with a language identifier SHALL render with syntax highlighting appropriate to the specified language.
+
+#### Scenario: Language-tagged code block
+
+- GIVEN a bot message containing a fenced code block with a language tag (e.g. ` ```python `)
+- WHEN rendered
+- THEN the code block displays with syntax-appropriate color highlighting for keywords, strings, comments, and other token types
+
+#### Scenario: No language tag
+
+- GIVEN a fenced code block without a language tag
+- WHEN rendered
+- THEN the code block renders in monospace with the default code block styling
+- AND no syntax highlighting is applied
+
+#### Scenario: Theme adaptation
+
+- GIVEN a syntax-highlighted code block
+- WHEN the user switches between light and dark mode
+- THEN the highlighting color scheme adapts to the active theme
+
+#### Scenario: Horizontal overflow
+
+- GIVEN a code block with lines wider than the message container
+- WHEN rendered
+- THEN the code block scrolls horizontally within its own container
+- AND the page body does not scroll horizontally
+
+#### Scenario: Copy button
+
+- GIVEN a rendered code block
+- WHEN the user hovers over or focuses the code block
+- THEN a copy-to-clipboard button is available
+
 ### Requirement: Theme-Aware Colors
 
 All markdown element colors SHALL use theme-aware values that adapt to light and dark mode. No hardcoded color values SHALL be used.
