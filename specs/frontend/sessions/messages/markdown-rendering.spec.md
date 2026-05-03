@@ -259,12 +259,14 @@ Fenced code blocks with a language identifier SHALL render with syntax highlight
 - THEN the code block scrolls horizontally within its own container
 - AND the page body does not scroll horizontally
 
-#### Scenario: Language header
+#### Scenario: Language header with copy button
 
 - GIVEN a fenced code block with a language tag
 - WHEN rendered
 - THEN a header bar appears above the code content
-- AND the header displays a code icon followed by the language name (e.g. "Python", "TypeScript")
+- AND the header displays a code icon followed by the language name (e.g. "Python", "TypeScript") on the left
+- AND a copy button is positioned on the right side of the header
+- AND the copy button is only visible when the user hovers over the code block
 - AND the header is visually distinct from the code content
 
 #### Scenario: Language header absent for untagged blocks
@@ -272,14 +274,14 @@ Fenced code blocks with a language identifier SHALL render with syntax highlight
 - GIVEN a fenced code block without a language tag
 - WHEN rendered
 - THEN no language header is displayed
+- AND the copy button appears floating over the code block on hover instead
 
 #### Scenario: Copy button
 
-- GIVEN a rendered code block
-- WHEN the user hovers over or focuses the code block
-- THEN a copy-to-clipboard button is available
-- AND the button uses a pointer cursor
-- AND the button displays a "Copy code" tooltip on hover
+- GIVEN a rendered code block with a visible copy button
+- WHEN the user hovers over the copy button
+- THEN the button uses a pointer cursor
+- AND the button displays a "Copy" tooltip
 
 #### Scenario: Copy confirmation
 
