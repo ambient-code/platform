@@ -29,11 +29,11 @@ v2 adapters SHALL transform API server responses into canonical frontend types. 
 - THEN the result conforms to the canonical `Project` type with `name`, `displayName`, `description`, `status`, `labels`, `annotations`, `creationTimestamp`, `uid`
 - AND `labels` and `annotations` are `Record<string, string>`, not serialized strings
 
-#### Scenario: Serialized collection fields are parsed
+#### Scenario: Collection fields are normalized regardless of wire format
 
-- GIVEN an API server response containing collection fields serialized as JSON strings
+- GIVEN an API server response where collection fields may arrive as JSON strings or as typed objects
 - WHEN the v2 adapter transforms the response
-- THEN those fields are parsed into their typed representations (arrays, records, nested objects)
+- THEN those fields are normalized into their typed representations (arrays, records, nested objects)
 - AND the consumer receives the same typed structures as from a v1 adapter
 
 #### Scenario: Missing canonical fields have defaults

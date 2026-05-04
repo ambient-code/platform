@@ -29,6 +29,10 @@ hook → port → v2 adapter → SDK client → fetch('/api/ambient/v1/...') →
 
 The SDK provides typed methods and types. A catch-all Next.js route proxies to the API server with auth headers. v2 adapters transform SDK responses into canonical frontend types.
 
+## Scope
+
+This skill covers **Sessions** and **Projects** — the first two domains to migrate. **ScheduledSessions** has a full CRUD plugin in the API server (`plugins/scheduledSessions/`) but is deferred until the sessions and projects migration is stable. **SessionEvents** (AG-UI streaming) is a separate port (`SessionEventsPort`) that can be migrated independently — see the spec for details.
+
 ## SDK Setup
 
 The SDK lives at `components/ambient-sdk/ts-sdk/`. It's auto-generated from the OpenAPI spec.
@@ -37,6 +41,7 @@ The SDK lives at `components/ambient-sdk/ts-sdk/`. It's auto-generated from the 
 
 1. Make `token` optional in `AmbientClientConfig` — skip the `Authorization` header when absent
 2. Accept relative `baseUrl` values (empty string or `'/'`) — skip `new URL()` validation for relative URLs, or use `'/'` as the base
+3. Add `display_name` to the SDK `Project` type — the API server model has `display_name` but the current SDK generator drops it
 
 Regenerate with `make generate-sdk`.
 
@@ -83,11 +88,14 @@ For sessions that originated from the K8s CRD backend (legacy), `kube_cr_name` i
 
 ```typescript
 async function resolveSessionId(client: AmbientClient, sessionName: string): Promise<string> {
-  const result = await client.sessions.list({ search: `kube_cr_name = '${sessionName}'`, size: 1 })
+  const escaped = sessionName.replace(/'/g, "''")
+  const result = await client.sessions.list({ search: `kube_cr_name = '${escaped}'`, size: 1 })
   if (!result.items.length) throw new ApiClientError(`Session '${sessionName}' not found`, 'NOT_FOUND')
   return result.items[0].id
 }
 ```
+
+**Security:** The `search` parameter is interpolated into a TSL query. Escape single quotes in `sessionName` to prevent TSL injection. The API server's TSL parser is the final defense, but the adapter should not rely on it.
 
 Optimization: if `sessionName` looks like a KSUID (26 alphanumeric chars), try `client.sessions.get(sessionName)` first and fall back to search only on 404. Most v2-created sessions will hit the fast path.
 
@@ -117,10 +125,11 @@ Note: `mainRepoIndex` has no SDK source — default to `undefined`. The `botAcco
 
 **autoBranch**: derive from `repos` if the backend computes it, or default to `undefined`.
 
-Use a safe JSON parser for all JSONB string fields:
+Use a safe JSON parser for all JSONB string fields. Collection fields may arrive as JSON strings or already-typed objects depending on the API server version — handle both:
 ```typescript
-function parseJsonField<T>(value: string | null | undefined, fallback: T): T {
-  if (!value) return fallback
+function parseJsonField<T>(value: unknown, fallback: T): T {
+  if (value == null) return fallback
+  if (typeof value !== 'string') return value as T
   try { return JSON.parse(value) } catch { return fallback }
 }
 ```
@@ -142,7 +151,7 @@ Canonical `CreateAgenticSessionRequest` → SDK `SessionCreateRequest`. The reve
 | `activeWorkflow` | `workflow_id` | see Workflow Resolution below |
 | `labels` | `labels` | `JSON.stringify()` |
 | `annotations` | `annotations` | `JSON.stringify()` |
-| `parent_session_id` | `parent_session_id` | direct (already snake_case in canonical) |
+| `parent_session_id` | `parent_session_id` | direct (canonical type uses snake_case for this field) |
 
 **Fields without SDK target** — these `CreateAgenticSessionRequest` fields have no corresponding SDK field. Drop silently:
 - `stopOnRunFinished` — feature-flag gated, not yet wired in API server
@@ -161,11 +170,13 @@ The canonical type uses `activeWorkflow: { gitUrl, branch, path? }`. The SDK use
 
 **Request (activeWorkflow → workflow_id):** If `activeWorkflow.gitUrl` is provided, call `client.workflows.list({ search: "git_url = '...'" })` to resolve the ID. If no match, the adapter should create the workflow or throw — this is a design decision for the implementer. Document the chosen behavior.
 
-For list responses with many sessions sharing the same `workflow_id`, batch-resolve: collect unique workflow IDs, fetch all in one `list({ search: "id in ('...', '...')" })` call, then map.
+For list responses with many sessions sharing the same `workflow_id`, batch-resolve: collect unique workflow IDs, fetch all in one `list({ search: "id in ('...', '...')" })` call, then map. TSL `in` queries are supported — confirmed by API server integration tests.
 
 ## Project Mapping
 
-SDK `Project` → canonical `Project`. `name` → direct, `description` → `description` and `displayName` (default to `name` if empty), `labels`/`annotations` → parse JSON, `status` → direct (default `'Active'`), `created_at` → `creationTimestamp`, `id` → `uid`. Defaults: `isOpenShift` → `false`, `namespace` → same as `name`.
+SDK `Project` → canonical `Project`. `name` → `name` (identifier), `display_name` → `displayName` (once SDK is fixed to include this field; until then, default to `name`), `description` → `description`, `labels`/`annotations` → parse JSON, `status` → direct (default `'Active'`), `created_at` → `creationTimestamp`, `id` → `uid`. Defaults: `isOpenShift` → `false`, `namespace` → same as `name`.
+
+**SDK gap:** The API server model has `display_name` (see `plugins/projects/model.go:11`) but the SDK `Project` type currently omits it. Fix the SDK generator to include this field. Until fixed, derive `displayName` from `name`.
 
 ## Project Request Mapping
 
@@ -173,13 +184,11 @@ Canonical `CreateProjectRequest` / `UpdateProjectRequest` → SDK `ProjectCreate
 
 | Canonical | SDK | Transform |
 |---|---|---|
-| `name` | `name` | direct |
-| `displayName` | `description` | direct (API server uses `description` for display) |
+| `name` | `name` | direct (project identifier) |
+| `displayName` | `display_name` | direct (requires SDK generator fix) |
 | `description` | `description` | direct |
 | `labels` | `labels` | `JSON.stringify()` |
 | `annotations` | `annotations` | `JSON.stringify()` |
-
-Note: if both `displayName` and `description` are set, prefer `description` for the SDK `description` field — the `displayName` is a UI convenience.
 
 ## Pagination
 
