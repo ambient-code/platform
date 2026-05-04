@@ -1,0 +1,26 @@
+[
+  {
+    "input": "/v2-adapters",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "frontend-v2-adapters" },
+    "description": "Direct slash command invocation"
+  },
+  {
+    "input": "create a v2 adapter for sessions that calls the API server",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "frontend-v2-adapters", "args": "sessions" },
+    "description": "Natural language request to create a v2 session adapter"
+  },
+  {
+    "input": "migrate the projects domain to use the ambient-api-server",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "frontend-v2-adapters", "args": "projects" },
+    "description": "Migration request for a specific domain"
+  },
+  {
+    "input": "how do I wire the SDK client for v2 adapters",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "frontend-v2-adapters" },
+    "description": "SDK integration question"
+  }
+]
