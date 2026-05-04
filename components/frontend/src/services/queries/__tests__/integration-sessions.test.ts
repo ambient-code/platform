@@ -98,6 +98,57 @@ describe('integration: hook → sessionsAdapter → fakeApi', () => {
     expect(result.current.data?.nextPage).toBeDefined();
   });
 
+  it('useSessionsPaginated: nextPage() fetches second page with correct offset', async () => {
+    const page1Session = {
+      metadata: { name: 'sess-1', namespace: 'proj-ns', annotations: {} },
+      spec: { initialPrompt: 'hello', llmSettings: { model: 'claude-sonnet-4-20250514' }, timeout: 3600 },
+      status: { phase: 'Running', agentStatus: 'idle' },
+    };
+    const page2Session = {
+      metadata: { name: 'sess-2', namespace: 'proj-ns', annotations: {} },
+      spec: { initialPrompt: 'world', llmSettings: { model: 'claude-sonnet-4-20250514' }, timeout: 3600 },
+      status: { phase: 'Stopped', agentStatus: 'idle' },
+    };
+
+    const fakeApi = createFakeSessionsApi();
+    fakeApi.listSessionsPaginated
+      .mockResolvedValueOnce({
+        items: [page1Session],
+        totalCount: 2,
+        hasMore: true,
+        limit: 1,
+        offset: 0,
+      })
+      .mockResolvedValueOnce({
+        items: [page2Session],
+        totalCount: 2,
+        hasMore: false,
+        limit: 1,
+        offset: 1,
+      });
+    const adapter = createSessionsAdapter(fakeApi);
+
+    const { result } = renderHook(
+      () => useSessionsPaginated('proj', { limit: 1 }, adapter),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.items).toHaveLength(1);
+    expect(result.current.data?.items[0].metadata.name).toBe('sess-1');
+    expect(result.current.data?.nextPage).toBeDefined();
+
+    const page2 = await result.current.data!.nextPage!();
+    expect(fakeApi.listSessionsPaginated).toHaveBeenCalledTimes(2);
+    expect(fakeApi.listSessionsPaginated.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ offset: 1, limit: 1 }),
+    );
+    expect(page2.items).toHaveLength(1);
+    expect(page2.items[0].metadata.name).toBe('sess-2');
+    expect(page2.hasMore).toBe(false);
+    expect(page2.nextPage).toBeUndefined();
+  });
+
   it('useSessions: returns items array from paginated response', async () => {
     const fakeApi = createFakeSessionsApi();
     const adapter = createSessionsAdapter(fakeApi);

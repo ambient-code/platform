@@ -112,8 +112,12 @@ describe('integration: hook → scheduledSessionsAdapter → fakeApi', () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(fakeApi.createScheduledSession).toHaveBeenCalled();
+    expect(fakeApi.createScheduledSession).toHaveBeenCalledWith(
+      'proj',
+      expect.objectContaining({ schedule: '0 12 * * 1' }),
+    );
     expect(result.current.data?.name).toBe('schedule-456');
+    expect(result.current.data?.displayName).toBe('New schedule');
   });
 
   it('useUpdateScheduledSession: update flows through', async () => {

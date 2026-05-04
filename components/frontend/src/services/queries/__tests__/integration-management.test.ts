@@ -122,6 +122,7 @@ describe('integration: hook → secretsAdapter → fakeApi', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(fakeApi.getSecretsConfig).toHaveBeenCalledWith('proj');
+    expect(result.current.data).toEqual({ secretName: 'my-secrets' });
   });
 
   it('useSecretsValues: flows through', async () => {

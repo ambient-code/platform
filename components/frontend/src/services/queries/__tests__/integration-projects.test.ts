@@ -266,7 +266,8 @@ describe('integration: hook → projectAccessAdapter → fakeApi (method name ma
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(fakeApi.addProjectPermission).toHaveBeenCalled();
+    expect(fakeApi.addProjectPermission).toHaveBeenCalledWith('proj', { subjectType: 'user', subjectName: 'user2', role: 'view' });
+    expect(result.current.data).toEqual({ subjectType: 'user', subjectName: 'user2', role: 'view' });
   });
 
   it('useRemoveProjectPermission: removeProjectPermission → removePermission mapping', async () => {
