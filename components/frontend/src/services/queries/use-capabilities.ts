@@ -1,36 +1,30 @@
-import { useQuery } from "@tanstack/react-query";
-import * as sessionsApi from "@/services/api/sessions";
+import { useQuery } from '@tanstack/react-query';
+import { sessionCapabilitiesAdapter } from '../adapters/session-capabilities';
+import type { SessionCapabilitiesPort } from '../ports/session-capabilities';
+import { BACKEND_VERSION } from './query-keys';
 
 export const capabilitiesKeys = {
-  all: ["capabilities"] as const,
+  all: [BACKEND_VERSION, 'capabilities'] as const,
   session: (projectName: string, sessionName: string) =>
     [...capabilitiesKeys.all, projectName, sessionName] as const,
 };
 
-/**
- * Fetch the runner's capabilities manifest for a session.
- *
- * Returns which AG-UI features the framework supports, which platform
- * features are available, and runtime config (model, tracing, etc.).
- * The frontend uses this to conditionally render UI panels.
- */
 export function useCapabilities(
   projectName: string,
   sessionName: string,
-  enabled: boolean = true
+  enabled: boolean = true,
+  port: SessionCapabilitiesPort = sessionCapabilitiesAdapter,
 ) {
   return useQuery({
     queryKey: capabilitiesKeys.session(projectName, sessionName),
-    queryFn: () => sessionsApi.getCapabilities(projectName, sessionName),
+    queryFn: () => port.getCapabilities(projectName, sessionName),
     enabled: enabled && !!projectName && !!sessionName,
-    staleTime: 60 * 1000, // 1 minute — capabilities rarely change mid-session
+    staleTime: 60 * 1000,
     retry: 2,
-    // Poll until runner is ready (returns real data)
     refetchInterval: (query) => {
-      if (query.state.data?.framework && query.state.data.framework !== "unknown") {
+      if (query.state.data?.framework && query.state.data.framework !== 'unknown') {
         return false;
       }
-      // Stop after ~1 min (6 × 10s)
       const updatedCount =
         (query.state as { dataUpdatedCount?: number }).dataUpdatedCount ?? 0;
       if (updatedCount >= 6) return false;
