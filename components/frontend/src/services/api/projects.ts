@@ -28,6 +28,7 @@ export async function listProjectsPaginated(
   if (params.limit) searchParams.set('limit', params.limit.toString());
   if (params.offset) searchParams.set('offset', params.offset.toString());
   if (params.search) searchParams.set('search', params.search);
+  if (params.continue) searchParams.set('continue', params.continue);
 
   const queryString = searchParams.toString();
   const url = queryString ? `/projects?${queryString}` : '/projects';
@@ -119,6 +120,15 @@ export async function removeProjectPermission(
   await apiClient.delete(
     `/projects/${projectName}/permissions/${subjectType}/${subjectName}`
   );
+}
+
+/**
+ * Get the current user's access level for a project
+ */
+export async function getProjectAccess(
+  projectName: string
+): Promise<{ project: string; allowed: boolean; reason?: string; userRole: import('@/types/project').PermissionRole }> {
+  return apiClient.get(`/projects/${projectName}/access`);
 }
 
 /**
