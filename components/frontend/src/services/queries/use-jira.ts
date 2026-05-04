@@ -1,31 +1,38 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import * as jiraAuthApi from '../api/jira-auth'
+import { jiraAdapter } from '../adapters/jira'
+import type { JiraPort } from '../ports/jira'
+import { BACKEND_VERSION } from './query-keys'
 
-export function useJiraStatus() {
+export const jiraKeys = {
+  all: [BACKEND_VERSION, 'jira'] as const,
+  status: () => [...jiraKeys.all, 'status'] as const,
+};
+
+export function useJiraStatus(port: JiraPort = jiraAdapter) {
   return useQuery({
-    queryKey: ['jira', 'status'],
-    queryFn: () => jiraAuthApi.getJiraStatus(),
+    queryKey: jiraKeys.status(),
+    queryFn: () => port.getJiraStatus(),
   })
 }
 
-export function useConnectJira() {
+export function useConnectJira(port: JiraPort = jiraAdapter) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: jiraAuthApi.connectJira,
+    mutationFn: port.connectJira,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['jira', 'status'] })
+      queryClient.invalidateQueries({ queryKey: jiraKeys.status() })
     },
   })
 }
 
-export function useDisconnectJira() {
+export function useDisconnectJira(port: JiraPort = jiraAdapter) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: jiraAuthApi.disconnectJira,
+    mutationFn: port.disconnectJira,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['jira', 'status'] })
+      queryClient.invalidateQueries({ queryKey: jiraKeys.status() })
     },
   })
 }

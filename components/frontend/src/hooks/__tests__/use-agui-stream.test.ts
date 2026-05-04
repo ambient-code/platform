@@ -1,13 +1,14 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useAGUIStream, initialState } from '../use-agui-stream';
+import type { SessionEventsPort } from '@/services/ports/session-events';
 
 // Mock the event-handlers module
 vi.mock('../agui/event-handlers', () => ({
   processAGUIEvent: vi.fn((prev) => prev),
 }));
 
-// EventSource mock
+// EventSource mock used by the fake port
 class MockEventSource {
   static instances: MockEventSource[] = [];
 
@@ -37,16 +38,25 @@ class MockEventSource {
   }
 }
 
-// Global fetch mock
-const fetchMock = vi.fn();
+function createFakePort(): SessionEventsPort {
+  return {
+    createEventSource: vi.fn((projectName, sessionName, runId) => {
+      let url = `/api/projects/${projectName}/agentic-sessions/${sessionName}/agui/events`;
+      if (runId) url += `?runId=${runId}`;
+      return new MockEventSource(url) as unknown as EventSource;
+    }),
+    sendMessage: vi.fn().mockResolvedValue({ runId: 'new-run' }),
+    interrupt: vi.fn().mockResolvedValue(undefined),
+  };
+}
 
 describe('useAGUIStream', () => {
+  let fakePort: ReturnType<typeof createFakePort>;
+
   beforeEach(() => {
     vi.useFakeTimers();
     MockEventSource.instances = [];
-    vi.stubGlobal('EventSource', MockEventSource);
-    vi.stubGlobal('fetch', fetchMock);
-    fetchMock.mockReset();
+    fakePort = createFakePort();
   });
 
   afterEach(() => {
@@ -60,7 +70,7 @@ describe('useAGUIStream', () => {
   };
 
   it('initializes with idle state', () => {
-    const { result } = renderHook(() => useAGUIStream(defaultOptions));
+    const { result } = renderHook(() => useAGUIStream(defaultOptions, fakePort));
 
     expect(result.current.state.status).toBe('idle');
     expect(result.current.isConnected).toBe(false);
@@ -75,29 +85,31 @@ describe('useAGUIStream', () => {
 
   describe('connect', () => {
     it('creates EventSource with correct URL', () => {
-      const { result } = renderHook(() => useAGUIStream(defaultOptions));
+      const { result } = renderHook(() => useAGUIStream(defaultOptions, fakePort));
 
       act(() => {
         result.current.connect();
       });
 
+      expect(fakePort.createEventSource).toHaveBeenCalledWith('proj', 'sess', undefined);
       expect(MockEventSource.instances).toHaveLength(1);
       expect(MockEventSource.instances[0].url).toBe('/api/projects/proj/agentic-sessions/sess/agui/events');
     });
 
     it('includes runId in URL when provided', () => {
-      const { result } = renderHook(() => useAGUIStream(defaultOptions));
+      const { result } = renderHook(() => useAGUIStream(defaultOptions, fakePort));
 
       act(() => {
         result.current.connect('run-123');
       });
 
+      expect(fakePort.createEventSource).toHaveBeenCalledWith('proj', 'sess', 'run-123');
       expect(MockEventSource.instances[0].url).toContain('?runId=run-123');
     });
 
     it('sets status to connecting then connected on open', () => {
       const onConnected = vi.fn();
-      const { result } = renderHook(() => useAGUIStream({ ...defaultOptions, onConnected }));
+      const { result } = renderHook(() => useAGUIStream({ ...defaultOptions, onConnected }, fakePort));
 
       act(() => {
         result.current.connect();
@@ -116,7 +128,7 @@ describe('useAGUIStream', () => {
 
     it('processes incoming events', () => {
       const onEvent = vi.fn();
-      const { result } = renderHook(() => useAGUIStream({ ...defaultOptions, onEvent }));
+      const { result } = renderHook(() => useAGUIStream({ ...defaultOptions, onEvent }, fakePort));
 
       act(() => {
         result.current.connect();
@@ -132,7 +144,7 @@ describe('useAGUIStream', () => {
 
     it('handles malformed JSON gracefully', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const { result } = renderHook(() => useAGUIStream(defaultOptions));
+      const { result } = renderHook(() => useAGUIStream(defaultOptions, fakePort));
 
       act(() => {
         result.current.connect();
@@ -148,7 +160,7 @@ describe('useAGUIStream', () => {
     });
 
     it('closes previous connection when connecting again', () => {
-      const { result } = renderHook(() => useAGUIStream(defaultOptions));
+      const { result } = renderHook(() => useAGUIStream(defaultOptions, fakePort));
 
       act(() => {
         result.current.connect();
@@ -167,7 +179,7 @@ describe('useAGUIStream', () => {
   describe('disconnect', () => {
     it('closes EventSource and resets state', () => {
       const onDisconnected = vi.fn();
-      const { result } = renderHook(() => useAGUIStream({ ...defaultOptions, onDisconnected }));
+      const { result } = renderHook(() => useAGUIStream({ ...defaultOptions, onDisconnected }, fakePort));
 
       act(() => {
         result.current.connect();
@@ -189,7 +201,7 @@ describe('useAGUIStream', () => {
     it('sets error state on connection error', () => {
       const onError = vi.fn();
       const onDisconnected = vi.fn();
-      const { result } = renderHook(() => useAGUIStream({ ...defaultOptions, onError, onDisconnected }));
+      const { result } = renderHook(() => useAGUIStream({ ...defaultOptions, onError, onDisconnected }, fakePort));
 
       act(() => {
         result.current.connect();
@@ -207,7 +219,7 @@ describe('useAGUIStream', () => {
     });
 
     it('schedules reconnect with exponential backoff', () => {
-      const { result } = renderHook(() => useAGUIStream(defaultOptions));
+      const { result } = renderHook(() => useAGUIStream(defaultOptions, fakePort));
 
       act(() => {
         result.current.connect();
@@ -232,31 +244,25 @@ describe('useAGUIStream', () => {
 
   describe('sendMessage', () => {
     it('sends message and adds to state', async () => {
-      fetchMock.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ runId: 'new-run' }),
-      });
-
-      const { result } = renderHook(() => useAGUIStream(defaultOptions));
+      const { result } = renderHook(() => useAGUIStream(defaultOptions, fakePort));
 
       await act(async () => {
         await result.current.sendMessage('Hello Claude');
       });
 
-      // User message should be added to state
+      expect(fakePort.sendMessage).toHaveBeenCalledWith('proj', 'sess', expect.objectContaining({
+        messages: [expect.objectContaining({ content: 'Hello Claude', role: 'user' })],
+      }));
       expect(result.current.state.messages).toHaveLength(1);
       expect(result.current.state.messages[0].content).toBe('Hello Claude');
       expect(result.current.state.messages[0].role).toBe('user');
     });
 
     it('handles send error', async () => {
-      fetchMock.mockResolvedValue({
-        ok: false,
-        text: () => Promise.resolve('Server error'),
-      });
+      (fakePort.sendMessage as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Server error'));
 
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const { result } = renderHook(() => useAGUIStream(defaultOptions));
+      const { result } = renderHook(() => useAGUIStream(defaultOptions, fakePort));
 
       let error: Error | undefined;
       await act(async () => {
@@ -267,7 +273,7 @@ describe('useAGUIStream', () => {
         }
       });
 
-      expect(error?.message).toContain('Failed to send message');
+      expect(error?.message).toContain('Server error');
       expect(result.current.state.status).toBe('error');
       consoleSpy.mockRestore();
     });
@@ -275,30 +281,24 @@ describe('useAGUIStream', () => {
 
   describe('interrupt', () => {
     it('sends interrupt request', async () => {
-      fetchMock.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ runId: 'run-1' }),
-      });
-
-      const { result } = renderHook(() => useAGUIStream(defaultOptions));
+      const { result } = renderHook(() => useAGUIStream(defaultOptions, fakePort));
 
       // First send a message to establish a run
       await act(async () => {
         await result.current.sendMessage('Hello');
       });
 
-      fetchMock.mockResolvedValue({ ok: true });
-
       await act(async () => {
         await result.current.interrupt();
       });
 
+      expect(fakePort.interrupt).toHaveBeenCalledWith('proj', 'sess', 'new-run');
       expect(result.current.isRunActive).toBe(false);
     });
 
     it('warns when no active run to interrupt', async () => {
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const { result } = renderHook(() => useAGUIStream(defaultOptions));
+      const { result } = renderHook(() => useAGUIStream(defaultOptions, fakePort));
 
       await act(async () => {
         await result.current.interrupt();
@@ -311,12 +311,12 @@ describe('useAGUIStream', () => {
 
   describe('autoConnect', () => {
     it('auto-connects when autoConnect is true', () => {
-      renderHook(() => useAGUIStream({ ...defaultOptions, autoConnect: true }));
+      renderHook(() => useAGUIStream({ ...defaultOptions, autoConnect: true }, fakePort));
       expect(MockEventSource.instances).toHaveLength(1);
     });
 
     it('does not auto-connect when autoConnect is false', () => {
-      renderHook(() => useAGUIStream({ ...defaultOptions, autoConnect: false }));
+      renderHook(() => useAGUIStream({ ...defaultOptions, autoConnect: false }, fakePort));
       expect(MockEventSource.instances).toHaveLength(0);
     });
   });
