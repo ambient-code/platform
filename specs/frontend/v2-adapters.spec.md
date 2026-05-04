@@ -4,7 +4,7 @@
 
 The frontend adapter layer SHALL support a second generation of adapters (v2) that consume the platform's REST API server instead of the legacy Kubernetes-backed backend. v2 adapters implement the same port interfaces defined in [api-adapter.spec.md](api-adapter.spec.md), enabling incremental per-domain migration without changes to React components or React Query hooks.
 
-Real-time and streaming operations (session messages, WebSocket connections) are out of scope for this spec. v2 adapters cover CRUD and lifecycle operations only.
+Session event streaming (`SessionEventsPort`) is a separate port that can be migrated to v2 independently of CRUD operations. The API server exposes AG-UI endpoints (`/sessions/{id}/agui/events`, `/agui/run`, `/agui/interrupt`) but currently operates as a thin proxy to the runner pod — it lacks the event persistence, between-run listening, and activity tracking present in the legacy backend. A v2 adapter for `SessionEventsPort` would call the API server directly (the SDK has no SSE support) and should account for these feature gaps.
 
 ## Requirements
 
