@@ -13,6 +13,15 @@ for these methods.
 | `GooglePort` | `getGoogleOAuthURL` | Returns a URL for redirect; no caching needed |
 | `GerritPort` | `getGerritInstanceStatus` | Used for per-instance status checks in components |
 
+## Streaming port (separate test location)
+
+The `SessionEventsPort` (streaming) integration test lives in
+`hooks/__tests__/integration-agui-stream.test.ts`, not in `queries/__tests__/`,
+because `useAGUIStream` is a stateful hook (not React Query) located in `hooks/`.
+The test uses `createSessionEventsAdapter(fakeApi)` with a `MockEventSource`
+and real `processAGUIEvent` — no `vi.mock`. Covers all 3 port methods:
+`createEventSource`, `sendMessage`, `interrupt`.
+
 ## Deprecated hooks (covered via paginated equivalents)
 
 `useProjects()` and `useSessions()` are thin wrappers over
