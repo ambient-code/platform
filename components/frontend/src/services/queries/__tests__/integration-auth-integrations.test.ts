@@ -56,7 +56,7 @@ describe('integration: hook → githubAdapter → fakeApi', () => {
       connectGitHub: vi.fn().mockResolvedValue('connected'),
       disconnectGitHub: vi.fn().mockResolvedValue('disconnected'),
       listGitHubForks: vi.fn().mockResolvedValue([{ full_name: 'user/repo', clone_url: 'https://github.com/user/repo.git' }]),
-      createGitHubFork: vi.fn().mockResolvedValue({ full_name: 'user/forked', clone_url: 'https://github.com/user/forked.git' }),
+      createGitHubFork: vi.fn().mockResolvedValue({ name: 'forked', fullName: 'user/forked', owner: 'user', url: 'https://github.com/user/forked', defaultBranch: 'main' }),
       getPRDiff: vi.fn().mockResolvedValue({ additions: 10, deletions: 2, changedFiles: 3 }),
       createPullRequest: vi.fn().mockResolvedValue({ url: 'https://github.com/org/repo/pull/1', number: 1 }),
       saveGitHubPAT: vi.fn().mockResolvedValue(undefined),
@@ -114,7 +114,7 @@ describe('integration: hook → githubAdapter → fakeApi', () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(fakeApi.connectGitHub).toHaveBeenCalled();
+    expect(fakeApi.connectGitHub).toHaveBeenCalledWith({ installationId: 123 });
   });
 
   it('useDisconnectGitHub: flows through', async () => {
@@ -140,7 +140,9 @@ describe('integration: hook → githubAdapter → fakeApi', () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(fakeApi.createGitHubFork).toHaveBeenCalled();
+    expect(fakeApi.createGitHubFork).toHaveBeenCalledWith({ owner: 'org', repo: 'repo' }, 'proj');
+    expect(result.current.data?.fullName).toBe('user/forked');
+    expect(result.current.data?.defaultBranch).toBe('main');
   });
 
   it('useCreatePullRequest: flows through', async () => {
@@ -157,8 +159,12 @@ describe('integration: hook → githubAdapter → fakeApi', () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(fakeApi.createPullRequest).toHaveBeenCalled();
+    expect(fakeApi.createPullRequest).toHaveBeenCalledWith(
+      { owner: 'org', repo: 'repo', title: 'PR title', body: 'Description', head: 'feature', base: 'main' },
+      'proj',
+    );
     expect(result.current.data?.number).toBe(1);
+    expect(result.current.data?.url).toBe('https://github.com/org/repo/pull/1');
   });
 
   it('useGitHubPATStatus: flows through', async () => {
@@ -226,7 +232,7 @@ describe('integration: hook → gitlabAdapter → fakeApi', () => {
     act(() => { result.current.mutate({ personalAccessToken: 'glpat-abc', instanceUrl: 'https://gitlab.example.com' }); });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(fakeApi.connectGitLab).toHaveBeenCalled();
+    expect(fakeApi.connectGitLab.mock.calls[0][0]).toEqual({ personalAccessToken: 'glpat-abc', instanceUrl: 'https://gitlab.example.com' });
   });
 
   it('useDisconnectGitLab: flows through', async () => {
@@ -306,7 +312,7 @@ describe('integration: hook → gerritAdapter → fakeApi', () => {
     act(() => { result.current.mutate({ instanceName: 'gerrit-1', url: 'https://gerrit.example.com', authMethod: 'http_basic' as const, username: 'user', httpToken: 'token' }); });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(fakeApi.connectGerrit).toHaveBeenCalled();
+    expect(fakeApi.connectGerrit.mock.calls[0][0]).toEqual({ instanceName: 'gerrit-1', url: 'https://gerrit.example.com', authMethod: 'http_basic', username: 'user', httpToken: 'token' });
   });
 
   it('useDisconnectGerrit: flows through', async () => {
@@ -331,8 +337,9 @@ describe('integration: hook → gerritAdapter → fakeApi', () => {
     act(() => { result.current.mutate({ url: 'https://gerrit.example.com', authMethod: 'http_basic' as const, username: 'user', httpToken: 'token' }); });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(fakeApi.testGerritConnection).toHaveBeenCalled();
+    expect(fakeApi.testGerritConnection.mock.calls[0][0]).toEqual({ url: 'https://gerrit.example.com', authMethod: 'http_basic', username: 'user', httpToken: 'token' });
     expect(result.current.data?.valid).toBe(true);
+    expect(result.current.data?.message).toBe('OK');
   });
 });
 
@@ -365,7 +372,7 @@ describe('integration: hook → jiraAdapter → fakeApi', () => {
     act(() => { result.current.mutate({ url: 'https://jira.example.com', email: 'user@example.com', apiToken: 'jira-token' }); });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(fakeApi.connectJira).toHaveBeenCalled();
+    expect(fakeApi.connectJira.mock.calls[0][0]).toEqual({ url: 'https://jira.example.com', email: 'user@example.com', apiToken: 'jira-token' });
   });
 
   it('useDisconnectJira: flows through', async () => {
@@ -399,7 +406,7 @@ describe('integration: hook → coderabbitAdapter → fakeApi', () => {
     act(() => { result.current.mutate({ apiKey: 'cr-key-123' }); });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(fakeApi.connectCodeRabbit).toHaveBeenCalled();
+    expect(fakeApi.connectCodeRabbit.mock.calls[0][0]).toEqual({ apiKey: 'cr-key-123' });
   });
 
   it('useDisconnectCodeRabbit: flows through', async () => {
@@ -478,6 +485,6 @@ describe('integration: hook → integrationsAdapter → fakeApi', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(fakeApi.getIntegrationsStatus).toHaveBeenCalled();
-    expect(result.current.data?.github).toBeDefined();
+    expect(result.current.data).toEqual({ github: { connected: true }, gitlab: { connected: false } });
   });
 });
