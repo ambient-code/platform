@@ -16,20 +16,36 @@ Standard patterns for data fetching, mutations, and cache management in the fron
 
 ```
 src/services/
-├── api/                    # API client layer (pure functions)
-│   ├── sessions.ts         # sessionApi.list(), .create(), .delete()
+├── ports/                  # Port interfaces (typed contracts)
+│   ├── sessions.ts         # SessionPort type definition
+│   ├── projects.ts         # ProjectPort type definition
+│   └── types.ts            # Canonical types (AgenticSession, Project, PaginatedResult, ApiError)
+├── adapters/               # Adapter implementations (satisfy port interfaces)
+│   ├── sessions.ts         # SessionAdapter — calls backend, transforms responses
 │   ├── projects.ts
-│   └── common.ts           # Shared fetch logic, error handling
-└── queries/                # React Query hooks
+│   └── __tests__/          # Adapter unit tests (recorded responses → canonical types)
+│       ├── sessions.test.ts
+│       └── projects.test.ts
+├── api/                    # Low-level API client (used by adapters, not by hooks directly)
+│   ├── client.ts           # Base fetch wrapper, error parsing
+│   ├── sessions.ts         # Raw backend API calls
+│   ├── projects.ts
+│   └── common.ts           # Shared types, pagination params
+└── queries/                # React Query hooks (consume ports, not api/ directly)
     ├── sessions.ts         # useSessions(), useCreateSession()
     ├── projects.ts
+    ├── __tests__/           # Hook tests against fake adapters
+    │   ├── sessions.test.ts
+    │   └── projects.test.ts
     └── common.ts           # Query client config
 ```
 
 **Separation of concerns:**
 
-- `api/`: Pure API functions (no React, no hooks)
-- `queries/`: React Query hooks that use API functions
+- `ports/`: Typed contracts — what operations exist and what types they use. No implementation.
+- `adapters/`: Implementations of ports — call `api/` functions, transform responses to canonical types. Fully unit tested.
+- `api/`: Low-level backend API calls (pure functions, no React). Used by adapters only.
+- `queries/`: React Query hooks that consume port interfaces. Tested against fake adapters.
 
 ## Pattern 1: Query Hook (List Resources)
 
@@ -399,6 +415,58 @@ useQuery({
 | Optimistic update | `onMutate` | Instant UI feedback |
 | Dependent query | `enabled` | Query depends on another |
 
+## Testing Requirements
+
+Every adapter MUST have full test coverage. This is non-negotiable — the adapter layer is the boundary that enables backend swaps, and untested adapters defeat the purpose.
+
+### Adapter Unit Tests (`adapters/__tests__/`)
+
+Every adapter function MUST have a unit test that:
+
+1. Provides a recorded backend response (inline JSON fixture)
+2. Verifies the adapter transforms it into the canonical type
+3. Verifies error responses are normalized to `ApiError`
+4. Runs without a backend, Next.js server, or network
+
+```typescript
+// adapters/__tests__/sessions.test.ts
+it('transforms backend session response to canonical AgenticSession', () => {
+  const backendResponse = { /* recorded JSON */ }
+  const result = sessionAdapter.transformSession(backendResponse)
+  expect(result.metadata.name).toBe('test-session')
+  expect(result.spec.llmSettings.model).toBe('claude-sonnet')
+  expect(result.status?.phase).toBe('Running')
+})
+
+it('normalizes backend error to ApiError', () => {
+  const errorResponse = { error: 'Not found', code: '404' }
+  expect(() => sessionAdapter.handleError(errorResponse))
+    .toThrow(expect.objectContaining({ error: 'Not found', code: '404' }))
+})
+```
+
+### Hook Tests (`queries/__tests__/`)
+
+Every React Query hook MUST have a test that:
+
+1. Provides a fake adapter implementation
+2. Verifies the hook returns the correct canonical types
+3. Verifies cache invalidation after mutations
+4. Runs without a backend
+
+### Contract Tests
+
+For each fully-adapted domain, a contract test SHOULD exist that:
+
+1. Runs against a live backend
+2. Calls every port function
+3. Verifies the response conforms to the canonical type
+4. Covers pagination, error handling, and edge cases
+
+### Coverage Rule
+
+**No adapter may be merged without corresponding tests.** If you add a new adapter function, add a test in the same PR. If you modify a transformation, update the test fixture.
+
 ## Validation Checklist
 
 Before merging frontend code:
@@ -409,3 +477,6 @@ Before merging frontend code:
 - [ ] Loading and error states handled
 - [ ] Optimistic updates for create/delete (where appropriate)
 - [ ] API client layer is pure functions (no hooks)
+- [ ] Every new adapter function has a unit test
+- [ ] Adapter tests use recorded responses, not mocked fetch (use fakes)
+- [ ] Hook tests use fake adapters, not real backends

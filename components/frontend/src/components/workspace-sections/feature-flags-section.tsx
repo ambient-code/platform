@@ -19,9 +19,11 @@ import { Separator } from "@/components/ui/separator";
 import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
 
-import { useFeatureFlags } from "@/services/queries/use-feature-flags-admin";
+import { useFeatureFlags, featureFlagKeys } from "@/services/queries/use-feature-flags-admin";
 import type { FeatureToggle } from "@/services/api/feature-flags-admin";
 import * as featureFlagsApi from "@/services/api/feature-flags-admin";
+import { modelKeys } from "@/services/queries/use-models";
+import { runnerTypeKeys } from "@/services/queries/use-runner-types";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -165,9 +167,9 @@ export function FeatureFlagsSection({ projectName }: FeatureFlagsSectionProps) {
 
       toast.success(`${changed.length} feature flag${changed.length > 1 ? "s" : ""} updated`);
 
-      queryClient.invalidateQueries({ queryKey: ["feature-flags", "list", projectName] });
-      queryClient.invalidateQueries({ queryKey: ["models", projectName] });
-      queryClient.invalidateQueries({ queryKey: ["runner-types", projectName] });
+      queryClient.invalidateQueries({ queryKey: featureFlagKeys.list(projectName) });
+      queryClient.invalidateQueries({ queryKey: modelKeys.forProject(projectName) });
+      queryClient.invalidateQueries({ queryKey: runnerTypeKeys.forProject(projectName) });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save feature flags");
     } finally {
