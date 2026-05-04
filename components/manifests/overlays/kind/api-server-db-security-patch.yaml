@@ -22,17 +22,17 @@ spec:
         - name: POSTGRES_USER
           valueFrom:
             secretKeyRef:
-              name: ambient-api-server-db
+              name: ambient-code-rds
               key: db.user
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: ambient-api-server-db
+              name: ambient-code-rds
               key: db.password
         - name: POSTGRES_DB
           valueFrom:
             secretKeyRef:
-              name: ambient-api-server-db
+              name: ambient-code-rds
               key: db.name
         - name: PGDATA
           value: /var/lib/postgresql/data/pgdata

@@ -14,7 +14,7 @@ parameters:
     description: The name of the OpenShift Service exposed for the database.
     displayName: Database Service Name
     required: true
-    value: ambient-api-server-db
+    value: ambient-code-rds
 
   - name: DATABASE_USER
     description: Username for PostgreSQL user that will be used for accessing the database.
