@@ -17,12 +17,14 @@ import type { EventHandlerCallbacks } from './agui/event-handlers'
 import { initialState } from './agui/types'
 import type { UseAGUIStreamOptions, UseAGUIStreamReturn } from './agui/types'
 import { frontendTools, executeFrontendTool } from '@/lib/frontend-tools'
+import { sessionEventsAdapter } from '@/services/adapters/session-events'
+import type { SessionEventsPort } from '@/services/ports/session-events'
 
 // Re-export types so existing consumers can import from this module
 export { initialState } from './agui/types'
 export type { UseAGUIStreamOptions, UseAGUIStreamReturn } from './agui/types'
 
-export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamReturn {
+export function useAGUIStream(options: UseAGUIStreamOptions, port: SessionEventsPort = sessionEventsAdapter): UseAGUIStreamReturn {
   // Track hidden message IDs (auto-sent initial/workflow prompts)
   const hiddenMessageIdsRef = useRef<Set<string>>(new Set())
   const {
@@ -111,13 +113,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         error: null,
       }))
 
-      // Build SSE URL through Next.js proxy
-      let url = `/api/projects/${encodeURIComponent(projectName)}/agentic-sessions/${encodeURIComponent(sessionName)}/agui/events`
-      if (runId) {
-        url += `?runId=${encodeURIComponent(runId)}`
-      }
-
-      const eventSource = new EventSource(url)
+      const eventSource = port.createEventSource(projectName, sessionName, runId)
       eventSourceRef.current = eventSource
 
       eventSource.onopen = () => {
@@ -185,7 +181,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         }, delay)
       }
     },
-    [projectName, sessionName, onConnected, onError, onDisconnected],
+    [projectName, sessionName, port, onConnected, onError, onDisconnected],
   )
 
   // Disconnect from the event stream
@@ -217,37 +213,21 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
       }
 
       try {
-        const interruptUrl = `/api/projects/${encodeURIComponent(projectName)}/agentic-sessions/${encodeURIComponent(sessionName)}/agui/interrupt`
-
-        const response = await fetch(interruptUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ runId }),
-        })
-
-        if (!response.ok) {
-          throw new Error(`Failed to interrupt: ${response.statusText}`)
-        }
-
-        // Mark run as inactive immediately (backend will send RUN_FINISHED or RUN_ERROR)
+        await port.interrupt(projectName, sessionName, runId)
         setIsRunActive(false)
         currentRunIdRef.current = null
-
       } catch (error) {
         console.error('[useAGUIStream] Interrupt failed:', error)
         throw error
       }
     },
-    [projectName, sessionName],
+    [projectName, sessionName, port],
   )
 
   // Send a message to start/continue the conversation
   // AG-UI server pattern: POST returns SSE stream directly
   const sendMessage = useCallback(
     async (content: string, metadata?: Record<string, unknown>) => {
-      // Send to backend via run endpoint - this returns an SSE stream
-      const runUrl = `/api/projects/${encodeURIComponent(projectName)}/agentic-sessions/${encodeURIComponent(sessionName)}/agui/run`
-
       const userMessage = {
         id: crypto.randomUUID(),
         role: 'user' as const,
@@ -255,7 +235,6 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         ...(metadata ? { metadata } : {}),
       }
 
-      // Add user message to state immediately for instant UI feedback.
       const userMsgWithTimestamp = {
         ...userMessage,
         timestamp: new Date().toISOString(),
@@ -268,42 +247,18 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
       }))
 
       try {
-        const response = await fetch(runUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            threadId: state.threadId || sessionName,
-            parentRunId: state.runId,
-            messages: [userMessage],
-            tools: frontendTools,
-          }),
+        const result = await port.sendMessage(projectName, sessionName, {
+          threadId: state.threadId || sessionName,
+          parentRunId: state.runId,
+          messages: [userMessage],
+          tools: frontendTools,
         })
 
-        if (!response.ok) {
-          const errorText = await response.text()
-          console.error(`[useAGUIStream] /agui/run error: ${errorText}`)
-          setState((prev) => ({
-            ...prev,
-            status: 'error',
-            error: errorText,
-          }))
-          setIsRunActive(false)
-          throw new Error(`Failed to send message: ${errorText}`)
-        }
-
-        // AG-UI middleware pattern: POST creates run and returns metadata immediately
-        // Events are broadcast to GET /agui/events subscribers (avoid concurrent streams)
-        const result = await response.json()
-
-        // Mark run as active and track runId
         if (result.runId) {
           currentRunIdRef.current = result.runId
           setIsRunActive(true)
         }
 
-        // Ensure we're connected to the thread stream to receive events.
         if (!eventSourceRef.current) {
           connect()
         }
@@ -317,7 +272,7 @@ export function useAGUIStream(options: UseAGUIStreamOptions): UseAGUIStreamRetur
         throw error
       }
     },
-    [projectName, sessionName, state.threadId, state.runId, connect],
+    [projectName, sessionName, state.threadId, state.runId, connect, port],
   )
 
   // Auto-connect on mount if enabled (client-side only)

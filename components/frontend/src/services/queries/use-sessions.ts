@@ -1,9 +1,8 @@
-/**
- * React Query hooks for agentic sessions
- */
-
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import * as sessionsApi from '../api/sessions';
+import { sessionsAdapter } from '../adapters/sessions';
+import { sessionReposAdapter } from '../adapters/session-repos';
+import type { SessionsPort } from '../ports/sessions';
+import type { SessionReposPort } from '../ports/session-repos';
 import type {
   AgenticSession,
   CreateAgenticSessionRequest,
@@ -11,12 +10,10 @@ import type {
   CloneAgenticSessionRequest,
   PaginationParams,
 } from '@/types/api';
+import { BACKEND_VERSION } from './query-keys';
 
-/**
- * Query keys for sessions
- */
 export const sessionKeys = {
-  all: ['sessions'] as const,
+  all: [BACKEND_VERSION, 'sessions'] as const,
   lists: () => [...sessionKeys.all, 'list'] as const,
   list: (projectName: string, params?: PaginationParams) =>
     [...sessionKeys.lists(), projectName, params ?? {}] as const,
@@ -31,104 +28,80 @@ export const sessionKeys = {
     [...sessionKeys.detail(projectName, sessionName), 'repos-status'] as const,
 };
 
-/**
- * Hook to fetch sessions for a project with pagination support
- */
-export function useSessionsPaginated(projectName: string, params: PaginationParams = {}) {
+export function useSessionsPaginated(projectName: string, params: PaginationParams = {}, port: SessionsPort = sessionsAdapter) {
   return useQuery({
     queryKey: sessionKeys.list(projectName, params),
-    queryFn: () => sessionsApi.listSessionsPaginated(projectName, params),
+    queryFn: () => port.listSessions(projectName, params),
     enabled: !!projectName,
-    placeholderData: keepPreviousData, // Keep previous data while fetching new page
-    refetchOnMount: 'always', // Always refetch when navigating back to the list
-    // Smart polling: tier interval based on the most active session in the list
+    placeholderData: keepPreviousData,
+    refetchOnMount: 'always',
     refetchInterval: (query) => {
       const data = query.state.data as { items?: AgenticSession[] } | undefined;
       const items = data?.items;
       if (!items?.length) return false;
 
-      // Tier 1: Any session transitioning phases → poll aggressively (2s)
       const hasTransitioning = items.some((s) => {
         const phase = s.status?.phase;
         return phase === 'Pending' || phase === 'Creating' || phase === 'Stopping';
       });
       if (hasTransitioning) return 2000;
 
-      // Tier 2: Any session with agent actively working → moderate (5s)
       const hasWorking = items.some((s) => {
         return s.status?.phase === 'Running' && (!s.status?.agentStatus || s.status?.agentStatus === 'working');
       });
       if (hasWorking) return 5000;
 
-      // Tier 3: Any session running but agent idle/waiting → slow (15s)
       const hasRunning = items.some((s) => s.status?.phase === 'Running');
       if (hasRunning) return 15000;
 
-      // Tier 4: All sessions terminal → no polling
       return false;
     },
   });
 }
 
-/**
- * Hook to fetch sessions for a project (legacy - no pagination)
- * @deprecated Use useSessionsPaginated for better performance
- */
-export function useSessions(projectName: string) {
+/** @deprecated Use useSessionsPaginated for better performance */
+export function useSessions(projectName: string, port: SessionsPort = sessionsAdapter) {
   return useQuery({
     queryKey: sessionKeys.list(projectName),
-    queryFn: () => sessionsApi.listSessions(projectName),
+    queryFn: async () => {
+      const result = await port.listSessions(projectName);
+      return result.items;
+    },
     enabled: !!projectName,
   });
 }
 
-/**
- * Hook to fetch a single session
- */
-export function useSession(projectName: string, sessionName: string) {
+export function useSession(projectName: string, sessionName: string, port: SessionsPort = sessionsAdapter) {
   return useQuery({
     queryKey: sessionKeys.detail(projectName, sessionName),
-    queryFn: () => sessionsApi.getSession(projectName, sessionName),
+    queryFn: () => port.getSession(projectName, sessionName),
     enabled: !!projectName && !!sessionName,
-    retry: 3, // Retry failed requests (useful during backend rollouts)
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000), // Exponential backoff
-    // Poll for status updates based on session phase
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
     refetchInterval: (query) => {
       const session = query.state.data as AgenticSession | undefined;
       const phase = session?.status?.phase;
       const annotations = session?.metadata?.annotations || {};
 
-      // Check if a state transition is pending (user requested start/stop)
-      // This catches the case where the phase hasn't updated yet but we know
-      // a transition is coming
       const desiredPhase = annotations['ambient-code.io/desired-phase'];
       if (desiredPhase) {
-        // Pending transition - poll very aggressively (every 500ms)
         return 500;
       }
 
-      // Transitional states - poll aggressively (every 1 second)
       const isTransitioning =
         phase === 'Stopping' ||
         phase === 'Pending' ||
         phase === 'Creating';
       if (isTransitioning) return 1000;
 
-      // Running state - poll normally (every 5 seconds)
       if (phase === 'Running') return 5000;
 
-      // Terminal states (Stopped, Completed, Failed) - no polling
       return false;
     },
   });
 }
 
-// useSessionMessages removed - replaced by AG-UI protocol (useAGUIStream)
-
-/**
- * Hook to create a session
- */
-export function useCreateSession() {
+export function useCreateSession(port: SessionsPort = sessionsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -138,21 +111,17 @@ export function useCreateSession() {
     }: {
       projectName: string;
       data: CreateAgenticSessionRequest;
-    }) => sessionsApi.createSession(projectName, data),
+    }) => port.createSession(projectName, data),
     onSuccess: (_session, { projectName }) => {
-      // Invalidate and refetch sessions list
       queryClient.invalidateQueries({
         queryKey: sessionKeys.list(projectName),
-        refetchType: 'all', // Refetch both active and inactive queries
+        refetchType: 'all',
       });
     },
   });
 }
 
-/**
- * Hook to stop a session
- */
-export function useStopSession() {
+export function useStopSession(port: SessionsPort = sessionsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -164,14 +133,12 @@ export function useStopSession() {
       projectName: string;
       sessionName: string;
       data?: StopAgenticSessionRequest;
-    }) => sessionsApi.stopSession(projectName, sessionName, data),
+    }) => port.stopSession(projectName, sessionName, data),
     onSuccess: (_message, { projectName, sessionName }) => {
-      // Invalidate session details to refetch status
       queryClient.invalidateQueries({
         queryKey: sessionKeys.detail(projectName, sessionName),
         refetchType: 'all',
       });
-      // Invalidate list to update session count
       queryClient.invalidateQueries({
         queryKey: sessionKeys.list(projectName),
         refetchType: 'all',
@@ -180,10 +147,7 @@ export function useStopSession() {
   });
 }
 
-/**
- * Hook to start/restart a session
- */
-export function useStartSession() {
+export function useStartSession(port: SessionsPort = sessionsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -193,14 +157,12 @@ export function useStartSession() {
     }: {
       projectName: string;
       sessionName: string;
-    }) => sessionsApi.startSession(projectName, sessionName),
+    }) => port.startSession(projectName, sessionName),
     onSuccess: (_response, { projectName, sessionName }) => {
-      // Invalidate session details to refetch status
       queryClient.invalidateQueries({
         queryKey: sessionKeys.detail(projectName, sessionName),
         refetchType: 'all',
       });
-      // Invalidate list to update session count
       queryClient.invalidateQueries({
         queryKey: sessionKeys.list(projectName),
         refetchType: 'all',
@@ -209,10 +171,7 @@ export function useStartSession() {
   });
 }
 
-/**
- * Hook to clone a session
- */
-export function useCloneSession() {
+export function useCloneSession(port: SessionsPort = sessionsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -224,21 +183,17 @@ export function useCloneSession() {
       projectName: string;
       sessionName: string;
       data: CloneAgenticSessionRequest;
-    }) => sessionsApi.cloneSession(projectName, sessionName, data),
+    }) => port.cloneSession(projectName, sessionName, data),
     onSuccess: (_session, { projectName }) => {
-      // Invalidate and refetch sessions list to show new cloned session
       queryClient.invalidateQueries({
         queryKey: sessionKeys.list(projectName),
-        refetchType: 'all', // Refetch both active and inactive queries
+        refetchType: 'all',
       });
     },
   });
 }
 
-/**
- * Hook to delete a session
- */
-export function useDeleteSession() {
+export function useDeleteSession(port: SessionsPort = sessionsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -248,13 +203,11 @@ export function useDeleteSession() {
     }: {
       projectName: string;
       sessionName: string;
-    }) => sessionsApi.deleteSession(projectName, sessionName),
+    }) => port.deleteSession(projectName, sessionName),
     onSuccess: (_data, { projectName, sessionName }) => {
-      // Remove from cache
       queryClient.removeQueries({
         queryKey: sessionKeys.detail(projectName, sessionName),
       });
-      // Invalidate list
       queryClient.invalidateQueries({
         queryKey: sessionKeys.list(projectName),
         refetchType: 'all',
@@ -263,29 +216,21 @@ export function useDeleteSession() {
   });
 }
 
-// useSendChatMessage and useSendControlMessage removed - replaced by AG-UI protocol
-
-/**
- * Hook to fetch Kubernetes events for the session's runner pod.
- * Pass a custom refetchInterval (ms) to poll faster during startup phases.
- */
 export function useSessionPodEvents(
   projectName: string,
   sessionName: string,
   refetchInterval: number = 3000,
+  port: SessionsPort = sessionsAdapter,
 ) {
   return useQuery({
     queryKey: [...sessionKeys.detail(projectName, sessionName), 'pod-events'] as const,
-    queryFn: () => sessionsApi.getSessionPodEvents(projectName, sessionName),
+    queryFn: () => port.getSessionPodEvents(projectName, sessionName),
     enabled: !!projectName && !!sessionName,
     refetchInterval,
   });
 }
 
-/**
- * Hook to continue a session (restarts the existing session)
- */
-export function useContinueSession() {
+export function useContinueSession(port: SessionsPort = sessionsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -296,16 +241,13 @@ export function useContinueSession() {
       projectName: string;
       parentSessionName: string;
     }) => {
-      // Restart the existing session by updating its status to Creating
-      return sessionsApi.startSession(projectName, parentSessionName);
+      return port.startSession(projectName, parentSessionName);
     },
     onSuccess: (_response, { projectName, parentSessionName }) => {
-      // Invalidate session details to refetch status
       queryClient.invalidateQueries({
         queryKey: sessionKeys.detail(projectName, parentSessionName),
         refetchType: 'all',
       });
-      // Invalidate list to update session count
       queryClient.invalidateQueries({
         queryKey: sessionKeys.list(projectName),
         refetchType: 'all',
@@ -314,10 +256,7 @@ export function useContinueSession() {
   });
 }
 
-/**
- * Hook to update a session's display name
- */
-export function useUpdateSessionDisplayName() {
+export function useUpdateSessionDisplayName(port: SessionsPort = sessionsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -329,14 +268,12 @@ export function useUpdateSessionDisplayName() {
       projectName: string;
       sessionName: string;
       displayName: string;
-    }) => sessionsApi.updateSessionDisplayName(projectName, sessionName, displayName),
+    }) => port.updateSessionDisplayName(projectName, sessionName, displayName),
     onSuccess: (_data, { projectName, sessionName }) => {
-      // Invalidate session details to refetch with new name
       queryClient.invalidateQueries({
         queryKey: sessionKeys.detail(projectName, sessionName),
         refetchType: 'all',
       });
-      // Invalidate list to update session name in list view
       queryClient.invalidateQueries({
         queryKey: sessionKeys.list(projectName),
         refetchType: 'all',
@@ -345,10 +282,7 @@ export function useUpdateSessionDisplayName() {
   });
 }
 
-/**
- * Hook to switch the LLM model for a running session
- */
-export function useSwitchSessionModel() {
+export function useSwitchSessionModel(port: SessionsPort = sessionsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -360,7 +294,7 @@ export function useSwitchSessionModel() {
       projectName: string;
       sessionName: string;
       model: string;
-    }) => sessionsApi.switchSessionModel(projectName, sessionName, model),
+    }) => port.switchSessionModel(projectName, sessionName, model),
     onSuccess: (_data, { projectName, sessionName }) => {
       queryClient.invalidateQueries({
         queryKey: sessionKeys.detail(projectName, sessionName),
@@ -370,28 +304,21 @@ export function useSwitchSessionModel() {
   });
 }
 
-/**
- * Hook to fetch session export data (AG-UI events + legacy messages)
- */
-export function useSessionExport(projectName: string, sessionName: string, enabled: boolean) {
+export function useSessionExport(projectName: string, sessionName: string, enabled: boolean, port: SessionsPort = sessionsAdapter) {
   return useQuery({
     queryKey: sessionKeys.export(projectName, sessionName),
-    queryFn: () => sessionsApi.getSessionExport(projectName, sessionName),
+    queryFn: () => port.getSessionExport(projectName, sessionName),
     enabled: enabled && !!projectName && !!sessionName,
-    staleTime: 60000, // Cache for 1 minute
+    staleTime: 60000,
   });
 }
 
-/**
- * Hook to fetch repository status (branches, current branch) from runner
- * Polls every 30 seconds for real-time updates
- */
-export function useReposStatus(projectName: string, sessionName: string, enabled: boolean = true) {
+export function useReposStatus(projectName: string, sessionName: string, enabled: boolean = true, port: SessionReposPort = sessionReposAdapter) {
   return useQuery({
     queryKey: sessionKeys.reposStatus(projectName, sessionName),
-    queryFn: () => sessionsApi.getReposStatus(projectName, sessionName),
+    queryFn: () => port.getReposStatus(projectName, sessionName),
     enabled: enabled && !!projectName && !!sessionName,
-    refetchInterval: 30000, // Poll every 30 seconds
-    staleTime: 25000, // Consider stale after 25 seconds
+    refetchInterval: 30000,
+    staleTime: 25000,
   });
 }
