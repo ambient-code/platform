@@ -1,0 +1,20 @@
+[
+  {
+    "input": "I need to add a new component to the frontend",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "frontend-development" },
+    "description": "Frontend component work should trigger standards loading"
+  },
+  {
+    "input": "fix the session list page",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "frontend-development" },
+    "description": "Frontend bug fix should trigger standards loading"
+  },
+  {
+    "input": "add a new React Query hook for scheduled sessions",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "frontend-development" },
+    "description": "React Query work should trigger standards loading"
+  }
+]
