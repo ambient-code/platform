@@ -31,7 +31,7 @@ The SDK provides typed methods and types. A catch-all Next.js route proxies to t
 
 ## Scope
 
-This skill covers **Sessions** and **Projects** — the first two domains to migrate. **ScheduledSessions** has a full CRUD plugin in the API server (`plugins/scheduledSessions/`) but is deferred until the sessions and projects migration is stable. **SessionEvents** (AG-UI streaming) is a separate port (`SessionEventsPort`) that can be migrated independently — see the spec for details.
+This skill covers **Sessions**, **Projects**, and **ScheduledSessions** — the three domains to migrate. ScheduledSessions has a full CRUD plugin in the API server (`plugins/scheduledSessions/`) with suspend/resume/trigger/runs endpoints. The TS SDK currently lacks ScheduledSession types — add to the OpenAPI spec and regenerate as a prerequisite (see SDK Prerequisites for ScheduledSessions below). **SessionEvents** (AG-UI streaming) is a separate port (`SessionEventsPort`) that can be migrated independently — see the spec for details.
 
 ## SDK Setup
 
@@ -190,6 +190,125 @@ Canonical `CreateProjectRequest` / `UpdateProjectRequest` → SDK `ProjectCreate
 | `labels` | `labels` | `JSON.stringify()` |
 | `annotations` | `annotations` | `JSON.stringify()` |
 
+## ScheduledSession Architecture
+
+The API server decomposes what the CRD bundles into separate resources:
+
+- **Agent config** (model, repos, workflow, env vars, prompt) → `Agent` resource
+- **Schedule config** (cron, timezone, enabled) → `ScheduledSession` resource
+- **Execution config** (timeout, inactivityTimeout, stopOnRunFinished, runnerType) → ScheduledSession fields (prerequisite: add these to API server model — they are session execution params, not agent config)
+
+The v2 adapter bridges this transparently. Consumers continue to work with `sessionTemplate` (the CRD-shaped bundled config) — the adapter creates/resolves Agents behind the port boundary.
+
+```
+Consumer → ScheduledSessionsPort → v2 adapter → { Agent API + ScheduledSession API }
+```
+
+## ScheduledSession Mapping (Response)
+
+SDK `ScheduledSession` → canonical `ScheduledSession`. The adapter must resolve `agent_id` to reconstruct `sessionTemplate`.
+
+**Step 1: Resolve Agent** — fetch Agent by `agent_id` via `client.agents.get(agentId)`. Cache Agent lookups within a request to avoid repeated calls for list operations (collect unique `agent_id` values, batch-fetch).
+
+**Step 2: Reconstruct sessionTemplate from Agent:**
+
+| Agent field | sessionTemplate field | Transform |
+|---|---|---|
+| `prompt` | `initialPrompt` | direct |
+| `llm_model` | `llmSettings.model` | nest |
+| `llm_temperature` | `llmSettings.temperature` | nest |
+| `llm_max_tokens` | `llmSettings.maxTokens` | nest |
+| `repo_url` | `repos[0].url` | wrap in single-element array (if non-null) |
+| `workflow_id` | `activeWorkflow` | resolve workflow → `{ gitUrl, branch, path }` (reuse Workflow Resolution) |
+| `environment_variables` | `environmentVariables` | parse JSON to `Record<string, string>` |
+
+**Step 3: Map direct ScheduledSession fields:**
+
+| SDK field | Canonical field | Transform |
+|---|---|---|
+| `name` | `name` | direct |
+| `name` | `displayName` | fallback (until `display_name` is added to model) |
+| `schedule` | `schedule` | direct |
+| `enabled` | `suspend` | invert (`!enabled`) |
+| `last_run_at` | `lastScheduleTime` | direct |
+| `created_at` | `creationTimestamp` | direct |
+
+**Step 4: Fields without SDK source — default to safe values:**
+- `namespace` → project name
+- `activeCount` → `0` (no API server equivalent; runtime state)
+- `reuseLastSession` → `false` (no API server equivalent)
+- `labels`, `annotations` → parse JSON or `{}`
+
+**When `agent_id` is absent** (once made optional on the API server): use `session_prompt` → `sessionTemplate.initialPrompt`, leave other sessionTemplate fields at defaults.
+
+## ScheduledSession Request Mapping (Create)
+
+Canonical `CreateScheduledSessionRequest` → implicit Agent creation + SDK ScheduledSession creation. The adapter decomposes `sessionTemplate` into agent-level and schedule-level config.
+
+**Step 1: Create Agent from sessionTemplate**
+
+| sessionTemplate field | Agent field | Transform |
+|---|---|---|
+| `initialPrompt` | `prompt` | direct |
+| `llmSettings.model` | `llm_model` | flatten |
+| `llmSettings.temperature` | `llm_temperature` | flatten |
+| `llmSettings.maxTokens` | `llm_max_tokens` | flatten |
+| `repos[0].url` | `repo_url` | extract first repo URL |
+| `activeWorkflow` | `workflow_id` | resolve `{ gitUrl, branch, path }` → workflow ID (reuse Workflow Resolution) |
+| `environmentVariables` | `environment_variables` | `JSON.stringify()` |
+
+Agent `name`: generate from scheduled session name (e.g., `{displayName}-agent` or `scheduled-{timestamp}`).
+
+**Step 2: Create ScheduledSession**
+
+| Canonical field | SDK field | Transform |
+|---|---|---|
+| `displayName` | `name` | direct |
+| `schedule` | `schedule` | direct |
+| `suspend` | `enabled` | invert (`!suspend`) |
+| (from step 1) | `agent_id` | reference created Agent |
+| `sessionTemplate.initialPrompt` | `session_prompt` | direct (prompt override) |
+
+**Fields without SDK target** — drop silently (execution params, prerequisite to add to API server model):
+- `sessionTemplate.timeout` → future `timeout` field on ScheduledSession
+- `sessionTemplate.inactivityTimeout` → future `inactivity_timeout` field
+- `sessionTemplate.stopOnRunFinished` → future `stop_on_run_finished` field
+- `sessionTemplate.runnerType` → future `runner_type` field
+- `reuseLastSession` → no API server equivalent
+
+## ScheduledSession Request Mapping (Update)
+
+For updates that change `sessionTemplate` fields: update the referenced Agent via `client.agents.update(agentId, patch)` with the changed agent-level fields. For updates that only change `schedule`, `suspend`, or `displayName`: patch the ScheduledSession only. If both change, patch both.
+
+## ScheduledSession Delete + Agent Cleanup
+
+On delete: delete the ScheduledSession via `client.scheduledSessions.delete(id)`. For the auto-created Agent, check if any other ScheduledSessions reference the same `agent_id` (query `client.scheduledSessions.list({ search: "agent_id = '...'" })`). If no other references exist, delete the Agent. If other references exist, leave it.
+
+No cascade delete exists at the DB level — the adapter handles cleanup explicitly.
+
+## ScheduledSessionsPort Method Status
+
+All 9 port methods are implementable via the SDK. No `NOT_IMPLEMENTED` throws needed.
+
+| Method | v2 Strategy | Notes |
+|---|---|---|
+| `listScheduledSessions` | Implement | `client.scheduledSessions.list()` + batch Agent resolution |
+| `getScheduledSession` | Implement | `client.scheduledSessions.get()` + Agent resolution |
+| `createScheduledSession` | Implement | Create Agent → create ScheduledSession (see Request Mapping) |
+| `updateScheduledSession` | Implement | Patch Agent and/or ScheduledSession (see Update mapping) |
+| `deleteScheduledSession` | Implement | Delete ScheduledSession + conditional Agent cleanup |
+| `suspendScheduledSession` | Implement | `client.scheduledSessions.suspend()` |
+| `resumeScheduledSession` | Implement | `client.scheduledSessions.resume()` |
+| `triggerScheduledSession` | Implement | `client.scheduledSessions.trigger()` |
+| `listScheduledSessionRuns` | Implement | `client.scheduledSessions.runs()` (returns sessions — reuse Session Mapping) |
+
+## SDK Prerequisites for ScheduledSessions
+
+1. **OpenAPI spec**: Add ScheduledSession schemas and paths to `openapi.yaml` — the plugin exists but is not registered in the OpenAPI spec (no paths, no schemas). Add under the `# AUTO-ADD NEW PATHS` and `# AUTO-ADD NEW SCHEMAS` markers.
+2. **TS SDK regeneration**: Run `make generate-sdk` after OpenAPI update to get TS types and client methods.
+3. **`agent_id` optionality**: Update API server validation to make `agent_id` optional on ScheduledSession create — sessions should be able to exist without an agent.
+4. **Execution fields**: Add `timeout`, `inactivity_timeout`, `stop_on_run_finished`, `runner_type` to the ScheduledSession model — these are session execution params, not agent config.
+
 ## Pagination
 
 Create `services/adapters/v2/pagination.ts`. The SDK returns `{ kind, page, size, total, items }`. Transform to `PaginatedResult<T>`:
@@ -245,6 +364,8 @@ Net: 3 methods implementable via SDK patch, 3 throw `NOT_IMPLEMENTED`.
 
 Note: `ProjectSettings` has its own SDK API (`client.projectSettings`). MCP server methods could be wired through that API in a future iteration.
 
+**ScheduledSessionsPort**: All 9 methods are implementable — see ScheduledSessionsPort Method Status above.
+
 ## Cache Isolation
 
 `BACKEND_VERSION` in `services/queries/query-keys.ts` prefixes all cache keys. Bump to `'v2'` when migrating domains to prevent stale v1 data from being served.
@@ -265,14 +386,26 @@ No hook or component changes needed.
 
 Mock SDK client methods with `vi.fn()`. Provide SDK-shaped responses (flat, snake_case, JSONB as strings). Assert canonical types come out (nested, camelCase, parsed). Test: pagination, error mapping, JSONB parse failures (malformed strings → fallback defaults), unmapped fields are dropped, missing fields get defaults, request mapping serializes collections, unsupported methods throw `NOT_IMPLEMENTED`, return type normalization produces correct shapes, name→ID resolution with KSUID fast path and search fallback.
 
+**ScheduledSession-specific tests:**
+- Agent creation from sessionTemplate decomposition (create path)
+- Agent resolution on read (reconstruct sessionTemplate from Agent config)
+- Batch Agent resolution for list operations (dedup by `agent_id`)
+- Update routing: sessionTemplate change → Agent patch, schedule-only change → ScheduledSession patch only
+- Delete with Agent cleanup check (no other references → delete Agent; other references → keep)
+- `enabled` ↔ `suspend` inversion in both directions
+- Missing `agent_id` fallback (`session_prompt` → `sessionTemplate.initialPrompt`, defaults for rest)
+
 ## Key Files
 
 - SDK types: `components/ambient-sdk/ts-sdk/src/{session,project,base}.ts`
 - SDK client: `components/ambient-sdk/ts-sdk/src/{client,session_api,project_api}.ts`
 - SDK generator: `components/ambient-sdk/generator/`
-- Canonical types: `components/frontend/src/types/api/sessions.ts`
-- Ports: `components/frontend/src/services/ports/{sessions,projects,types}.ts`
-- v1 reference: `components/frontend/src/services/adapters/v1/sessions.ts`
+- Canonical types: `components/frontend/src/types/api/sessions.ts`, `components/frontend/src/types/api/scheduled-sessions.ts`
+- Ports: `components/frontend/src/services/ports/{sessions,projects,scheduled-sessions,types}.ts`
+- v1 reference: `components/frontend/src/services/adapters/v1/sessions.ts`, `components/frontend/src/services/adapters/v1/scheduled-sessions.ts`
 - Auth: `components/frontend/src/lib/auth.ts`
 - Query keys: `components/frontend/src/services/queries/query-keys.ts`
+- API server ScheduledSession plugin: `components/ambient-api-server/plugins/scheduledSessions/`
+- API server Agent plugin: `components/ambient-api-server/plugins/agents/`
+- Go SDK ScheduledSession types: `components/ambient-sdk/go-sdk/types/scheduled_session.go`
 - Migration roadmap: `components/ambient-api-server/DATA_MODEL_COMPARISON.md`

@@ -4,6 +4,8 @@
 
 The frontend adapter layer SHALL support a second generation of adapters (v2) that consume the platform's REST API server instead of the legacy Kubernetes-backed backend. v2 adapters implement the same port interfaces defined in [api-adapter.spec.md](api-adapter.spec.md), enabling incremental per-domain migration without changes to React components or React Query hooks.
 
+This spec covers three domains: **Sessions**, **Projects**, and **ScheduledSessions**. ScheduledSessions have a full CRUD plugin in the API server (`plugins/scheduledSessions/`) with suspend/resume/trigger/runs endpoints. The API server decomposes what the legacy CRD bundles: agent-level config (model, repos, workflow, env vars, prompt) lives on a separate Agent resource, while schedule config (cron, timezone, enabled) lives on the ScheduledSession. v2 adapters bridge this by transparently creating and resolving Agent resources.
+
 Session event streaming (`SessionEventsPort`) is a separate port that can be migrated to v2 independently of CRUD operations. The API server exposes AG-UI endpoints (`/sessions/{id}/agui/events`, `/agui/run`, `/agui/interrupt`) but currently operates as a thin proxy to the runner pod — it lacks the event persistence, between-run listening, and activity tracking present in the legacy backend. A v2 adapter for `SessionEventsPort` would call the API server directly (the SDK has no SSE support) and should account for these feature gaps.
 
 ## Requirements
@@ -35,6 +37,15 @@ v2 adapters SHALL transform API server responses into canonical frontend types. 
 - WHEN the v2 adapter transforms the response
 - THEN those fields are normalized into their typed representations (arrays, records, nested objects)
 - AND the consumer receives the same typed structures as from a v1 adapter
+
+#### Scenario: ScheduledSession response maps to canonical ScheduledSession
+
+- GIVEN an API server ScheduledSession response with `agent_id` referencing an Agent resource
+- WHEN the v2 adapter transforms the response
+- THEN the adapter resolves `agent_id` to reconstruct `sessionTemplate` from Agent config (prompt, LLM settings, repo URL, workflow ID, environment variables)
+- AND `enabled` maps to `!suspend`
+- AND `session_prompt` maps to `sessionTemplate.initialPrompt` when no Agent is referenced
+- AND the result conforms to the existing canonical `ScheduledSession` type without modification to that type
 
 #### Scenario: Missing canonical fields have defaults
 
@@ -156,6 +167,23 @@ v2 adapters SHALL transform canonical frontend request types into API server req
 - THEN the canonical request is transformed to the API server format
 - AND collection fields (labels, annotations) are serialized
 
+#### Scenario: ScheduledSession creation decomposes sessionTemplate into Agent and schedule
+
+- GIVEN a `CreateScheduledSessionRequest` containing a `sessionTemplate` with LLM settings, repos, workflow, and environment variables
+- WHEN the v2 adapter submits the creation request
+- THEN the adapter creates an Agent resource from the agent-level config in `sessionTemplate`
+- AND creates the ScheduledSession with `agent_id` referencing the new Agent
+- AND `suspend` maps to `!enabled`
+- AND execution-level fields (timeout, inactivityTimeout) are mapped to ScheduledSession fields when available
+- AND the consumer's request type is unchanged from v1
+
+#### Scenario: ScheduledSession update without sessionTemplate changes skips Agent mutation
+
+- GIVEN a scheduled session update that only changes `schedule` or `suspend`
+- WHEN the v2 adapter submits the patch
+- THEN only the ScheduledSession is patched
+- AND the referenced Agent is not modified
+
 #### Scenario: Request fields without API server equivalents are handled gracefully
 
 - GIVEN a canonical request type containing fields that have no API server equivalent
@@ -180,6 +208,14 @@ v2 adapters SHALL declare a strategy for port methods that have no API server eq
 - GIVEN a project port method that operates on domain-specific sub-resources not modeled in the API server
 - WHEN a consumer calls that method through a v2 adapter
 - THEN the adapter SHALL throw a documented error
+
+#### Scenario: ScheduledSession execution fields degrade gracefully
+
+- GIVEN a ScheduledSession port method that sets execution parameters (timeout, inactivityTimeout, stopOnRunFinished, runnerType)
+- WHEN the API server ScheduledSession model does not yet support those fields
+- THEN the adapter drops unsupported execution fields silently on create and update
+- AND documents which execution fields are not yet available
+- AND the consumer's request type is unchanged
 
 #### Scenario: Partial migration is supported
 
