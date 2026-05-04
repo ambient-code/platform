@@ -95,7 +95,7 @@ describe('integration: hook → secretsAdapter → fakeApi', () => {
     return {
       getSecretsList: vi.fn().mockResolvedValue(['SECRET_A', 'SECRET_B']),
       getSecretsConfig: vi.fn().mockResolvedValue({ secretName: 'my-secrets' }),
-      getSecretsValues: vi.fn().mockResolvedValue([{ name: 'SECRET_A', value: '***' }]),
+      getSecretsValues: vi.fn().mockResolvedValue([{ key: 'SECRET_A', value: '***' }]),
       updateSecretsConfig: vi.fn().mockResolvedValue(undefined),
       updateSecrets: vi.fn().mockResolvedValue(undefined),
       getIntegrationSecrets: vi.fn().mockResolvedValue([{ name: 'INT_KEY', value: '***' }]),
@@ -133,6 +133,8 @@ describe('integration: hook → secretsAdapter → fakeApi', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(fakeApi.getSecretsValues).toHaveBeenCalledWith('proj');
+    expect(result.current.data).toHaveLength(1);
+    expect(result.current.data?.[0].key).toBe('SECRET_A');
   });
 
   it('useUpdateSecretsConfig: flows through', async () => {
@@ -505,6 +507,7 @@ describe('integration: hook → repoAdapter → fakeApi', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(fakeApi.listRepoBranches).toHaveBeenCalledWith('proj', 'org/repo');
+    expect(result.current.data?.branches).toEqual(['main', 'develop']);
   });
 });
 

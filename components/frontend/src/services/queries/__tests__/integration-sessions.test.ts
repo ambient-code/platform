@@ -194,7 +194,7 @@ describe('integration: hook → sessionsAdapter → fakeApi', () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(fakeApi.createSession).toHaveBeenCalled();
+    expect(fakeApi.createSession).toHaveBeenCalledWith('proj', expect.objectContaining({ prompt: 'hello' }));
     expect(result.current.data?.metadata.name).toBe('sess-1');
   });
 
@@ -242,7 +242,9 @@ describe('integration: hook → sessionsAdapter → fakeApi', () => {
     );
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fakeApi.getSessionExport).toHaveBeenCalledWith('proj', 'sess-1');
     expect(result.current.data?.aguiEvents).toHaveLength(1);
+    expect(result.current.data?.sessionId).toBe('sess-1');
   });
 
   it('useSessionPodEvents: pod events flow through', async () => {

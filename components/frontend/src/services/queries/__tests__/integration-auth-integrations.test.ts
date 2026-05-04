@@ -101,6 +101,8 @@ describe('integration: hook → githubAdapter → fakeApi', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(fakeApi.getPRDiff).toHaveBeenCalledWith('owner', 'repo', 42, 'proj');
+    expect(result.current.data?.additions).toBe(10);
+    expect(result.current.data?.deletions).toBe(2);
   });
 
   it('useConnectGitHub: flows through', async () => {
