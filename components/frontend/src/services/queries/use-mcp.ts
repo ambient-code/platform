@@ -2,9 +2,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { sessionMcpAdapter } from '../adapters/session-mcp';
 import type { SessionMcpPort } from '../ports/session-mcp';
 import type { MCPServersConfig } from '@/types/agentic-session';
+import { BACKEND_VERSION } from './query-keys';
 
 export const mcpKeys = {
-  all: ['mcp'] as const,
+  all: [BACKEND_VERSION, 'mcp'] as const,
   status: (projectName: string, sessionName: string) =>
     [...mcpKeys.all, 'status', projectName, sessionName] as const,
 };

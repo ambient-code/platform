@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { sessionWorkspaceAdapter } from '../adapters/session-workspace';
 import type { SessionWorkspacePort } from '../ports/session-workspace';
+import { BACKEND_VERSION } from './query-keys';
+import { sessionKeys } from './use-sessions';
 
 export const workspaceKeys = {
-  all: ['workspace'] as const,
+  all: [BACKEND_VERSION, 'workspace'] as const,
   lists: () => [...workspaceKeys.all, 'list'] as const,
   list: (projectName: string, sessionName: string, path?: string) =>
     [...workspaceKeys.lists(), projectName, sessionName, path] as const,
@@ -168,7 +170,7 @@ export function usePushSessionToGitHub(port: SessionWorkspacePort = sessionWorks
         queryKey: workspaceKeys.diff(projectName, sessionName, repoIndex),
       });
       queryClient.invalidateQueries({
-        queryKey: ['sessions', 'detail', projectName, sessionName],
+        queryKey: sessionKeys.detail(projectName, sessionName),
       });
     },
   });

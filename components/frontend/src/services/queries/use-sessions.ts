@@ -10,9 +10,10 @@ import type {
   CloneAgenticSessionRequest,
   PaginationParams,
 } from '@/types/api';
+import { BACKEND_VERSION } from './query-keys';
 
 export const sessionKeys = {
-  all: ['sessions'] as const,
+  all: [BACKEND_VERSION, 'sessions'] as const,
   lists: () => [...sessionKeys.all, 'list'] as const,
   list: (projectName: string, params?: PaginationParams) =>
     [...sessionKeys.lists(), projectName, params ?? {}] as const,

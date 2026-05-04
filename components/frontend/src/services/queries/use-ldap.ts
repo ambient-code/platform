@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { ldapAdapter } from '../adapters/ldap';
 import type { LdapPort } from '../ports/ldap';
+import { BACKEND_VERSION } from './query-keys';
 
 export const ldapKeys = {
-  all: ['ldap'] as const,
+  all: [BACKEND_VERSION, 'ldap'] as const,
   users: () => [...ldapKeys.all, 'users'] as const,
   userSearch: (query: string) => [...ldapKeys.users(), 'search', query] as const,
   user: (uid: string) => [...ldapKeys.users(), uid] as const,

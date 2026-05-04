@@ -6,9 +6,11 @@ import type {
   CreatePRRequest,
   GitHubConnectRequest,
 } from '@/types/api';
+import { BACKEND_VERSION } from './query-keys';
+import { integrationsKeys } from './use-integrations';
 
 export const githubKeys = {
-  all: ['github'] as const,
+  all: [BACKEND_VERSION, 'github'] as const,
   status: () => [...githubKeys.all, 'status'] as const,
   forks: () => [...githubKeys.all, 'forks'] as const,
   forksForProject: (projectName: string, upstreamRepo?: string) =>
@@ -56,7 +58,7 @@ export function useConnectGitHub(port: GitHubPort = githubAdapter) {
     mutationFn: (data: GitHubConnectRequest) => port.connectGitHub(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: githubKeys.status() });
-      queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] });
+      queryClient.invalidateQueries({ queryKey: integrationsKeys.status() });
     },
   });
 }
@@ -68,7 +70,7 @@ export function useDisconnectGitHub(port: GitHubPort = githubAdapter) {
     mutationFn: port.disconnectGitHub,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: githubKeys.status() });
-      queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] });
+      queryClient.invalidateQueries({ queryKey: integrationsKeys.status() });
       queryClient.invalidateQueries({ queryKey: githubKeys.forks() });
     },
   });
@@ -125,7 +127,7 @@ export function useSaveGitHubPAT(port: GitHubPort = githubAdapter) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [...githubKeys.all, 'pat', 'status'] });
       queryClient.invalidateQueries({ queryKey: githubKeys.status() });
-      queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] });
+      queryClient.invalidateQueries({ queryKey: integrationsKeys.status() });
     },
   });
 }
@@ -138,7 +140,7 @@ export function useDeleteGitHubPAT(port: GitHubPort = githubAdapter) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [...githubKeys.all, 'pat', 'status'] });
       queryClient.invalidateQueries({ queryKey: githubKeys.status() });
-      queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] });
+      queryClient.invalidateQueries({ queryKey: integrationsKeys.status() });
     },
   });
 }

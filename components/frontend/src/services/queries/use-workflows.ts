@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { workflowsAdapter } from '../adapters/workflows';
 import type { WorkflowsPort } from '../ports/workflows';
+import { BACKEND_VERSION } from './query-keys';
 
 export const workflowKeys = {
-  all: ['workflows'] as const,
+  all: [BACKEND_VERSION, 'workflows'] as const,
   ootb: (projectName?: string) => [...workflowKeys.all, 'ootb', projectName] as const,
   metadata: (projectName: string, sessionName: string) =>
     [...workflowKeys.all, 'metadata', projectName, sessionName] as const,

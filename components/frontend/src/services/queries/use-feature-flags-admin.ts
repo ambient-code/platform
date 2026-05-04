@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { featureFlagsAdapter } from '../adapters/feature-flags';
 import type { FeatureFlagsPort } from '../ports/feature-flags';
+import { BACKEND_VERSION } from './query-keys';
 
 export const featureFlagKeys = {
-  all: ['feature-flags'] as const,
+  all: [BACKEND_VERSION, 'feature-flags'] as const,
   list: (projectName: string) => [...featureFlagKeys.all, 'list', projectName] as const,
   detail: (projectName: string, flagName: string) =>
     [...featureFlagKeys.all, 'detail', projectName, flagName] as const,
