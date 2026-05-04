@@ -31,7 +31,7 @@ class MockEventSource {
 
 function createFakeApi() {
   return {
-    createEventSource: vi.fn((_proj: string, _sess: string, _runId?: string) => {
+    createEventSource: vi.fn(() => {
       return new MockEventSource('/fake') as unknown as EventSource;
     }),
     sendMessage: vi.fn().mockResolvedValue({ runId: 'new-run' }),
