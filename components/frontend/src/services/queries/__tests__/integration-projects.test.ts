@@ -13,6 +13,8 @@ import {
   useAddProjectPermission,
   useRemoveProjectPermission,
   useProjectIntegrationStatus,
+  useProjectMcpServers,
+  useUpdateProjectMcpServers,
 } from '../use-projects';
 import { useProjectAccess } from '../use-project-access';
 import { createWrapper } from './test-utils';
@@ -173,6 +175,38 @@ describe('integration: hook → projectsAdapter → fakeApi', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(fakeApi.getProjectIntegrationStatus).toHaveBeenCalledWith('my-project');
     expect(result.current.data).toEqual({ github: { connected: true }, gitlab: { connected: false } });
+  });
+
+  it('useProjectMcpServers: MCP servers config flows through', async () => {
+    const fakeApi = createFakeProjectsApi();
+    const adapter = createProjectsAdapter(fakeApi);
+
+    const { result } = renderHook(
+      () => useProjectMcpServers('my-project', adapter),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fakeApi.getProjectMcpServers).toHaveBeenCalledWith('my-project');
+    expect(result.current.data).toEqual({ custom: {} });
+  });
+
+  it('useUpdateProjectMcpServers: MCP servers update flows through', async () => {
+    const fakeApi = createFakeProjectsApi();
+    const adapter = createProjectsAdapter(fakeApi);
+
+    const { result } = renderHook(
+      () => useUpdateProjectMcpServers('my-project', adapter),
+      { wrapper: createWrapper() },
+    );
+
+    const config = { custom: { 'my-server': { command: 'node', args: ['server.js'] } } };
+    act(() => {
+      result.current.mutate(config);
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fakeApi.updateProjectMcpServers).toHaveBeenCalledWith('my-project', config);
   });
 });
 

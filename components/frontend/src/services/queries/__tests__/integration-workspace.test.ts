@@ -6,6 +6,7 @@ import {
   useWorkspaceFile,
   useWriteWorkspaceFile,
   useSessionGitHubDiff,
+  useAllSessionGitHubDiffs,
   usePushSessionToGitHub,
   useAbandonSessionChanges,
   useGitMergeStatus,
@@ -238,5 +239,24 @@ describe('integration: hook → sessionWorkspaceAdapter → fakeApi', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(fakeApi.configureGitRemote).toHaveBeenCalledWith('proj', 'sess', '/workspace', 'https://github.com/org/repo.git', 'develop');
+  });
+
+  it('useAllSessionGitHubDiffs: aggregated diffs flow through', async () => {
+    const fakeApi = createFakeWorkspaceApi();
+    const adapter = createSessionWorkspaceAdapter(fakeApi);
+
+    const repos = [
+      { input: { url: 'https://github.com/org/repo', branch: 'main' } },
+    ];
+    const deriveRepoFolder = (url: string) => url.split('/').pop() || '';
+
+    const { result } = renderHook(
+      () => useAllSessionGitHubDiffs('proj', 'sess', repos, deriveRepoFolder, undefined, adapter),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fakeApi.getSessionGitHubDiff).toHaveBeenCalled();
+    expect(result.current.data?.[0]?.total_added).toBe(42);
   });
 });

@@ -11,7 +11,12 @@ import {
   useSession,
   useCreateSession,
   useStopSession,
+  useStartSession,
+  useCloneSession,
   useDeleteSession,
+  useContinueSession,
+  useUpdateSessionDisplayName,
+  useSwitchSessionModel,
   useSessionExport,
   useSessionPodEvents,
   useReposStatus,
@@ -201,6 +206,95 @@ describe('integration: hook → sessionsAdapter → fakeApi', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(fakeApi.getSessionPodEvents).toHaveBeenCalledWith('proj', 'sess-1');
     expect(result.current.data).toHaveLength(1);
+  });
+
+  it('useStartSession: start flows through', async () => {
+    const fakeApi = createFakeSessionsApi();
+    const adapter = createSessionsAdapter(fakeApi);
+
+    const { result } = renderHook(
+      () => useStartSession(adapter),
+      { wrapper: createWrapper() },
+    );
+
+    act(() => {
+      result.current.mutate({ projectName: 'proj', sessionName: 'sess-1' });
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fakeApi.startSession).toHaveBeenCalledWith('proj', 'sess-1');
+  });
+
+  it('useCloneSession: clone flows through', async () => {
+    const fakeApi = createFakeSessionsApi();
+    const adapter = createSessionsAdapter(fakeApi);
+
+    const { result } = renderHook(
+      () => useCloneSession(adapter),
+      { wrapper: createWrapper() },
+    );
+
+    act(() => {
+      result.current.mutate({
+        projectName: 'proj',
+        sessionName: 'sess-1',
+        data: { targetProject: 'proj', newSessionName: 'sess-clone' },
+      });
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fakeApi.cloneSession).toHaveBeenCalledWith('proj', 'sess-1', { targetProject: 'proj', newSessionName: 'sess-clone' });
+  });
+
+  it('useContinueSession: continue flows through (delegates to startSession)', async () => {
+    const fakeApi = createFakeSessionsApi();
+    const adapter = createSessionsAdapter(fakeApi);
+
+    const { result } = renderHook(
+      () => useContinueSession(adapter),
+      { wrapper: createWrapper() },
+    );
+
+    act(() => {
+      result.current.mutate({ projectName: 'proj', parentSessionName: 'sess-1' });
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fakeApi.startSession).toHaveBeenCalledWith('proj', 'sess-1');
+  });
+
+  it('useUpdateSessionDisplayName: display name update flows through', async () => {
+    const fakeApi = createFakeSessionsApi();
+    const adapter = createSessionsAdapter(fakeApi);
+
+    const { result } = renderHook(
+      () => useUpdateSessionDisplayName(adapter),
+      { wrapper: createWrapper() },
+    );
+
+    act(() => {
+      result.current.mutate({ projectName: 'proj', sessionName: 'sess-1', displayName: 'New Name' });
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fakeApi.updateSessionDisplayName).toHaveBeenCalledWith('proj', 'sess-1', 'New Name');
+  });
+
+  it('useSwitchSessionModel: model switch flows through', async () => {
+    const fakeApi = createFakeSessionsApi();
+    const adapter = createSessionsAdapter(fakeApi);
+
+    const { result } = renderHook(
+      () => useSwitchSessionModel(adapter),
+      { wrapper: createWrapper() },
+    );
+
+    act(() => {
+      result.current.mutate({ projectName: 'proj', sessionName: 'sess-1', model: 'claude-opus-4-20250514' });
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fakeApi.switchSessionModel).toHaveBeenCalledWith('proj', 'sess-1', 'claude-opus-4-20250514');
   });
 });
 

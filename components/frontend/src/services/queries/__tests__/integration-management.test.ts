@@ -27,12 +27,15 @@ import { useOOTBWorkflows, useWorkflowMetadata } from '../use-workflows';
 import {
   useFeatureFlags,
   useFeatureFlag,
+  useWorkspaceFlag,
   useToggleFeatureFlag,
   useSetFeatureFlagOverride,
   useRemoveFeatureFlagOverride,
+  useEnableFeatureFlag,
+  useDisableFeatureFlag,
 } from '../use-feature-flags-admin';
 import { useLDAPUserSearch, useLDAPGroupSearch, useLDAPUser } from '../use-ldap';
-import { useRepoTree, useRepoFileExists, useRepoBranches } from '../use-repo';
+import { useRepoBlob, useRepoTree, useRepoFileExists, useRepoBranches } from '../use-repo';
 import { useClusterInfo } from '../use-cluster';
 import { useVersion } from '../use-version';
 import { useLoadingTips } from '../use-loading-tips';
@@ -347,6 +350,49 @@ describe('integration: hook → featureFlagsAdapter → fakeApi', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(fakeApi.removeFeatureFlagOverride).toHaveBeenCalledWith('proj', 'dark-mode');
   });
+
+  it('useWorkspaceFlag: evaluate flows through with transformed result', async () => {
+    const fakeApi = createFakeFeatureFlagsApi();
+    const adapter = createFeatureFlagsAdapter(fakeApi);
+
+    const { result } = renderHook(
+      () => useWorkspaceFlag('proj', 'dark-mode', adapter),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.enabled).toBe(true));
+    expect(fakeApi.evaluateFeatureFlag).toHaveBeenCalledWith('proj', 'dark-mode');
+    expect(result.current.source).toBe('override');
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it('useEnableFeatureFlag: enable flows through', async () => {
+    const fakeApi = createFakeFeatureFlagsApi();
+    const adapter = createFeatureFlagsAdapter(fakeApi);
+
+    const { result } = renderHook(() => useEnableFeatureFlag(adapter), { wrapper: createWrapper() });
+
+    act(() => {
+      result.current.mutate({ projectName: 'proj', flagName: 'dark-mode' });
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fakeApi.enableFeatureFlag).toHaveBeenCalledWith('proj', 'dark-mode');
+  });
+
+  it('useDisableFeatureFlag: disable flows through', async () => {
+    const fakeApi = createFakeFeatureFlagsApi();
+    const adapter = createFeatureFlagsAdapter(fakeApi);
+
+    const { result } = renderHook(() => useDisableFeatureFlag(adapter), { wrapper: createWrapper() });
+
+    act(() => {
+      result.current.mutate({ projectName: 'proj', flagName: 'dark-mode' });
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fakeApi.disableFeatureFlag).toHaveBeenCalledWith('proj', 'dark-mode');
+  });
 });
 
 describe('integration: hook → ldapAdapter → fakeApi', () => {
@@ -401,6 +447,21 @@ describe('integration: hook → repoAdapter → fakeApi', () => {
       listRepoBranches: vi.fn().mockResolvedValue({ branches: ['main', 'develop'] }),
     };
   }
+
+  it('useRepoBlob: flows through', async () => {
+    const fakeApi = createFakeRepoApi();
+    const adapter = createRepoAdapter(fakeApi);
+    const params = { repo: 'org/repo', ref: 'main', path: 'src/index.ts' };
+
+    const { result } = renderHook(
+      () => useRepoBlob('proj', params, undefined, adapter),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fakeApi.getRepoBlob).toHaveBeenCalledWith('proj', params);
+    expect(result.current.data).toBeInstanceOf(Response);
+  });
 
   it('useRepoTree: flows through', async () => {
     const fakeApi = createFakeRepoApi();
