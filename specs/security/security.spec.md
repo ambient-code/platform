@@ -336,10 +336,86 @@ Each session must have a ServiceAccount that can only access its own resources:
 
 ---
 
+## 4. Credential Authorization Model
+
+This section defines how credentials are authorized at runtime. For credential Kind schemas,
+API endpoints, and provider enum definitions, see
+[`specs/api/ambient-model.spec.md`](../api/ambient-model.spec.md).
+
+### Project-Scoped Sharing
+
+Credentials belong to a project. All agents in the project share the project's credentials
+automatically — no explicit sharing or per-credential RoleBindings needed. At session start,
+the resolver lists all credentials in the agent's project and returns the matching credential
+for each requested provider.
+
+This follows the Kubernetes resource model:
+
+| Ambient | Kubernetes Analogy | Relationship |
+|---------|-------------------|--------------|
+| Project | Namespace | Isolation boundary, owns child resources |
+| Agent | Deployment | Mutable definition, runs workloads |
+| Session | Pod | Ephemeral execution, created from Agent |
+| Credential | Secret | Project-scoped secret, available to all workloads in the namespace |
+
+Named patterns:
+- **Project Robot Account** — credential created in a project; all agents use it automatically.
+- **Multi-project credential** — create the same credential (same PAT) in multiple projects. Each project gets its own Credential record.
+- **No credential** — projects without credentials simply run sessions without provider integrations.
+
+### `credential:token-reader` Runtime Grant
+
+The `credential:token-reader` role is granted to the runner service account by the platform
+at session start. It is never granted via user-facing `POST /role_bindings`. It is a
+platform-internal binding managed by the operator.
+
+Credential CRUD is governed by the caller's project-level role — `project:owner` and
+`project:editor` can create/update/delete credentials; `project:viewer` can list/read
+metadata.
+
+### API Server Proxy Authentication
+
+All backend paths not mapped to a native `/api/ambient/v1/...` endpoint are forwarded
+verbatim to the backend service. The API server authenticates the caller, injects service
+credentials, then proxies the request — preserving method, path, query string, body, and
+response status.
+
+Runner-internal endpoints (called by runner pods at runtime):
+- `POST /api/projects/{p}/agentic-sessions/{s}/github/token` — get a GitHub token for a session
+- `GET /api/projects/{p}/agentic-sessions/{s}/credentials/{provider}` — fetch credential by provider
+- `POST /api/projects/{p}/agentic-sessions/{s}/runner/feedback` — runner feedback
+
+These are accessible via the API server for SDK/CLI tooling but are not intended for human
+interactive use. The API server validates the caller is cluster-internal
+(`.svc.cluster.local`, `localhost`) to prevent token exfiltration.
+
+---
+
+## 5. Design Decisions
+
+| Decision | Rationale |
+|----------|-----------||
+| Agent ownership via RBAC, not a hardcoded FK | Ownership is expressed as a RoleBinding (`scope=agent`, `scope_id=agent_id`). Enables multi-owner and delegated ownership consistently across all Kinds. |
+| Credential is project-scoped, like a Kubernetes Secret | Credentials live inside a project. All agents in the project share them automatically. Duplication across projects is intentional and explicit — each project gets its own Credential record, same as Kubernetes Secrets in different Namespaces. |
+| Credential token is write-only | Prevents token exfiltration via the standard REST API. Raw token only surfaced to runners via the runtime credentials path, not to end users. |
+| Four-scope RBAC (`global`, `project`, `agent`, `session`) | Credential access is implicit via project membership — no dedicated `credential` scope needed. Simpler model with fewer moving parts. |
+| Credential CRUD governed by project roles | `project:owner` and `project:editor` can manage credentials. No separate `credential:owner` / `credential:reader` roles — project roles cover it. |
+| `agent:runner` role | Pods get minimum viable credential: read agent definition, push session messages, send inbox. |
+| Union-only permissions | No deny rules — simpler mental model for fleet operators. |
+| Token stored in database, encrypted at rest | Single authoritative store. A future Vault integration can be adopted by pointing the DB row at a Vault path without changing the API surface. |
+| `google` token serialized as a string | Service Account JSON is serialized into the single `token` field. Keeps the schema uniform across all providers. |
+| No validation on creation | First-use error is acceptable. Avoids a network call to the provider at creation time and the failure modes that come with it. |
+| Credential rotation is user-managed | Users update the token via `PATCH` or `acpctl credential update`. No platform-side rotation or expiry tracking. |
+| No migration utility for existing K8s Secrets | Users re-enter credentials via the new API. The old Secret-based path is removed when the new API is live. |
+| Dedicated tokens, not personal credentials | Users are expected to create dedicated Robot Accounts or PATs for each project, not share their personal credentials. Each project gets its own Credential records. |
+
+---
+
 ## References
 
-- [Security Standards](../../security-standards.md)
-- [User Token Authentication ADR](../adr/0002-user-token-authentication.md)
-- [Credential API OpenAPI Spec](../../../components/ambient-api-server/openapi/openapi.credentials.yaml)
-- [Control Plane RBAC](../../../components/manifests/base/rbac/control-plane-clusterrole.yaml)
-- [Operator Session Handler](../../../components/operator/internal/handlers/sessions.go)
+- [Ambient Data Model Spec](../api/ambient-model.spec.md) — Credential/RBAC schemas, endpoints, provider enum
+- [Security Standards](../standards/security/security.spec.md)
+- [User Token Authentication ADR](../../docs/internal/adr/0002-user-token-authentication.md)
+- [Credential API OpenAPI Spec](../../components/ambient-api-server/openapi/openapi.credentials.yaml)
+- [Control Plane RBAC](../../components/manifests/base/rbac/control-plane-clusterrole.yaml)
+- [Operator Session Handler](../../components/operator/internal/handlers/sessions.go)

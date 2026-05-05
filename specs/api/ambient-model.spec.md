@@ -745,9 +745,10 @@ DELETE /api/ambient/v1/projects/{id}/credentials/{cred_id}                 soft 
 GET    /api/ambient/v1/projects/{id}/credentials/{cred_id}/token           fetch raw token — restricted to credential:token-reader
 ```
 
-`token` is accepted on `POST` and `PATCH` but **never returned** by the standard read endpoints. It is stored encrypted in the database. The database row is the authoritative store; a future Vault integration can be adopted by pointing the row at a Vault path without changing the API surface.
-
-`GET /projects/{id}/credentials/{cred_id}/token` is the **only** endpoint that returns the raw token. It is gated by the `credential:token-reader` role — a platform-internal role granted only to runner service accounts at session start. Human users and service accounts do not hold this role by default. Credential CRUD is governed by the caller's project-level role (e.g. `project:owner`, `project:editor`).
+`token` is accepted on `POST` and `PATCH` but **never returned** by standard read endpoints.
+`GET .../token` is gated by `credential:token-reader`. See
+[Security Spec §4](../security/security.spec.md#4-credential-authorization-model) for
+runtime authorization semantics.
 
 #### Provider Enum
 
@@ -788,21 +789,9 @@ Effective permissions = union of all applicable bindings (global ∪ project ∪
 
 #### Credential Access — Project-Scoped by Default
 
-Credentials belong to a project. All agents in the project share the project's credentials automatically — no explicit sharing or per-credential RoleBindings needed. At session start, the resolver lists all credentials in the agent's project and returns the matching credential for each requested provider.
-
-This follows the Kubernetes resource model:
-
-| Ambient | Kubernetes Analogy | Relationship |
-|---------|-------------------|-------------|
-| Project | Namespace | Isolation boundary, owns child resources |
-| Agent | Deployment | Mutable definition, runs workloads |
-| Session | Pod | Ephemeral execution, created from Agent |
-| Credential | Secret | Project-scoped secret, available to all workloads in the namespace |
-
-Named patterns:
-- **Project Robot Account** — credential created in a project; all agents use it automatically.
-- **Multi-project credential** — create the same credential (same PAT) in multiple projects. Each project gets its own Credential record.
-- **No credential** — projects without credentials simply run sessions without provider integrations.
+Credentials belong to a project. All agents in the project share them automatically.
+See [Security Spec §4](../security/security.spec.md#4-credential-authorization-model) for
+sharing model, K8s analogy, and named patterns.
 
 ### Built-in Roles
 
@@ -853,7 +842,9 @@ GET    /api/ambient/v1/projects/{id}/agents/{agent_id}/role_bindings
 GET    /api/ambient/v1/sessions/{id}/role_bindings
 ```
 
-The `credential:token-reader` role is granted to the runner service account by the platform at session start. It is never granted via user-facing `POST /role_bindings`. It is a platform-internal binding managed by the operator. Credential CRUD is governed by the caller's project-level role — `project:owner` and `project:editor` can create/update/delete credentials; `project:viewer` can list/read metadata.
+The `credential:token-reader` role is platform-internal. See
+[Security Spec §4](../security/security.spec.md#credentialtoken-reader-runtime-grant) for
+grant semantics and CRUD authorization rules.
 
 ---
 
@@ -876,9 +867,14 @@ GET    /api/ambient/v1/projects/{id}/scheduled-sessions/{sched_id}/runs         
 
 ### Generic Proxy
 
-All backend paths not mapped to a native `/api/ambient/v1/...` endpoint are forwarded verbatim to the backend service. The API server authenticates the caller, injects service credentials, then proxies the request — preserving method, path, query string, body, and response status.
+All backend paths not mapped to a native `/api/ambient/v1/...` endpoint are forwarded
+verbatim to the backend service. See
+[Security Spec §4](../security/security.spec.md#api-server-proxy-authentication) for
+authentication and credential injection behavior.
 
-This allows SDK and CLI clients to reach the full backend surface through a single authenticated endpoint without requiring every backend route to be natively implemented in the API server. Routes listed here are candidates for future native spec entries.
+This allows SDK and CLI clients to reach the full backend surface through a single
+authenticated endpoint without requiring every backend route to be natively implemented in
+the API server. Routes listed here are candidates for future native spec entries.
 
 #### Project Configuration (proxied)
 
@@ -1080,10 +1076,6 @@ This structure means you can define and compose bespoke agent suites — entire 
 | Agent is project-scoped, not global | Simplicity. An agent's identity and prompt are contextual to the project it serves. No indirection via a global registry. |
 | Agent.prompt is mutable | Prompt editing is a routine operational task. RBAC controls who can change it. No versioning overhead. |
 | Agent ownership via RBAC, not a hardcoded FK | Ownership is expressed as a RoleBinding (`scope=agent`, `scope_id=agent_id`). Enables multi-owner and delegated ownership consistently across all Kinds. |
-| Credential is project-scoped, like a Kubernetes Secret | Credentials live inside a project. All agents in the project share them automatically. Duplication across projects is intentional and explicit — each project gets its own Credential record, same as Kubernetes Secrets in different Namespaces. |
-| Credential token is write-only | Prevents token exfiltration via the standard REST API. Raw token only surfaced to runners via the runtime credentials path, not to end users. |
-| Four-scope RBAC (`global`, `project`, `agent`, `session`) | Credential access is implicit via project membership — no dedicated `credential` scope needed. Simpler model with fewer moving parts. |
-| Credential CRUD governed by project roles | `project:owner` and `project:editor` can manage credentials. No separate `credential:owner` / `credential:reader` roles — project roles cover it. |
 | One active Session per Agent | Avoids concurrent conflicting runs; start is idempotent |
 | Inbox on Agent, not Session | Messages persist across re-ignitions; addressed to the agent, not the run |
 | Inbox drained at start | Unread messages become part of the start context; session picks up where things left off |
@@ -1091,12 +1083,11 @@ This structure means you can define and compose bespoke agent suites — entire 
 | Sessions created only via start | Sessions are run artifacts; direct `POST /sessions` does not exist |
 | Every layer carries a `prompt` | Project.prompt = workspace context; Agent.prompt = who the agent is; Session.prompt = what this run does; Inbox = prior requests. Pokes roll downhill. |
 | `SessionMessage` is append-only | Canonical record of the LLM conversation; never edited or deleted |
-| `agent:editor` role | Allows prompt updates without full operator access |
-| `agent:runner` role | Pods get minimum viable credential: read agent definition, push session messages, send inbox |
-| Union-only permissions | No deny rules — simpler mental model for fleet operators |
 | CLI mirrors API 1-for-1 | Every endpoint has a corresponding command; status tracked explicitly |
 | This document is the spec | A reconciler will compare the spec (this doc) against code status and surface gaps |
 | `labels` / `annotations` are JSONB, not strings | Enables GIN-indexed key/value queries (`@>` operator) without joins; every row carries its own metadata without a separate EAV table. `labels` = queryable tags; `annotations` = freeform notes. Applied to first-class Kinds: User, Project, Agent, Session. Not applied to Inbox, SessionMessage, Role/RoleBinding. |
+
+Security and credential design decisions (RBAC scoping, write-only tokens, role catalog rationale) are in [Security Spec §5](../security/security.spec.md#5-design-decisions).
 
 ---
 
@@ -1145,15 +1136,8 @@ acpctl apply -f credential.yaml
 
 ## Design Decisions — Credential
 
-| Decision | Rationale |
-|----------|-----------|
-| Credential is project-scoped | Follows the Kubernetes Secret-in-Namespace pattern. All agents in the project share credentials implicitly. No RoleBindings needed for sharing within a project. |
-| Token stored in database, encrypted at rest | Single authoritative store. A future Vault integration can be adopted by pointing the DB row at a Vault path without changing the API surface. |
-| `google` token serialized as a string | Service Account JSON is serialized into the single `token` field. Keeps the schema uniform across all providers. |
-| No validation on creation | First-use error is acceptable. Avoids a network call to the provider at creation time and the failure modes that come with it. |
-| Credential rotation is user-managed | Users update the token via `PATCH` or `acpctl credential update`. No platform-side rotation or expiry tracking. |
-| No migration utility for existing K8s Secrets | Users re-enter credentials via the new API. The old Secret-based path is removed when the new API is live. |
-| Dedicated tokens, not personal credentials | Users are expected to create dedicated Robot Accounts or PATs for each project, not share their personal credentials. Each project gets its own Credential records. |
+See [Security Spec §5](../security/security.spec.md#5-design-decisions) for credential
+design rationale (storage, rotation, provider serialization, migration).
 
 ---
 
