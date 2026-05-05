@@ -1,8 +1,8 @@
 {
   "description": "Canonical list of Claude Agent SDK ClaudeAgentOptions fields",
   "generatedFrom": "claude-agent-sdk (PyPI)",
-  "generatedAt": "2026-04-21T17:25:32.146793+00:00",
-  "sdkVersion": "0.1.64",
+  "generatedAt": "2026-05-05T09:35:22.214093+00:00",
+  "sdkVersion": "0.1.73",
   "options": {
     "tools": {
       "type": "list[str] | claude_agent_sdk.types.ToolsPreset | None",
@@ -162,6 +162,10 @@
     },
     "session_store": {
       "type": "claude_agent_sdk.types.SessionStore | None",
+      "required": false
+    },
+    "session_store_flush": {
+      "type": "typing.Literal['batched', 'eager']",
       "required": false
     },
     "load_timeout_ms": {
