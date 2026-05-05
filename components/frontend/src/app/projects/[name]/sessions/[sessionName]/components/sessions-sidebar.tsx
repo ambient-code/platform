@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -38,6 +38,7 @@ import {
   Square,
   ArrowRight,
   Trash2,
+  User,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -48,9 +49,13 @@ import {
   useUpdateSessionDisplayName,
 } from "@/services/queries/use-sessions";
 import { useProjectAccess } from "@/services/queries/use-project-access";
+import { useCurrentUser } from "@/services/queries/use-auth";
 import { useVersion } from "@/services/queries/use-version";
+import { useLocalStorage } from "@/hooks/use-local-storage";
 import { cn } from "@/lib/utils";
 import type { AgenticSession } from "@/types/api";
+
+type StatusFilter = "all" | "running" | "completed" | "failed";
 
 type SessionsSidebarProps = {
   projectName: string;
@@ -102,20 +107,59 @@ export function SessionsSidebar({
   const continueMutation = useContinueSession();
   const updateDisplayNameMutation = useUpdateSessionDisplayName();
 
+  const { data: currentUser } = useCurrentUser();
+
   const [editingSession, setEditingSession] = useState<{ name: string; displayName: string } | null>(null);
   const [deletingSessionName, setDeletingSessionName] = useState<string | null>(null);
+  const [mineOnly, setMineOnly] = useLocalStorage(`acp:sidebar:mine:${projectName}`, false);
+  const [statusFilter, setStatusFilter] = useLocalStorage<StatusFilter>(`acp:sidebar:status:${projectName}`, "all");
+
+  const toggleMineOnly = useCallback(() => setMineOnly((prev: boolean) => !prev), [setMineOnly]);
+  const toggleStatusFilter = useCallback(
+    (filter: StatusFilter) => setStatusFilter((prev: StatusFilter) => prev === filter ? "all" : filter),
+    [setStatusFilter],
+  );
 
   const sessions = useMemo(() => {
     const items = data?.items ?? [];
     return [...items].sort((a, b) => getActivityTime(b) - getActivityTime(a));
   }, [data?.items]);
 
-  const visibleSessions = useMemo(() => {
-    if (showAll) return sessions;
-    return sessions.slice(0, INITIAL_RECENTS_COUNT);
-  }, [sessions, showAll]);
+  const filteredSessions = useMemo(() => {
+    let result = sessions;
 
-  const hasMore = sessions.length > INITIAL_RECENTS_COUNT && !showAll;
+    if (mineOnly && currentUser?.userId) {
+      result = result.filter(
+        (s) => s.spec.userContext?.userId === currentUser.userId,
+      );
+    }
+
+    if (statusFilter !== "all") {
+      result = result.filter((s) => {
+        const phase = s.status?.phase;
+        switch (statusFilter) {
+          case "running":
+            return phase === "Running" || phase === "Pending" || phase === "Creating";
+          case "completed":
+            return phase === "Completed" || phase === "Stopped";
+          case "failed":
+            return phase === "Failed";
+          default:
+            return true;
+        }
+      });
+    }
+
+    return result;
+  }, [sessions, mineOnly, currentUser?.userId, statusFilter]);
+
+  const visibleSessions = useMemo(() => {
+    if (showAll) return filteredSessions;
+    return filteredSessions.slice(0, INITIAL_RECENTS_COUNT);
+  }, [filteredSessions, showAll]);
+
+  const hasMore = filteredSessions.length > INITIAL_RECENTS_COUNT && !showAll;
+  const isFiltered = mineOnly || statusFilter !== "all";
 
   const navItems: NavItem[] = useMemo(
     () => [
@@ -307,15 +351,49 @@ export function SessionsSidebar({
           <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
             Recents
           </span>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => refetch()}
             disabled={isFetching}
-            className="text-muted-foreground/60 hover:text-muted-foreground transition-colors disabled:opacity-50"
+            className="h-5 w-5 p-0 text-muted-foreground/60 hover:text-muted-foreground"
             title={dataUpdatedAt ? `Last updated ${formatDistanceToNow(new Date(dataUpdatedAt), { addSuffix: true })}` : "Refresh"}
           >
             <RefreshCw className="h-3 w-3" />
-          </button>
+          </Button>
+        </div>
+
+        {/* Filter chips */}
+        <div className="flex items-center gap-1 px-3 pb-1 flex-wrap" data-testid="sidebar-filters">
+          <Button
+            variant={mineOnly ? "default" : "secondary"}
+            size="sm"
+            onClick={toggleMineOnly}
+            className={cn(
+              "h-auto rounded-full px-2 py-0.5 text-[0.6875rem] font-medium gap-1",
+              !mineOnly && "text-muted-foreground",
+            )}
+            title="Show only my sessions"
+            data-testid="filter-mine"
+          >
+            <User className="h-3 w-3" />
+            Mine
+          </Button>
+          {(["running", "completed", "failed"] as const).map((filter) => (
+            <Button
+              key={filter}
+              variant={statusFilter === filter ? "default" : "secondary"}
+              size="sm"
+              onClick={() => toggleStatusFilter(filter)}
+              className={cn(
+                "h-auto rounded-full px-2 py-0.5 text-[0.6875rem] font-medium capitalize",
+                statusFilter !== filter && "text-muted-foreground",
+              )}
+              data-testid={`filter-${filter}`}
+            >
+              {filter}
+            </Button>
+          ))}
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -325,9 +403,9 @@ export function SessionsSidebar({
                 <Skeleton key={i} className="h-10 w-full rounded-md" />
               ))}
             </div>
-          ) : sessions.length === 0 ? (
+          ) : filteredSessions.length === 0 ? (
             <div className="p-4 text-center text-sm text-muted-foreground">
-              No sessions yet
+              {isFiltered ? "No matching sessions" : "No sessions yet"}
             </div>
           ) : (
               <div className="space-y-0.5 p-1">
