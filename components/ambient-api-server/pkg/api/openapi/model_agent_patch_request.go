@@ -20,11 +20,17 @@ var _ MappedNullable = &AgentPatchRequest{}
 
 // AgentPatchRequest struct for AgentPatchRequest
 type AgentPatchRequest struct {
-	Name *string `json:"name,omitempty"`
+	Name        *string `json:"name,omitempty"`
+	DisplayName *string `json:"display_name,omitempty"`
+	Description *string `json:"description,omitempty"`
 	// Update agent prompt (access controlled by RBAC)
-	Prompt      *string `json:"prompt,omitempty"`
-	Labels      *string `json:"labels,omitempty"`
-	Annotations *string `json:"annotations,omitempty"`
+	Prompt         *string  `json:"prompt,omitempty"`
+	RepoUrl        *string  `json:"repo_url,omitempty"`
+	LlmModel       *string  `json:"llm_model,omitempty"`
+	LlmTemperature *float64 `json:"llm_temperature,omitempty"`
+	LlmMaxTokens   *int32   `json:"llm_max_tokens,omitempty"`
+	Labels         *string  `json:"labels,omitempty"`
+	Annotations    *string  `json:"annotations,omitempty"`
 }
 
 // NewAgentPatchRequest instantiates a new AgentPatchRequest object
@@ -76,6 +82,70 @@ func (o *AgentPatchRequest) SetName(v string) {
 	o.Name = &v
 }
 
+// GetDisplayName returns the DisplayName field value if set, zero value otherwise.
+func (o *AgentPatchRequest) GetDisplayName() string {
+	if o == nil || IsNil(o.DisplayName) {
+		var ret string
+		return ret
+	}
+	return *o.DisplayName
+}
+
+// GetDisplayNameOk returns a tuple with the DisplayName field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentPatchRequest) GetDisplayNameOk() (*string, bool) {
+	if o == nil || IsNil(o.DisplayName) {
+		return nil, false
+	}
+	return o.DisplayName, true
+}
+
+// HasDisplayName returns a boolean if a field has been set.
+func (o *AgentPatchRequest) HasDisplayName() bool {
+	if o != nil && !IsNil(o.DisplayName) {
+		return true
+	}
+
+	return false
+}
+
+// SetDisplayName gets a reference to the given string and assigns it to the DisplayName field.
+func (o *AgentPatchRequest) SetDisplayName(v string) {
+	o.DisplayName = &v
+}
+
+// GetDescription returns the Description field value if set, zero value otherwise.
+func (o *AgentPatchRequest) GetDescription() string {
+	if o == nil || IsNil(o.Description) {
+		var ret string
+		return ret
+	}
+	return *o.Description
+}
+
+// GetDescriptionOk returns a tuple with the Description field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentPatchRequest) GetDescriptionOk() (*string, bool) {
+	if o == nil || IsNil(o.Description) {
+		return nil, false
+	}
+	return o.Description, true
+}
+
+// HasDescription returns a boolean if a field has been set.
+func (o *AgentPatchRequest) HasDescription() bool {
+	if o != nil && !IsNil(o.Description) {
+		return true
+	}
+
+	return false
+}
+
+// SetDescription gets a reference to the given string and assigns it to the Description field.
+func (o *AgentPatchRequest) SetDescription(v string) {
+	o.Description = &v
+}
+
 // GetPrompt returns the Prompt field value if set, zero value otherwise.
 func (o *AgentPatchRequest) GetPrompt() string {
 	if o == nil || IsNil(o.Prompt) {
@@ -106,6 +176,134 @@ func (o *AgentPatchRequest) HasPrompt() bool {
 // SetPrompt gets a reference to the given string and assigns it to the Prompt field.
 func (o *AgentPatchRequest) SetPrompt(v string) {
 	o.Prompt = &v
+}
+
+// GetRepoUrl returns the RepoUrl field value if set, zero value otherwise.
+func (o *AgentPatchRequest) GetRepoUrl() string {
+	if o == nil || IsNil(o.RepoUrl) {
+		var ret string
+		return ret
+	}
+	return *o.RepoUrl
+}
+
+// GetRepoUrlOk returns a tuple with the RepoUrl field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentPatchRequest) GetRepoUrlOk() (*string, bool) {
+	if o == nil || IsNil(o.RepoUrl) {
+		return nil, false
+	}
+	return o.RepoUrl, true
+}
+
+// HasRepoUrl returns a boolean if a field has been set.
+func (o *AgentPatchRequest) HasRepoUrl() bool {
+	if o != nil && !IsNil(o.RepoUrl) {
+		return true
+	}
+
+	return false
+}
+
+// SetRepoUrl gets a reference to the given string and assigns it to the RepoUrl field.
+func (o *AgentPatchRequest) SetRepoUrl(v string) {
+	o.RepoUrl = &v
+}
+
+// GetLlmModel returns the LlmModel field value if set, zero value otherwise.
+func (o *AgentPatchRequest) GetLlmModel() string {
+	if o == nil || IsNil(o.LlmModel) {
+		var ret string
+		return ret
+	}
+	return *o.LlmModel
+}
+
+// GetLlmModelOk returns a tuple with the LlmModel field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentPatchRequest) GetLlmModelOk() (*string, bool) {
+	if o == nil || IsNil(o.LlmModel) {
+		return nil, false
+	}
+	return o.LlmModel, true
+}
+
+// HasLlmModel returns a boolean if a field has been set.
+func (o *AgentPatchRequest) HasLlmModel() bool {
+	if o != nil && !IsNil(o.LlmModel) {
+		return true
+	}
+
+	return false
+}
+
+// SetLlmModel gets a reference to the given string and assigns it to the LlmModel field.
+func (o *AgentPatchRequest) SetLlmModel(v string) {
+	o.LlmModel = &v
+}
+
+// GetLlmTemperature returns the LlmTemperature field value if set, zero value otherwise.
+func (o *AgentPatchRequest) GetLlmTemperature() float64 {
+	if o == nil || IsNil(o.LlmTemperature) {
+		var ret float64
+		return ret
+	}
+	return *o.LlmTemperature
+}
+
+// GetLlmTemperatureOk returns a tuple with the LlmTemperature field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentPatchRequest) GetLlmTemperatureOk() (*float64, bool) {
+	if o == nil || IsNil(o.LlmTemperature) {
+		return nil, false
+	}
+	return o.LlmTemperature, true
+}
+
+// HasLlmTemperature returns a boolean if a field has been set.
+func (o *AgentPatchRequest) HasLlmTemperature() bool {
+	if o != nil && !IsNil(o.LlmTemperature) {
+		return true
+	}
+
+	return false
+}
+
+// SetLlmTemperature gets a reference to the given float64 and assigns it to the LlmTemperature field.
+func (o *AgentPatchRequest) SetLlmTemperature(v float64) {
+	o.LlmTemperature = &v
+}
+
+// GetLlmMaxTokens returns the LlmMaxTokens field value if set, zero value otherwise.
+func (o *AgentPatchRequest) GetLlmMaxTokens() int32 {
+	if o == nil || IsNil(o.LlmMaxTokens) {
+		var ret int32
+		return ret
+	}
+	return *o.LlmMaxTokens
+}
+
+// GetLlmMaxTokensOk returns a tuple with the LlmMaxTokens field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentPatchRequest) GetLlmMaxTokensOk() (*int32, bool) {
+	if o == nil || IsNil(o.LlmMaxTokens) {
+		return nil, false
+	}
+	return o.LlmMaxTokens, true
+}
+
+// HasLlmMaxTokens returns a boolean if a field has been set.
+func (o *AgentPatchRequest) HasLlmMaxTokens() bool {
+	if o != nil && !IsNil(o.LlmMaxTokens) {
+		return true
+	}
+
+	return false
+}
+
+// SetLlmMaxTokens gets a reference to the given int32 and assigns it to the LlmMaxTokens field.
+func (o *AgentPatchRequest) SetLlmMaxTokens(v int32) {
+	o.LlmMaxTokens = &v
 }
 
 // GetLabels returns the Labels field value if set, zero value otherwise.
@@ -185,8 +383,26 @@ func (o AgentPatchRequest) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.Name) {
 		toSerialize["name"] = o.Name
 	}
+	if !IsNil(o.DisplayName) {
+		toSerialize["display_name"] = o.DisplayName
+	}
+	if !IsNil(o.Description) {
+		toSerialize["description"] = o.Description
+	}
 	if !IsNil(o.Prompt) {
 		toSerialize["prompt"] = o.Prompt
+	}
+	if !IsNil(o.RepoUrl) {
+		toSerialize["repo_url"] = o.RepoUrl
+	}
+	if !IsNil(o.LlmModel) {
+		toSerialize["llm_model"] = o.LlmModel
+	}
+	if !IsNil(o.LlmTemperature) {
+		toSerialize["llm_temperature"] = o.LlmTemperature
+	}
+	if !IsNil(o.LlmMaxTokens) {
+		toSerialize["llm_max_tokens"] = o.LlmMaxTokens
 	}
 	if !IsNil(o.Labels) {
 		toSerialize["labels"] = o.Labels
