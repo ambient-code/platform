@@ -1,7 +1,6 @@
 package scheduledSessions
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
@@ -198,11 +197,4 @@ func (h *scheduledSessionHandler) Runs(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	handlers.HandleList(w, r, cfg)
-}
-
-// writeJSON is a helper for action endpoints that don't use the handler framework.
-func writeJSON(w http.ResponseWriter, status int, v interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
 }
