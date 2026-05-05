@@ -10,11 +10,21 @@ async function proxyRequest(
   { params }: { params: Promise<{ path: string[] }> },
 ): Promise<Response> {
   const { path } = await params;
+  if (path.some(s => s === '..' || s === '.')) {
+    return NextResponse.json({ error: 'invalid_path' }, { status: 400 });
+  }
   const pathStr = path.map(s => encodeURIComponent(s)).join('/');
   const url = new URL(`/api/ambient/v1/${pathStr}`, API_SERVER_URL);
   url.search = request.nextUrl.search;
 
   const headers = await buildForwardHeadersAsync(request);
+
+  // Forward the client's Accept header so the upstream can respond with the
+  // correct content type (e.g. text/event-stream for SSE endpoints).
+  const accept = request.headers.get('accept');
+  if (accept) {
+    headers['Accept'] = accept;
+  }
 
   // Forward content-type for requests with bodies
   const contentType = request.headers.get('content-type');
@@ -32,9 +42,9 @@ async function proxyRequest(
       duplex: 'half',
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[Ambient API proxy] fetch failed:', error instanceof Error ? error.message : error);
     return NextResponse.json(
-      { error: 'upstream_unavailable', message },
+      { error: 'upstream_unavailable' },
       { status: 502 },
     );
   }
