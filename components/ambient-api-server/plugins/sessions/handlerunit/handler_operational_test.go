@@ -78,7 +78,9 @@ func TestWorkflowMetadata_NoWorkflow_ReturnsNullWorkflow(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body)
 	}
 	var m map[string]interface{}
-	json.Unmarshal(rr.Body.Bytes(), &m)
+	if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {
+		t.Fatalf("json: %v", err)
+	}
 	if m["workflow"] != nil {
 		t.Errorf("expected null workflow, got %v", m["workflow"])
 	}
@@ -109,7 +111,9 @@ func TestWorkflowMetadata_WithWorkflow_ReturnsMetadata(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rr2.Code, rr2.Body)
 	}
 	var m map[string]interface{}
-	json.Unmarshal(rr2.Body.Bytes(), &m)
+	if err := json.Unmarshal(rr2.Body.Bytes(), &m); err != nil {
+		t.Fatalf("json: %v", err)
+	}
 	if m["workflow"] == nil {
 		t.Error("expected non-null workflow in metadata")
 	}
