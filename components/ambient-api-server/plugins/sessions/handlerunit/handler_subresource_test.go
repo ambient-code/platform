@@ -216,7 +216,9 @@ func TestAddRepo_DefaultBranch(t *testing.T) {
 	}
 	m := decodeSession(t, rr.Body.Bytes())
 	var repos []RepoEntry
-	json.Unmarshal([]byte(m["repos"].(string)), &repos)
+	if err := json.Unmarshal([]byte(m["repos"].(string)), &repos); err != nil {
+		t.Fatalf("json: %v", err)
+	}
 	if repos[0].Branch != "main" {
 		t.Errorf("expected default branch=main, got %s", repos[0].Branch)
 	}
@@ -262,7 +264,9 @@ func TestAddRepo_Accumulates(t *testing.T) {
 		t.Fatal(err)
 	}
 	var repos []RepoEntry
-	json.Unmarshal([]byte(*sess.Repos), &repos)
+	if err := json.Unmarshal([]byte(*sess.Repos), &repos); err != nil {
+		t.Fatalf("json: %v", err)
+	}
 	if len(repos) != 2 {
 		t.Errorf("expected 2 repos, got %d", len(repos))
 	}
@@ -303,7 +307,9 @@ func TestRemoveRepo_Success(t *testing.T) {
 	}
 	sess, _ := svc.Get(context.Background(), src.ID)
 	var repos []RepoEntry
-	json.Unmarshal([]byte(*sess.Repos), &repos)
+	if err := json.Unmarshal([]byte(*sess.Repos), &repos); err != nil {
+		t.Fatalf("json: %v", err)
+	}
 	if len(repos) != 1 {
 		t.Errorf("expected 1 repo after removal, got %d", len(repos))
 	}
@@ -362,7 +368,9 @@ func TestSetWorkflow_DefaultBranch(t *testing.T) {
 	}
 	sess, _ := svc.Get(context.Background(), src.ID)
 	var wf SetWorkflowRequest
-	json.Unmarshal([]byte(*sess.WorkflowId), &wf)
+	if err := json.Unmarshal([]byte(*sess.WorkflowId), &wf); err != nil {
+		t.Fatalf("json: %v", err)
+	}
 	if wf.Branch != "main" {
 		t.Errorf("expected default branch=main, got %s", wf.Branch)
 	}

@@ -61,7 +61,9 @@ func TestAGUICapabilities_NoRunner_ReturnsStub(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body)
 	}
 	var m map[string]interface{}
-	json.Unmarshal(rr.Body.Bytes(), &m)
+	if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {
+		t.Fatalf("json: %v", err)
+	}
 	if m["framework"] != "unknown" {
 		t.Errorf("expected framework=unknown, got %v", m["framework"])
 	}
@@ -81,7 +83,9 @@ func TestMCPStatus_NoRunner_ReturnsStub(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body)
 	}
 	var m map[string]interface{}
-	json.Unmarshal(rr.Body.Bytes(), &m)
+	if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {
+		t.Fatalf("json: %v", err)
+	}
 	if _, ok := m["servers"]; !ok {
 		t.Error("expected servers field in stub response")
 	}
