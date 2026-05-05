@@ -9,32 +9,40 @@ from typing import Any, Iterator, Optional, TYPE_CHECKING
 from urllib.parse import quote
 
 from ._base import ListOptions
-from .session_message import SessionMessage, SessionMessageList
+from .scheduled_session import ScheduledSession, ScheduledSessionList
 
 if TYPE_CHECKING:
     from .client import AmbientClient
 
 
-class SessionMessageAPI:
+class ScheduledSessionAPI:
     def __init__(self, client: AmbientClient) -> None:
         self._client = client
     def _base_path(self) -> str:
-        return "/sessions/{id}/messages".replace("{id}", quote(self._client._project, safe=""))
+        return "/projects/{id}/scheduled-sessions".replace("{id}", quote(self._client._project, safe=""))
 
 
-    def create(self, data: dict) -> SessionMessage:
+    def create(self, data: dict) -> ScheduledSession:
         resp = self._client._request("POST", self._base_path(), json=data)
-        return SessionMessage.from_dict(resp)
+        return ScheduledSession.from_dict(resp)
 
-    def get(self, resource_id: str) -> SessionMessage:
+    def get(self, resource_id: str) -> ScheduledSession:
         resp = self._client._request("GET", f"{self._base_path()}/{resource_id}")
-        return SessionMessage.from_dict(resp)
+        return ScheduledSession.from_dict(resp)
 
-    def list(self, opts: Optional[ListOptions] = None) -> SessionMessageList:
+    def list(self, opts: Optional[ListOptions] = None) -> ScheduledSessionList:
         params = opts.to_params() if opts else None
         resp = self._client._request("GET", self._base_path(), params=params)
-        return SessionMessageList.from_dict(resp)
-    def list_all(self, size: int = 100, **kwargs: Any) -> Iterator[SessionMessage]:
+        return ScheduledSessionList.from_dict(resp)
+    def update(self, resource_id: str, patch: Any) -> ScheduledSession:
+        data = patch.to_dict() if hasattr(patch, "to_dict") else patch
+        resp = self._client._request("PATCH", f"{self._base_path()}/{resource_id}", json=data)
+        return ScheduledSession.from_dict(resp)
+
+    def delete(self, resource_id: str) -> None:
+        self._client._request("DELETE", f"{self._base_path()}/{resource_id}", expect_json=False)
+
+    def list_all(self, size: int = 100, **kwargs: Any) -> Iterator[ScheduledSession]:
         page = 1
         while True:
             result = self.list(ListOptions().page(page).size(size))

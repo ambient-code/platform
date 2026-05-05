@@ -13,7 +13,7 @@ from ._base import ListMeta, _parse_datetime
 
 
 @dataclass(frozen=True)
-class Project:
+class Credential:
     id: str = ""
     kind: str = ""
     href: str = ""
@@ -21,14 +21,16 @@ class Project:
     updated_at: Optional[datetime] = None
     annotations: str = ""
     description: str = ""
-    display_name: str = ""
+    email: str = ""
     labels: str = ""
     name: str = ""
-    prompt: str = ""
-    status: str = ""
+    project_id: str = ""
+    provider: str = ""
+    token: str = ""
+    url: str = ""
 
     @classmethod
-    def from_dict(cls, data: dict) -> Project:
+    def from_dict(cls, data: dict) -> Credential:
         return cls(
             id=data.get("id", ""),
             kind=data.get("kind", ""),
@@ -37,107 +39,125 @@ class Project:
             updated_at=_parse_datetime(data.get("updated_at")),
             annotations=data.get("annotations", ""),
             description=data.get("description", ""),
-            display_name=data.get("display_name", ""),
+            email=data.get("email", ""),
             labels=data.get("labels", ""),
             name=data.get("name", ""),
-            prompt=data.get("prompt", ""),
-            status=data.get("status", ""),
+            project_id=data.get("project_id", ""),
+            provider=data.get("provider", ""),
+            token=data.get("token", ""),
+            url=data.get("url", ""),
         )
 
     @classmethod
-    def builder(cls) -> ProjectBuilder:
-        return ProjectBuilder()
+    def builder(cls) -> CredentialBuilder:
+        return CredentialBuilder()
 
 
 @dataclass(frozen=True)
-class ProjectList:
+class CredentialList:
     kind: str = ""
     page: int = 0
     size: int = 0
     total: int = 0
-    items: list[Project] = ()
+    items: list[Credential] = ()
 
     @classmethod
-    def from_dict(cls, data: dict) -> ProjectList:
+    def from_dict(cls, data: dict) -> CredentialList:
         return cls(
             kind=data.get("kind", ""),
             page=data.get("page", 0),
             size=data.get("size", 0),
             total=data.get("total", 0),
-            items=[Project.from_dict(item) for item in data.get("items", [])],
+            items=[Credential.from_dict(item) for item in data.get("items", [])],
         )
 
 
-class ProjectBuilder:
+class CredentialBuilder:
     def __init__(self) -> None:
         self._data: dict[str, Any] = {}
 
 
-    def annotations(self, value: str) -> ProjectBuilder:
+    def annotations(self, value: str) -> CredentialBuilder:
         self._data["annotations"] = value
         return self
 
-    def description(self, value: str) -> ProjectBuilder:
+    def description(self, value: str) -> CredentialBuilder:
         self._data["description"] = value
         return self
 
-    def display_name(self, value: str) -> ProjectBuilder:
-        self._data["display_name"] = value
+    def email(self, value: str) -> CredentialBuilder:
+        self._data["email"] = value
         return self
 
-    def labels(self, value: str) -> ProjectBuilder:
+    def labels(self, value: str) -> CredentialBuilder:
         self._data["labels"] = value
         return self
 
-    def name(self, value: str) -> ProjectBuilder:
+    def name(self, value: str) -> CredentialBuilder:
         self._data["name"] = value
         return self
 
-    def prompt(self, value: str) -> ProjectBuilder:
-        self._data["prompt"] = value
+    def project_id(self, value: str) -> CredentialBuilder:
+        self._data["project_id"] = value
         return self
 
-    def status(self, value: str) -> ProjectBuilder:
-        self._data["status"] = value
+    def provider(self, value: str) -> CredentialBuilder:
+        self._data["provider"] = value
+        return self
+
+    def token(self, value: str) -> CredentialBuilder:
+        self._data["token"] = value
+        return self
+
+    def url(self, value: str) -> CredentialBuilder:
+        self._data["url"] = value
         return self
 
     def build(self) -> dict:
         if "name" not in self._data:
             raise ValueError("name is required")
+        if "project_id" not in self._data:
+            raise ValueError("project_id is required")
+        if "provider" not in self._data:
+            raise ValueError("provider is required")
         return dict(self._data)
 
 
-class ProjectPatch:
+class CredentialPatch:
     def __init__(self) -> None:
         self._data: dict[str, Any] = {}
 
 
-    def annotations(self, value: str) -> ProjectPatch:
+    def annotations(self, value: str) -> CredentialPatch:
         self._data["annotations"] = value
         return self
 
-    def description(self, value: str) -> ProjectPatch:
+    def description(self, value: str) -> CredentialPatch:
         self._data["description"] = value
         return self
 
-    def display_name(self, value: str) -> ProjectPatch:
-        self._data["display_name"] = value
+    def email(self, value: str) -> CredentialPatch:
+        self._data["email"] = value
         return self
 
-    def labels(self, value: str) -> ProjectPatch:
+    def labels(self, value: str) -> CredentialPatch:
         self._data["labels"] = value
         return self
 
-    def name(self, value: str) -> ProjectPatch:
+    def name(self, value: str) -> CredentialPatch:
         self._data["name"] = value
         return self
 
-    def prompt(self, value: str) -> ProjectPatch:
-        self._data["prompt"] = value
+    def provider(self, value: str) -> CredentialPatch:
+        self._data["provider"] = value
         return self
 
-    def status(self, value: str) -> ProjectPatch:
-        self._data["status"] = value
+    def token(self, value: str) -> CredentialPatch:
+        self._data["token"] = value
+        return self
+
+    def url(self, value: str) -> CredentialPatch:
+        self._data["url"] = value
         return self
 
     def to_dict(self) -> dict:
