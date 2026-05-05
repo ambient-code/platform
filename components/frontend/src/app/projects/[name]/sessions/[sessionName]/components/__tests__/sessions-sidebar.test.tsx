@@ -34,8 +34,21 @@ vi.mock('@/services/queries/use-project-access', () => ({
   useProjectAccess: () => ({ data: { userRole: 'admin' } }),
 }));
 
+const mockCurrentUser = vi.fn(() => ({ data: { authenticated: true, userId: 'user-1', displayName: 'Test User' } }));
+vi.mock('@/services/queries/use-auth', () => ({
+  useCurrentUser: () => mockCurrentUser(),
+}));
+
 vi.mock('@/services/queries/use-version', () => ({
   useVersion: () => ({ data: '1.0.0' }),
+}));
+
+const localStorageValues: Record<string, unknown> = {};
+vi.mock('@/hooks/use-local-storage', () => ({
+  useLocalStorage: (key: string, initial: unknown) => {
+    const value = key in localStorageValues ? localStorageValues[key] : initial;
+    return [value, vi.fn(), vi.fn()];
+  },
 }));
 
 vi.mock('@/components/session-status-dot', () => ({
@@ -49,7 +62,12 @@ vi.mock('date-fns', () => ({
   formatDistanceToNow: () => '2 hours',
 }));
 
-function makeSessions(count: number) {
+type MakeSessionsOptions = {
+  userId?: string;
+  phase?: string;
+};
+
+function makeSessions(count: number, options: MakeSessionsOptions = {}) {
   return Array.from({ length: count }, (_, i) => ({
     metadata: {
       name: `session-${i}`,
@@ -62,8 +80,9 @@ function makeSessions(count: number) {
       initialPrompt: 'test',
       llmSettings: { model: 'test', temperature: 0, maxTokens: 100 },
       timeout: 3600,
+      ...(options.userId ? { userContext: { userId: options.userId, displayName: 'User', groups: [] } } : {}),
     },
-    status: { phase: 'Running' as const },
+    status: { phase: options.phase ?? 'Running' },
   })) as unknown as AgenticSession[];
 }
 
@@ -76,6 +95,7 @@ describe('SessionsSidebar', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.keys(localStorageValues).forEach((k) => delete localStorageValues[k]);
     mockUseSessionsPaginated.mockReturnValue({
       data: { items: [] },
       isLoading: false,
@@ -183,5 +203,60 @@ describe('SessionsSidebar', () => {
     expect(collapseBtn).toBeDefined();
     fireEvent.click(collapseBtn);
     expect(onCollapse).toHaveBeenCalled();
+  });
+
+  it('renders filter chips', () => {
+    render(<SessionsSidebar {...defaultProps} />);
+    expect(screen.getByTestId('sidebar-filters')).toBeDefined();
+    expect(screen.getByTestId('filter-mine')).toBeDefined();
+    expect(screen.getByTestId('filter-running')).toBeDefined();
+    expect(screen.getByTestId('filter-completed')).toBeDefined();
+    expect(screen.getByTestId('filter-failed')).toBeDefined();
+  });
+
+  it('"Mine" filter chip has correct label', () => {
+    render(<SessionsSidebar {...defaultProps} />);
+    expect(screen.getByTestId('filter-mine').textContent).toContain('Mine');
+  });
+
+  it('shows "No matching sessions" when status filter excludes all sessions', () => {
+    localStorageValues['acp:sidebar:status:test-project'] = 'failed';
+    mockUseSessionsPaginated.mockReturnValue({
+      data: { items: makeSessions(3, { phase: 'Running' }) },
+      isLoading: false,
+    });
+
+    render(<SessionsSidebar {...defaultProps} />);
+    expect(screen.getByText('No matching sessions')).toBeDefined();
+  });
+
+  it('shows "No matching sessions" when "Mine" filter excludes all sessions', () => {
+    localStorageValues['acp:sidebar:mine:test-project'] = true;
+    mockCurrentUser.mockReturnValue({ data: { authenticated: true, userId: 'user-1', displayName: 'Test User' } });
+    mockUseSessionsPaginated.mockReturnValue({
+      data: { items: makeSessions(3, { userId: 'other-user' }) },
+      isLoading: false,
+    });
+
+    render(<SessionsSidebar {...defaultProps} />);
+    expect(screen.getByText('No matching sessions')).toBeDefined();
+  });
+
+  it('shows only matching sessions when status filter is active', () => {
+    localStorageValues['acp:sidebar:status:test-project'] = 'failed';
+    const runningSession = makeSessions(1, { phase: 'Running' })[0];
+    const failedSession = makeSessions(1, { phase: 'Failed' })[0];
+    failedSession.metadata.name = 'failed-1';
+    failedSession.metadata.uid = 'uid-failed-1';
+    failedSession.spec.displayName = 'Failed Session';
+
+    mockUseSessionsPaginated.mockReturnValue({
+      data: { items: [runningSession, failedSession] },
+      isLoading: false,
+    });
+
+    render(<SessionsSidebar {...defaultProps} />);
+    expect(screen.getByText('Failed Session')).toBeDefined();
+    expect(screen.queryByText('Session 0')).toBeNull();
   });
 });
