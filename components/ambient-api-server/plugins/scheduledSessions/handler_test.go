@@ -38,17 +38,12 @@ func setupRouter(svc ScheduledSessionService) *mux.Router {
 
 func newSS(t *testing.T, svc ScheduledSessionService, projectId string) openapi.ScheduledSession {
 	t.Helper()
-	body := openapi.ScheduledSession{
+	agentId := "agent-123"
+	ss, err := svc.Create(context.Background(), &ScheduledSession{
 		Name:      "daily-run",
 		ProjectId: projectId,
-		AgentId:   "agent-123",
+		AgentId:   &agentId,
 		Schedule:  "0 9 * * 1-5",
-	}
-	ss, err := svc.Create(context.Background(), &ScheduledSession{
-		Name:      body.Name,
-		ProjectId: body.ProjectId,
-		AgentId:   body.AgentId,
-		Schedule:  body.Schedule,
 	})
 	if err != nil {
 		t.Fatalf("failed to seed scheduled session: %v", err)
@@ -98,9 +93,10 @@ func TestCreate_Success(t *testing.T) {
 	svc := NewInMemoryService()
 	router := setupRouter(svc)
 
+	agentId := "agent-abc"
 	body := openapi.ScheduledSession{
 		Name:          "nightly",
-		AgentId:       "agent-abc",
+		AgentId:       &agentId,
 		Schedule:      "0 22 * * *",
 		SessionPrompt: strPtr("run nightly analysis"),
 	}
@@ -138,9 +134,8 @@ func TestCreate_MissingRequiredFields(t *testing.T) {
 		name string
 		body openapi.ScheduledSession
 	}{
-		{"missing name", openapi.ScheduledSession{AgentId: "a", Schedule: "* * * * *"}},
-		{"missing agent_id", openapi.ScheduledSession{Name: "x", Schedule: "* * * * *"}},
-		{"missing schedule", openapi.ScheduledSession{Name: "x", AgentId: "a"}},
+		{"missing name", openapi.ScheduledSession{Schedule: "* * * * *"}},
+		{"missing schedule", openapi.ScheduledSession{Name: "x"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -165,7 +160,6 @@ func TestCreate_RejectsClientSuppliedId(t *testing.T) {
 	body := openapi.ScheduledSession{
 		Id:       &id,
 		Name:     "x",
-		AgentId:  "a",
 		Schedule: "* * * * *",
 	}
 	req := httptest.NewRequest(http.MethodPost,
@@ -397,9 +391,10 @@ func TestFullCRUDLifecycle(t *testing.T) {
 	projectId := "lifecycle-proj"
 
 	// Create
+	agentId := "agent-1"
 	body := openapi.ScheduledSession{
 		Name:     "lifecycle-test",
-		AgentId:  "agent-1",
+		AgentId:  &agentId,
 		Schedule: "*/5 * * * *",
 	}
 	createReq := httptest.NewRequest(http.MethodPost,
@@ -505,6 +500,110 @@ func TestFullCRUDLifecycle(t *testing.T) {
 	decodeJSON(t, listRR2.Body.Bytes(), &list2)
 	if list2.Total != 0 {
 		t.Errorf("expected 0 after delete, got %d", list2.Total)
+	}
+}
+
+func TestCreate_WithoutAgentId(t *testing.T) {
+	svc := NewInMemoryService()
+	router := setupRouter(svc)
+
+	body := openapi.ScheduledSession{
+		Name:     "no-agent",
+		Schedule: "0 9 * * *",
+	}
+	req := httptest.NewRequest(http.MethodPost,
+		"/api/ambient/v1/projects/proj-1/scheduled-sessions",
+		jsonBody(t, body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rr.Code, rr.Body)
+	}
+	var ss openapi.ScheduledSession
+	decodeJSON(t, rr.Body.Bytes(), &ss)
+	if ss.AgentId != nil {
+		t.Errorf("expected nil agent_id, got %s", *ss.AgentId)
+	}
+}
+
+func TestCreate_WithExecutionFields(t *testing.T) {
+	svc := NewInMemoryService()
+	router := setupRouter(svc)
+
+	timeout := int32(3600)
+	inactivityTimeout := int32(600)
+	stopOnRunFinished := true
+	runnerType := "claude-code"
+	agentId := "agent-exec"
+	body := openapi.ScheduledSession{
+		Name:              "exec-fields",
+		AgentId:           &agentId,
+		Schedule:          "0 12 * * *",
+		Timeout:           &timeout,
+		InactivityTimeout: &inactivityTimeout,
+		StopOnRunFinished: &stopOnRunFinished,
+		RunnerType:        &runnerType,
+	}
+	req := httptest.NewRequest(http.MethodPost,
+		"/api/ambient/v1/projects/proj-1/scheduled-sessions",
+		jsonBody(t, body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rr.Code, rr.Body)
+	}
+	var ss openapi.ScheduledSession
+	decodeJSON(t, rr.Body.Bytes(), &ss)
+	if ss.Timeout == nil || *ss.Timeout != 3600 {
+		t.Errorf("timeout mismatch: got %v", ss.Timeout)
+	}
+	if ss.InactivityTimeout == nil || *ss.InactivityTimeout != 600 {
+		t.Errorf("inactivity_timeout mismatch: got %v", ss.InactivityTimeout)
+	}
+	if ss.StopOnRunFinished == nil || !*ss.StopOnRunFinished {
+		t.Errorf("stop_on_run_finished mismatch: got %v", ss.StopOnRunFinished)
+	}
+	if ss.RunnerType == nil || *ss.RunnerType != "claude-code" {
+		t.Errorf("runner_type mismatch: got %v", ss.RunnerType)
+	}
+}
+
+func TestPatch_ExecutionFields(t *testing.T) {
+	svc := NewInMemoryService()
+	router := setupRouter(svc)
+
+	ss := newSS(t, svc, "proj-1")
+
+	timeout := int32(7200)
+	runnerType := "custom-runner"
+	patch := openapi.ScheduledSessionPatchRequest{
+		Timeout:    &timeout,
+		RunnerType: &runnerType,
+	}
+	req := httptest.NewRequest(http.MethodPatch,
+		fmt.Sprintf("/api/ambient/v1/projects/proj-1/scheduled-sessions/%s", *ss.Id),
+		jsonBody(t, patch))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body)
+	}
+	var updated openapi.ScheduledSession
+	decodeJSON(t, rr.Body.Bytes(), &updated)
+	if updated.Timeout == nil || *updated.Timeout != 7200 {
+		t.Errorf("timeout not patched: got %v", updated.Timeout)
+	}
+	if updated.RunnerType == nil || *updated.RunnerType != "custom-runner" {
+		t.Errorf("runner_type not patched: got %v", updated.RunnerType)
+	}
+	if updated.Schedule != "0 9 * * 1-5" {
+		t.Errorf("schedule should be unchanged: got %s", updated.Schedule)
 	}
 }
 
