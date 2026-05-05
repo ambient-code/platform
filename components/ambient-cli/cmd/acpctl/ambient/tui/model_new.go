@@ -2161,11 +2161,10 @@ func (m *AppModel) handleScheduledSessionsRune(key string) (tea.Model, tea.Cmd) 
 			}
 			agentOpts = append(agentOpts, huh.NewOption(a.Name, a.ID))
 		}
-		if len(agentOpts) == 0 {
-			return m, m.setInfo("No agents found — create an agent first")
-		}
 		var name, schedule, description, sessionPrompt, timezone, agentID string
-		agentID = agentOpts[0].Value
+		if len(agentOpts) > 0 {
+			agentID = agentOpts[0].Value
+		}
 		form := views.NewScheduledSessionForm(&name, &schedule, &description, &sessionPrompt, &timezone, &agentID, agentOpts)
 		form.WithWidth(60)
 		m.formOverlay = form

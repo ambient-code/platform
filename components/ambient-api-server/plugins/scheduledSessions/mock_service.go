@@ -75,6 +75,21 @@ func (s *InMemoryScheduledSessionService) Patch(_ context.Context, id string, pa
 	if patch.SessionPrompt != nil {
 		ss.SessionPrompt = patch.SessionPrompt
 	}
+	if patch.AgentId != nil {
+		ss.AgentId = patch.AgentId
+	}
+	if patch.Timeout != nil {
+		ss.Timeout = patch.Timeout
+	}
+	if patch.InactivityTimeout != nil {
+		ss.InactivityTimeout = patch.InactivityTimeout
+	}
+	if patch.StopOnRunFinished != nil {
+		ss.StopOnRunFinished = patch.StopOnRunFinished
+	}
+	if patch.RunnerType != nil {
+		ss.RunnerType = patch.RunnerType
+	}
 	ss.UpdatedAt = time.Now()
 	cp := *ss
 	return &cp, nil

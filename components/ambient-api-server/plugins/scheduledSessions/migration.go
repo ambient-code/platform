@@ -34,6 +34,30 @@ func migration() *gormigrate.Migration {
 	}
 }
 
+func executionFieldsMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202605050001",
+		Migrate: func(tx *gorm.DB) error {
+			stmts := []string{
+				`ALTER TABLE scheduled_sessions ALTER COLUMN agent_id DROP NOT NULL`,
+				`ALTER TABLE scheduled_sessions ADD COLUMN IF NOT EXISTS timeout integer`,
+				`ALTER TABLE scheduled_sessions ADD COLUMN IF NOT EXISTS inactivity_timeout integer`,
+				`ALTER TABLE scheduled_sessions ADD COLUMN IF NOT EXISTS stop_on_run_finished boolean`,
+				`ALTER TABLE scheduled_sessions ADD COLUMN IF NOT EXISTS runner_type text`,
+			}
+			for _, s := range stmts {
+				if err := tx.Exec(s).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return nil
+		},
+	}
+}
+
 func indexMigration() *gormigrate.Migration {
 	stmts := []string{
 		`CREATE INDEX IF NOT EXISTS idx_scheduled_sessions_project ON scheduled_sessions(project_id)`,

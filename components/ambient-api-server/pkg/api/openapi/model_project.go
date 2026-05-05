@@ -29,6 +29,7 @@ type Project struct {
 	CreatedAt   *time.Time `json:"created_at,omitempty"`
 	UpdatedAt   *time.Time `json:"updated_at,omitempty"`
 	Name        string     `json:"name"`
+	DisplayName *string    `json:"display_name,omitempty"`
 	Description *string    `json:"description,omitempty"`
 	Labels      *string    `json:"labels,omitempty"`
 	Annotations *string    `json:"annotations,omitempty"`
@@ -241,6 +242,38 @@ func (o *Project) SetName(v string) {
 	o.Name = v
 }
 
+// GetDisplayName returns the DisplayName field value if set, zero value otherwise.
+func (o *Project) GetDisplayName() string {
+	if o == nil || IsNil(o.DisplayName) {
+		var ret string
+		return ret
+	}
+	return *o.DisplayName
+}
+
+// GetDisplayNameOk returns a tuple with the DisplayName field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Project) GetDisplayNameOk() (*string, bool) {
+	if o == nil || IsNil(o.DisplayName) {
+		return nil, false
+	}
+	return o.DisplayName, true
+}
+
+// HasDisplayName returns a boolean if a field has been set.
+func (o *Project) HasDisplayName() bool {
+	if o != nil && !IsNil(o.DisplayName) {
+		return true
+	}
+
+	return false
+}
+
+// SetDisplayName gets a reference to the given string and assigns it to the DisplayName field.
+func (o *Project) SetDisplayName(v string) {
+	o.DisplayName = &v
+}
+
 // GetDescription returns the Description field value if set, zero value otherwise.
 func (o *Project) GetDescription() string {
 	if o == nil || IsNil(o.Description) {
@@ -427,6 +460,9 @@ func (o Project) ToMap() (map[string]interface{}, error) {
 		toSerialize["updated_at"] = o.UpdatedAt
 	}
 	toSerialize["name"] = o.Name
+	if !IsNil(o.DisplayName) {
+		toSerialize["display_name"] = o.DisplayName
+	}
 	if !IsNil(o.Description) {
 		toSerialize["description"] = o.Description
 	}

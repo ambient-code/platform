@@ -1,0 +1,535 @@
+paths:
+  /api/ambient/v1/projects/{id}/scheduled-sessions:
+    get:
+      summary: Returns a list of scheduled sessions in a project
+      security:
+        - Bearer: []
+      responses:
+        '200':
+          description: A JSON array of scheduled session objects
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledSessionList'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No project with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/size'
+        - $ref: '#/components/parameters/search'
+        - $ref: '#/components/parameters/orderBy'
+        - $ref: '#/components/parameters/fields'
+    post:
+      summary: Create a scheduled session in a project
+      security:
+        - Bearer: []
+      requestBody:
+        description: Scheduled session data
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduledSession'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledSession'
+        '400':
+          description: Validation errors occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No project with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred creating the scheduled session
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    parameters:
+      - $ref: '#/components/parameters/id'
+  /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}:
+    get:
+      summary: Get a scheduled session by id
+      security:
+        - Bearer: []
+      responses:
+        '200':
+          description: Scheduled session found by id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledSession'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No scheduled session with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    patch:
+      summary: Update a scheduled session
+      security:
+        - Bearer: []
+      requestBody:
+        description: Updated scheduled session data
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduledSessionPatchRequest'
+      responses:
+        '200':
+          description: Scheduled session updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledSession'
+        '400':
+          description: Validation errors occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No scheduled session with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error updating scheduled session
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    delete:
+      summary: Delete a scheduled session
+      security:
+        - Bearer: []
+      responses:
+        '204':
+          description: Scheduled session deleted successfully
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No scheduled session with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    parameters:
+      - $ref: '#/components/parameters/id'
+      - name: ss_id
+        in: path
+        description: The id of the scheduled session
+        required: true
+        schema:
+          type: string
+  /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/suspend:
+    post:
+      summary: Suspend a scheduled session (sets enabled=false)
+      security:
+        - Bearer: []
+      responses:
+        '200':
+          description: Scheduled session suspended
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledSession'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No scheduled session with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    parameters:
+      - $ref: '#/components/parameters/id'
+      - name: ss_id
+        in: path
+        description: The id of the scheduled session
+        required: true
+        schema:
+          type: string
+  /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/resume:
+    post:
+      summary: Resume a suspended scheduled session (sets enabled=true)
+      security:
+        - Bearer: []
+      responses:
+        '200':
+          description: Scheduled session resumed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledSession'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No scheduled session with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    parameters:
+      - $ref: '#/components/parameters/id'
+      - name: ss_id
+        in: path
+        description: The id of the scheduled session
+        required: true
+        schema:
+          type: string
+  /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/trigger:
+    post:
+      summary: Manually trigger a scheduled session to run immediately
+      security:
+        - Bearer: []
+      responses:
+        '200':
+          description: Scheduled session triggered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No scheduled session with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    parameters:
+      - $ref: '#/components/parameters/id'
+      - name: ss_id
+        in: path
+        description: The id of the scheduled session
+        required: true
+        schema:
+          type: string
+  /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/runs:
+    get:
+      summary: List sessions triggered by this scheduled session
+      security:
+        - Bearer: []
+      responses:
+        '200':
+          description: List of session runs
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.sessions.yaml#/components/schemas/SessionList'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No scheduled session with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/size'
+    parameters:
+      - $ref: '#/components/parameters/id'
+      - name: ss_id
+        in: path
+        description: The id of the scheduled session
+        required: true
+        schema:
+          type: string
+components:
+  schemas:
+    ScheduledSession:
+      allOf:
+        - $ref: 'openapi.yaml#/components/schemas/ObjectReference'
+        - type: object
+          required:
+            - name
+            - project_id
+            - schedule
+          properties:
+            name:
+              type: string
+              description: Human-readable name for the scheduled session
+            description:
+              type: string
+            project_id:
+              type: string
+              description: The project this scheduled session belongs to
+            agent_id:
+              type: string
+              description: Optional agent to run when triggered
+            schedule:
+              type: string
+              description: Cron expression defining the schedule
+            timezone:
+              type: string
+              description: IANA timezone for the schedule (default UTC)
+            enabled:
+              type: boolean
+              description: Whether the schedule is active
+            session_prompt:
+              type: string
+              description: Prompt passed to each triggered session
+            last_run_at:
+              type: string
+              format: date-time
+            next_run_at:
+              type: string
+              format: date-time
+            timeout:
+              type: integer
+              format: int32
+              description: Session timeout in seconds
+            inactivity_timeout:
+              type: integer
+              format: int32
+              description: Session inactivity timeout in seconds
+            stop_on_run_finished:
+              type: boolean
+              description: Whether to stop the session when the run finishes
+            runner_type:
+              type: string
+              description: Runner type override for triggered sessions
+    ScheduledSessionList:
+      allOf:
+        - $ref: 'openapi.yaml#/components/schemas/List'
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/ScheduledSession'
+    ScheduledSessionPatchRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        agent_id:
+          type: string
+        schedule:
+          type: string
+        timezone:
+          type: string
+        enabled:
+          type: boolean
+        session_prompt:
+          type: string
+        timeout:
+          type: integer
+          format: int32
+        inactivity_timeout:
+          type: integer
+          format: int32
+        stop_on_run_finished:
+          type: boolean
+        runner_type:
+          type: string
+  parameters:
+    id:
+      name: id
+      in: path
+      description: The id of the project
+      required: true
+      schema:
+        type: string
+    page:
+      name: page
+      in: query
+      description: Page number of record list when record list exceeds specified page size
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+      required: false
+    size:
+      name: size
+      in: query
+      description: Maximum number of records to return
+      schema:
+        type: integer
+        default: 100
+        minimum: 0
+      required: false
+    search:
+      name: search
+      in: query
+      required: false
+      description: Specifies the search criteria
+      schema:
+        type: string
+    orderBy:
+      name: orderBy
+      in: query
+      required: false
+      description: Specifies the order by criteria
+      schema:
+        type: string
+    fields:
+      name: fields
+      in: query
+      required: false
+      description: Supplies a comma-separated list of fields to be returned
+      schema:
+        type: string
