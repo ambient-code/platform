@@ -5,41 +5,46 @@
 
 import type { ObjectReference, ListMeta } from './base';
 
-export type Project = ObjectReference & {
+export type Credential = ObjectReference & {
   annotations: string;
   description: string;
-  display_name: string;
+  email: string;
   labels: string;
   name: string;
-  prompt: string;
-  status: string;
+  project_id: string;
+  provider: string;
+  token: string;
+  url: string;
 };
 
-export type ProjectList = ListMeta & {
-  items: Project[];
+export type CredentialList = ListMeta & {
+  items: Credential[];
 };
 
-export type ProjectCreateRequest = {
+export type CredentialCreateRequest = {
   annotations?: string;
   description?: string;
-  display_name?: string;
+  email?: string;
   labels?: string;
   name: string;
-  prompt?: string;
-  status?: string;
+  project_id: string;
+  provider: string;
+  token?: string;
+  url?: string;
 };
 
-export type ProjectPatchRequest = {
+export type CredentialPatchRequest = {
   annotations?: string;
   description?: string;
-  display_name?: string;
+  email?: string;
   labels?: string;
   name?: string;
-  prompt?: string;
-  status?: string;
+  provider?: string;
+  token?: string;
+  url?: string;
 };
 
-export class ProjectBuilder {
+export class CredentialBuilder {
   private data: Record<string, unknown> = {};
 
 
@@ -53,8 +58,8 @@ export class ProjectBuilder {
     return this;
   }
 
-  displayName(value: string): this {
-    this.data['display_name'] = value;
+  email(value: string): this {
+    this.data['email'] = value;
     return this;
   }
 
@@ -68,25 +73,41 @@ export class ProjectBuilder {
     return this;
   }
 
-  prompt(value: string): this {
-    this.data['prompt'] = value;
+  projectId(value: string): this {
+    this.data['project_id'] = value;
     return this;
   }
 
-  status(value: string): this {
-    this.data['status'] = value;
+  provider(value: string): this {
+    this.data['provider'] = value;
     return this;
   }
 
-  build(): ProjectCreateRequest {
+  token(value: string): this {
+    this.data['token'] = value;
+    return this;
+  }
+
+  url(value: string): this {
+    this.data['url'] = value;
+    return this;
+  }
+
+  build(): CredentialCreateRequest {
     if (!this.data['name']) {
       throw new Error('name is required');
     }
-    return this.data as ProjectCreateRequest;
+    if (!this.data['project_id']) {
+      throw new Error('project_id is required');
+    }
+    if (!this.data['provider']) {
+      throw new Error('provider is required');
+    }
+    return this.data as CredentialCreateRequest;
   }
 }
 
-export class ProjectPatchBuilder {
+export class CredentialPatchBuilder {
   private data: Record<string, unknown> = {};
 
 
@@ -100,8 +121,8 @@ export class ProjectPatchBuilder {
     return this;
   }
 
-  displayName(value: string): this {
-    this.data['display_name'] = value;
+  email(value: string): this {
+    this.data['email'] = value;
     return this;
   }
 
@@ -115,17 +136,22 @@ export class ProjectPatchBuilder {
     return this;
   }
 
-  prompt(value: string): this {
-    this.data['prompt'] = value;
+  provider(value: string): this {
+    this.data['provider'] = value;
     return this;
   }
 
-  status(value: string): this {
-    this.data['status'] = value;
+  token(value: string): this {
+    this.data['token'] = value;
     return this;
   }
 
-  build(): ProjectPatchRequest {
-    return this.data as ProjectPatchRequest;
+  url(value: string): this {
+    this.data['url'] = value;
+    return this;
+  }
+
+  build(): CredentialPatchRequest {
+    return this.data as CredentialPatchRequest;
   }
 }
