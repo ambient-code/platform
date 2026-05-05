@@ -29,11 +29,23 @@ type Agent struct {
 	CreatedAt *time.Time `json:"created_at,omitempty"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 	// The project this agent belongs to
-	ProjectId string `json:"project_id"`
+	ProjectId     string  `json:"project_id"`
+	ParentAgentId *string `json:"parent_agent_id,omitempty"`
+	OwnerUserId   *string `json:"owner_user_id,omitempty"`
 	// Human-readable identifier; unique within the project
-	Name string `json:"name"`
+	Name        string  `json:"name"`
+	DisplayName *string `json:"display_name,omitempty"`
+	Description *string `json:"description,omitempty"`
 	// Defines who this agent is. Mutable via PATCH. Access controlled by RBAC.
-	Prompt *string `json:"prompt,omitempty"`
+	Prompt               *string  `json:"prompt,omitempty"`
+	RepoUrl              *string  `json:"repo_url,omitempty"`
+	WorkflowId           *string  `json:"workflow_id,omitempty"`
+	LlmModel             *string  `json:"llm_model,omitempty"`
+	LlmTemperature       *float64 `json:"llm_temperature,omitempty"`
+	LlmMaxTokens         *int32   `json:"llm_max_tokens,omitempty"`
+	BotAccountName       *string  `json:"bot_account_name,omitempty"`
+	ResourceOverrides    *string  `json:"resource_overrides,omitempty"`
+	EnvironmentVariables *string  `json:"environment_variables,omitempty"`
 	// Denormalized for fast reads — the active session, if any
 	CurrentSessionId *string `json:"current_session_id,omitempty"`
 	Labels           *string `json:"labels,omitempty"`
@@ -245,6 +257,70 @@ func (o *Agent) SetProjectId(v string) {
 	o.ProjectId = v
 }
 
+// GetParentAgentId returns the ParentAgentId field value if set, zero value otherwise.
+func (o *Agent) GetParentAgentId() string {
+	if o == nil || IsNil(o.ParentAgentId) {
+		var ret string
+		return ret
+	}
+	return *o.ParentAgentId
+}
+
+// GetParentAgentIdOk returns a tuple with the ParentAgentId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Agent) GetParentAgentIdOk() (*string, bool) {
+	if o == nil || IsNil(o.ParentAgentId) {
+		return nil, false
+	}
+	return o.ParentAgentId, true
+}
+
+// HasParentAgentId returns a boolean if a field has been set.
+func (o *Agent) HasParentAgentId() bool {
+	if o != nil && !IsNil(o.ParentAgentId) {
+		return true
+	}
+
+	return false
+}
+
+// SetParentAgentId gets a reference to the given string and assigns it to the ParentAgentId field.
+func (o *Agent) SetParentAgentId(v string) {
+	o.ParentAgentId = &v
+}
+
+// GetOwnerUserId returns the OwnerUserId field value if set, zero value otherwise.
+func (o *Agent) GetOwnerUserId() string {
+	if o == nil || IsNil(o.OwnerUserId) {
+		var ret string
+		return ret
+	}
+	return *o.OwnerUserId
+}
+
+// GetOwnerUserIdOk returns a tuple with the OwnerUserId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Agent) GetOwnerUserIdOk() (*string, bool) {
+	if o == nil || IsNil(o.OwnerUserId) {
+		return nil, false
+	}
+	return o.OwnerUserId, true
+}
+
+// HasOwnerUserId returns a boolean if a field has been set.
+func (o *Agent) HasOwnerUserId() bool {
+	if o != nil && !IsNil(o.OwnerUserId) {
+		return true
+	}
+
+	return false
+}
+
+// SetOwnerUserId gets a reference to the given string and assigns it to the OwnerUserId field.
+func (o *Agent) SetOwnerUserId(v string) {
+	o.OwnerUserId = &v
+}
+
 // GetName returns the Name field value
 func (o *Agent) GetName() string {
 	if o == nil {
@@ -267,6 +343,70 @@ func (o *Agent) GetNameOk() (*string, bool) {
 // SetName sets field value
 func (o *Agent) SetName(v string) {
 	o.Name = v
+}
+
+// GetDisplayName returns the DisplayName field value if set, zero value otherwise.
+func (o *Agent) GetDisplayName() string {
+	if o == nil || IsNil(o.DisplayName) {
+		var ret string
+		return ret
+	}
+	return *o.DisplayName
+}
+
+// GetDisplayNameOk returns a tuple with the DisplayName field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Agent) GetDisplayNameOk() (*string, bool) {
+	if o == nil || IsNil(o.DisplayName) {
+		return nil, false
+	}
+	return o.DisplayName, true
+}
+
+// HasDisplayName returns a boolean if a field has been set.
+func (o *Agent) HasDisplayName() bool {
+	if o != nil && !IsNil(o.DisplayName) {
+		return true
+	}
+
+	return false
+}
+
+// SetDisplayName gets a reference to the given string and assigns it to the DisplayName field.
+func (o *Agent) SetDisplayName(v string) {
+	o.DisplayName = &v
+}
+
+// GetDescription returns the Description field value if set, zero value otherwise.
+func (o *Agent) GetDescription() string {
+	if o == nil || IsNil(o.Description) {
+		var ret string
+		return ret
+	}
+	return *o.Description
+}
+
+// GetDescriptionOk returns a tuple with the Description field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Agent) GetDescriptionOk() (*string, bool) {
+	if o == nil || IsNil(o.Description) {
+		return nil, false
+	}
+	return o.Description, true
+}
+
+// HasDescription returns a boolean if a field has been set.
+func (o *Agent) HasDescription() bool {
+	if o != nil && !IsNil(o.Description) {
+		return true
+	}
+
+	return false
+}
+
+// SetDescription gets a reference to the given string and assigns it to the Description field.
+func (o *Agent) SetDescription(v string) {
+	o.Description = &v
 }
 
 // GetPrompt returns the Prompt field value if set, zero value otherwise.
@@ -299,6 +439,262 @@ func (o *Agent) HasPrompt() bool {
 // SetPrompt gets a reference to the given string and assigns it to the Prompt field.
 func (o *Agent) SetPrompt(v string) {
 	o.Prompt = &v
+}
+
+// GetRepoUrl returns the RepoUrl field value if set, zero value otherwise.
+func (o *Agent) GetRepoUrl() string {
+	if o == nil || IsNil(o.RepoUrl) {
+		var ret string
+		return ret
+	}
+	return *o.RepoUrl
+}
+
+// GetRepoUrlOk returns a tuple with the RepoUrl field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Agent) GetRepoUrlOk() (*string, bool) {
+	if o == nil || IsNil(o.RepoUrl) {
+		return nil, false
+	}
+	return o.RepoUrl, true
+}
+
+// HasRepoUrl returns a boolean if a field has been set.
+func (o *Agent) HasRepoUrl() bool {
+	if o != nil && !IsNil(o.RepoUrl) {
+		return true
+	}
+
+	return false
+}
+
+// SetRepoUrl gets a reference to the given string and assigns it to the RepoUrl field.
+func (o *Agent) SetRepoUrl(v string) {
+	o.RepoUrl = &v
+}
+
+// GetWorkflowId returns the WorkflowId field value if set, zero value otherwise.
+func (o *Agent) GetWorkflowId() string {
+	if o == nil || IsNil(o.WorkflowId) {
+		var ret string
+		return ret
+	}
+	return *o.WorkflowId
+}
+
+// GetWorkflowIdOk returns a tuple with the WorkflowId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Agent) GetWorkflowIdOk() (*string, bool) {
+	if o == nil || IsNil(o.WorkflowId) {
+		return nil, false
+	}
+	return o.WorkflowId, true
+}
+
+// HasWorkflowId returns a boolean if a field has been set.
+func (o *Agent) HasWorkflowId() bool {
+	if o != nil && !IsNil(o.WorkflowId) {
+		return true
+	}
+
+	return false
+}
+
+// SetWorkflowId gets a reference to the given string and assigns it to the WorkflowId field.
+func (o *Agent) SetWorkflowId(v string) {
+	o.WorkflowId = &v
+}
+
+// GetLlmModel returns the LlmModel field value if set, zero value otherwise.
+func (o *Agent) GetLlmModel() string {
+	if o == nil || IsNil(o.LlmModel) {
+		var ret string
+		return ret
+	}
+	return *o.LlmModel
+}
+
+// GetLlmModelOk returns a tuple with the LlmModel field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Agent) GetLlmModelOk() (*string, bool) {
+	if o == nil || IsNil(o.LlmModel) {
+		return nil, false
+	}
+	return o.LlmModel, true
+}
+
+// HasLlmModel returns a boolean if a field has been set.
+func (o *Agent) HasLlmModel() bool {
+	if o != nil && !IsNil(o.LlmModel) {
+		return true
+	}
+
+	return false
+}
+
+// SetLlmModel gets a reference to the given string and assigns it to the LlmModel field.
+func (o *Agent) SetLlmModel(v string) {
+	o.LlmModel = &v
+}
+
+// GetLlmTemperature returns the LlmTemperature field value if set, zero value otherwise.
+func (o *Agent) GetLlmTemperature() float64 {
+	if o == nil || IsNil(o.LlmTemperature) {
+		var ret float64
+		return ret
+	}
+	return *o.LlmTemperature
+}
+
+// GetLlmTemperatureOk returns a tuple with the LlmTemperature field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Agent) GetLlmTemperatureOk() (*float64, bool) {
+	if o == nil || IsNil(o.LlmTemperature) {
+		return nil, false
+	}
+	return o.LlmTemperature, true
+}
+
+// HasLlmTemperature returns a boolean if a field has been set.
+func (o *Agent) HasLlmTemperature() bool {
+	if o != nil && !IsNil(o.LlmTemperature) {
+		return true
+	}
+
+	return false
+}
+
+// SetLlmTemperature gets a reference to the given float64 and assigns it to the LlmTemperature field.
+func (o *Agent) SetLlmTemperature(v float64) {
+	o.LlmTemperature = &v
+}
+
+// GetLlmMaxTokens returns the LlmMaxTokens field value if set, zero value otherwise.
+func (o *Agent) GetLlmMaxTokens() int32 {
+	if o == nil || IsNil(o.LlmMaxTokens) {
+		var ret int32
+		return ret
+	}
+	return *o.LlmMaxTokens
+}
+
+// GetLlmMaxTokensOk returns a tuple with the LlmMaxTokens field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Agent) GetLlmMaxTokensOk() (*int32, bool) {
+	if o == nil || IsNil(o.LlmMaxTokens) {
+		return nil, false
+	}
+	return o.LlmMaxTokens, true
+}
+
+// HasLlmMaxTokens returns a boolean if a field has been set.
+func (o *Agent) HasLlmMaxTokens() bool {
+	if o != nil && !IsNil(o.LlmMaxTokens) {
+		return true
+	}
+
+	return false
+}
+
+// SetLlmMaxTokens gets a reference to the given int32 and assigns it to the LlmMaxTokens field.
+func (o *Agent) SetLlmMaxTokens(v int32) {
+	o.LlmMaxTokens = &v
+}
+
+// GetBotAccountName returns the BotAccountName field value if set, zero value otherwise.
+func (o *Agent) GetBotAccountName() string {
+	if o == nil || IsNil(o.BotAccountName) {
+		var ret string
+		return ret
+	}
+	return *o.BotAccountName
+}
+
+// GetBotAccountNameOk returns a tuple with the BotAccountName field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Agent) GetBotAccountNameOk() (*string, bool) {
+	if o == nil || IsNil(o.BotAccountName) {
+		return nil, false
+	}
+	return o.BotAccountName, true
+}
+
+// HasBotAccountName returns a boolean if a field has been set.
+func (o *Agent) HasBotAccountName() bool {
+	if o != nil && !IsNil(o.BotAccountName) {
+		return true
+	}
+
+	return false
+}
+
+// SetBotAccountName gets a reference to the given string and assigns it to the BotAccountName field.
+func (o *Agent) SetBotAccountName(v string) {
+	o.BotAccountName = &v
+}
+
+// GetResourceOverrides returns the ResourceOverrides field value if set, zero value otherwise.
+func (o *Agent) GetResourceOverrides() string {
+	if o == nil || IsNil(o.ResourceOverrides) {
+		var ret string
+		return ret
+	}
+	return *o.ResourceOverrides
+}
+
+// GetResourceOverridesOk returns a tuple with the ResourceOverrides field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Agent) GetResourceOverridesOk() (*string, bool) {
+	if o == nil || IsNil(o.ResourceOverrides) {
+		return nil, false
+	}
+	return o.ResourceOverrides, true
+}
+
+// HasResourceOverrides returns a boolean if a field has been set.
+func (o *Agent) HasResourceOverrides() bool {
+	if o != nil && !IsNil(o.ResourceOverrides) {
+		return true
+	}
+
+	return false
+}
+
+// SetResourceOverrides gets a reference to the given string and assigns it to the ResourceOverrides field.
+func (o *Agent) SetResourceOverrides(v string) {
+	o.ResourceOverrides = &v
+}
+
+// GetEnvironmentVariables returns the EnvironmentVariables field value if set, zero value otherwise.
+func (o *Agent) GetEnvironmentVariables() string {
+	if o == nil || IsNil(o.EnvironmentVariables) {
+		var ret string
+		return ret
+	}
+	return *o.EnvironmentVariables
+}
+
+// GetEnvironmentVariablesOk returns a tuple with the EnvironmentVariables field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Agent) GetEnvironmentVariablesOk() (*string, bool) {
+	if o == nil || IsNil(o.EnvironmentVariables) {
+		return nil, false
+	}
+	return o.EnvironmentVariables, true
+}
+
+// HasEnvironmentVariables returns a boolean if a field has been set.
+func (o *Agent) HasEnvironmentVariables() bool {
+	if o != nil && !IsNil(o.EnvironmentVariables) {
+		return true
+	}
+
+	return false
+}
+
+// SetEnvironmentVariables gets a reference to the given string and assigns it to the EnvironmentVariables field.
+func (o *Agent) SetEnvironmentVariables(v string) {
+	o.EnvironmentVariables = &v
 }
 
 // GetCurrentSessionId returns the CurrentSessionId field value if set, zero value otherwise.
@@ -423,9 +819,45 @@ func (o Agent) ToMap() (map[string]interface{}, error) {
 		toSerialize["updated_at"] = o.UpdatedAt
 	}
 	toSerialize["project_id"] = o.ProjectId
+	if !IsNil(o.ParentAgentId) {
+		toSerialize["parent_agent_id"] = o.ParentAgentId
+	}
+	if !IsNil(o.OwnerUserId) {
+		toSerialize["owner_user_id"] = o.OwnerUserId
+	}
 	toSerialize["name"] = o.Name
+	if !IsNil(o.DisplayName) {
+		toSerialize["display_name"] = o.DisplayName
+	}
+	if !IsNil(o.Description) {
+		toSerialize["description"] = o.Description
+	}
 	if !IsNil(o.Prompt) {
 		toSerialize["prompt"] = o.Prompt
+	}
+	if !IsNil(o.RepoUrl) {
+		toSerialize["repo_url"] = o.RepoUrl
+	}
+	if !IsNil(o.WorkflowId) {
+		toSerialize["workflow_id"] = o.WorkflowId
+	}
+	if !IsNil(o.LlmModel) {
+		toSerialize["llm_model"] = o.LlmModel
+	}
+	if !IsNil(o.LlmTemperature) {
+		toSerialize["llm_temperature"] = o.LlmTemperature
+	}
+	if !IsNil(o.LlmMaxTokens) {
+		toSerialize["llm_max_tokens"] = o.LlmMaxTokens
+	}
+	if !IsNil(o.BotAccountName) {
+		toSerialize["bot_account_name"] = o.BotAccountName
+	}
+	if !IsNil(o.ResourceOverrides) {
+		toSerialize["resource_overrides"] = o.ResourceOverrides
+	}
+	if !IsNil(o.EnvironmentVariables) {
+		toSerialize["environment_variables"] = o.EnvironmentVariables
 	}
 	if !IsNil(o.CurrentSessionId) {
 		toSerialize["current_session_id"] = o.CurrentSessionId
