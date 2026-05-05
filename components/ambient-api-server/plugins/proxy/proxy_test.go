@@ -12,9 +12,9 @@ import (
 
 // buildHandler wraps a mock backend with the proxy middleware and a sentinel native handler.
 func buildHandler(backendURL string) http.Handler {
-	nativeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	nativeHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("native"))
+		_, _ = w.Write([]byte("native"))
 	})
 	mw := proxy.NewBackendProxyMiddleware(backendURL)
 	return mw(nativeHandler)
@@ -62,9 +62,9 @@ func TestNativePath_Metrics_PassesThrough(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestProxyPath_ForwardsToBackend(t *testing.T) {
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("from-backend"))
+		_, _ = w.Write([]byte("from-backend"))
 	}))
 	defer backend.Close()
 
