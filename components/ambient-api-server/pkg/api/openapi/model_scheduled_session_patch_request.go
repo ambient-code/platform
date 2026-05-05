@@ -20,24 +20,386 @@ var _ MappedNullable = &ScheduledSessionPatchRequest{}
 
 // ScheduledSessionPatchRequest struct for ScheduledSessionPatchRequest
 type ScheduledSessionPatchRequest struct {
-	Name          *string `json:"name,omitempty"`
-	Description   *string `json:"description,omitempty"`
-	Schedule      *string `json:"schedule,omitempty"`
-	Timezone      *string `json:"timezone,omitempty"`
-	Enabled       *bool   `json:"enabled,omitempty"`
-	SessionPrompt *string `json:"session_prompt,omitempty"`
+	Name              *string `json:"name,omitempty"`
+	Description       *string `json:"description,omitempty"`
+	AgentId           *string `json:"agent_id,omitempty"`
+	Schedule          *string `json:"schedule,omitempty"`
+	Timezone          *string `json:"timezone,omitempty"`
+	Enabled           *bool   `json:"enabled,omitempty"`
+	SessionPrompt     *string `json:"session_prompt,omitempty"`
+	Timeout           *int32  `json:"timeout,omitempty"`
+	InactivityTimeout *int32  `json:"inactivity_timeout,omitempty"`
+	StopOnRunFinished *bool   `json:"stop_on_run_finished,omitempty"`
+	RunnerType        *string `json:"runner_type,omitempty"`
 }
 
 // NewScheduledSessionPatchRequest instantiates a new ScheduledSessionPatchRequest object
+// This constructor will assign default values to properties that have it defined,
+// and makes sure properties required by API are set, but the set of arguments
+// will change when the set of required properties is changed
 func NewScheduledSessionPatchRequest() *ScheduledSessionPatchRequest {
 	this := ScheduledSessionPatchRequest{}
 	return &this
 }
 
-// NewScheduledSessionPatchRequestWithDefaults instantiates a new ScheduledSessionPatchRequest object with defaults
+// NewScheduledSessionPatchRequestWithDefaults instantiates a new ScheduledSessionPatchRequest object
+// This constructor will only assign default values to properties that have it defined,
+// but it doesn't guarantee that properties required by API are set
 func NewScheduledSessionPatchRequestWithDefaults() *ScheduledSessionPatchRequest {
 	this := ScheduledSessionPatchRequest{}
 	return &this
+}
+
+// GetName returns the Name field value if set, zero value otherwise.
+func (o *ScheduledSessionPatchRequest) GetName() string {
+	if o == nil || IsNil(o.Name) {
+		var ret string
+		return ret
+	}
+	return *o.Name
+}
+
+// GetNameOk returns a tuple with the Name field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ScheduledSessionPatchRequest) GetNameOk() (*string, bool) {
+	if o == nil || IsNil(o.Name) {
+		return nil, false
+	}
+	return o.Name, true
+}
+
+// HasName returns a boolean if a field has been set.
+func (o *ScheduledSessionPatchRequest) HasName() bool {
+	if o != nil && !IsNil(o.Name) {
+		return true
+	}
+
+	return false
+}
+
+// SetName gets a reference to the given string and assigns it to the Name field.
+func (o *ScheduledSessionPatchRequest) SetName(v string) {
+	o.Name = &v
+}
+
+// GetDescription returns the Description field value if set, zero value otherwise.
+func (o *ScheduledSessionPatchRequest) GetDescription() string {
+	if o == nil || IsNil(o.Description) {
+		var ret string
+		return ret
+	}
+	return *o.Description
+}
+
+// GetDescriptionOk returns a tuple with the Description field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ScheduledSessionPatchRequest) GetDescriptionOk() (*string, bool) {
+	if o == nil || IsNil(o.Description) {
+		return nil, false
+	}
+	return o.Description, true
+}
+
+// HasDescription returns a boolean if a field has been set.
+func (o *ScheduledSessionPatchRequest) HasDescription() bool {
+	if o != nil && !IsNil(o.Description) {
+		return true
+	}
+
+	return false
+}
+
+// SetDescription gets a reference to the given string and assigns it to the Description field.
+func (o *ScheduledSessionPatchRequest) SetDescription(v string) {
+	o.Description = &v
+}
+
+// GetAgentId returns the AgentId field value if set, zero value otherwise.
+func (o *ScheduledSessionPatchRequest) GetAgentId() string {
+	if o == nil || IsNil(o.AgentId) {
+		var ret string
+		return ret
+	}
+	return *o.AgentId
+}
+
+// GetAgentIdOk returns a tuple with the AgentId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ScheduledSessionPatchRequest) GetAgentIdOk() (*string, bool) {
+	if o == nil || IsNil(o.AgentId) {
+		return nil, false
+	}
+	return o.AgentId, true
+}
+
+// HasAgentId returns a boolean if a field has been set.
+func (o *ScheduledSessionPatchRequest) HasAgentId() bool {
+	if o != nil && !IsNil(o.AgentId) {
+		return true
+	}
+
+	return false
+}
+
+// SetAgentId gets a reference to the given string and assigns it to the AgentId field.
+func (o *ScheduledSessionPatchRequest) SetAgentId(v string) {
+	o.AgentId = &v
+}
+
+// GetSchedule returns the Schedule field value if set, zero value otherwise.
+func (o *ScheduledSessionPatchRequest) GetSchedule() string {
+	if o == nil || IsNil(o.Schedule) {
+		var ret string
+		return ret
+	}
+	return *o.Schedule
+}
+
+// GetScheduleOk returns a tuple with the Schedule field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ScheduledSessionPatchRequest) GetScheduleOk() (*string, bool) {
+	if o == nil || IsNil(o.Schedule) {
+		return nil, false
+	}
+	return o.Schedule, true
+}
+
+// HasSchedule returns a boolean if a field has been set.
+func (o *ScheduledSessionPatchRequest) HasSchedule() bool {
+	if o != nil && !IsNil(o.Schedule) {
+		return true
+	}
+
+	return false
+}
+
+// SetSchedule gets a reference to the given string and assigns it to the Schedule field.
+func (o *ScheduledSessionPatchRequest) SetSchedule(v string) {
+	o.Schedule = &v
+}
+
+// GetTimezone returns the Timezone field value if set, zero value otherwise.
+func (o *ScheduledSessionPatchRequest) GetTimezone() string {
+	if o == nil || IsNil(o.Timezone) {
+		var ret string
+		return ret
+	}
+	return *o.Timezone
+}
+
+// GetTimezoneOk returns a tuple with the Timezone field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ScheduledSessionPatchRequest) GetTimezoneOk() (*string, bool) {
+	if o == nil || IsNil(o.Timezone) {
+		return nil, false
+	}
+	return o.Timezone, true
+}
+
+// HasTimezone returns a boolean if a field has been set.
+func (o *ScheduledSessionPatchRequest) HasTimezone() bool {
+	if o != nil && !IsNil(o.Timezone) {
+		return true
+	}
+
+	return false
+}
+
+// SetTimezone gets a reference to the given string and assigns it to the Timezone field.
+func (o *ScheduledSessionPatchRequest) SetTimezone(v string) {
+	o.Timezone = &v
+}
+
+// GetEnabled returns the Enabled field value if set, zero value otherwise.
+func (o *ScheduledSessionPatchRequest) GetEnabled() bool {
+	if o == nil || IsNil(o.Enabled) {
+		var ret bool
+		return ret
+	}
+	return *o.Enabled
+}
+
+// GetEnabledOk returns a tuple with the Enabled field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ScheduledSessionPatchRequest) GetEnabledOk() (*bool, bool) {
+	if o == nil || IsNil(o.Enabled) {
+		return nil, false
+	}
+	return o.Enabled, true
+}
+
+// HasEnabled returns a boolean if a field has been set.
+func (o *ScheduledSessionPatchRequest) HasEnabled() bool {
+	if o != nil && !IsNil(o.Enabled) {
+		return true
+	}
+
+	return false
+}
+
+// SetEnabled gets a reference to the given bool and assigns it to the Enabled field.
+func (o *ScheduledSessionPatchRequest) SetEnabled(v bool) {
+	o.Enabled = &v
+}
+
+// GetSessionPrompt returns the SessionPrompt field value if set, zero value otherwise.
+func (o *ScheduledSessionPatchRequest) GetSessionPrompt() string {
+	if o == nil || IsNil(o.SessionPrompt) {
+		var ret string
+		return ret
+	}
+	return *o.SessionPrompt
+}
+
+// GetSessionPromptOk returns a tuple with the SessionPrompt field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ScheduledSessionPatchRequest) GetSessionPromptOk() (*string, bool) {
+	if o == nil || IsNil(o.SessionPrompt) {
+		return nil, false
+	}
+	return o.SessionPrompt, true
+}
+
+// HasSessionPrompt returns a boolean if a field has been set.
+func (o *ScheduledSessionPatchRequest) HasSessionPrompt() bool {
+	if o != nil && !IsNil(o.SessionPrompt) {
+		return true
+	}
+
+	return false
+}
+
+// SetSessionPrompt gets a reference to the given string and assigns it to the SessionPrompt field.
+func (o *ScheduledSessionPatchRequest) SetSessionPrompt(v string) {
+	o.SessionPrompt = &v
+}
+
+// GetTimeout returns the Timeout field value if set, zero value otherwise.
+func (o *ScheduledSessionPatchRequest) GetTimeout() int32 {
+	if o == nil || IsNil(o.Timeout) {
+		var ret int32
+		return ret
+	}
+	return *o.Timeout
+}
+
+// GetTimeoutOk returns a tuple with the Timeout field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ScheduledSessionPatchRequest) GetTimeoutOk() (*int32, bool) {
+	if o == nil || IsNil(o.Timeout) {
+		return nil, false
+	}
+	return o.Timeout, true
+}
+
+// HasTimeout returns a boolean if a field has been set.
+func (o *ScheduledSessionPatchRequest) HasTimeout() bool {
+	if o != nil && !IsNil(o.Timeout) {
+		return true
+	}
+
+	return false
+}
+
+// SetTimeout gets a reference to the given int32 and assigns it to the Timeout field.
+func (o *ScheduledSessionPatchRequest) SetTimeout(v int32) {
+	o.Timeout = &v
+}
+
+// GetInactivityTimeout returns the InactivityTimeout field value if set, zero value otherwise.
+func (o *ScheduledSessionPatchRequest) GetInactivityTimeout() int32 {
+	if o == nil || IsNil(o.InactivityTimeout) {
+		var ret int32
+		return ret
+	}
+	return *o.InactivityTimeout
+}
+
+// GetInactivityTimeoutOk returns a tuple with the InactivityTimeout field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ScheduledSessionPatchRequest) GetInactivityTimeoutOk() (*int32, bool) {
+	if o == nil || IsNil(o.InactivityTimeout) {
+		return nil, false
+	}
+	return o.InactivityTimeout, true
+}
+
+// HasInactivityTimeout returns a boolean if a field has been set.
+func (o *ScheduledSessionPatchRequest) HasInactivityTimeout() bool {
+	if o != nil && !IsNil(o.InactivityTimeout) {
+		return true
+	}
+
+	return false
+}
+
+// SetInactivityTimeout gets a reference to the given int32 and assigns it to the InactivityTimeout field.
+func (o *ScheduledSessionPatchRequest) SetInactivityTimeout(v int32) {
+	o.InactivityTimeout = &v
+}
+
+// GetStopOnRunFinished returns the StopOnRunFinished field value if set, zero value otherwise.
+func (o *ScheduledSessionPatchRequest) GetStopOnRunFinished() bool {
+	if o == nil || IsNil(o.StopOnRunFinished) {
+		var ret bool
+		return ret
+	}
+	return *o.StopOnRunFinished
+}
+
+// GetStopOnRunFinishedOk returns a tuple with the StopOnRunFinished field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ScheduledSessionPatchRequest) GetStopOnRunFinishedOk() (*bool, bool) {
+	if o == nil || IsNil(o.StopOnRunFinished) {
+		return nil, false
+	}
+	return o.StopOnRunFinished, true
+}
+
+// HasStopOnRunFinished returns a boolean if a field has been set.
+func (o *ScheduledSessionPatchRequest) HasStopOnRunFinished() bool {
+	if o != nil && !IsNil(o.StopOnRunFinished) {
+		return true
+	}
+
+	return false
+}
+
+// SetStopOnRunFinished gets a reference to the given bool and assigns it to the StopOnRunFinished field.
+func (o *ScheduledSessionPatchRequest) SetStopOnRunFinished(v bool) {
+	o.StopOnRunFinished = &v
+}
+
+// GetRunnerType returns the RunnerType field value if set, zero value otherwise.
+func (o *ScheduledSessionPatchRequest) GetRunnerType() string {
+	if o == nil || IsNil(o.RunnerType) {
+		var ret string
+		return ret
+	}
+	return *o.RunnerType
+}
+
+// GetRunnerTypeOk returns a tuple with the RunnerType field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ScheduledSessionPatchRequest) GetRunnerTypeOk() (*string, bool) {
+	if o == nil || IsNil(o.RunnerType) {
+		return nil, false
+	}
+	return o.RunnerType, true
+}
+
+// HasRunnerType returns a boolean if a field has been set.
+func (o *ScheduledSessionPatchRequest) HasRunnerType() bool {
+	if o != nil && !IsNil(o.RunnerType) {
+		return true
+	}
+
+	return false
+}
+
+// SetRunnerType gets a reference to the given string and assigns it to the RunnerType field.
+func (o *ScheduledSessionPatchRequest) SetRunnerType(v string) {
+	o.RunnerType = &v
 }
 
 func (o ScheduledSessionPatchRequest) MarshalJSON() ([]byte, error) {
@@ -56,6 +418,9 @@ func (o ScheduledSessionPatchRequest) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.Description) {
 		toSerialize["description"] = o.Description
 	}
+	if !IsNil(o.AgentId) {
+		toSerialize["agent_id"] = o.AgentId
+	}
 	if !IsNil(o.Schedule) {
 		toSerialize["schedule"] = o.Schedule
 	}
@@ -67,6 +432,18 @@ func (o ScheduledSessionPatchRequest) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.SessionPrompt) {
 		toSerialize["session_prompt"] = o.SessionPrompt
+	}
+	if !IsNil(o.Timeout) {
+		toSerialize["timeout"] = o.Timeout
+	}
+	if !IsNil(o.InactivityTimeout) {
+		toSerialize["inactivity_timeout"] = o.InactivityTimeout
+	}
+	if !IsNil(o.StopOnRunFinished) {
+		toSerialize["stop_on_run_finished"] = o.StopOnRunFinished
+	}
+	if !IsNil(o.RunnerType) {
+		toSerialize["runner_type"] = o.RunnerType
 	}
 	return toSerialize, nil
 }
