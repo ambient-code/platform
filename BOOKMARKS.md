@@ -25,7 +25,7 @@ Desired state of the system, organized by capability domain.
 
 | Spec | Domain | Purpose |
 |------|--------|---------|
-| [Ambient Data Model](specs/api/ambient-model.spec.md) | sessions | Platform-wide data model: projects, agents, sessions, credentials, RBAC |
+| [Ambient Data Model](specs/api/ambient-model.spec.md) | api | Platform-wide data model: projects, agents, sessions, credentials, RBAC |
 | [Control Plane](specs/control-plane/control-plane.spec.md) | control-plane | CP architecture, runner structure, K8s provisioning |
 | [Runner](specs/agents/runner.spec.md) | agents | Runner subprocess lifecycle, bridges, gRPC/HTTP endpoints |
 | [MCP Server](specs/integrations/mcp-server.spec.md) | integrations | MCP tool definitions, sidecar and public endpoint modes |

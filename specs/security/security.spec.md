@@ -1,25 +1,25 @@
-# Ambient Code Platform: Security Specification
+# Security Specification
 
-**Status:** Draft
-**Authors:** Platform Team
-**Last Updated:** 2026-05-05
-
-## Summary
+## Purpose
 
 The Ambient Code Platform runs agentic AI sessions inside Kubernetes. Each session is a
 pod that executes an LLM-powered runner, accesses external services (Vertex AI, GitHub,
 Jira), and stores results via the API server.
 
 This specification defines who can do what. Six identity boundaries govern the platform:
-an SRE-managed Control Plane that reconciles state across namespaces, per-session
+an SRE-managed Control Plane that reconciles state across Projects, per-session
 ServiceAccounts that isolate runner pods from each other, user SSO tokens that scope
-runner authorization to the creating user, per-project LLM credentials (Vertex AI),
-per-project integration credentials (GitHub/GitLab/Jira/etc.), and a namespace-scoped
+runner authorization to the creating user, per-Project LLM credentials (Vertex AI),
+per-Project integration credentials (GitHub/GitLab/Jira/etc.), and a Project-scoped
 build agent SA for OpenShift CI/CD workflows.
 
-**The critical gap today:** all runner sessions in a namespace share a ServiceAccount with
-unscoped Secret access. Any session can read another session's runner tokens. This spec
-closes that gap with per-session Roles restricted by `resourceNames`.
+**Critical gap:** all runner sessions in a Project share a ServiceAccount with unscoped
+Secret access. Any session can read another session's runner tokens. This spec closes
+that gap with per-session Roles restricted by `resourceNames`.
+
+**Terminology:** Each Project is realized as a single Kubernetes namespace. This spec
+uses "Project" for the Ambient isolation boundary and "namespace" only when referring
+to the Kubernetes primitive directly.
 
 ## Accounts and Tokens
 
@@ -29,43 +29,197 @@ closes that gap with per-session Roles restricted by `resourceNames`.
 | `ambient-control-plane` OIDC token | OAuth2 client_credentials | SRE | API server | Auto-refreshed (30s buffer) | CP authenticates to API server for session/credential CRUD |
 | `backend-api` | K8s ServiceAccount | SRE | Cluster (ClusterRole) | Pod lifetime | Backend API: manages CRs, mints session tokens, validates user tokens |
 | `frontend` | K8s ServiceAccount | SRE | Cluster (ClusterRole) | Pod lifetime | Frontend: TokenReview and SubjectAccessReview only |
-| `ambient-session-<name>` | K8s ServiceAccount | SRE (created by operator) | Namespace (Role) | Session lifetime | Per-session runner identity; scoped to own secrets and session CR |
+| `ambient-session-<name>` | K8s ServiceAccount | SRE (created by operator) | Project (Role) | Session lifetime | Per-session runner identity; scoped to own secrets and session CR |
 | Runner bot token | K8s TokenRequest | SRE (minted by operator) | Session-specific | Mounted + refreshed by kubelet | Runner authenticates to K8s API and API server for status/credential ops |
 | Runner AGUI token | UUID | SRE (generated per session) | Session-specific | Session lifetime | Authenticates inbound AG-UI requests to runner pod (bearer validation) |
 | CP RSA-encrypted session token | RSA + OIDC exchange | SRE | Session-specific | On-demand (per request) | Runner fetches API token from CP `/token` endpoint using encrypted session ID |
 | User SSO token | OIDC (Red Hat SSO) | User | User's RBAC scope | SSO session TTL | User authenticates to frontend/backend; propagated as `caller_token` to runner |
-| `Credential(provider=vertex)` | GCP service account key | User | Project | Until rotated | Vertex AI LLM inference; stored in API server, materialized as K8s Secret per namespace |
-| `Credential(provider=github)` | PAT or GitHub App token | User | Project | Until rotated | Git operations; fetched at runtime, written to ephemeral `/tmp/`, cleared per turn |
+| `Credential(provider=vertex)` | GCP service account key | User | Project | Until rotated | Vertex AI LLM inference; stored in API server, materialized as K8s Secret per Project |
+| `Credential(provider=github)` | PAT or GitHub App token | User | Project | Until rotated | Git operations; fetched at runtime, written to ephemeral storage, cleared per turn |
 | `Credential(provider=gitlab)` | PAT | User | Project | Until rotated | GitLab repository access |
 | `Credential(provider=jira)` | API token | User | Project | Until rotated | Jira issue tracking integration |
 | `Credential(provider=google)` | OAuth2 token | User | Project | Until rotated | Google Workspace integrations |
 | `Credential(provider=kubeconfig)` | Kubeconfig | User | Project | Until rotated | Cross-cluster Kubernetes operations |
-| `ambient-agent` (proposed) | K8s ServiceAccount | SRE | Single namespace (Role) | Long-lived | OpenShift build agent: BuildConfig, ImageStream, deploy within one namespace |
+| `ambient-agent` (proposed) | K8s ServiceAccount | SRE | Single Project (Role) | Long-lived | OpenShift build agent: BuildConfig, ImageStream, deploy within one Project |
 
-## Overview
+## Requirements
 
-This document defines the security boundaries for the Ambient Code Platform. It addresses
-identity isolation, credential scoping, and the principle of least privilege across the
-control plane, runner sessions, and user-facing integrations.
+### Requirement: Control Plane Identity Isolation
 
----
+The Control Plane SA SHALL be the only identity that spans Projects. Runner containers
+MUST NOT mount or inherit the CP token. The CP SHALL create per-session SAs with scoped
+tokens rather than sharing its own.
 
-## 1. OpenShift Namespace-Scoped Build Agent Service Account
+#### Scenario: Runner cannot access CP token
 
-### Purpose
+- GIVEN a runner pod in a Project
+- WHEN the pod enumerates available ServiceAccount tokens
+- THEN no CP token is present in the pod's filesystem or environment
 
-A dedicated ServiceAccount for automated build-and-deploy workflows within a single
-OpenShift namespace. This SA enables agentic workflows to build container images via
-`BuildConfig`, push to the internal registry, and deploy workloads without requiring
-cluster-admin privileges.
+#### Scenario: CP reconciles across Projects
 
-### Scope
+- GIVEN the Control Plane is running
+- WHEN a new session is created in any Project
+- THEN the CP reconciles the session to Kubernetes resources in that Project's namespace
+- AND uses its own cluster-scoped SA for cross-Project operations
 
-- Bound to a single namespace (e.g., `ambient-sandbox`)
-- Cannot access other namespaces, nodes, or cluster-scoped resources
-- Cannot create or modify CRDs, ClusterRoles, or ClusterRoleBindings
+### Requirement: Vertex AI Credential Scoping
 
-### Permissions
+Vertex AI credentials SHALL be scoped per Project. The credential token MUST be
+write-only in the API (never returned in GET responses). The runner SHALL fetch
+credentials at runtime via authenticated API calls.
+
+#### Scenario: Credential write-only enforcement
+
+- GIVEN a user creates a `Credential(provider=vertex)` in their Project
+- WHEN another user calls `GET /credentials/{id}`
+- THEN the response contains metadata but the `token` field is absent
+
+#### Scenario: Credential materialization
+
+- GIVEN a Project has a Vertex credential
+- WHEN a runner pod is provisioned in that Project
+- THEN the CP resolves the credential and writes the service account key into a K8s Secret
+- AND the runner pod mounts this secret for `GOOGLE_APPLICATION_CREDENTIALS`
+
+#### Scenario: Credential rotation
+
+- GIVEN a Vertex credential is updated via the API
+- WHEN the next session is provisioned in that Project
+- THEN the CP re-resolves the credential and writes the updated key
+
+### Requirement: User Token Propagation
+
+The runner SHALL operate with the creating user's authorization context. The runner
+MUST NOT access resources the creating user cannot access.
+
+#### Scenario: User SSO token passed to runner
+
+- GIVEN a user authenticates via SSO and creates a session
+- WHEN a human interacts via AG-UI
+- THEN their bearer token is passed through as `caller_token`
+- AND the runner uses this token for API calls, falling back to the bot token only if expired
+
+#### Scenario: Cross-user credential access blocked
+
+- GIVEN user A creates a session
+- WHEN user B's token is used to access user A's session credentials
+- THEN the backend returns 403 Forbidden
+
+#### Scenario: Bot token scoped to session
+
+- GIVEN a runner pod with a bot token
+- WHEN the bot token is used for API calls
+- THEN access is restricted to the specific session's resources within the Project
+
+### Requirement: Integration Credential Isolation
+
+Integration credentials SHALL be Project-scoped. Projects MUST NOT access each other's
+credentials. Credential tokens SHALL be write-only in the API.
+
+#### Scenario: Cross-Project credential access blocked
+
+- GIVEN Project A has a GitHub credential
+- WHEN a runner in Project B attempts to fetch that credential
+- THEN the request is denied
+
+#### Scenario: Runner fetches credential at runtime
+
+- GIVEN a Project has a GitHub credential
+- WHEN a runner pod in that Project requests the credential token
+- THEN the token is returned via the restricted endpoint
+- AND the runner writes it to ephemeral storage
+- AND the credential is cleared after each turn
+
+#### Scenario: Token fetch restricted to cluster-internal callers
+
+- GIVEN a valid credential token request
+- WHEN the caller is not cluster-internal
+- THEN the request is denied to prevent token exfiltration
+
+### Requirement: MCP Credential Lifecycle
+
+MCP server credentials SHALL follow the same Project-scoped isolation as other
+integration credentials. The Control Plane SHOULD support dynamic credential updates
+without requiring full pod restarts.
+
+#### Scenario: Sidecar mode credential update
+
+- GIVEN an MCP sidecar running alongside a runner
+- WHEN the Project's MCP credentials are updated
+- THEN the CP triggers a pod rolling restart with updated environment
+
+#### Scenario: Pod mode credential update (proposed)
+
+- GIVEN an MCP server running as an independent Pod
+- WHEN the Project's MCP credentials are updated
+- THEN the CP updates the MCP Pod configuration without affecting the runner
+
+### Requirement: Per-Session Service Account Isolation
+
+Each session MUST have a ServiceAccount that can only access its own resources.
+Sessions MUST NOT be able to read other sessions' runner tokens from K8s Secrets.
+
+#### Scenario: Session cannot read another session's secrets
+
+- GIVEN Session A and Session B running in the same Project
+- WHEN Session A attempts to read Session B's runner token Secret
+- THEN the request is denied by RBAC (`resourceNames` restriction)
+
+#### Scenario: Per-session Role restricts Secret access
+
+- GIVEN a new session is created
+- WHEN the operator provisions the session SA
+- THEN the Role restricts Secret access to `ambient-runner-token-<sessionName>` and shared read-only secrets
+- AND AgenticSession access is restricted to `<sessionName>`
+
+#### Scenario: NetworkPolicy isolates session pods
+
+- GIVEN a session pod is running
+- WHEN another session's pod attempts to connect
+- THEN the NetworkPolicy blocks the traffic
+- AND only the session's own pods and the Control Plane can communicate
+
+#### Scenario: Shared secrets mounted read-only
+
+- GIVEN Project-wide secrets exist (e.g., Vertex credentials)
+- WHEN a session pod needs access
+- THEN the secrets are mounted as read-only volumes
+- AND they are not accessible via the K8s API from the session SA
+
+### Requirement: Per-Session SA Target State
+
+Each session SA SHALL be restricted to the following resources:
+
+| Resource | Allowed Names | Verbs |
+|----------|--------------|-------|
+| Secrets | `ambient-runner-token-<sessionName>`, shared secrets (read-only mount) | get |
+| Pods | Labeled `ambient-code/session=<sessionName>` | get, list, watch |
+| AgenticSessions | `<sessionName>` | get, update (status only) |
+| SelfSubjectAccessReviews | (any) | create |
+
+### Requirement: Build Agent SA Scoping (OpenShift)
+
+The build agent SA SHALL be bound to a single Project. It MUST NOT access other
+Projects, nodes, or cluster-scoped resources. It MUST NOT create or modify CRDs,
+ClusterRoles, or ClusterRoleBindings.
+
+#### Scenario: Build agent deploys within Project
+
+- GIVEN a build agent SA bound to a Project
+- WHEN the agent triggers a BuildConfig
+- THEN the build runs within that Project's namespace
+- AND images are pushed to the internal registry via `system:image-builder`
+
+#### Scenario: Build agent cannot escalate
+
+- GIVEN a build agent SA bound to a Project
+- WHEN the agent attempts to create a ClusterRole
+- THEN the request is denied
+
+### Requirement: Build Agent Permissions
+
+The build agent SA SHALL have the following permissions within its Project:
 
 | API Group | Resources | Verbs |
 |-----------|-----------|-------|
@@ -80,230 +234,95 @@ cluster-admin privileges.
 
 Additionally requires the built-in `system:image-builder` role for internal registry push access.
 
-### Rationale
+## Credential Authorization Model
 
-Agentic workflows need to build and deploy without human intervention, but must not
-escalate beyond the target namespace. This SA provides the minimal surface area for a
-CI/CD agent to operate a full build-test-deploy cycle while remaining invisible to the
-rest of the cluster.
+This section defines how credentials are authorized at runtime. For credential Kind schemas,
+API endpoints, and provider enum definitions, see the
+[Ambient Data Model Spec](../api/ambient-model.spec.md).
 
----
+### Requirement: Project-Scoped Credential Sharing
 
-## 2. Security Boundaries
+Credentials SHALL belong to a Project. All agents in the Project SHALL share the Project's
+credentials automatically — no explicit sharing or per-credential RoleBindings needed. At
+session start, the resolver SHALL list all credentials in the agent's Project and return
+the matching credential for each requested provider.
 
-### 2.1 SRE Boundary: Control Plane Service Account
+This follows the Kubernetes resource model:
 
-**Identity:** `ambient-control-plane` ServiceAccount (cluster-scoped RBAC)
+| Ambient | Kubernetes Analogy | Relationship |
+|---------|-------------------|--------------|
+| Project | Namespace | Isolation boundary, owns child resources |
+| Agent | Deployment | Mutable definition, runs workloads |
+| Session | Pod | Ephemeral execution, created from Agent |
+| Credential | Secret | Project-scoped secret, available to all workloads in the Project |
 
-**Role:** The single SRE-owned identity that bridges the API server and Kubernetes. The
-Control Plane runs as an informer/watcher that:
+Named patterns:
+- **Project Robot Account** — credential created in a Project; all agents use it automatically.
+- **Multi-Project credential** — create the same credential (same PAT) in multiple Projects. Each Project gets its own Credential record.
+- **No credential** — Projects without credentials run sessions without provider integrations.
 
-- Watches the API server (PostgreSQL-backed) for new/modified session and project resources
-- Reconciles desired state to Kubernetes (creates Pods, Services, Secrets, ServiceAccounts
-  in project namespaces)
-- Writes reconciled status back to the API server (phase transitions, runner pod names,
-  credential resolution results)
+#### Scenario: All agents share Project credentials
 
-**Current Implementation:**
-- SA defined in `components/manifests/base/rbac/control-plane-sa.yaml`
-- ClusterRole in `components/manifests/base/rbac/control-plane-clusterrole.yaml`
-- Long-lived token via companion Secret (`kubernetes.io/service-account-token`)
-- Authenticates to API server via OIDC `client_credentials` flow or static token
+- GIVEN a Project has a GitHub credential
+- WHEN any agent in that Project starts a session
+- THEN the runner can fetch the GitHub credential token
 
-**Security Properties:**
-- This SA must never be exposed to user workloads
-- Runner containers must not mount or inherit the CP token
-- The CP creates per-session SAs with scoped tokens (see 2.5) rather than sharing its own
+#### Scenario: Cross-Project credential isolation
 
-### 2.2 User Boundary: Vertex AI Credentials
+- GIVEN Project A and Project B each have credentials
+- WHEN an agent in Project A requests credentials
+- THEN only Project A's credentials are returned
 
-**Identity:** Per-project `Credential(provider=vertex)` stored in the API server (PostgreSQL)
+### Requirement: Token Reader Role Grant
 
-**Role:** Provides Vertex AI / Google Cloud authentication for LLM inference. Each project
-can bind its own Vertex credential, allowing different teams to use different GCP projects
-or service accounts.
+The `credential:token-reader` role SHALL be granted to the runner service account by the
+platform at session start. It MUST NOT be granted via user-facing `POST /role_bindings`.
+It is a platform-internal binding managed by the operator.
 
-**Flow:**
-1. User creates `Credential(provider=vertex)` in their project via the API
-2. On runner pod provisioning, the Control Plane calls `resolveCredentialIDs()` to look up
-   the project's Vertex credential
-3. The CP writes the Vertex service account key into a Kubernetes Secret
-   (`ambient-vertex`) in the project namespace
-4. The runner pod mounts this secret and uses it for `GOOGLE_APPLICATION_CREDENTIALS`
+Credential CRUD SHALL be governed by the caller's project-level role — `project:owner` and
+`project:editor` can create/update/delete credentials; `project:viewer` can list/read
+metadata.
 
-**Security Properties:**
-- Vertex credentials are scoped per project, not shared globally
-- Credential tokens are write-only in the API (never returned in GET responses)
-- The runner fetches credentials at runtime via authenticated API calls, not baked into
-  the container image
-- Credential rotation requires only updating the `Credential` resource; the CP
-  re-resolves on next session provisioning
+#### Scenario: Runner can fetch token
 
-### 2.3 User Boundary: Red Hat SSO / User Token Propagation
+- GIVEN a runner SA with `credential:token-reader` bound at session start
+- WHEN the runner calls `GET /projects/{id}/credentials/{cred_id}/token`
+- THEN the raw token is returned
 
-**Identity:** The authenticated user's own SSO token, propagated into the runner
+#### Scenario: Human user cannot fetch token
 
-**Role:** Ensures the runner operates with the creating user's authorization context, not
-an elevated service identity. The runner's API calls (session status updates, credential
-fetches, AG-UI event streaming) are scoped to what the user is allowed to access.
+- GIVEN a human user without `credential:token-reader`
+- WHEN they call `GET /projects/{id}/credentials/{cred_id}/token`
+- THEN the request is denied with 403
 
-**Flow:**
-1. User authenticates via Red Hat SSO (OIDC)
-2. The backend mints a per-session K8s ServiceAccount token annotated with the user's
-   identity (`ambient-code.io/created-by-user-id`)
-3. The runner resolves its bot token via the CP token endpoint (OIDC `client_credentials`
-   exchange, encrypted with CP's RSA public key)
-4. When a human interacts via AG-UI, their bearer token is passed through as
-   `context.caller_token` — the runner uses this token first, falling back to the bot
-   token only if expired
-5. Backend RBAC enforcement (`enforceCredentialRBAC()`) validates the caller is either the
-   session owner or a bot acting on behalf of the owner
+### Requirement: Proxy Authentication
 
-**Security Properties:**
-- Runner cannot access resources the user cannot access
-- Cross-user credential access is blocked (403)
-- The bot token is scoped to the specific session's namespace and resources
-- Token refresh uses RSA-encrypted session ID exchange, not stored credentials
+All backend paths not mapped to a native `/api/ambient/v1/...` endpoint SHALL be forwarded
+verbatim to the backend service. The API server SHALL authenticate the caller, inject
+service credentials, then proxy the request — preserving method, path, query string, body,
+and response status.
 
-### 2.4 User Boundary: Integration Credentials
+Runner-internal endpoints (called by runner pods at runtime):
+- `POST /api/projects/{p}/agentic-sessions/{s}/github/token` — get a GitHub token for a session
+- `GET /api/projects/{p}/agentic-sessions/{s}/credentials/{provider}` — fetch credential by provider
+- `POST /api/projects/{p}/agentic-sessions/{s}/runner/feedback` — runner feedback
 
-**Identity:** Per-project `Credential(provider=*)` resources — `github`, `gitlab`, `jira`,
-`google`, `kubeconfig`, and future providers
+These endpoints MUST validate the caller is cluster-internal to prevent token exfiltration.
 
-**Role:** Users bind external integration credentials to their project. The runner fetches
-these at runtime to perform git operations, issue tracking, and other integrations.
+#### Scenario: External caller blocked from runner endpoints
 
-**Current Providers (OpenAPI enum):**
-- `github` — PAT or GitHub App token for repository access
-- `gitlab` — PAT for GitLab repository access
-- `jira` — API token for issue tracking
-- `google` — OAuth2 token for Google integrations
-- `kubeconfig` — Kubernetes config for cross-cluster operations
+- GIVEN an external client with a valid token
+- WHEN they call a runner-internal endpoint
+- THEN the request is denied because the caller is not cluster-internal
 
-**Flow:**
-1. User creates `Credential(provider=github, ...)` in their project
-2. Runner fetches credential token at runtime:
-   `GET /api/ambient/v1/projects/{project}/credentials/{id}/token`
-3. Token is written to ephemeral files (`/tmp/`) for git credential helper and CLI
-   wrappers
-4. Credentials are cleared from environment after each turn
-   (`clear_runtime_credentials()`)
-
-**Security Properties:**
-- Credentials are project-scoped — projects cannot access each other's credentials
-- RBAC permissions: `credential:token` required for token fetch (separate from
-  `credential:read`)
-- Backend validates caller hostname is cluster-internal (`.svc.cluster.local`, `localhost`)
-  to prevent token exfiltration
-- Credential tokens are write-only in the API (presenter strips `Token` field from GET
-  responses)
-
-#### 2.4a Dynamic MCP Credential Watching and Pod Lifecycle
-
-**Current State:** MCP servers run as sidecars (`ambient-mcp` container) injected by the
-Control Plane when provisioning runner pods. Credentials for MCP servers are stored in a
-shared Secret (`mcp-server-credentials`) keyed by `serverName:userID`.
-
-**Target State:** If the Control Plane continuously watches `Credential` resources for
-changes, MCP configurations can be dynamically applied without restarting the runner:
-
-- **Sidecar mode (current):** MCP runs as a sidecar container alongside the runner in the
-  same Pod. Suitable for lightweight, session-scoped MCP servers. Limited to the pod's
-  lifecycle — cannot be independently restarted or scaled.
-- **Pod mode (proposed):** MCP runs as an independent Pod in the project namespace with its
-  own lifecycle (readiness probes, independent restarts, resource limits). Required when
-  MCP servers need:
-  - Independent scaling or resource allocation
-  - Persistence across session restarts
-  - Shared access across multiple sessions in the same project
-  - Long-running connections (databases, message queues) that survive session recycling
-
-**Credential Watch Flow:**
-1. Control Plane watches `Credential` resources on the API server (via informer or
-   polling)
-2. On credential create/update/delete, CP evaluates which sessions or MCP pods are
-   affected
-3. For sidecar mode: CP triggers a pod rolling restart with updated environment
-4. For pod mode: CP creates/updates/deletes MCP Pods with the new credential configuration
-5. MCP pods authenticate to external services using the bound credential tokens
-
-### 2.5 SRE Boundary: Per-Session Service Accounts
-
-**Problem Statement:**
-
-Today, all runner sessions within a project namespace share access to each other's
-resources. A compromised or misbehaving session can:
-- Read other sessions' runner tokens from Kubernetes Secrets
-- Access other sessions' mounted credentials
-- Interfere with other sessions' pods via the Kubernetes API
-- Exfiltrate data from other sessions' PVCs
-
-This is a significant security gap. The shared access model was an expedient choice during
-early development but violates the principle of least privilege.
-
-**Current State (partially implemented):**
-
-The operator already creates per-session ServiceAccounts
-(`ambient-session-<sessionName>`) with scoped Roles:
-
-```
-SA:    ambient-session-<sessionName>
-Role:  get/list/watch/create/update/patch AgenticSessions
-       create SelfSubjectAccessReviews
-       get Secrets
-       get/list/update MLflow Experiments
-```
-
-However, the Role's `get Secrets` permission is not scoped to the session's own secrets.
-Any session SA can read any Secret in the namespace, including other sessions' runner
-tokens.
-
-**Target State:**
-
-Each session must have a ServiceAccount that can only access its own resources:
-
-| Resource | Allowed Names | Verbs |
-|----------|--------------|-------|
-| Secrets | `ambient-runner-token-<sessionName>`, `ambient-vertex` (read-only) | get |
-| Pods | Labeled `ambient-code/session=<sessionName>` | get, list, watch |
-| AgenticSessions | `<sessionName>` | get, update (status only) |
-| SelfSubjectAccessReviews | (any) | create |
-
-**Implementation Requirements:**
-1. **Per-session Role:** The operator must generate a Role per session with `resourceNames`
-   restrictions on Secrets and AgenticSessions
-2. **Label-based pod access:** Use label selectors in NetworkPolicies to restrict inter-pod
-   communication to same-session containers only
-3. **Secret naming convention:** All session-scoped secrets must follow the pattern
-   `ambient-runner-token-<sessionName>` or `<sessionName>-*` to enable `resourceNames`
-   restrictions
-4. **Shared secrets (read-only):** Project-wide secrets (`ambient-vertex`,
-   `ambient-runner-secrets`) should be mounted as read-only volumes rather than accessed
-   via the Kubernetes API
-5. **NetworkPolicy per session:** Extend the existing `ensureRunnerNetworkPolicy()` to
-   create per-session policies that restrict ingress/egress to only the session's own pods
-   and the control plane
-
-**Migration Path:**
-1. Deploy per-session Roles with `resourceNames` restrictions (backward compatible —
-   existing sessions continue to work with broader access until recreated)
-2. Update the operator's `regenerateRunnerToken()` to bind the session SA to the new
-   scoped Role instead of the namespace-wide Role
-3. Audit existing sessions for cross-session secret access (add audit logging for Secret
-   GET operations with caller identity)
-4. Enforce per-session NetworkPolicies in new sessions; backfill existing sessions during
-   next maintenance window
-
----
-
-## 3. Security Boundary Summary
+## Security Boundary Summary
 
 ```
 +------------------------------------------------------------------+
 |                        Cluster                                   |
 |                                                                  |
 |  +---------------------------+  +-----------------------------+  |
-|  | ambient-code namespace    |  | project namespace           |  |
+|  | ambient-code (platform)   |  | Project A                   |  |
 |  |                           |  |                             |  |
 |  | [Control Plane]           |  |  [Session A Pod]            |  |
 |  |  SA: ambient-control-plane|  |   SA: ambient-session-aaa   |  |
@@ -329,76 +348,18 @@ Each session must have a ServiceAccount that can only access its own resources:
 **Key Invariants:**
 1. No runner session can access another session's secrets or tokens
 2. No runner session can operate beyond the user's own authorization scope
-3. Integration credentials are project-scoped and fetched at runtime, never baked in
-4. The Control Plane SA is the only identity that spans namespaces
-5. MCP lifecycle (sidecar vs. pod) is determined by operational requirements, not security
-   compromise
+3. Integration credentials are Project-scoped and fetched at runtime, never baked in
+4. The Control Plane SA is the only identity that spans Projects
+5. MCP lifecycle (sidecar vs. pod) is determined by operational requirements, not security compromise
 
----
-
-## 4. Credential Authorization Model
-
-This section defines how credentials are authorized at runtime. For credential Kind schemas,
-API endpoints, and provider enum definitions, see
-[`specs/api/ambient-model.spec.md`](../api/ambient-model.spec.md).
-
-### Project-Scoped Sharing
-
-Credentials belong to a project. All agents in the project share the project's credentials
-automatically — no explicit sharing or per-credential RoleBindings needed. At session start,
-the resolver lists all credentials in the agent's project and returns the matching credential
-for each requested provider.
-
-This follows the Kubernetes resource model:
-
-| Ambient | Kubernetes Analogy | Relationship |
-|---------|-------------------|--------------|
-| Project | Namespace | Isolation boundary, owns child resources |
-| Agent | Deployment | Mutable definition, runs workloads |
-| Session | Pod | Ephemeral execution, created from Agent |
-| Credential | Secret | Project-scoped secret, available to all workloads in the namespace |
-
-Named patterns:
-- **Project Robot Account** — credential created in a project; all agents use it automatically.
-- **Multi-project credential** — create the same credential (same PAT) in multiple projects. Each project gets its own Credential record.
-- **No credential** — projects without credentials simply run sessions without provider integrations.
-
-### `credential:token-reader` Runtime Grant
-
-The `credential:token-reader` role is granted to the runner service account by the platform
-at session start. It is never granted via user-facing `POST /role_bindings`. It is a
-platform-internal binding managed by the operator.
-
-Credential CRUD is governed by the caller's project-level role — `project:owner` and
-`project:editor` can create/update/delete credentials; `project:viewer` can list/read
-metadata.
-
-### API Server Proxy Authentication
-
-All backend paths not mapped to a native `/api/ambient/v1/...` endpoint are forwarded
-verbatim to the backend service. The API server authenticates the caller, injects service
-credentials, then proxies the request — preserving method, path, query string, body, and
-response status.
-
-Runner-internal endpoints (called by runner pods at runtime):
-- `POST /api/projects/{p}/agentic-sessions/{s}/github/token` — get a GitHub token for a session
-- `GET /api/projects/{p}/agentic-sessions/{s}/credentials/{provider}` — fetch credential by provider
-- `POST /api/projects/{p}/agentic-sessions/{s}/runner/feedback` — runner feedback
-
-These are accessible via the API server for SDK/CLI tooling but are not intended for human
-interactive use. The API server validates the caller is cluster-internal
-(`.svc.cluster.local`, `localhost`) to prevent token exfiltration.
-
----
-
-## 5. Design Decisions
+## Design Decisions
 
 | Decision | Rationale |
-|----------|-----------||
+|----------|-----------|
 | Agent ownership via RBAC, not a hardcoded FK | Ownership is expressed as a RoleBinding (`scope=agent`, `scope_id=agent_id`). Enables multi-owner and delegated ownership consistently across all Kinds. |
-| Credential is project-scoped, like a Kubernetes Secret | Credentials live inside a project. All agents in the project share them automatically. Duplication across projects is intentional and explicit — each project gets its own Credential record, same as Kubernetes Secrets in different Namespaces. |
+| Credential is Project-scoped, like a Kubernetes Secret | Credentials live inside a Project. All agents in the Project share them automatically. Duplication across Projects is intentional and explicit — each Project gets its own Credential record, same as Kubernetes Secrets in different Namespaces. |
 | Credential token is write-only | Prevents token exfiltration via the standard REST API. Raw token only surfaced to runners via the runtime credentials path, not to end users. |
-| Four-scope RBAC (`global`, `project`, `agent`, `session`) | Credential access is implicit via project membership — no dedicated `credential` scope needed. Simpler model with fewer moving parts. |
+| Four-scope RBAC (`global`, `project`, `agent`, `session`) | Credential access is implicit via Project membership — no dedicated `credential` scope needed. Simpler model with fewer moving parts. |
 | Credential CRUD governed by project roles | `project:owner` and `project:editor` can manage credentials. No separate `credential:owner` / `credential:reader` roles — project roles cover it. |
 | `agent:runner` role | Pods get minimum viable credential: read agent definition, push session messages, send inbox. |
 | Union-only permissions | No deny rules — simpler mental model for fleet operators. |
@@ -407,15 +368,10 @@ interactive use. The API server validates the caller is cluster-internal
 | No validation on creation | First-use error is acceptable. Avoids a network call to the provider at creation time and the failure modes that come with it. |
 | Credential rotation is user-managed | Users update the token via `PATCH` or `acpctl credential update`. No platform-side rotation or expiry tracking. |
 | No migration utility for existing K8s Secrets | Users re-enter credentials via the new API. The old Secret-based path is removed when the new API is live. |
-| Dedicated tokens, not personal credentials | Users are expected to create dedicated Robot Accounts or PATs for each project, not share their personal credentials. Each project gets its own Credential records. |
-
----
+| Dedicated tokens, not personal credentials | Users are expected to create dedicated Robot Accounts or PATs for each Project, not share their personal credentials. Each Project gets its own Credential records. |
 
 ## References
 
 - [Ambient Data Model Spec](../api/ambient-model.spec.md) — Credential/RBAC schemas, endpoints, provider enum
 - [Security Standards](../standards/security/security.spec.md)
 - [User Token Authentication ADR](../../docs/internal/adr/0002-user-token-authentication.md)
-- [Credential API OpenAPI Spec](../../components/ambient-api-server/openapi/openapi.credentials.yaml)
-- [Control Plane RBAC](../../components/manifests/base/rbac/control-plane-clusterrole.yaml)
-- [Operator Session Handler](../../components/operator/internal/handlers/sessions.go)

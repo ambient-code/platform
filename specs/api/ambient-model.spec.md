@@ -747,7 +747,7 @@ GET    /api/ambient/v1/projects/{id}/credentials/{cred_id}/token           fetch
 
 `token` is accepted on `POST` and `PATCH` but **never returned** by standard read endpoints.
 `GET .../token` is gated by `credential:token-reader`. See
-[Security Spec §4](../security/security.spec.md#4-credential-authorization-model) for
+[Security Spec — Token Reader Role Grant](../security/security.spec.md#requirement-token-reader-role-grant) for
 runtime authorization semantics.
 
 #### Provider Enum
@@ -790,7 +790,7 @@ Effective permissions = union of all applicable bindings (global ∪ project ∪
 #### Credential Access — Project-Scoped by Default
 
 Credentials belong to a project. All agents in the project share them automatically.
-See [Security Spec §4](../security/security.spec.md#4-credential-authorization-model) for
+See [Security Spec — Project-Scoped Credential Sharing](../security/security.spec.md#requirement-project-scoped-credential-sharing) for
 sharing model, K8s analogy, and named patterns.
 
 ### Built-in Roles
@@ -843,7 +843,7 @@ GET    /api/ambient/v1/sessions/{id}/role_bindings
 ```
 
 The `credential:token-reader` role is platform-internal. See
-[Security Spec §4](../security/security.spec.md#credentialtoken-reader-runtime-grant) for
+[Security Spec — Token Reader Role Grant](../security/security.spec.md#requirement-token-reader-role-grant) for
 grant semantics and CRUD authorization rules.
 
 ---
@@ -869,7 +869,7 @@ GET    /api/ambient/v1/projects/{id}/scheduled-sessions/{sched_id}/runs         
 
 All backend paths not mapped to a native `/api/ambient/v1/...` endpoint are forwarded
 verbatim to the backend service. See
-[Security Spec §4](../security/security.spec.md#api-server-proxy-authentication) for
+[Security Spec — Proxy Authentication](../security/security.spec.md#requirement-proxy-authentication) for
 authentication and credential injection behavior.
 
 This allows SDK and CLI clients to reach the full backend surface through a single
@@ -1087,7 +1087,7 @@ This structure means you can define and compose bespoke agent suites — entire 
 | This document is the spec | A reconciler will compare the spec (this doc) against code status and surface gaps |
 | `labels` / `annotations` are JSONB, not strings | Enables GIN-indexed key/value queries (`@>` operator) without joins; every row carries its own metadata without a separate EAV table. `labels` = queryable tags; `annotations` = freeform notes. Applied to first-class Kinds: User, Project, Agent, Session. Not applied to Inbox, SessionMessage, Role/RoleBinding. |
 
-Security and credential design decisions (RBAC scoping, write-only tokens, role catalog rationale) are in [Security Spec §5](../security/security.spec.md#5-design-decisions).
+Security and credential design decisions (RBAC scoping, write-only tokens, role catalog rationale) are in the [Security Spec — Design Decisions](../security/security.spec.md#design-decisions).
 
 ---
 
@@ -1136,7 +1136,7 @@ acpctl apply -f credential.yaml
 
 ## Design Decisions — Credential
 
-See [Security Spec §5](../security/security.spec.md#5-design-decisions) for credential
+See the [Security Spec — Design Decisions](../security/security.spec.md#design-decisions) for credential
 design rationale (storage, rotation, provider serialization, migration).
 
 ---
