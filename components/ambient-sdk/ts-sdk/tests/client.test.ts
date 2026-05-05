@@ -57,6 +57,14 @@ describe('AmbientClient construction', () => {
     });
     expect(client).toBeDefined();
   });
+
+  it('rejects protocol-relative URLs', () => {
+    expect(() => new AmbientClient({
+      baseUrl: '//evil.com/path',
+      token: 'sha256~abcdefghijklmnopqrstuvwxyz1234567890',
+      project: 'test-project',
+    })).toThrow('Protocol-relative URLs are not allowed for baseUrl');
+  });
 });
 
 describe('AmbientClient.fromEnv', () => {

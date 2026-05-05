@@ -29,6 +29,11 @@ export class AmbientClient {
       throw new Error('project name cannot exceed 63 characters');
     }
 
+    // Reject protocol-relative URLs (e.g. "//evil.com/path")
+    if (config.baseUrl.startsWith('//')) {
+      throw new Error('Protocol-relative URLs are not allowed for baseUrl');
+    }
+
     // Skip URL parsing for relative paths (e.g. "/api/proxy")
     if (!config.baseUrl.startsWith('/')) {
       const url = new URL(config.baseUrl);
