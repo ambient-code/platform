@@ -93,6 +93,9 @@ func (s *InMemorySessionService) AllByProjectId(_ context.Context, projectId str
 }
 
 func (s *InMemorySessionService) UpdateStatus(_ context.Context, id string, patch *SessionStatusPatchRequest) (*Session, *errors.ServiceError) {
+	if patch == nil {
+		return nil, errors.Validation("patch request must not be nil")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ss, ok := s.data[id]
@@ -116,6 +119,7 @@ func (s *InMemorySessionService) Start(_ context.Context, id string) (*Session, 
 	}
 	phase := "running"
 	ss.Phase = &phase
+	ss.UpdatedAt = time.Now()
 	cp := *ss
 	return &cp, nil
 }
@@ -129,6 +133,7 @@ func (s *InMemorySessionService) Stop(_ context.Context, id string) (*Session, *
 	}
 	phase := "stopped"
 	ss.Phase = &phase
+	ss.UpdatedAt = time.Now()
 	cp := *ss
 	return &cp, nil
 }
