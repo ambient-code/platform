@@ -468,7 +468,7 @@ func (tc *TUIClient) StartAgent(projectID, agentID, prompt string) tea.Cmd {
 			return StartAgentMsg{Err: err}
 		}
 
-		resp, err := client.Agents().Start(ctx, projectID, agentID, prompt)
+		resp, err := client.Agents().StartInProject(ctx, projectID, agentID, prompt)
 		if err != nil {
 			return StartAgentMsg{Err: err}
 		}
@@ -837,7 +837,7 @@ func (tc *TUIClient) FetchScheduledSessions(projectID string) tea.Cmd {
 			return ScheduledSessionsMsg{Err: err}
 		}
 
-		list, err := client.ScheduledSessions().List(ctx, projectID, defaultListOpts())
+		list, err := client.ScheduledSessions().ListInProject(ctx, projectID, defaultListOpts())
 		if err != nil {
 			return ScheduledSessionsMsg{Err: err}
 		}
@@ -856,7 +856,7 @@ func (tc *TUIClient) DeleteScheduledSession(projectID, id string) tea.Cmd {
 			return DeleteScheduledSessionMsg{Err: err}
 		}
 
-		err = client.ScheduledSessions().Delete(ctx, projectID, id)
+		err = client.ScheduledSessions().DeleteInProject(ctx, projectID, id)
 		return DeleteScheduledSessionMsg{Err: err}
 	}
 }
@@ -936,7 +936,7 @@ func (tc *TUIClient) CreateScheduledSession(projectID, name, agentID, schedule, 
 			Enabled:       true,
 		}
 
-		result, err := client.ScheduledSessions().Create(ctx, projectID, ss)
+		result, err := client.ScheduledSessions().CreateInProject(ctx, projectID, ss)
 		if err != nil {
 			return CreateScheduledSessionMsg{Err: err}
 		}
@@ -964,7 +964,7 @@ func (tc *TUIClient) UpdateScheduledSession(projectID, id string, patch map[stri
 			return UpdateScheduledSessionMsg{Err: fmt.Errorf("unmarshal patch: %w", err)}
 		}
 
-		result, err := client.ScheduledSessions().Update(ctx, projectID, id, &typedPatch)
+		result, err := client.ScheduledSessions().UpdateInProject(ctx, projectID, id, &typedPatch)
 		if err != nil {
 			return UpdateScheduledSessionMsg{Err: err}
 		}
