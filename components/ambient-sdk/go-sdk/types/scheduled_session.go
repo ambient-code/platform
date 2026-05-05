@@ -38,17 +38,17 @@ func (l *ScheduledSessionList) GetSize() int                 { return l.Size }
 // ScheduledSessionPatch is the request body for a PATCH operation.
 // Only set fields that should be changed; omitted (nil) fields are left unchanged.
 type ScheduledSessionPatch struct {
+	AgentID           *string `json:"agent_id,omitempty"`
 	Name              *string `json:"name,omitempty"`
 	Description       *string `json:"description,omitempty"`
-	AgentID           *string `json:"agent_id,omitempty"`
 	Schedule          *string `json:"schedule,omitempty"`
 	Timezone          *string `json:"timezone,omitempty"`
 	Enabled           *bool   `json:"enabled,omitempty"`
-	SessionPrompt     *string `json:"session_prompt,omitempty"`
-	Timeout           *int32  `json:"timeout,omitempty"`
 	InactivityTimeout *int32  `json:"inactivity_timeout,omitempty"`
-	StopOnRunFinished *bool   `json:"stop_on_run_finished,omitempty"`
 	RunnerType        *string `json:"runner_type,omitempty"`
+	SessionPrompt     *string `json:"session_prompt,omitempty"`
+	StopOnRunFinished *bool   `json:"stop_on_run_finished,omitempty"`
+	Timeout           *int32  `json:"timeout,omitempty"`
 }
 
 // ScheduledSessionBuilder builds a ScheduledSession for creation.
@@ -119,6 +119,9 @@ func (b *ScheduledSessionBuilder) RunnerType(v string) *ScheduledSessionBuilder 
 func (b *ScheduledSessionBuilder) Build() (*ScheduledSession, error) {
 	if b.resource.Name == "" {
 		b.errs = append(b.errs, fmt.Errorf("name is required"))
+	}
+	if b.resource.AgentID == "" {
+		b.errs = append(b.errs, fmt.Errorf("agent_id is required"))
 	}
 	if b.resource.Schedule == "" {
 		b.errs = append(b.errs, fmt.Errorf("schedule is required"))
