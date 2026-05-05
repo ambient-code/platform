@@ -837,7 +837,7 @@ func (tc *TUIClient) FetchScheduledSessions(projectID string) tea.Cmd {
 			return ScheduledSessionsMsg{Err: err}
 		}
 
-		list, err := client.ScheduledSessions().ListInProject(ctx, projectID, defaultListOpts())
+		list, err := client.ScheduledSessions().ListByProject(ctx, projectID, defaultListOpts())
 		if err != nil {
 			return ScheduledSessionsMsg{Err: err}
 		}
@@ -955,16 +955,7 @@ func (tc *TUIClient) UpdateScheduledSession(projectID, id string, patch map[stri
 			return UpdateScheduledSessionMsg{Err: err}
 		}
 
-		patchJSON, err := json.Marshal(patch)
-		if err != nil {
-			return UpdateScheduledSessionMsg{Err: fmt.Errorf("marshal patch: %w", err)}
-		}
-		var typedPatch sdktypes.ScheduledSessionPatch
-		if err := json.Unmarshal(patchJSON, &typedPatch); err != nil {
-			return UpdateScheduledSessionMsg{Err: fmt.Errorf("unmarshal patch: %w", err)}
-		}
-
-		result, err := client.ScheduledSessions().UpdateInProject(ctx, projectID, id, &typedPatch)
+		result, err := client.ScheduledSessions().UpdateInProject(ctx, projectID, id, patch)
 		if err != nil {
 			return UpdateScheduledSessionMsg{Err: err}
 		}

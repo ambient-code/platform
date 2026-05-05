@@ -14,7 +14,7 @@ func (a *ScheduledSessionAPI) projectPath(projectID string) string {
 	return "/projects/" + url.PathEscape(projectID) + "/scheduled-sessions"
 }
 
-func (a *ScheduledSessionAPI) ListInProject(ctx context.Context, projectID string, opts *types.ListOptions) (*types.ScheduledSessionList, error) {
+func (a *ScheduledSessionAPI) ListByProject(ctx context.Context, projectID string, opts *types.ListOptions) (*types.ScheduledSessionList, error) {
 	var result types.ScheduledSessionList
 	if err := a.client.doWithQuery(ctx, http.MethodGet, a.projectPath(projectID), nil, http.StatusOK, &result, opts); err != nil {
 		return nil, err
@@ -22,7 +22,7 @@ func (a *ScheduledSessionAPI) ListInProject(ctx context.Context, projectID strin
 	return &result, nil
 }
 
-func (a *ScheduledSessionAPI) GetInProject(ctx context.Context, projectID, id string) (*types.ScheduledSession, error) {
+func (a *ScheduledSessionAPI) GetByProject(ctx context.Context, projectID, id string) (*types.ScheduledSession, error) {
 	var result types.ScheduledSession
 	path := a.projectPath(projectID) + "/" + url.PathEscape(id)
 	if err := a.client.do(ctx, http.MethodGet, path, nil, http.StatusOK, &result); err != nil {
@@ -43,7 +43,7 @@ func (a *ScheduledSessionAPI) CreateInProject(ctx context.Context, projectID str
 	return &result, nil
 }
 
-func (a *ScheduledSessionAPI) UpdateInProject(ctx context.Context, projectID, id string, patch any) (*types.ScheduledSession, error) {
+func (a *ScheduledSessionAPI) UpdateInProject(ctx context.Context, projectID, id string, patch map[string]any) (*types.ScheduledSession, error) {
 	body, err := json.Marshal(patch)
 	if err != nil {
 		return nil, fmt.Errorf("marshal patch: %w", err)
@@ -93,7 +93,7 @@ func (a *ScheduledSessionAPI) Runs(ctx context.Context, projectID, id string, op
 }
 
 func (a *ScheduledSessionAPI) GetByName(ctx context.Context, projectID, name string) (*types.ScheduledSession, error) {
-	list, err := a.ListInProject(ctx, projectID, &types.ListOptions{Search: "name = '" + name + "'"})
+	list, err := a.ListByProject(ctx, projectID, &types.ListOptions{Search: "name = '" + name + "'"})
 	if err != nil {
 		return nil, err
 	}

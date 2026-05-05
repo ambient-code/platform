@@ -53,7 +53,7 @@ func resolveScheduledSession(ctx context.Context, projectID, arg string) (string
 	if err != nil {
 		return "", err
 	}
-	ss, err := client.ScheduledSessions().GetInProject(ctx, projectID, arg)
+	ss, err := client.ScheduledSessions().GetByProject(ctx, projectID, arg)
 	if err != nil {
 		ss, err = client.ScheduledSessions().GetByName(ctx, projectID, arg)
 		if err != nil {
@@ -98,7 +98,7 @@ var listCmd = &cobra.Command{
 		defer cancel()
 
 		opts := sdktypes.NewListOptions().Size(listArgs.limit).Build()
-		list, err := client.ScheduledSessions().ListInProject(ctx, projectID, opts)
+		list, err := client.ScheduledSessions().ListByProject(ctx, projectID, opts)
 		if err != nil {
 			return fmt.Errorf("list scheduled sessions: %w", err)
 		}
@@ -150,7 +150,7 @@ var getCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 		defer cancel()
 
-		ss, err := client.ScheduledSessions().GetInProject(ctx, projectID, args[0])
+		ss, err := client.ScheduledSessions().GetByProject(ctx, projectID, args[0])
 		if err != nil {
 			ss, err = client.ScheduledSessions().GetByName(ctx, projectID, args[0])
 			if err != nil {
