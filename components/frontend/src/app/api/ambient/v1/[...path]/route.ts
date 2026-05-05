@@ -39,6 +39,10 @@ async function proxyRequest(
     );
   }
 
+  if (!upstream.ok) {
+    console.error('[Ambient API proxy] upstream error:', upstream.status, pathStr);
+  }
+
   // SSE/streaming: pipe through without buffering
   const upstreamContentType = upstream.headers.get('content-type') || '';
   if (
@@ -49,8 +53,8 @@ async function proxyRequest(
 
     if (upstream.body) {
       upstream.body.pipeTo(writable).catch((err: unknown) => {
-        // AbortError is normal when client disconnects
-        if (err instanceof Error && err.name !== 'AbortError') {
+        // AbortError / ResponseAborted is normal when client disconnects
+        if (err instanceof Error && err.name !== 'AbortError' && !err.message?.includes('ResponseAborted')) {
           console.error('Ambient API proxy pipe error:', err);
         }
       });
