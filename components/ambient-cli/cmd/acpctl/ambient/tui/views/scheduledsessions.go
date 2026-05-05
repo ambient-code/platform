@@ -1,6 +1,7 @@
 package views
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/charmbracelet/bubbles/table"
@@ -86,6 +87,21 @@ func ScheduledSessionDetail(ss sdktypes.ScheduledSession) []DetailLine {
 		updatedAt = ss.UpdatedAt.Format(time.RFC3339)
 	}
 
+	timeout := ""
+	if ss.Timeout != nil {
+		timeout = fmt.Sprintf("%d", *ss.Timeout)
+	}
+
+	inactivityTimeout := ""
+	if ss.InactivityTimeout != nil {
+		inactivityTimeout = fmt.Sprintf("%d", *ss.InactivityTimeout)
+	}
+
+	stopOnRunFinished := ""
+	if ss.StopOnRunFinished != nil {
+		stopOnRunFinished = fmt.Sprintf("%v", *ss.StopOnRunFinished)
+	}
+
 	return []DetailLine{
 		{Key: "ID", Value: ss.ID},
 		{Key: "Name", Value: ss.Name},
@@ -96,6 +112,10 @@ func ScheduledSessionDetail(ss sdktypes.ScheduledSession) []DetailLine {
 		{Key: "Timezone", Value: ss.Timezone},
 		{Key: "Suspended", Value: suspended},
 		{Key: "Session Prompt", Value: ss.SessionPrompt},
+		{Key: "Timeout", Value: timeout},
+		{Key: "Inactivity Timeout", Value: inactivityTimeout},
+		{Key: "Stop On Run Finished", Value: stopOnRunFinished},
+		{Key: "Runner Type", Value: ss.RunnerType},
 		{Key: "Last Run At", Value: lastRun},
 		{Key: "Next Run At", Value: nextRun},
 		{Key: "Created At", Value: createdAt},
@@ -104,11 +124,12 @@ func ScheduledSessionDetail(ss sdktypes.ScheduledSession) []DetailLine {
 }
 
 // NewScheduledSessionForm creates a huh form for creating a new scheduled
-// session. agentOptions must have at least one entry (agent is required).
+// session. Agent selection is optional — a "None" option is prepended.
 func NewScheduledSessionForm(
 	displayName, schedule, description, sessionPrompt, timezone, agentID *string,
 	agentOptions []huh.Option[string],
 ) *huh.Form {
+	allAgentOpts := append([]huh.Option[string]{huh.NewOption("(none)", "")}, agentOptions...)
 	fields := []huh.Field{
 		huh.NewInput().
 			Key("displayName").
@@ -118,8 +139,8 @@ func NewScheduledSessionForm(
 			Value(displayName),
 		huh.NewSelect[string]().
 			Key("agent").
-			Title("Agent").
-			Options(agentOptions...).
+			Title("Agent (optional)").
+			Options(allAgentOpts...).
 			Value(agentID),
 		huh.NewInput().
 			Key("schedule").

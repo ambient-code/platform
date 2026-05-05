@@ -32,12 +32,23 @@ Method | HTTP request | Description
 [**ApiAmbientV1ProjectsIdGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdGet) | **Get** /api/ambient/v1/projects/{id} | Get a project by id
 [**ApiAmbientV1ProjectsIdHomeGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdHomeGet) | **Get** /api/ambient/v1/projects/{id}/home | Project home — latest status for every Agent in this project
 [**ApiAmbientV1ProjectsIdPatch**](DefaultAPI.md#ApiAmbientV1ProjectsIdPatch) | **Patch** /api/ambient/v1/projects/{id} | Update a project
+[**ApiAmbientV1ProjectsIdScheduledSessionsGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdScheduledSessionsGet) | **Get** /api/ambient/v1/projects/{id}/scheduled-sessions | Returns a list of scheduled sessions in a project
+[**ApiAmbientV1ProjectsIdScheduledSessionsPost**](DefaultAPI.md#ApiAmbientV1ProjectsIdScheduledSessionsPost) | **Post** /api/ambient/v1/projects/{id}/scheduled-sessions | Create a scheduled session in a project
+[**ApiAmbientV1ProjectsIdScheduledSessionsSsIdDelete**](DefaultAPI.md#ApiAmbientV1ProjectsIdScheduledSessionsSsIdDelete) | **Delete** /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id} | Delete a scheduled session
+[**ApiAmbientV1ProjectsIdScheduledSessionsSsIdGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdScheduledSessionsSsIdGet) | **Get** /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id} | Get a scheduled session by id
+[**ApiAmbientV1ProjectsIdScheduledSessionsSsIdPatch**](DefaultAPI.md#ApiAmbientV1ProjectsIdScheduledSessionsSsIdPatch) | **Patch** /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id} | Update a scheduled session
+[**ApiAmbientV1ProjectsIdScheduledSessionsSsIdResumePost**](DefaultAPI.md#ApiAmbientV1ProjectsIdScheduledSessionsSsIdResumePost) | **Post** /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/resume | Resume a suspended scheduled session (sets enabled&#x3D;true)
+[**ApiAmbientV1ProjectsIdScheduledSessionsSsIdRunsGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdScheduledSessionsSsIdRunsGet) | **Get** /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/runs | List sessions triggered by this scheduled session
+[**ApiAmbientV1ProjectsIdScheduledSessionsSsIdSuspendPost**](DefaultAPI.md#ApiAmbientV1ProjectsIdScheduledSessionsSsIdSuspendPost) | **Post** /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/suspend | Suspend a scheduled session (sets enabled&#x3D;false)
+[**ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost**](DefaultAPI.md#ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost) | **Post** /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/trigger | Manually trigger a scheduled session to run immediately
 [**ApiAmbientV1ProjectsPost**](DefaultAPI.md#ApiAmbientV1ProjectsPost) | **Post** /api/ambient/v1/projects | Create a new project
 [**ApiAmbientV1RoleBindingsGet**](DefaultAPI.md#ApiAmbientV1RoleBindingsGet) | **Get** /api/ambient/v1/role_bindings | Returns a list of roleBindings
+[**ApiAmbientV1RoleBindingsIdDelete**](DefaultAPI.md#ApiAmbientV1RoleBindingsIdDelete) | **Delete** /api/ambient/v1/role_bindings/{id} | Delete a role binding by id
 [**ApiAmbientV1RoleBindingsIdGet**](DefaultAPI.md#ApiAmbientV1RoleBindingsIdGet) | **Get** /api/ambient/v1/role_bindings/{id} | Get an roleBinding by id
 [**ApiAmbientV1RoleBindingsIdPatch**](DefaultAPI.md#ApiAmbientV1RoleBindingsIdPatch) | **Patch** /api/ambient/v1/role_bindings/{id} | Update an roleBinding
 [**ApiAmbientV1RoleBindingsPost**](DefaultAPI.md#ApiAmbientV1RoleBindingsPost) | **Post** /api/ambient/v1/role_bindings | Create a new roleBinding
 [**ApiAmbientV1RolesGet**](DefaultAPI.md#ApiAmbientV1RolesGet) | **Get** /api/ambient/v1/roles | Returns a list of roles
+[**ApiAmbientV1RolesIdDelete**](DefaultAPI.md#ApiAmbientV1RolesIdDelete) | **Delete** /api/ambient/v1/roles/{id} | Delete a role by id
 [**ApiAmbientV1RolesIdGet**](DefaultAPI.md#ApiAmbientV1RolesIdGet) | **Get** /api/ambient/v1/roles/{id} | Get an role by id
 [**ApiAmbientV1RolesIdPatch**](DefaultAPI.md#ApiAmbientV1RolesIdPatch) | **Patch** /api/ambient/v1/roles/{id} | Update an role
 [**ApiAmbientV1RolesPost**](DefaultAPI.md#ApiAmbientV1RolesPost) | **Post** /api/ambient/v1/roles | Create a new role
@@ -108,9 +119,9 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
  **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria |
- **orderBy** | **string** | Specifies the order by criteria |
- **fields** | **string** | Supplies a comma-separated list of fields to be returned |
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
 
 ### Return type
 
@@ -167,7 +178,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -235,7 +246,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -304,7 +315,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -314,7 +325,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1ProjectSetting
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **projectSettingsPatchRequest** | [**ProjectSettingsPatchRequest**](ProjectSettingsPatchRequest.md) | Updated project settings data |
+ **projectSettingsPatchRequest** | [**ProjectSettingsPatchRequest**](ProjectSettingsPatchRequest.md) | Updated project settings data | 
 
 ### Return type
 
@@ -378,7 +389,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1ProjectSetting
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **projectSettings** | [**ProjectSettings**](ProjectSettings.md) | Project settings data |
+ **projectSettings** | [**ProjectSettings**](ProjectSettings.md) | Project settings data | 
 
 ### Return type
 
@@ -448,9 +459,9 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
  **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria |
- **orderBy** | **string** | Specifies the order by criteria |
- **fields** | **string** | Supplies a comma-separated list of fields to be returned |
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
 
 ### Return type
 
@@ -508,8 +519,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**agentId** | **string** | The id of the agent |
+**id** | **string** | The id of record | 
+**agentId** | **string** | The id of the agent | 
 
 ### Other Parameters
 
@@ -579,8 +590,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**agentId** | **string** | The id of the agent |
+**id** | **string** | The id of record | 
+**agentId** | **string** | The id of the agent | 
 
 ### Other Parameters
 
@@ -650,8 +661,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**agentId** | **string** | The id of the agent |
+**id** | **string** | The id of record | 
+**agentId** | **string** | The id of the agent | 
 
 ### Other Parameters
 
@@ -723,8 +734,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**agentId** | **string** | The id of the agent |
+**id** | **string** | The id of record | 
+**agentId** | **string** | The id of the agent | 
 
 ### Other Parameters
 
@@ -795,9 +806,9 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**agentId** | **string** | The id of the agent |
-**msgId** | **string** | The id of the inbox message |
+**id** | **string** | The id of record | 
+**agentId** | **string** | The id of the agent | 
+**msgId** | **string** | The id of the inbox message | 
 
 ### Other Parameters
 
@@ -870,9 +881,9 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**agentId** | **string** | The id of the agent |
-**msgId** | **string** | The id of the inbox message |
+**id** | **string** | The id of record | 
+**agentId** | **string** | The id of the agent | 
+**msgId** | **string** | The id of the inbox message | 
 
 ### Other Parameters
 
@@ -884,7 +895,7 @@ Name | Type | Description  | Notes
 
 
 
- **inboxMessagePatchRequest** | [**InboxMessagePatchRequest**](InboxMessagePatchRequest.md) | Inbox message patch |
+ **inboxMessagePatchRequest** | [**InboxMessagePatchRequest**](InboxMessagePatchRequest.md) | Inbox message patch | 
 
 ### Return type
 
@@ -945,8 +956,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**agentId** | **string** | The id of the agent |
+**id** | **string** | The id of record | 
+**agentId** | **string** | The id of the agent | 
 
 ### Other Parameters
 
@@ -957,7 +968,7 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
 
- **inboxMessage** | [**InboxMessage**](InboxMessage.md) | Inbox message to send |
+ **inboxMessage** | [**InboxMessage**](InboxMessage.md) | Inbox message to send | 
 
 ### Return type
 
@@ -1018,8 +1029,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**agentId** | **string** | The id of the agent |
+**id** | **string** | The id of record | 
+**agentId** | **string** | The id of the agent | 
 
 ### Other Parameters
 
@@ -1030,7 +1041,7 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
 
- **agentPatchRequest** | [**AgentPatchRequest**](AgentPatchRequest.md) | Updated agent data |
+ **agentPatchRequest** | [**AgentPatchRequest**](AgentPatchRequest.md) | Updated agent data | 
 
 ### Return type
 
@@ -1092,8 +1103,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**agentId** | **string** | The id of the agent |
+**id** | **string** | The id of record | 
+**agentId** | **string** | The id of the agent | 
 
 ### Other Parameters
 
@@ -1168,8 +1179,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**agentId** | **string** | The id of the agent |
+**id** | **string** | The id of record | 
+**agentId** | **string** | The id of the agent | 
 
 ### Other Parameters
 
@@ -1180,7 +1191,7 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
 
- **startRequest** | [**StartRequest**](StartRequest.md) | Optional start parameters |
+ **startRequest** | [**StartRequest**](StartRequest.md) | Optional start parameters | 
 
 ### Return type
 
@@ -1244,7 +1255,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -1256,9 +1267,9 @@ Name | Type | Description  | Notes
 
  **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
  **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria |
- **orderBy** | **string** | Specifies the order by criteria |
- **fields** | **string** | Supplies a comma-separated list of fields to be returned |
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
 
 ### Return type
 
@@ -1318,7 +1329,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -1328,7 +1339,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdAgen
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **agent** | [**Agent**](Agent.md) | Agent data |
+ **agent** | [**Agent**](Agent.md) | Agent data | 
 
 ### Return type
 
@@ -1386,8 +1397,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**credId** | **string** | The id of the credential |
+**id** | **string** | The id of record | 
+**credId** | **string** | The id of the credential | 
 
 ### Other Parameters
 
@@ -1457,8 +1468,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**credId** | **string** | The id of the credential |
+**id** | **string** | The id of record | 
+**credId** | **string** | The id of the credential | 
 
 ### Other Parameters
 
@@ -1529,8 +1540,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**credId** | **string** | The id of the credential |
+**id** | **string** | The id of record | 
+**credId** | **string** | The id of the credential | 
 
 ### Other Parameters
 
@@ -1541,7 +1552,7 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
 
- **credentialPatchRequest** | [**CredentialPatchRequest**](CredentialPatchRequest.md) | Updated credential data |
+ **credentialPatchRequest** | [**CredentialPatchRequest**](CredentialPatchRequest.md) | Updated credential data | 
 
 ### Return type
 
@@ -1603,8 +1614,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**credId** | **string** | The id of the credential |
+**id** | **string** | The id of record | 
+**credId** | **string** | The id of the credential | 
 
 ### Other Parameters
 
@@ -1679,7 +1690,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -1691,10 +1702,10 @@ Name | Type | Description  | Notes
 
  **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
  **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria |
- **orderBy** | **string** | Specifies the order by criteria |
- **fields** | **string** | Supplies a comma-separated list of fields to be returned |
- **provider** | **string** | Filter credentials by provider |
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
+ **provider** | **string** | Filter credentials by provider | 
 
 ### Return type
 
@@ -1754,7 +1765,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -1764,7 +1775,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdCred
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **credential** | [**Credential**](Credential.md) | Credential data |
+ **credential** | [**Credential**](Credential.md) | Credential data | 
 
 ### Return type
 
@@ -1821,7 +1832,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -1889,7 +1900,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -1957,7 +1968,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -2026,7 +2037,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -2036,7 +2047,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdPatc
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **projectPatchRequest** | [**ProjectPatchRequest**](ProjectPatchRequest.md) | Updated project data |
+ **projectPatchRequest** | [**ProjectPatchRequest**](ProjectPatchRequest.md) | Updated project data | 
 
 ### Return type
 
@@ -2049,6 +2060,655 @@ Name | Type | Description  | Notes
 ### HTTP request headers
 
 - **Content-Type**: application/json
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdScheduledSessionsGet
+
+> ScheduledSessionList ApiAmbientV1ProjectsIdScheduledSessionsGet(ctx, id).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
+
+Returns a list of scheduled sessions in a project
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	page := int32(56) // int32 | Page number of record list when record list exceeds specified page size (optional) (default to 1)
+	size := int32(56) // int32 | Maximum number of records to return (optional) (default to 100)
+	search := "search_example" // string | Specifies the search criteria (optional)
+	orderBy := "orderBy_example" // string | Specifies the order by criteria (optional)
+	fields := "fields_example" // string | Supplies a comma-separated list of fields to be returned (optional)
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsGet(context.Background(), id).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdScheduledSessionsGet`: ScheduledSessionList
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsGet`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdScheduledSessionsGetRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+ **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
+ **size** | **int32** | Maximum number of records to return | [default to 100]
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
+
+### Return type
+
+[**ScheduledSessionList**](ScheduledSessionList.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdScheduledSessionsPost
+
+> ScheduledSession ApiAmbientV1ProjectsIdScheduledSessionsPost(ctx, id).ScheduledSession(scheduledSession).Execute()
+
+Create a scheduled session in a project
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	scheduledSession := *openapiclient.NewScheduledSession("Name_example", "ProjectId_example", "Schedule_example") // ScheduledSession | Scheduled session data
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsPost(context.Background(), id).ScheduledSession(scheduledSession).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsPost``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdScheduledSessionsPost`: ScheduledSession
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsPost`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdScheduledSessionsPostRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+ **scheduledSession** | [**ScheduledSession**](ScheduledSession.md) | Scheduled session data | 
+
+### Return type
+
+[**ScheduledSession**](ScheduledSession.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdScheduledSessionsSsIdDelete
+
+> ApiAmbientV1ProjectsIdScheduledSessionsSsIdDelete(ctx, id, ssId).Execute()
+
+Delete a scheduled session
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	ssId := "ssId_example" // string | The id of the scheduled session
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdDelete(context.Background(), id, ssId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdDelete``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**ssId** | **string** | The id of the scheduled session | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdScheduledSessionsSsIdDeleteRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+
+### Return type
+
+ (empty response body)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdScheduledSessionsSsIdGet
+
+> ScheduledSession ApiAmbientV1ProjectsIdScheduledSessionsSsIdGet(ctx, id, ssId).Execute()
+
+Get a scheduled session by id
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	ssId := "ssId_example" // string | The id of the scheduled session
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdGet(context.Background(), id, ssId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdScheduledSessionsSsIdGet`: ScheduledSession
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdGet`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**ssId** | **string** | The id of the scheduled session | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdScheduledSessionsSsIdGetRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+
+### Return type
+
+[**ScheduledSession**](ScheduledSession.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdScheduledSessionsSsIdPatch
+
+> ScheduledSession ApiAmbientV1ProjectsIdScheduledSessionsSsIdPatch(ctx, id, ssId).ScheduledSessionPatchRequest(scheduledSessionPatchRequest).Execute()
+
+Update a scheduled session
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	ssId := "ssId_example" // string | The id of the scheduled session
+	scheduledSessionPatchRequest := *openapiclient.NewScheduledSessionPatchRequest() // ScheduledSessionPatchRequest | Updated scheduled session data
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdPatch(context.Background(), id, ssId).ScheduledSessionPatchRequest(scheduledSessionPatchRequest).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdPatch``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdScheduledSessionsSsIdPatch`: ScheduledSession
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdPatch`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**ssId** | **string** | The id of the scheduled session | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdScheduledSessionsSsIdPatchRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+ **scheduledSessionPatchRequest** | [**ScheduledSessionPatchRequest**](ScheduledSessionPatchRequest.md) | Updated scheduled session data | 
+
+### Return type
+
+[**ScheduledSession**](ScheduledSession.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdScheduledSessionsSsIdResumePost
+
+> ScheduledSession ApiAmbientV1ProjectsIdScheduledSessionsSsIdResumePost(ctx, id, ssId).Execute()
+
+Resume a suspended scheduled session (sets enabled=true)
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	ssId := "ssId_example" // string | The id of the scheduled session
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdResumePost(context.Background(), id, ssId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdResumePost``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdScheduledSessionsSsIdResumePost`: ScheduledSession
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdResumePost`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**ssId** | **string** | The id of the scheduled session | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdScheduledSessionsSsIdResumePostRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+
+### Return type
+
+[**ScheduledSession**](ScheduledSession.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdScheduledSessionsSsIdRunsGet
+
+> SessionList ApiAmbientV1ProjectsIdScheduledSessionsSsIdRunsGet(ctx, id, ssId).Page(page).Size(size).Execute()
+
+List sessions triggered by this scheduled session
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	ssId := "ssId_example" // string | The id of the scheduled session
+	page := int32(56) // int32 | Page number of record list when record list exceeds specified page size (optional) (default to 1)
+	size := int32(56) // int32 | Maximum number of records to return (optional) (default to 100)
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdRunsGet(context.Background(), id, ssId).Page(page).Size(size).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdRunsGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdScheduledSessionsSsIdRunsGet`: SessionList
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdRunsGet`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**ssId** | **string** | The id of the scheduled session | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdScheduledSessionsSsIdRunsGetRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+ **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
+ **size** | **int32** | Maximum number of records to return | [default to 100]
+
+### Return type
+
+[**SessionList**](SessionList.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdScheduledSessionsSsIdSuspendPost
+
+> ScheduledSession ApiAmbientV1ProjectsIdScheduledSessionsSsIdSuspendPost(ctx, id, ssId).Execute()
+
+Suspend a scheduled session (sets enabled=false)
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	ssId := "ssId_example" // string | The id of the scheduled session
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdSuspendPost(context.Background(), id, ssId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdSuspendPost``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdScheduledSessionsSsIdSuspendPost`: ScheduledSession
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdSuspendPost`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**ssId** | **string** | The id of the scheduled session | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdScheduledSessionsSsIdSuspendPostRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+
+### Return type
+
+[**ScheduledSession**](ScheduledSession.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost
+
+> ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost(ctx, id, ssId).Execute()
+
+Manually trigger a scheduled session to run immediately
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	ssId := "ssId_example" // string | The id of the scheduled session
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost(context.Background(), id, ssId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost`: ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**ssId** | **string** | The id of the scheduled session | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPostRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+
+### Return type
+
+[**ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response**](ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
 - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
@@ -2100,7 +2760,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsPostRe
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **project** | [**Project**](Project.md) | Project data |
+ **project** | [**Project**](Project.md) | Project data | 
 
 ### Return type
 
@@ -2170,13 +2830,79 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
  **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria |
- **orderBy** | **string** | Specifies the order by criteria |
- **fields** | **string** | Supplies a comma-separated list of fields to be returned |
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
 
 ### Return type
 
 [**RoleBindingList**](RoleBindingList.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1RoleBindingsIdDelete
+
+> ApiAmbientV1RoleBindingsIdDelete(ctx, id).Execute()
+
+Delete a role binding by id
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	r, err := apiClient.DefaultAPI.ApiAmbientV1RoleBindingsIdDelete(context.Background(), id).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1RoleBindingsIdDelete``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1RoleBindingsIdDeleteRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+### Return type
+
+ (empty response body)
 
 ### Authorization
 
@@ -2231,7 +2957,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -2300,7 +3026,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -2310,7 +3036,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1RoleBindingsId
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **roleBindingPatchRequest** | [**RoleBindingPatchRequest**](RoleBindingPatchRequest.md) | Updated roleBinding data |
+ **roleBindingPatchRequest** | [**RoleBindingPatchRequest**](RoleBindingPatchRequest.md) | Updated roleBinding data | 
 
 ### Return type
 
@@ -2374,7 +3100,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1RoleBindingsPo
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **roleBinding** | [**RoleBinding**](RoleBinding.md) | RoleBinding data |
+ **roleBinding** | [**RoleBinding**](RoleBinding.md) | RoleBinding data | 
 
 ### Return type
 
@@ -2444,13 +3170,79 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
  **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria |
- **orderBy** | **string** | Specifies the order by criteria |
- **fields** | **string** | Supplies a comma-separated list of fields to be returned |
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
 
 ### Return type
 
 [**RoleList**](RoleList.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1RolesIdDelete
+
+> ApiAmbientV1RolesIdDelete(ctx, id).Execute()
+
+Delete a role by id
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	r, err := apiClient.DefaultAPI.ApiAmbientV1RolesIdDelete(context.Background(), id).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1RolesIdDelete``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1RolesIdDeleteRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+### Return type
+
+ (empty response body)
 
 ### Authorization
 
@@ -2505,7 +3297,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -2574,7 +3366,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -2584,7 +3376,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1RolesIdPatchRe
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **rolePatchRequest** | [**RolePatchRequest**](RolePatchRequest.md) | Updated role data |
+ **rolePatchRequest** | [**RolePatchRequest**](RolePatchRequest.md) | Updated role data | 
 
 ### Return type
 
@@ -2648,7 +3440,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1RolesPostReque
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **role** | [**Role**](Role.md) | Role data |
+ **role** | [**Role**](Role.md) | Role data | 
 
 ### Return type
 
@@ -2718,9 +3510,9 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
  **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria |
- **orderBy** | **string** | Specifies the order by criteria |
- **fields** | **string** | Supplies a comma-separated list of fields to be returned |
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
 
 ### Return type
 
@@ -2777,7 +3569,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -2845,7 +3637,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -2916,7 +3708,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -2968,7 +3760,7 @@ import (
 
 func main() {
 	id := "id_example" // string | The id of record
-	sessionMessagePushRequest := *openapiclient.NewSessionMessagePushRequest() // SessionMessagePushRequest |
+	sessionMessagePushRequest := *openapiclient.NewSessionMessagePushRequest() // SessionMessagePushRequest | 
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
@@ -2988,7 +3780,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -2998,7 +3790,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1SessionsIdMess
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **sessionMessagePushRequest** | [**SessionMessagePushRequest**](SessionMessagePushRequest.md) |  |
+ **sessionMessagePushRequest** | [**SessionMessagePushRequest**](SessionMessagePushRequest.md) |  | 
 
 ### Return type
 
@@ -3058,7 +3850,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -3068,7 +3860,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1SessionsIdPatc
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **sessionPatchRequest** | [**SessionPatchRequest**](SessionPatchRequest.md) | Updated session data |
+ **sessionPatchRequest** | [**SessionPatchRequest**](SessionPatchRequest.md) | Updated session data | 
 
 ### Return type
 
@@ -3129,7 +3921,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -3200,7 +3992,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -3210,7 +4002,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1SessionsIdStat
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **sessionStatusPatchRequest** | [**SessionStatusPatchRequest**](SessionStatusPatchRequest.md) | Session status fields to update |
+ **sessionStatusPatchRequest** | [**SessionStatusPatchRequest**](SessionStatusPatchRequest.md) | Session status fields to update | 
 
 ### Return type
 
@@ -3271,7 +4063,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -3344,7 +4136,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1SessionsPostRe
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **session** | [**Session**](Session.md) | Session data |
+ **session** | [**Session**](Session.md) | Session data | 
 
 ### Return type
 
@@ -3414,9 +4206,9 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
  **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria |
- **orderBy** | **string** | Specifies the order by criteria |
- **fields** | **string** | Supplies a comma-separated list of fields to be returned |
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
 
 ### Return type
 
@@ -3475,7 +4267,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -3544,7 +4336,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -3554,7 +4346,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1UsersIdPatchRe
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **userPatchRequest** | [**UserPatchRequest**](UserPatchRequest.md) | Updated user data |
+ **userPatchRequest** | [**UserPatchRequest**](UserPatchRequest.md) | Updated user data | 
 
 ### Return type
 
@@ -3618,7 +4410,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1UsersPostReque
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **user** | [**User**](User.md) | User data |
+ **user** | [**User**](User.md) | User data | 
 
 ### Return type
 
@@ -3636,3 +4428,4 @@ Name | Type | Description  | Notes
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
 [[Back to Model list]](../README.md#documentation-for-models)
 [[Back to README]](../README.md)
+

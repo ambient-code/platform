@@ -20,12 +20,17 @@ type ScheduledSessionService interface {
 }
 
 type ScheduledSessionPatch struct {
-	Name          *string
-	Description   *string
-	Schedule      *string
-	Timezone      *string
-	Enabled       *bool
-	SessionPrompt *string
+	Name              *string
+	Description       *string
+	AgentId           *string
+	Schedule          *string
+	Timezone          *string
+	Enabled           *bool
+	SessionPrompt     *string
+	Timeout           *int32
+	InactivityTimeout *int32
+	StopOnRunFinished *bool
+	RunnerType        *string
 }
 
 type sqlScheduledSessionService struct {
@@ -66,6 +71,9 @@ func (s *sqlScheduledSessionService) Patch(ctx context.Context, id string, patch
 	if patch.Description != nil {
 		ss.Description = patch.Description
 	}
+	if patch.AgentId != nil {
+		ss.AgentId = patch.AgentId
+	}
 	if patch.Schedule != nil {
 		ss.Schedule = *patch.Schedule
 	}
@@ -77,6 +85,18 @@ func (s *sqlScheduledSessionService) Patch(ctx context.Context, id string, patch
 	}
 	if patch.SessionPrompt != nil {
 		ss.SessionPrompt = patch.SessionPrompt
+	}
+	if patch.Timeout != nil {
+		ss.Timeout = patch.Timeout
+	}
+	if patch.InactivityTimeout != nil {
+		ss.InactivityTimeout = patch.InactivityTimeout
+	}
+	if patch.StopOnRunFinished != nil {
+		ss.StopOnRunFinished = patch.StopOnRunFinished
+	}
+	if patch.RunnerType != nil {
+		ss.RunnerType = patch.RunnerType
 	}
 	updated, err := s.dao.Replace(ctx, ss)
 	if err != nil {
