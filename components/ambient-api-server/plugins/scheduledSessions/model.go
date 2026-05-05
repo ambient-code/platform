@@ -9,16 +9,20 @@ import (
 
 type ScheduledSession struct {
 	api.Meta
-	Name          string     `json:"name"`
-	Description   *string    `json:"description,omitempty"`
-	ProjectId     string     `json:"project_id"`
-	AgentId       string     `json:"agent_id"`
-	Schedule      string     `json:"schedule"`
-	Timezone      string     `json:"timezone"`
-	Enabled       bool       `json:"enabled"`
-	SessionPrompt *string    `json:"session_prompt,omitempty"`
-	LastRunAt     *time.Time `json:"last_run_at,omitempty"`
-	NextRunAt     *time.Time `json:"next_run_at,omitempty"`
+	Name              string     `json:"name"`
+	Description       *string    `json:"description,omitempty"`
+	ProjectId         string     `json:"project_id"`
+	AgentId           *string    `json:"agent_id,omitempty"`
+	Schedule          string     `json:"schedule"`
+	Timezone          string     `json:"timezone"`
+	Enabled           bool       `json:"enabled"`
+	SessionPrompt     *string    `json:"session_prompt,omitempty"`
+	LastRunAt         *time.Time `json:"last_run_at,omitempty"`
+	NextRunAt         *time.Time `json:"next_run_at,omitempty"`
+	Timeout           *int32     `json:"timeout,omitempty"`
+	InactivityTimeout *int32     `json:"inactivity_timeout,omitempty"`
+	StopOnRunFinished *bool      `json:"stop_on_run_finished,omitempty"`
+	RunnerType        *string    `json:"runner_type,omitempty"`
 }
 
 type ScheduledSessionList []*ScheduledSession
