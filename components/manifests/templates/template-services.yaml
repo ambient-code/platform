@@ -683,7 +683,6 @@ objects:
           - --client-secret-file=/etc/oauth-client/client_secret
           - --upstream=http://backend-service:8080/api/
           - --upstream=http://localhost:3000
-          - --openshift-delegate-urls={"/api":{"resource":"projects","verb":"list"}}
           - --tls-cert=/etc/tls/private/tls.crt
           - --tls-key=/etc/tls/private/tls.key
           - --cookie-secret-file=/etc/oauth-cookie/cookie_secret
