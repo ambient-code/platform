@@ -100,17 +100,15 @@ HUMAN_INPUT_INSTRUCTIONS = (
 
 PRODSEC_SKILLS_PROMPT = (
     "## Security Skills\n"
-    "Product Security skills are available at `/app/prodsec-skills/skills/`. "
+    "Product Security skills are available at `/app/prodsec-skills/module/skills/`. "
+    "Each skill is a directory containing a `SKILL.md` file. Choose a skill by reading "
+    "its `description` field — it is written as an invocation condition, not a summary. "
     "When performing security-sensitive tasks (code review, writing auth/crypto/network "
-    "code, configuring infrastructure, auditing), read the relevant skill for guidance "
-    "before proceeding. Key areas:\n"
-    "- `secure_development/` — cryptography, web security, supply chain, MCP servers, "
-    "Kubernetes, API gateways, inference engines, agent security\n"
-    "- `security_testing/` — fuzzing (AFL++, libFuzzer, cargo-fuzz), static analysis "
-    "(Semgrep, CodeQL, SARIF)\n"
-    "- `security_auditing/` — context building, differential review, variant analysis\n"
-    "- `developer_tooling/` — devcontainers, property-based testing\n"
-    "See `/app/prodsec-skills/skills/README.md` for the full index.\n\n"
+    "code, configuring infrastructure, auditing), read the relevant skill before "
+    "proceeding. Example:\n"
+    "  `Using /app/prodsec-skills/module/skills/go-security/SKILL.md`: review this "
+    "handler for injection risks.\n"
+    "See `/app/prodsec-skills/module/AGENTS.md` for the full index and usage guide.\n\n"
 )
 
 RESTART_TOOL_DESCRIPTION = (
@@ -247,7 +245,7 @@ def build_workspace_context_prompt(
         prompt += GITLAB_TOKEN_PROMPT
 
     # Prodsec-skills: security guidance for every session
-    if Path("/app/prodsec-skills/skills").exists():
+    if Path("/app/prodsec-skills/module/skills").exists():
         prompt += PRODSEC_SKILLS_PROMPT
 
     # Workflow instructions
