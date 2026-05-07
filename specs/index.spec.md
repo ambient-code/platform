@@ -79,9 +79,11 @@ specs/
 
 | Domain | Covers |
 |--------|--------|
-| `sessions/` | Lifecycle, initialization, status, messages, events, data model |
+| `api/` | Platform data model: projects, agents, sessions, credentials, RBAC, CLI |
+| `sessions/` | Lifecycle, initialization, status, messages, events |
 | `agents/` | Agent model, runtime registry, prompts, runners |
 | `control-plane/` | Reconciliation, operator, scheduling |
 | `frontend/` | UI rendering, session views, markdown, navigation |
 | `integrations/` | MCP, Gerrit, external services |
+| `security/` | Identity boundaries, credential authorization, per-session isolation |
 | `standards/` | Cross-cutting engineering constraints by component |
