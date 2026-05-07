@@ -254,7 +254,7 @@ func extractResource(name, pathSegment string, doc *subSpecDoc) (*Resource, erro
 
 	hasDelete := checkHasDelete(doc.Paths, pathSegment)
 	hasPatch := checkHasPatch(doc.Paths, pathSegment)
-	actions := detectActions(doc.Paths, pathSegment)
+	actions := detectActions(doc.Paths, pathSegment, name)
 	parentPath := inferParentPath(pathSegment)
 	isSubResource := parentPath != ""
 
@@ -458,11 +458,11 @@ func checkHasDelete(paths map[string]interface{}, pathSegment string) bool {
 	return hasDelete
 }
 
-func detectActions(paths map[string]interface{}, pathSegment string) []string {
+func detectActions(paths map[string]interface{}, pathSegment string, resourceName string) []Action {
 	basePath := extractBasePath(paths)
 	fullCollection := basePath + "/" + pathSegment
-	knownActions := []string{"start", "stop"}
-	var found []string
+	knownActions := []string{"start", "stop", "suspend", "resume", "trigger", "runs"}
+	var found []Action
 	for _, action := range knownActions {
 		for path, val := range paths {
 			if !strings.HasPrefix(path, fullCollection+"/") {
@@ -475,13 +475,74 @@ func detectActions(paths map[string]interface{}, pathSegment string) []string {
 			if !ok {
 				continue
 			}
-			if _, hasPost := pathMap["post"]; hasPost {
-				found = append(found, action)
-				break
+
+			method, opMap := detectHTTPMethod(pathMap)
+			if method == "" {
+				continue
+			}
+
+			returnType := extractActionReturnType(opMap, resourceName)
+
+			found = append(found, Action{
+				Name:       action,
+				Method:     method,
+				ReturnType: returnType,
+			})
+			break
+		}
+	}
+	sort.Slice(found, func(i, j int) bool {
+		return found[i].Name < found[j].Name
+	})
+	return found
+}
+
+func detectHTTPMethod(pathMap map[string]interface{}) (string, map[string]interface{}) {
+	for _, method := range []string{"post", "get", "put", "patch", "delete"} {
+		if opVal, ok := pathMap[method]; ok {
+			if opMap, ok := opVal.(map[string]interface{}); ok {
+				return method, opMap
 			}
 		}
 	}
-	return found
+	return "", nil
+}
+
+func extractActionReturnType(opMap map[string]interface{}, resourceName string) string {
+	responses, ok := opMap["responses"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+
+	for _, code := range []string{"200", "201"} {
+		resp, ok := responses[code].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		content, ok := resp["content"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		jsonContent, ok := content["application/json"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		schema, ok := jsonContent["schema"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		ref, ok := schema["$ref"].(string)
+		if !ok {
+			return ""
+		}
+		parts := strings.Split(ref, "/")
+		refName := parts[len(parts)-1]
+		if refName == resourceName {
+			return resourceName
+		}
+		return ""
+	}
+	return ""
 }
 
 var objectReferenceFields = map[string]bool{
