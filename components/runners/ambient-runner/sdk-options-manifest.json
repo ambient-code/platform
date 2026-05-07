@@ -1,8 +1,8 @@
 {
   "description": "Canonical list of Claude Agent SDK ClaudeAgentOptions fields",
   "generatedFrom": "claude-agent-sdk (PyPI)",
-  "generatedAt": "2026-05-05T09:35:22.214093+00:00",
-  "sdkVersion": "0.1.73",
+  "generatedAt": "2026-05-07T09:50:32.263415+00:00",
+  "sdkVersion": "0.1.76",
   "options": {
     "tools": {
       "type": "list[str] | claude_agent_sdk.types.ToolsPreset | None",
@@ -18,6 +18,10 @@
     },
     "mcp_servers": {
       "type": "dict[str, claude_agent_sdk.types.McpStdioServerConfig | claude_agent_sdk.types.McpSSEServerConfig | claude_agent_sdk.types.McpHttpServerConfig | claude_agent_sdk.types.McpSdkServerConfig] | str | pathlib.Path",
+      "required": false
+    },
+    "strict_mcp_config": {
+      "type": "<class 'bool'>",
       "required": false
     },
     "permission_mode": {
@@ -116,6 +120,10 @@
       "type": "<class 'bool'>",
       "required": false
     },
+    "include_hook_events": {
+      "type": "<class 'bool'>",
+      "required": false
+    },
     "fork_session": {
       "type": "<class 'bool'>",
       "required": false
@@ -149,7 +157,7 @@
       "required": false
     },
     "effort": {
-      "type": "typing.Optional[typing.Literal['low', 'medium', 'high', 'max']]",
+      "type": "typing.Optional[typing.Literal['low', 'medium', 'high', 'xhigh', 'max']]",
       "required": false
     },
     "output_format": {
