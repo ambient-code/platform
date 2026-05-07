@@ -18,8 +18,14 @@ type Resource struct {
 	HasDelete         bool
 	HasPatch          bool
 	HasStatusPatch    bool
-	Actions           []string
+	Actions           []Action
 	IsSubResource     bool
+}
+
+type Action struct {
+	Name       string
+	Method     string
+	ReturnType string
 }
 
 type Field struct {
