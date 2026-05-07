@@ -116,17 +116,31 @@ func (a *{{.Resource.Name}}API) UpdateStatus(ctx context.Context, id string, pat
 }
 {{end}}
 {{- range .Resource.Actions}}
-func (a *{{$.Resource.Name}}API) {{. | title}}(ctx context.Context, id string) (*types.{{$.Resource.Name}}, error) {
+{{- if .ReturnType}}
+func (a *{{$.Resource.Name}}API) {{.Name | title}}(ctx context.Context, id string) (*types.{{$.Resource.Name}}, error) {
 	var result types.{{$.Resource.Name}}
 {{- if $.Resource.IsSubResource}}
-	if err := a.client.do(ctx, http.MethodPost, a.basePath()+"/"+url.PathEscape(id)+"/{{.}}", nil, http.StatusOK, &result); err != nil {
+	if err := a.client.do(ctx, http.Method{{.Method | title}}, a.basePath()+"/"+url.PathEscape(id)+"/{{.Name}}", nil, http.StatusOK, &result); err != nil {
 {{- else}}
-	if err := a.client.do(ctx, http.MethodPost, "/{{$.Resource.PathSegment}}/"+url.PathEscape(id)+"/{{.}}", nil, http.StatusOK, &result); err != nil {
+	if err := a.client.do(ctx, http.Method{{.Method | title}}, "/{{$.Resource.PathSegment}}/"+url.PathEscape(id)+"/{{.Name}}", nil, http.StatusOK, &result); err != nil {
 {{- end}}
 		return nil, err
 	}
 	return &result, nil
 }
+{{- else}}
+func (a *{{$.Resource.Name}}API) {{.Name | title}}(ctx context.Context, id string) (map[string]interface{}, error) {
+	var result map[string]interface{}
+{{- if $.Resource.IsSubResource}}
+	if err := a.client.do(ctx, http.Method{{.Method | title}}, a.basePath()+"/"+url.PathEscape(id)+"/{{.Name}}", nil, http.StatusOK, &result); err != nil {
+{{- else}}
+	if err := a.client.do(ctx, http.Method{{.Method | title}}, "/{{$.Resource.PathSegment}}/"+url.PathEscape(id)+"/{{.Name}}", nil, http.StatusOK, &result); err != nil {
+{{- end}}
+		return nil, err
+	}
+	return result, nil
+}
+{{- end}}
 {{end}}
 func (a *{{.Resource.Name}}API) ListAll(ctx context.Context, opts *types.ListOptions) *Iterator[types.{{.Resource.Name}}] {
 	return NewIterator(func(page int) (*types.{{.Resource.Name}}List, error) {

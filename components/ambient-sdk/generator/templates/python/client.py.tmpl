@@ -80,13 +80,23 @@ class {{.Resource.Name}}API:
         return {{.Resource.Name}}.from_dict(resp)
 {{end}}
 {{- range .Resource.Actions}}
-    def {{.}}(self, resource_id: str) -> {{$.Resource.Name}}:
+{{- if .ReturnType}}
+    def {{.Name}}(self, resource_id: str) -> {{$.Resource.Name}}:
 {{- if $.Resource.IsSubResource}}
-        resp = self._client._request("POST", f"{self._base_path()}/{resource_id}/{{.}}")
+        resp = self._client._request("{{.Method | upper}}", f"{self._base_path()}/{resource_id}/{{.Name}}")
 {{- else}}
-        resp = self._client._request("POST", f"/{{$.Resource.PathSegment}}/{resource_id}/{{.}}")
+        resp = self._client._request("{{.Method | upper}}", f"/{{$.Resource.PathSegment}}/{resource_id}/{{.Name}}")
 {{- end}}
         return {{$.Resource.Name}}.from_dict(resp)
+{{- else}}
+    def {{.Name}}(self, resource_id: str) -> dict:
+{{- if $.Resource.IsSubResource}}
+        resp = self._client._request("{{.Method | upper}}", f"{self._base_path()}/{resource_id}/{{.Name}}")
+{{- else}}
+        resp = self._client._request("{{.Method | upper}}", f"/{{$.Resource.PathSegment}}/{resource_id}/{{.Name}}")
+{{- end}}
+        return resp
+{{- end}}
 {{end}}
     def list_all(self, size: int = 100, **kwargs: Any) -> Iterator[{{.Resource.Name}}]:
         page = 1
