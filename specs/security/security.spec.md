@@ -23,24 +23,51 @@ to the Kubernetes primitive directly.
 
 ## Accounts and Tokens
 
+### Control Plane Identities
+
 | Identity | Type | Owner | Scope | Lifetime | Purpose |
 |----------|------|-------|-------|----------|---------|
 | `ambient-control-plane` | K8s ServiceAccount | SRE | Cluster (ClusterRole) | Long-lived (token Secret) | Watches API server, reconciles sessions/projects to K8s, writes status back |
 | `ambient-control-plane` OIDC token | OAuth2 client_credentials | SRE | API server | Auto-refreshed (30s buffer) | CP authenticates to API server for session/credential CRUD |
+
+### Platform Service Identities
+
+| Identity | Type | Owner | Scope | Lifetime | Purpose |
+|----------|------|-------|-------|----------|---------|
 | `backend-api` | K8s ServiceAccount | SRE | Cluster (ClusterRole) | Pod lifetime | Backend API: manages CRs, mints session tokens, validates user tokens |
 | `frontend` | K8s ServiceAccount | SRE | Cluster (ClusterRole) | Pod lifetime | Frontend: TokenReview and SubjectAccessReview only |
+
+### Session Runtime Identities
+
+| Identity | Type | Owner | Scope | Lifetime | Purpose |
+|----------|------|-------|-------|----------|---------|
 | `ambient-session-<name>` | K8s ServiceAccount | SRE (created by operator) | Project (Role) | Session lifetime | Per-session runner identity; scoped to own secrets and session CR |
 | Runner bot token | K8s TokenRequest | SRE (minted by operator) | Session-specific | Mounted + refreshed by kubelet | Runner authenticates to K8s API and API server for status/credential ops |
 | Runner AGUI token | UUID | SRE (generated per session) | Session-specific | Session lifetime | Authenticates inbound AG-UI requests to runner pod (bearer validation) |
 | CP RSA-encrypted session token | RSA + OIDC exchange | SRE | Session-specific | On-demand (per request) | Runner fetches API token from CP `/token` endpoint using encrypted session ID |
+
+### User Authentication
+
+| Identity | Type | Owner | Scope | Lifetime | Purpose |
+|----------|------|-------|-------|----------|---------|
 | User SSO token | OIDC (Red Hat SSO) | User | User's RBAC scope | SSO session TTL | User authenticates to frontend/backend; propagated as `caller_token` to runner |
+
+### Project Credentials
+
+| Identity | Type | Owner | Scope | Lifetime | Purpose |
+|----------|------|-------|-------|----------|---------|
 | `Credential(provider=vertex)` | GCP service account key | User | Project | Until rotated | Vertex AI LLM inference; stored in API server, materialized as K8s Secret per Project |
 | `Credential(provider=github)` | PAT or GitHub App token | User | Project | Until rotated | Git operations; fetched at runtime, written to ephemeral storage, cleared per turn |
 | `Credential(provider=gitlab)` | PAT | User | Project | Until rotated | GitLab repository access |
 | `Credential(provider=jira)` | API token | User | Project | Until rotated | Jira issue tracking integration |
 | `Credential(provider=google)` | OAuth2 token | User | Project | Until rotated | Google Workspace integrations |
 | `Credential(provider=kubeconfig)` | Kubeconfig | User | Project | Until rotated | Cross-cluster Kubernetes operations |
-| `ambient-agent` (proposed) | K8s ServiceAccount | SRE | Single Project (Role) | Long-lived | OpenShift build agent: BuildConfig, ImageStream, deploy within one Project |
+
+### Build Agent Identity (Proposed)
+
+| Identity | Type | Owner | Scope | Lifetime | Purpose |
+|----------|------|-------|-------|----------|---------|
+| `ambient-agent` | K8s ServiceAccount | SRE | Single Project (Role) | Long-lived | OpenShift build agent: BuildConfig, ImageStream, deploy within one Project |
 
 ## Requirements
 
