@@ -75,6 +75,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
   const limit = DEFAULT_PAGE_SIZE;
   const [phaseFilter, setPhaseFilter] = useState<string>('');
   const [mySessionsOnly, setMySessionsOnly] = useState(false);
+  const [sortBy, setSortBy] = useState<'created' | 'name'>('created');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   // Debounce search to avoid too many API calls
@@ -86,7 +87,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
   // Reset offset when search or filters change
   useEffect(() => {
     setOffset(0);
-  }, [debouncedSearch, phaseFilter, mySessionsOnly, sortDirection]);
+  }, [debouncedSearch, phaseFilter, mySessionsOnly, sortBy, sortDirection]);
 
   // Access control (default-deny until role is resolved)
   const { data: access } = useProjectAccess(projectName);
@@ -115,7 +116,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
     search: debouncedSearch || undefined,
     phase: phaseFilter || undefined,
     userId: mySessionsOnly ? currentUser?.userId : undefined,
-    sortBy: 'created',
+    sortBy,
     sortDirection,
   });
 
@@ -325,16 +326,38 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[20px] px-0"></TableHead>
-                    <TableHead className="min-w-[180px]">Name</TableHead>
+                    <TableHead
+                      className="min-w-[180px] cursor-pointer select-none"
+                      onClick={() => {
+                        if (sortBy === 'name') {
+                          setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setSortBy('name');
+                          setSortDirection('asc');
+                        }
+                      }}
+                    >
+                      <div className="flex items-center gap-1">
+                        Name
+                        {sortBy === 'name' && (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
+                      </div>
+                    </TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="hidden md:table-cell">Model</TableHead>
                     <TableHead
                       className="hidden lg:table-cell cursor-pointer select-none"
-                      onClick={() => setSortDirection(prev => prev === 'desc' ? 'asc' : 'desc')}
+                      onClick={() => {
+                        if (sortBy === 'created') {
+                          setSortDirection(prev => prev === 'desc' ? 'asc' : 'desc');
+                        } else {
+                          setSortBy('created');
+                          setSortDirection('desc');
+                        }
+                      }}
                     >
                       <div className="flex items-center gap-1">
                         Created
-                        {sortDirection === 'desc' ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />}
+                        {sortBy === 'created' && (sortDirection === 'desc' ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />)}
                       </div>
                     </TableHead>
                     <TableHead className="hidden xl:table-cell">Creator</TableHead>
