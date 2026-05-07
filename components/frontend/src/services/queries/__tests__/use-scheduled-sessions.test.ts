@@ -61,15 +61,15 @@ describe('scheduledSessionKeys', () => {
   });
 
   it('generates correct query keys', () => {
-    expect(scheduledSessionKeys.all).toEqual(['v1', 'scheduled-sessions']);
-    expect(scheduledSessionKeys.lists()).toEqual(['v1', 'scheduled-sessions', 'list']);
-    expect(scheduledSessionKeys.list('proj')).toEqual(['v1', 'scheduled-sessions', 'list', 'proj']);
-    expect(scheduledSessionKeys.details()).toEqual(['v1', 'scheduled-sessions', 'detail']);
+    expect(scheduledSessionKeys.all).toEqual([BACKEND_VERSION, 'scheduled-sessions']);
+    expect(scheduledSessionKeys.lists()).toEqual([BACKEND_VERSION, 'scheduled-sessions', 'list']);
+    expect(scheduledSessionKeys.list('proj')).toEqual([BACKEND_VERSION, 'scheduled-sessions', 'list', 'proj']);
+    expect(scheduledSessionKeys.details()).toEqual([BACKEND_VERSION, 'scheduled-sessions', 'detail']);
     expect(scheduledSessionKeys.detail('proj', 'sched-1')).toEqual([
-      'v1', 'scheduled-sessions', 'detail', 'proj', 'sched-1',
+      BACKEND_VERSION, 'scheduled-sessions', 'detail', 'proj', 'sched-1',
     ]);
     expect(scheduledSessionKeys.runs('proj', 'sched-1')).toEqual([
-      'v1', 'scheduled-sessions', 'detail', 'proj', 'sched-1', 'runs',
+      BACKEND_VERSION, 'scheduled-sessions', 'detail', 'proj', 'sched-1', 'runs',
     ]);
   });
 });

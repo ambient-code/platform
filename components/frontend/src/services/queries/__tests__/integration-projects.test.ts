@@ -1,6 +1,6 @@
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { createProjectsAdapter } from '../../adapters/projects';
+import { createProjectsAdapter } from '../../adapters/v1/projects';
 import { createProjectAccessAdapter } from '../../adapters/project-access';
 import {
   useProjectsPaginated,

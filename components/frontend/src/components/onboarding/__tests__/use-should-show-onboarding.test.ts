@@ -4,23 +4,22 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { useShouldShowOnboarding, ONBOARDING_FLAG } from '../use-should-show-onboarding';
 
-vi.mock('@/services/api/projects', () => ({
-  listProjectsPaginated: vi.fn(),
-  getProject: vi.fn(),
-  createProject: vi.fn(),
-  updateProject: vi.fn(),
-  deleteProject: vi.fn(),
-  getProjectIntegrationStatus: vi.fn(),
-  getProjectMcpServers: vi.fn(),
-  updateProjectMcpServers: vi.fn(),
-  getProjectAccess: vi.fn(),
-  getProjectPermissions: vi.fn(),
-  addProjectPermission: vi.fn(),
-  removeProjectPermission: vi.fn(),
-}));
-
-import * as projectsApi from '@/services/api/projects';
-const mockListPaginated = vi.mocked(projectsApi.listProjectsPaginated);
+const mockListProjects = vi.fn();
+vi.mock('@/services/adapters/projects', () => {
+  return {
+    projectsAdapter: {
+      listProjects: (...args: unknown[]) => mockListProjects(...args),
+      getProject: vi.fn(),
+      createProject: vi.fn(),
+      updateProject: vi.fn(),
+      deleteProject: vi.fn(),
+      getProjectIntegrationStatus: vi.fn(),
+      getProjectMcpServers: vi.fn(),
+      updateProjectMcpServers: vi.fn(),
+    },
+    createProjectsAdapter: vi.fn(),
+  };
+});
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -41,18 +40,17 @@ describe('useShouldShowOnboarding', () => {
     vi.restoreAllMocks();
   });
 
-  const emptyResponse = { items: [], totalCount: 0, hasMore: false, limit: 1, offset: 0 };
+  const emptyResponse = { items: [], totalCount: 0, hasMore: false, nextPage: undefined };
 
   const projectResponse = {
     items: [{ name: 'proj', displayName: 'Proj', labels: {}, annotations: {}, creationTimestamp: '', status: 'active' as const, isOpenShift: false }],
     totalCount: 1,
     hasMore: false,
-    limit: 1,
-    offset: 0,
+    nextPage: undefined,
   };
 
   it('shows wizard when zero projects and no localStorage flag', async () => {
-    mockListPaginated.mockResolvedValue(emptyResponse);
+    mockListProjects.mockResolvedValue(emptyResponse);
     const wrapper = createWrapper();
     const { result } = renderHook(() => useShouldShowOnboarding(), { wrapper });
 
@@ -62,7 +60,7 @@ describe('useShouldShowOnboarding', () => {
 
   it('hides wizard when zero projects but localStorage flag is set', async () => {
     localStorage.setItem(ONBOARDING_FLAG, 'true');
-    mockListPaginated.mockResolvedValue(emptyResponse);
+    mockListProjects.mockResolvedValue(emptyResponse);
     const wrapper = createWrapper();
     const { result } = renderHook(() => useShouldShowOnboarding(), { wrapper });
 
@@ -71,7 +69,7 @@ describe('useShouldShowOnboarding', () => {
   });
 
   it('hides wizard when user has projects', async () => {
-    mockListPaginated.mockResolvedValue(projectResponse);
+    mockListProjects.mockResolvedValue(projectResponse);
     const wrapper = createWrapper();
     const { result } = renderHook(() => useShouldShowOnboarding(), { wrapper });
 
@@ -80,7 +78,7 @@ describe('useShouldShowOnboarding', () => {
   });
 
   it('hides wizard when user has projects even without localStorage flag', async () => {
-    mockListPaginated.mockResolvedValue(projectResponse);
+    mockListProjects.mockResolvedValue(projectResponse);
     const wrapper = createWrapper();
     const { result } = renderHook(() => useShouldShowOnboarding(), { wrapper });
 
@@ -89,7 +87,7 @@ describe('useShouldShowOnboarding', () => {
   });
 
   it('dismiss sets the localStorage flag', async () => {
-    mockListPaginated.mockResolvedValue(emptyResponse);
+    mockListProjects.mockResolvedValue(emptyResponse);
     const wrapper = createWrapper();
     const { result } = renderHook(() => useShouldShowOnboarding(), { wrapper });
 

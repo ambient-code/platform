@@ -60,13 +60,13 @@ describe('sessionKeys', () => {
   });
 
   it('generates correct query keys', () => {
-    expect(sessionKeys.all).toEqual(['v1', 'sessions']);
-    expect(sessionKeys.lists()).toEqual(['v1', 'sessions', 'list']);
-    expect(sessionKeys.list('proj')).toEqual(['v1', 'sessions', 'list', 'proj', {}]);
-    expect(sessionKeys.detail('proj', 'sess')).toEqual(['v1', 'sessions', 'detail', 'proj', 'sess']);
-    expect(sessionKeys.messages('proj', 'sess')).toEqual(['v1', 'sessions', 'detail', 'proj', 'sess', 'messages']);
-    expect(sessionKeys.export('proj', 'sess')).toEqual(['v1', 'sessions', 'detail', 'proj', 'sess', 'export']);
-    expect(sessionKeys.reposStatus('proj', 'sess')).toEqual(['v1', 'sessions', 'detail', 'proj', 'sess', 'repos-status']);
+    expect(sessionKeys.all).toEqual([BACKEND_VERSION, 'sessions']);
+    expect(sessionKeys.lists()).toEqual([BACKEND_VERSION, 'sessions', 'list']);
+    expect(sessionKeys.list('proj')).toEqual([BACKEND_VERSION, 'sessions', 'list', 'proj', {}]);
+    expect(sessionKeys.detail('proj', 'sess')).toEqual([BACKEND_VERSION, 'sessions', 'detail', 'proj', 'sess']);
+    expect(sessionKeys.messages('proj', 'sess')).toEqual([BACKEND_VERSION, 'sessions', 'detail', 'proj', 'sess', 'messages']);
+    expect(sessionKeys.export('proj', 'sess')).toEqual([BACKEND_VERSION, 'sessions', 'detail', 'proj', 'sess', 'export']);
+    expect(sessionKeys.reposStatus('proj', 'sess')).toEqual([BACKEND_VERSION, 'sessions', 'detail', 'proj', 'sess', 'repos-status']);
   });
 });
 

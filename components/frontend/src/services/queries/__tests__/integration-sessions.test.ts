@@ -1,6 +1,6 @@
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { createSessionsAdapter } from '../../adapters/sessions';
+import { createSessionsAdapter } from '../../adapters/v1/sessions';
 import { createSessionReposAdapter } from '../../adapters/session-repos';
 import { createSessionMcpAdapter } from '../../adapters/session-mcp';
 import { createSessionCapabilitiesAdapter } from '../../adapters/session-capabilities';

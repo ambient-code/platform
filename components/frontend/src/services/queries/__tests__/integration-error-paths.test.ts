@@ -1,13 +1,13 @@
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { createSessionsAdapter } from '../../adapters/sessions';
-import { createProjectsAdapter } from '../../adapters/projects';
+import { createSessionsAdapter } from '../../adapters/v1/sessions';
+import { createProjectsAdapter } from '../../adapters/v1/projects';
 import { createProjectAccessAdapter } from '../../adapters/project-access';
 import { createSessionTasksAdapter } from '../../adapters/session-tasks';
 import { createGitHubAdapter } from '../../adapters/github';
 import { createKeysAdapter } from '../../adapters/keys';
 import { createSessionWorkspaceAdapter } from '../../adapters/session-workspace';
-import { createScheduledSessionsAdapter } from '../../adapters/scheduled-sessions';
+import { createScheduledSessionsAdapter } from '../../adapters/v1/scheduled-sessions';
 import { createSecretsAdapter } from '../../adapters/secrets';
 import { createAuthAdapter } from '../../adapters/auth';
 import {
