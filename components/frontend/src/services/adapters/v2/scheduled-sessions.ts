@@ -3,6 +3,7 @@ import type { ScheduledSessionsPort } from '../../ports/scheduled-sessions';
 import type { ScheduledSession, CreateScheduledSessionRequest } from '@/types/api/scheduled-sessions';
 import type { CreateAgenticSessionRequest } from '@/types/api/sessions';
 import type { AgenticSession } from '@/types/api/sessions';
+import type { SdkClient } from './client';
 import { getClient } from './client';
 import { parseJsonField } from './json';
 import { wrapSdkError } from './errors';
@@ -49,13 +50,12 @@ function toScheduledSession(
 }
 
 async function resolveAgents(
-  projectName: string,
+  client: SdkClient,
   scheduledSessions: SdkScheduledSession[],
 ): Promise<Map<string, SdkAgent>> {
   const agentIds = [...new Set(scheduledSessions.map(s => s.agent_id).filter(Boolean))];
   if (agentIds.length === 0) return new Map();
 
-  const client = getClient(projectName);
   const agents = new Map<string, SdkAgent>();
 
   const results = await Promise.allSettled(
@@ -103,13 +103,13 @@ function sessionTemplateToAgentRequest(
   };
 }
 
-export function createScheduledSessionsAdapter(): ScheduledSessionsPort {
+export function createScheduledSessionsAdapter(injectedClient?: SdkClient): ScheduledSessionsPort {
   return {
     async listScheduledSessions(projectName: string) {
       try {
-        const client = getClient(projectName);
+        const client = injectedClient ?? getClient(projectName);
         const list = await client.scheduledSessions.list({ size: 1000 });
-        const agents = await resolveAgents(projectName, list.items);
+        const agents = await resolveAgents(client, list.items);
         return list.items.map(s => toScheduledSession(s, agents.get(s.agent_id)));
       } catch (err) {
         wrapSdkError(err);
@@ -118,7 +118,7 @@ export function createScheduledSessionsAdapter(): ScheduledSessionsPort {
 
     async getScheduledSession(projectName: string, name: string) {
       try {
-        const client = getClient(projectName);
+        const client = injectedClient ?? getClient(projectName);
         const sdk = await client.scheduledSessions.get(name);
         let agent: SdkAgent | undefined;
         if (sdk.agent_id) {
@@ -136,7 +136,7 @@ export function createScheduledSessionsAdapter(): ScheduledSessionsPort {
 
     async createScheduledSession(projectName: string, data: CreateScheduledSessionRequest) {
       try {
-        const client = getClient(projectName);
+        const client = injectedClient ?? getClient(projectName);
         const agentReq = sessionTemplateToAgentRequest(projectName, data.sessionTemplate, data.displayName);
         const agent = await client.agents.create(agentReq);
 
@@ -158,7 +158,7 @@ export function createScheduledSessionsAdapter(): ScheduledSessionsPort {
 
     async updateScheduledSession(projectName: string, name: string, data) {
       try {
-        const client = getClient(projectName);
+        const client = injectedClient ?? getClient(projectName);
         const existing = await client.scheduledSessions.get(name);
 
         if (data.sessionTemplate && existing.agent_id) {
@@ -203,7 +203,7 @@ export function createScheduledSessionsAdapter(): ScheduledSessionsPort {
 
     async deleteScheduledSession(projectName: string, name: string) {
       try {
-        const client = getClient(projectName);
+        const client = injectedClient ?? getClient(projectName);
         const existing = await client.scheduledSessions.get(name);
         await client.scheduledSessions.delete(name);
         if (existing.agent_id) {
@@ -220,7 +220,7 @@ export function createScheduledSessionsAdapter(): ScheduledSessionsPort {
 
     async suspendScheduledSession(projectName: string, name: string) {
       try {
-        const client = getClient(projectName);
+        const client = injectedClient ?? getClient(projectName);
         const sdk = await client.scheduledSessions.suspend(name);
         let agent: SdkAgent | undefined;
         if (sdk.agent_id) {
@@ -236,7 +236,7 @@ export function createScheduledSessionsAdapter(): ScheduledSessionsPort {
 
     async resumeScheduledSession(projectName: string, name: string) {
       try {
-        const client = getClient(projectName);
+        const client = injectedClient ?? getClient(projectName);
         const sdk = await client.scheduledSessions.resume(name);
         let agent: SdkAgent | undefined;
         if (sdk.agent_id) {
@@ -252,7 +252,7 @@ export function createScheduledSessionsAdapter(): ScheduledSessionsPort {
 
     async triggerScheduledSession(projectName: string, name: string) {
       try {
-        const client = getClient(projectName);
+        const client = injectedClient ?? getClient(projectName);
         const result = await client.scheduledSessions.trigger(name);
         return {
           name: (result as Record<string, string>).name || name,
@@ -265,7 +265,7 @@ export function createScheduledSessionsAdapter(): ScheduledSessionsPort {
 
     async listScheduledSessionRuns(projectName: string, name: string) {
       try {
-        const client = getClient(projectName);
+        const client = injectedClient ?? getClient(projectName);
         const result = await client.scheduledSessions.runs(name);
         return ((result as Record<string, unknown>).items as AgenticSession[]) || [];
       } catch (err) {

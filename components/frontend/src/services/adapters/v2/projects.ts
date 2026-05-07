@@ -3,6 +3,7 @@ import type { ProjectsPort } from '../../ports/projects';
 import type { Project } from '@/types/api/projects';
 import type { PaginationParams } from '@/types/api/common';
 import { ApiClientError } from '@/types/api/common';
+import type { SdkClient } from './client';
 import { getClient } from './client';
 import { toListOptions, fromSdkList } from './pagination';
 import { parseJsonField } from './json';
@@ -22,11 +23,11 @@ function toProject(s: SdkProject): Project {
   };
 }
 
-export function createProjectsAdapter(): ProjectsPort {
+export function createProjectsAdapter(injectedClient?: SdkClient): ProjectsPort {
+  const client = injectedClient ?? getClient();
   return {
     async listProjects(params?: PaginationParams) {
       try {
-        const client = getClient();
         const opts = toListOptions(params);
         const list = await client.projects.list(opts);
         return fromSdkList(list, toProject, (p) => this.listProjects(p));
@@ -37,7 +38,6 @@ export function createProjectsAdapter(): ProjectsPort {
 
     async getProject(name: string) {
       try {
-        const client = getClient();
         const sdk = await client.projects.get(name);
         return toProject(sdk);
       } catch (err) {
@@ -47,7 +47,6 @@ export function createProjectsAdapter(): ProjectsPort {
 
     async createProject(data) {
       try {
-        const client = getClient();
         const sdk = await client.projects.create({
           name: data.name,
           display_name: data.displayName,
@@ -62,7 +61,6 @@ export function createProjectsAdapter(): ProjectsPort {
 
     async updateProject(name: string, data) {
       try {
-        const client = getClient();
         const sdk = await client.projects.update(name, {
           display_name: data.displayName,
           description: data.description,
@@ -77,7 +75,6 @@ export function createProjectsAdapter(): ProjectsPort {
 
     async deleteProject(name: string) {
       try {
-        const client = getClient();
         await client.projects.delete(name);
         return name;
       } catch (err) {

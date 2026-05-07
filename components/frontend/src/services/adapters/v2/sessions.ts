@@ -4,6 +4,7 @@ import type { AgenticSession, AgenticSessionPhase, LLMSettings, SessionRepo, Rec
 import type { PaginationParams } from '@/types/api/common';
 import { ApiClientError } from '@/types/api/common';
 import * as sessionsApi from '../../api/sessions';
+import type { SdkClient } from './client';
 import { getClient } from './client';
 import { toListOptions, fromSdkList } from './pagination';
 import { parseJsonField } from './json';
@@ -59,11 +60,11 @@ function toSession(s: SdkSession): AgenticSession {
   };
 }
 
-export function createSessionsAdapter(): SessionsPort {
+export function createSessionsAdapter(injectedClient?: SdkClient): SessionsPort {
   return {
     async listSessions(projectName: string, params?: PaginationParams) {
       try {
-        const client = getClient(projectName);
+        const client = injectedClient ?? getClient(projectName);
         const opts = toListOptions(params);
         const list = await client.sessions.list(opts);
         return fromSdkList(list, toSession, (p) => this.listSessions(projectName, p));
@@ -74,7 +75,7 @@ export function createSessionsAdapter(): SessionsPort {
 
     async getSession(projectName: string, sessionName: string) {
       try {
-        const client = getClient(projectName);
+        const client = injectedClient ?? getClient(projectName);
         const sdk = await client.sessions.get(sessionName);
         return toSession(sdk);
       } catch (err) {
@@ -84,7 +85,7 @@ export function createSessionsAdapter(): SessionsPort {
 
     async createSession(projectName: string, data) {
       try {
-        const client = getClient(projectName);
+        const client = injectedClient ?? getClient(projectName);
         const sdk = await client.sessions.create({
           name: data.displayName || `session-${Date.now()}`,
           prompt: data.initialPrompt,
@@ -107,7 +108,7 @@ export function createSessionsAdapter(): SessionsPort {
 
     async stopSession(projectName: string, sessionName: string) {
       try {
-        const client = getClient(projectName);
+        const client = injectedClient ?? getClient(projectName);
         await client.sessions.stop(sessionName);
         return 'Session stopped';
       } catch (err) {
@@ -117,7 +118,7 @@ export function createSessionsAdapter(): SessionsPort {
 
     async startSession(projectName: string, sessionName: string) {
       try {
-        const client = getClient(projectName);
+        const client = injectedClient ?? getClient(projectName);
         await client.sessions.start(sessionName);
         return { message: 'Session started' };
       } catch (err) {
@@ -131,7 +132,7 @@ export function createSessionsAdapter(): SessionsPort {
 
     async deleteSession(projectName: string, sessionName: string) {
       try {
-        const client = getClient(projectName);
+        const client = injectedClient ?? getClient(projectName);
         await client.sessions.delete(sessionName);
       } catch (err) {
         wrapSdkError(err);
@@ -144,7 +145,7 @@ export function createSessionsAdapter(): SessionsPort {
 
     async updateSessionDisplayName(projectName: string, sessionName: string, displayName: string) {
       try {
-        const client = getClient(projectName);
+        const client = injectedClient ?? getClient(projectName);
         const sdk = await client.sessions.update(sessionName, { name: displayName });
         return toSession(sdk);
       } catch (err) {
@@ -158,7 +159,7 @@ export function createSessionsAdapter(): SessionsPort {
 
     async switchSessionModel(projectName: string, sessionName: string, model: string) {
       try {
-        const client = getClient(projectName);
+        const client = injectedClient ?? getClient(projectName);
         const sdk = await client.sessions.update(sessionName, { llm_model: model });
         return toSession(sdk);
       } catch (err) {
