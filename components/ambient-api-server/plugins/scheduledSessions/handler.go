@@ -1,7 +1,6 @@
 package scheduledSessions
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
@@ -71,9 +70,6 @@ func (h *scheduledSessionHandler) Create(w http.ResponseWriter, r *http.Request)
 				if body.Name == "" {
 					return errors.Validation("name is required")
 				}
-				if body.AgentId == "" {
-					return errors.Validation("agent_id is required")
-				}
 				if body.Schedule == "" {
 					return errors.Validation("schedule is required")
 				}
@@ -103,12 +99,17 @@ func (h *scheduledSessionHandler) Patch(w http.ResponseWriter, r *http.Request) 
 		Action: func() (interface{}, *errors.ServiceError) {
 			id := mux.Vars(r)["id"]
 			patch := &ScheduledSessionPatch{
-				Name:          body.Name,
-				Description:   body.Description,
-				Schedule:      body.Schedule,
-				Timezone:      body.Timezone,
-				Enabled:       body.Enabled,
-				SessionPrompt: body.SessionPrompt,
+				Name:              body.Name,
+				Description:       body.Description,
+				AgentId:           body.AgentId,
+				Schedule:          body.Schedule,
+				Timezone:          body.Timezone,
+				Enabled:           body.Enabled,
+				SessionPrompt:     body.SessionPrompt,
+				Timeout:           body.Timeout,
+				InactivityTimeout: body.InactivityTimeout,
+				StopOnRunFinished: body.StopOnRunFinished,
+				RunnerType:        body.RunnerType,
 			}
 			updated, err := h.svc.Patch(r.Context(), id, patch)
 			if err != nil {
@@ -196,11 +197,4 @@ func (h *scheduledSessionHandler) Runs(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	handlers.HandleList(w, r, cfg)
-}
-
-// writeJSON is a helper for action endpoints that don't use the handler framework.
-func writeJSON(w http.ResponseWriter, status int, v interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
 }

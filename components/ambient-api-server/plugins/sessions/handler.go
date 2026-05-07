@@ -1082,9 +1082,9 @@ func (h sessionHandler) ExportSession(w http.ResponseWriter, r *http.Request) {
 				return nil, svcErr
 			}
 			return map[string]interface{}{
-				"session":    presenters.PresentReference(sess.ID, sess),
-				"export_at":  time.Now().UTC(),
-				"version":    "1",
+				"session":   presenters.PresentReference(sess.ID, sess),
+				"export_at": time.Now().UTC(),
+				"version":   "1",
 			}, nil
 		},
 	}
