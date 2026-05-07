@@ -1,9 +1,0 @@
-extends: substitution
-message: "Use '%s' instead of '%s'."
-level: error
-ignorecase: true
-swap:
-  vTeam: ACP
-  v-team: ACP
-  vteam platform: Ambient Code Platform
-  the vteam: ACP

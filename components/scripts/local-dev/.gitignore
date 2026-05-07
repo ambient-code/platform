@@ -1,7 +1,0 @@
-# Local dev runtime files (CRC-based)
-state/
-*.log
-*.tar
-
-# Build artifacts
-tmp/

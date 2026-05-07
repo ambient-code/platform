@@ -1,6 +1,0 @@
-# Patch to set imagePullPolicy: Always for kind cluster with Quay images
-# Always pull from Quay registry to ensure latest production images
-# For local development, use overlays/kind-local/ which sets IfNotPresent
-- op: replace
-  path: /spec/template/spec/containers/0/imagePullPolicy
-  value: Always
