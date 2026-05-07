@@ -1,1 +1,1 @@
-export * from './v1/sessions'
+export * from './v2/sessions'

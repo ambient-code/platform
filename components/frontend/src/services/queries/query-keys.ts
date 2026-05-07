@@ -1,1 +1,1 @@
-export const BACKEND_VERSION = 'v1' as const
+export const BACKEND_VERSION = 'v2' as const
