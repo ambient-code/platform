@@ -1,5 +1,5 @@
 import { buildForwardHeadersAsync } from '@/lib/auth';
-import { BACKEND_URL } from '@/lib/config';
+import { API_SERVER_URL } from '@/lib/config';
 import { NextRequest } from 'next/server';
 import { fileTypeFromBuffer } from 'file-type';
 
@@ -357,7 +357,7 @@ async function preUploadFileToS3(
   const uploadPath = pathParts.join('/');
 
   return fetch(
-    `${BACKEND_URL}/projects/${encodeURIComponent(name)}/agentic-sessions/${encodeURIComponent(sessionName)}/file-uploads/${uploadPath}`,
+    `${API_SERVER_URL}/api/projects/${encodeURIComponent(name)}/agentic-sessions/${encodeURIComponent(sessionName)}/file-uploads/${uploadPath}`,
     {
       method: 'PUT',
       headers: {
@@ -394,7 +394,7 @@ async function uploadFileToWorkspace(
 
   for (let retries = 0; retries < maxRetries; retries++) {
     const resp = await fetch(
-      `${BACKEND_URL}/projects/${encodeURIComponent(name)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${uploadPath}`,
+      `${API_SERVER_URL}/api/projects/${encodeURIComponent(name)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${uploadPath}`,
       {
         method: 'PUT',
         headers: {

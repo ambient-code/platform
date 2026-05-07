@@ -1,5 +1,5 @@
 import { buildForwardHeadersAsync } from '@/lib/auth'
-import { BACKEND_URL } from '@/lib/config';
+import { API_SERVER_URL } from '@/lib/config';
 
 // Map file extensions to MIME types for inline rendering
 const INLINE_MIME_TYPES: Record<string, string> = {
@@ -16,7 +16,7 @@ export async function GET(
   const { name, sessionName, path } = await params
   const headers = await buildForwardHeadersAsync(request)
   const rel = path.map(s => encodeURIComponent(s)).join('/')
-  const resp = await fetch(`${BACKEND_URL}/projects/${encodeURIComponent(name)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${rel}`, { headers })
+  const resp = await fetch(`${API_SERVER_URL}/api/projects/${encodeURIComponent(name)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${rel}`, { headers })
   const buf = await resp.arrayBuffer()
 
   // Determine content type: use extension-based detection if backend returns generic octet-stream
@@ -55,7 +55,7 @@ export async function PUT(
   const rel = path.map(s => encodeURIComponent(s)).join('/')
   const contentType = request.headers.get('content-type') || 'text/plain; charset=utf-8'
   const textBody = await request.text()
-  const resp = await fetch(`${BACKEND_URL}/projects/${encodeURIComponent(name)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${rel}`, {
+  const resp = await fetch(`${API_SERVER_URL}/api/projects/${encodeURIComponent(name)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${rel}`, {
     method: 'PUT',
     headers: { ...headers, 'Content-Type': contentType },
     body: textBody,
@@ -71,7 +71,7 @@ export async function DELETE(
   const { name, sessionName, path } = await params
   const headers = await buildForwardHeadersAsync(request)
   const rel = path.map(s => encodeURIComponent(s)).join('/')
-  const resp = await fetch(`${BACKEND_URL}/projects/${encodeURIComponent(name)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${rel}`, {
+  const resp = await fetch(`${API_SERVER_URL}/api/projects/${encodeURIComponent(name)}/agentic-sessions/${encodeURIComponent(sessionName)}/workspace/${rel}`, {
     method: 'DELETE',
     headers,
   })

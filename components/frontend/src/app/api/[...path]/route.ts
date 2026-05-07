@@ -15,7 +15,7 @@ async function proxyRequest(
     return Response.json({ error: 'invalid_path' }, { status: 400 });
   }
   const pathStr = path.map(s => encodeURIComponent(s)).join('/');
-  const url = new URL(`/api/ambient/v1/${pathStr}`, API_SERVER_URL);
+  const url = new URL(`/api/${pathStr}`, API_SERVER_URL);
   url.search = new URL(request.url).search;
 
   const headers = await buildForwardHeadersAsync(request);
@@ -43,15 +43,15 @@ async function proxyRequest(
       body,
     });
   } catch (error: unknown) {
-    console.error('[Ambient API proxy] fetch failed:', error instanceof Error ? error.message : error);
+    console.error('[API proxy] fetch failed:', error instanceof Error ? error.message : error);
     return Response.json(
-      { error: 'Failed to reach ambient API', details: error instanceof Error ? error.message : String(error) },
+      { error: 'Failed to reach API server', details: error instanceof Error ? error.message : String(error) },
       { status: 502 },
     );
   }
 
   if (!upstream.ok) {
-    console.error('[Ambient API proxy] upstream error:', upstream.status, pathStr);
+    console.error('[API proxy] upstream error:', upstream.status, pathStr);
   }
 
   const upstreamContentType = upstream.headers.get('content-type') || '';
@@ -64,7 +64,7 @@ async function proxyRequest(
     if (upstream.body) {
       upstream.body.pipeTo(writable).catch((err: unknown) => {
         if (err instanceof Error && err.name !== 'AbortError' && !err.message?.includes('ResponseAborted')) {
-          console.error('Ambient API proxy pipe error:', err);
+          console.error('API proxy pipe error:', err);
         }
       });
     } else {
