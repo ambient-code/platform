@@ -161,7 +161,7 @@ func TestScheduledSessionDeleteInProject(t *testing.T) {
 	}
 }
 
-func TestScheduledSessionSuspend(t *testing.T) {
+func TestScheduledSessionSuspendInProject(t *testing.T) {
 	want := &types.ScheduledSession{
 		ObjectReference: types.ObjectReference{ID: "ss-sus"},
 		Enabled:         false,
@@ -181,16 +181,16 @@ func TestScheduledSessionSuspend(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(t, srv)
-	got, err := c.ScheduledSessions().Suspend(context.Background(), "proj-a", "ss-sus")
+	got, err := c.ScheduledSessions().SuspendInProject(context.Background(), "proj-a", "ss-sus")
 	if err != nil {
-		t.Fatalf("Suspend: %v", err)
+		t.Fatalf("SuspendInProject: %v", err)
 	}
 	if got.ID != "ss-sus" {
 		t.Errorf("unexpected result: %+v", got)
 	}
 }
 
-func TestScheduledSessionResume(t *testing.T) {
+func TestScheduledSessionResumeInProject(t *testing.T) {
 	want := &types.ScheduledSession{
 		ObjectReference: types.ObjectReference{ID: "ss-res"},
 		Enabled:         true,
@@ -210,16 +210,16 @@ func TestScheduledSessionResume(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(t, srv)
-	got, err := c.ScheduledSessions().Resume(context.Background(), "proj-a", "ss-res")
+	got, err := c.ScheduledSessions().ResumeInProject(context.Background(), "proj-a", "ss-res")
 	if err != nil {
-		t.Fatalf("Resume: %v", err)
+		t.Fatalf("ResumeInProject: %v", err)
 	}
 	if got.ID != "ss-res" || !got.Enabled {
 		t.Errorf("unexpected result: %+v", got)
 	}
 }
 
-func TestScheduledSessionTrigger(t *testing.T) {
+func TestScheduledSessionTriggerInProject(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Errorf("expected POST, got %s", r.Method)
@@ -232,8 +232,8 @@ func TestScheduledSessionTrigger(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(t, srv)
-	if err := c.ScheduledSessions().Trigger(context.Background(), "proj-a", "ss-trig"); err != nil {
-		t.Fatalf("Trigger: %v", err)
+	if err := c.ScheduledSessions().TriggerInProject(context.Background(), "proj-a", "ss-trig"); err != nil {
+		t.Fatalf("TriggerInProject: %v", err)
 	}
 }
 
@@ -417,7 +417,7 @@ func TestClientProjectAccessor(t *testing.T) {
 // ScheduledSession Runs
 // ---------------------------------------------------------------------------
 
-func TestScheduledSessionRuns(t *testing.T) {
+func TestScheduledSessionRunsInProject(t *testing.T) {
 	want := &types.SessionList{
 		ListMeta: types.ListMeta{Kind: "SessionList", Page: 1, Size: 10, Total: 2},
 		Items: []types.Session{
@@ -443,9 +443,9 @@ func TestScheduledSessionRuns(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(t, srv)
-	got, err := c.ScheduledSessions().Runs(context.Background(), "proj-a", "ss-runs", &types.ListOptions{})
+	got, err := c.ScheduledSessions().RunsInProject(context.Background(), "proj-a", "ss-runs", &types.ListOptions{})
 	if err != nil {
-		t.Fatalf("Runs: %v", err)
+		t.Fatalf("RunsInProject: %v", err)
 	}
 	if len(got.Items) != 2 {
 		t.Errorf("expected 2 runs, got %d", len(got.Items))
