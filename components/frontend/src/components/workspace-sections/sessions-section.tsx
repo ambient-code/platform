@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Plus, RefreshCw, MoreVertical, Square, Trash2, ArrowRight, Brain, Search, Pencil, Clock, Cpu, MessageSquare, NotepadText, User } from 'lucide-react';
+import { Plus, RefreshCw, MoreVertical, Square, Trash2, ArrowRight, Brain, Search, Pencil, Clock, Cpu, MessageSquare, NotepadText, User, ArrowUp, ArrowDown } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import {
   Pagination,
   PaginationContent,
@@ -28,6 +30,7 @@ import { deriveAgentStatusFromPhase } from '@/hooks/use-agent-status';
 import { EditSessionNameDialog } from '@/components/edit-session-name-dialog';
 
 import { useSessionsPaginated, useStopSession, useDeleteSession, useContinueSession, useUpdateSessionDisplayName, useRunnerTypes } from '@/services/queries';
+import { useCurrentUser } from '@/services/queries/use-auth';
 import { toast } from 'sonner';
 import { useWorkspaceList } from '@/services/queries/use-workspace';
 import { useProjectAccess } from '@/services/queries/use-project-access';
@@ -66,18 +69,24 @@ type SessionsSectionProps = {
 };
 
 export function SessionsSection({ projectName }: SessionsSectionProps) {
-  // Pagination and search state
+  // Pagination, search, and filter state
   const [searchInput, setSearchInput] = useState('');
   const [offset, setOffset] = useState(0);
   const limit = DEFAULT_PAGE_SIZE;
+  const [phaseFilter, setPhaseFilter] = useState<string>('');
+  const [mySessionsOnly, setMySessionsOnly] = useState(false);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   // Debounce search to avoid too many API calls
   const debouncedSearch = useDebounce(searchInput, 300);
 
-  // Reset offset when search changes
+  // Current user for "My sessions" filter
+  const { data: currentUser } = useCurrentUser();
+
+  // Reset offset when search or filters change
   useEffect(() => {
     setOffset(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, phaseFilter, mySessionsOnly]);
 
   // Access control (default-deny until role is resolved)
   const { data: access } = useProjectAccess(projectName);
@@ -104,6 +113,10 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
     limit,
     offset,
     search: debouncedSearch || undefined,
+    phase: phaseFilter || undefined,
+    userId: mySessionsOnly ? currentUser?.userId : undefined,
+    sortBy: 'created',
+    sortDirection,
   });
 
   const sessions = paginatedData?.items ?? [];
@@ -228,31 +241,84 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
             )}
           </div>
         </div>
-        {/* Search input */}
-        <div className="relative mt-4 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search sessions..."
-            value={searchInput}
-            onChange={handleSearchChange}
-            className="pl-9"
-          />
+        {/* Search and filters */}
+        <div className="flex items-center gap-3 mt-4 flex-wrap">
+          <div className="relative max-w-sm flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search sessions..."
+              value={searchInput}
+              onChange={handleSearchChange}
+              className="pl-9"
+            />
+          </div>
+
+          <Select value={phaseFilter || 'all'} onValueChange={(value) => setPhaseFilter(value === 'all' ? '' : value)}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="All statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="Running,Pending,Creating">Active</SelectItem>
+              <SelectItem value="Completed,Stopped">Completed</SelectItem>
+              <SelectItem value="Failed">Failed</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Button
+            variant={mySessionsOnly ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setMySessionsOnly(!mySessionsOnly)}
+            className="h-9"
+          >
+            <User className="h-4 w-4 mr-1" />
+            My sessions
+          </Button>
         </div>
+
+        {/* Active filter chips */}
+        {(phaseFilter || mySessionsOnly) && (
+          <div className="flex items-center gap-2 mt-2">
+            <span className="text-xs text-muted-foreground">Filters:</span>
+            {phaseFilter && (
+              <Badge variant="secondary" className="cursor-pointer gap-1" onClick={() => setPhaseFilter('')}>
+                {phaseFilter === 'Running,Pending,Creating' ? 'Active' : phaseFilter === 'Completed,Stopped' ? 'Completed' : phaseFilter}
+                <span className="text-muted-foreground">&times;</span>
+              </Badge>
+            )}
+            {mySessionsOnly && (
+              <Badge variant="secondary" className="cursor-pointer gap-1" onClick={() => setMySessionsOnly(false)}>
+                My sessions
+                <span className="text-muted-foreground">&times;</span>
+              </Badge>
+            )}
+          </div>
+        )}
       </CardHeader>
       <CardContent>
-        {sessions.length === 0 && !debouncedSearch ? (
-          <EmptyState
-            icon={Brain}
-            title="No sessions found"
-            description="Create your first agentic session"
-          />
-        ) : sessions.length === 0 && debouncedSearch ? (
-          <EmptyState
-            icon={Search}
-            title="No matching sessions"
-            description={`No sessions found matching "${debouncedSearch}"`}
-          />
-        ) : (
+        {(() => {
+          const hasActiveFilters = !!debouncedSearch || !!phaseFilter || mySessionsOnly;
+          if (sessions.length === 0 && !hasActiveFilters) {
+            return (
+              <EmptyState
+                icon={Brain}
+                title="No sessions found"
+                description="Create your first agentic session"
+              />
+            );
+          }
+          if (sessions.length === 0 && hasActiveFilters) {
+            return (
+              <EmptyState
+                icon={Search}
+                title="No matching sessions"
+                description="No sessions found matching the current filters"
+              />
+            );
+          }
+          return null;
+        })()}
+        {sessions.length > 0 && (
           <>
             <div className="overflow-x-auto">
               <Table>
@@ -262,7 +328,15 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                     <TableHead className="min-w-[180px]">Name</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="hidden md:table-cell">Model</TableHead>
-                    <TableHead className="hidden lg:table-cell">Created</TableHead>
+                    <TableHead
+                      className="hidden lg:table-cell cursor-pointer select-none"
+                      onClick={() => setSortDirection(prev => prev === 'desc' ? 'asc' : 'desc')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Created
+                        {sortDirection === 'desc' ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />}
+                      </div>
+                    </TableHead>
                     <TableHead className="hidden xl:table-cell">Creator</TableHead>
                     <TableHead className="hidden 2xl:table-cell">Artifacts</TableHead>
                     <TableHead className="w-[50px]">Actions</TableHead>

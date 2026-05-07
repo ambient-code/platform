@@ -68,6 +68,11 @@ describe('sessionKeys', () => {
     expect(sessionKeys.export('proj', 'sess')).toEqual(['v1', 'sessions', 'detail', 'proj', 'sess', 'export']);
     expect(sessionKeys.reposStatus('proj', 'sess')).toEqual(['v1', 'sessions', 'detail', 'proj', 'sess', 'repos-status']);
   });
+
+  it('includes filter params in query key', () => {
+    const key = sessionKeys.list('proj', { phase: 'Running', userId: 'user-1' });
+    expect(key).toEqual(['v1', 'sessions', 'list', 'proj', { phase: 'Running', userId: 'user-1' }]);
+  });
 });
 
 describe('useSessions', () => {
@@ -101,6 +106,36 @@ describe('useSessionsPaginated', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(fakePort.listSessions).toHaveBeenCalledWith('proj', { limit: 10 });
     expect(result.current.data?.totalCount).toBe(1);
+  });
+
+  it('passes phase filter to port', async () => {
+    const fakePort = createFakeSessionsPort();
+    const { result } = renderHook(
+      () => useSessionsPaginated('proj', { limit: 10, phase: 'Running,Pending' }, fakePort),
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fakePort.listSessions).toHaveBeenCalledWith('proj', { limit: 10, phase: 'Running,Pending' });
+  });
+
+  it('passes userId filter to port', async () => {
+    const fakePort = createFakeSessionsPort();
+    const { result } = renderHook(
+      () => useSessionsPaginated('proj', { limit: 10, userId: 'user-1' }, fakePort),
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fakePort.listSessions).toHaveBeenCalledWith('proj', { limit: 10, userId: 'user-1' });
+  });
+
+  it('passes sort params to port', async () => {
+    const fakePort = createFakeSessionsPort();
+    const { result } = renderHook(
+      () => useSessionsPaginated('proj', { sortBy: 'created', sortDirection: 'asc' }, fakePort),
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fakePort.listSessions).toHaveBeenCalledWith('proj', { sortBy: 'created', sortDirection: 'asc' });
   });
 });
 
