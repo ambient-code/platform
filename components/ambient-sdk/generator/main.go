@@ -489,6 +489,7 @@ func loadTemplate(path string) (*template.Template, error) {
 	funcMap := template.FuncMap{
 		"snakeCase": toSnakeCase,
 		"lower":     strings.ToLower,
+		"upper":     strings.ToUpper,
 		"title": func(s string) string {
 			if s == "" {
 				return s
