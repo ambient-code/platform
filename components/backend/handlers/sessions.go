@@ -821,17 +821,6 @@ func sortSessions(sessions []types.AgenticSession, sortBy, sortDirection string)
 	})
 }
 
-// sortSessionsByCreationTime sorts sessions by creation timestamp (newest first)
-func sortSessionsByCreationTime(sessions []types.AgenticSession) {
-	// Use sort.Slice for O(n log n) performance
-	sort.Slice(sessions, func(i, j int) bool {
-		ts1 := getSessionCreationTimestamp(sessions[i])
-		ts2 := getSessionCreationTimestamp(sessions[j])
-		// Sort descending (newest first) - RFC3339 timestamps sort lexicographically
-		return ts1 > ts2
-	})
-}
-
 // getSessionCreationTimestamp extracts the creation timestamp from session metadata
 func getSessionCreationTimestamp(session types.AgenticSession) string {
 	if ts, ok := session.Metadata["creationTimestamp"].(string); ok {

@@ -86,7 +86,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
   // Reset offset when search or filters change
   useEffect(() => {
     setOffset(0);
-  }, [debouncedSearch, phaseFilter, mySessionsOnly]);
+  }, [debouncedSearch, phaseFilter, mySessionsOnly, sortDirection]);
 
   // Access control (default-deny until role is resolved)
   const { data: access } = useProjectAccess(projectName);
