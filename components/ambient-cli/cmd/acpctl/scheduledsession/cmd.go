@@ -448,7 +448,7 @@ var suspendCmd = &cobra.Command{
 			return err
 		}
 
-		ss, err := client.ScheduledSessions().Suspend(ctx, projectID, id)
+		ss, err := client.ScheduledSessions().SuspendInProject(ctx, projectID, id)
 		if err != nil {
 			return fmt.Errorf("suspend scheduled session: %w", err)
 		}
@@ -496,7 +496,7 @@ var resumeCmd = &cobra.Command{
 			return err
 		}
 
-		ss, err := client.ScheduledSessions().Resume(ctx, projectID, id)
+		ss, err := client.ScheduledSessions().ResumeInProject(ctx, projectID, id)
 		if err != nil {
 			return fmt.Errorf("resume scheduled session: %w", err)
 		}
@@ -544,7 +544,7 @@ var triggerCmd = &cobra.Command{
 			return err
 		}
 
-		if err := client.ScheduledSessions().Trigger(ctx, projectID, id); err != nil {
+		if err := client.ScheduledSessions().TriggerInProject(ctx, projectID, id); err != nil {
 			return fmt.Errorf("trigger scheduled session: %w", err)
 		}
 
@@ -594,7 +594,7 @@ var runsCmd = &cobra.Command{
 		}
 
 		opts := sdktypes.NewListOptions().Size(runsArgs.limit).Build()
-		list, err := client.ScheduledSessions().Runs(ctx, projectID, id, opts)
+		list, err := client.ScheduledSessions().RunsInProject(ctx, projectID, id, opts)
 		if err != nil {
 			return fmt.Errorf("list runs: %w", err)
 		}
