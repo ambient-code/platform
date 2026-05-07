@@ -56,12 +56,6 @@ patches:
     kind: PersistentVolumeClaim
     name: minio-data
     version: v1
-- path: frontend-github-callback-patch.yaml
-  target:
-    group: apps
-    kind: Deployment
-    name: frontend
-    version: v1
 
 # Production images
 images:
