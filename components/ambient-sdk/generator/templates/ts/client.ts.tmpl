@@ -12,6 +12,9 @@ export class {{.Resource.Name}}API {
 
 {{- if .Resource.IsSubResource}}
   private basePath(): string {
+    if (!this.config.project) {
+      throw new Error('project is required for {{.Resource.Name}} operations');
+    }
     return '/{{.Resource.PathSegment}}'.replace('{id}', encodeURIComponent(this.config.project));
   }
 {{end}}
