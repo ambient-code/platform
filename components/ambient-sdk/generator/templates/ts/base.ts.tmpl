@@ -70,8 +70,8 @@ export type RequestOptions = {
 
 export type AmbientClientConfig = {
   baseUrl: string;
-  token: string;
-  project: string;
+  token?: string;
+  project?: string;
 };
 
 export async function ambientFetch<T>(
@@ -83,8 +83,8 @@ export async function ambientFetch<T>(
 ): Promise<T> {
   const url = `${config.baseUrl}{{.Spec.BasePath}}${path}`;
   const headers: Record<string, string> = {
-    'Authorization': `Bearer ${config.token}`,
-    'X-Ambient-Project': config.project,
+    ...(config.token ? { 'Authorization': `Bearer ${config.token}` } : {}),
+    ...(config.project ? { 'X-Ambient-Project': config.project } : {}),
   };
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json';
