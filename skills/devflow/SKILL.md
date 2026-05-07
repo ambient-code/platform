@@ -78,7 +78,7 @@ Every component has a spec file. Load the spec for the component being changed:
 
 | Component | Spec | Guide |
 |-----------|------|-------|
-| Data Model / API / CLI / RBAC | `specs/sessions/ambient-model.spec.md` | `workflows/sessions/ambient-model.workflow.md` |
+| Data Model / API / CLI / RBAC | `specs/api/ambient-model.spec.md` | `workflows/sessions/ambient-model.workflow.md` |
 
 ### 2b. Modify the Spec
 
@@ -354,7 +354,7 @@ But prefer fixing the lint/format issue instead.
 | `specs/standards/backend/conventions.spec.md` | SDK generation |
 | `specs/standards/control-plane/conventions.spec.md` | CP fan-out, runner contract |
 | `specs/standards/frontend/conventions.spec.md` | Frontend build, React Query |
-| `specs/sessions/ambient-model.spec.md` | Data model spec (source of truth) |
+| `specs/api/ambient-model.spec.md` | Data model spec (source of truth) |
 | `workflows/sessions/ambient-model.workflow.md` | Implementation workflow (wave-based) |
 
 ---
