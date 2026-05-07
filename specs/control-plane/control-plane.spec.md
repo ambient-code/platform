@@ -100,6 +100,15 @@ The CP creates a Pod (not a Job) for each session. Key pod attributes:
 
 Each section is joined with `\n\n`. Empty sections are omitted. If all four are empty, `INITIAL_PROMPT` is not set and the runner waits for a user message via gRPC.
 
+### Workspace Initialization and State Persistence
+
+Workspace setup (repo cloning, S3 state hydration) and ongoing state persistence (S3 sync sidecar) are specified in dedicated specs:
+
+- **[Workspace Initialization](workspace-init.spec.md)** — init container that clones repos, restores S3 state, and prepares `/workspace` before the runner starts
+- **[State Persistence](state-persistence.spec.md)** — sidecar that periodically syncs workspace state to S3 and backs up git repo state
+
+Both are **not yet implemented** in the CP. The operator implements both patterns. Sessions created via the CP currently have ephemeral workspaces with empty repo directories.
+
 ### Environment Variables Injected into Runner Pod
 
 | Var | Value | Purpose |
@@ -116,6 +125,7 @@ Each section is joined with `\n\n`. Empty sections are omitted. If all four are 
 | `USE_VERTEX` / `ANTHROPIC_VERTEX_PROJECT_ID` / `CLOUD_ML_REGION` | CP config | Vertex AI config (when enabled) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | `/app/vertex/ambient-code-key.json` | Vertex service account path |
 | `LLM_MODEL` / `LLM_TEMPERATURE` / `LLM_MAX_TOKENS` | session fields | Per-session model config |
+| `REPOS_JSON` | JSON array of `{"url","branch"}` | Repos to clone into `/workspace/repos/`. Set on the **init container** when present (see `workspace-init.spec.md`); currently set on the runner container as a stopgap |
 | `CREDENTIAL_IDS` | JSON map `{provider: credential_id}` | Resolved credentials for this session; runner calls `/credentials/{id}/token` per provider |
 
 ---
