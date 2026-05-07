@@ -87,20 +87,9 @@ func ScheduledSessionDetail(ss sdktypes.ScheduledSession) []DetailLine {
 		updatedAt = ss.UpdatedAt.Format(time.RFC3339)
 	}
 
-	timeout := ""
-	if ss.Timeout != nil {
-		timeout = fmt.Sprintf("%d", *ss.Timeout)
-	}
-
-	inactivityTimeout := ""
-	if ss.InactivityTimeout != nil {
-		inactivityTimeout = fmt.Sprintf("%d", *ss.InactivityTimeout)
-	}
-
-	stopOnRunFinished := ""
-	if ss.StopOnRunFinished != nil {
-		stopOnRunFinished = fmt.Sprintf("%v", *ss.StopOnRunFinished)
-	}
+	timeout := fmt.Sprintf("%d", ss.Timeout)
+	inactivityTimeout := fmt.Sprintf("%d", ss.InactivityTimeout)
+	stopOnRunFinished := fmt.Sprintf("%v", ss.StopOnRunFinished)
 
 	return []DetailLine{
 		{Key: "ID", Value: ss.ID},

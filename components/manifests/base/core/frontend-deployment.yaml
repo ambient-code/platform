@@ -24,6 +24,8 @@ spec:
         env:
         - name: BACKEND_URL
           value: "http://backend-service:8080/api"
+        - name: API_SERVER_URL
+          value: "http://ambient-api-server:8000"
         - name: NODE_ENV
           value: "production"
         - name: GITHUB_APP_SLUG
