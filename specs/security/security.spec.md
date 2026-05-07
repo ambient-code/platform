@@ -9,9 +9,9 @@ Jira), and stores results via the API server.
 This specification defines who can do what. Six identity boundaries govern the platform:
 an SRE-managed Control Plane that reconciles state across Projects, per-session
 ServiceAccounts that isolate runner pods from each other, user SSO tokens that scope
-runner authorization to the creating user, per-Project LLM credentials (Vertex AI),
-per-Project integration credentials (GitHub/GitLab/Jira/etc.), and a Project-scoped
-build agent SA for OpenShift CI/CD workflows.
+runner authorization to the creating user, global credentials bound to Projects via
+RoleBindings (Vertex AI, GitHub/GitLab/Jira/etc.), and a Project-scoped build agent
+SA for OpenShift CI/CD workflows.
 
 **Critical gap:** all runner sessions in a Project share a ServiceAccount with unscoped
 Secret access. Any session can read another session's runner tokens. This spec closes
@@ -52,16 +52,16 @@ to the Kubernetes primitive directly.
 |----------|------|-------|-------|----------|---------|
 | User SSO token | OIDC (Red Hat SSO) | User | User's RBAC scope | SSO session TTL | User authenticates to frontend/backend; propagated as `caller_token` to runner |
 
-### Project Credentials
+### Credentials (Global, Bound via RoleBindings)
 
 | Identity | Type | Owner | Scope | Lifetime | Purpose |
 |----------|------|-------|-------|----------|---------|
-| `Credential(provider=vertex)` | GCP service account key | User | Project | Until rotated | Vertex AI LLM inference; stored in API server, materialized as K8s Secret per Project |
-| `Credential(provider=github)` | PAT or GitHub App token | User | Project | Until rotated | Git operations; fetched at runtime, written to ephemeral storage, cleared per turn |
-| `Credential(provider=gitlab)` | PAT | User | Project | Until rotated | GitLab repository access |
-| `Credential(provider=jira)` | API token | User | Project | Until rotated | Jira issue tracking integration |
-| `Credential(provider=google)` | OAuth2 token | User | Project | Until rotated | Google Workspace integrations |
-| `Credential(provider=kubeconfig)` | Kubeconfig | User | Project | Until rotated | Cross-cluster Kubernetes operations |
+| `Credential(provider=vertex)` | GCP service account key | User | Global (bound to Projects via RoleBindings) | Until rotated | Vertex AI LLM inference; stored in API server, materialized as K8s Secret per Project |
+| `Credential(provider=github)` | PAT or GitHub App token | User | Global (bound to Projects via RoleBindings) | Until rotated | Git operations; fetched at runtime, written to ephemeral storage, cleared per turn |
+| `Credential(provider=gitlab)` | PAT | User | Global (bound to Projects via RoleBindings) | Until rotated | GitLab repository access |
+| `Credential(provider=jira)` | API token | User | Global (bound to Projects via RoleBindings) | Until rotated | Jira issue tracking integration |
+| `Credential(provider=google)` | OAuth2 token | User | Global (bound to Projects via RoleBindings) | Until rotated | Google Workspace integrations |
+| `Credential(provider=kubeconfig)` | Kubeconfig | User | Global (bound to Projects via RoleBindings) | Until rotated | Cross-cluster Kubernetes operations |
 
 ### Build Agent Identity (Proposed)
 
@@ -92,13 +92,13 @@ tokens rather than sharing its own.
 
 ### Requirement: Vertex AI Credential Scoping
 
-Vertex AI credentials SHALL be scoped per Project. The credential token MUST be
-write-only in the API (never returned in GET responses). The runner SHALL fetch
-credentials at runtime via authenticated API calls.
+Vertex AI credentials SHALL be global resources bound to Projects via RoleBindings.
+The credential token MUST be write-only in the API (never returned in GET responses).
+The runner SHALL fetch credentials at runtime via authenticated API calls.
 
 #### Scenario: Credential write-only enforcement
 
-- GIVEN a user creates a `Credential(provider=vertex)` in their Project
+- GIVEN a user creates a `Credential(provider=vertex)` and binds it to a Project
 - WHEN another user calls `GET /credentials/{id}`
 - THEN the response contains metadata but the `token` field is absent
 
@@ -141,18 +141,19 @@ MUST NOT access resources the creating user cannot access.
 
 ### Requirement: Integration Credential Isolation
 
-Integration credentials SHALL be Project-scoped. Projects MUST NOT access each other's
-credentials. Credential tokens SHALL be write-only in the API.
+Integration credentials SHALL be global resources. Access SHALL be controlled via
+RoleBindings — a credential is only accessible to runners in Projects it has been
+bound to. Credential tokens SHALL be write-only in the API.
 
-#### Scenario: Cross-Project credential access blocked
+#### Scenario: Unbound credential access blocked
 
-- GIVEN Project A has a GitHub credential
+- GIVEN a GitHub credential exists but is not bound to Project B
 - WHEN a runner in Project B attempts to fetch that credential
 - THEN the request is denied
 
 #### Scenario: Runner fetches credential at runtime
 
-- GIVEN a Project has a GitHub credential
+- GIVEN a GitHub credential is bound to a Project
 - WHEN a runner pod in that Project requests the credential token
 - THEN the token is returned via the restricted endpoint
 - AND the runner writes it to ephemeral storage
@@ -166,7 +167,7 @@ credentials. Credential tokens SHALL be write-only in the API.
 
 ### Requirement: MCP Credential Lifecycle
 
-MCP server credentials SHALL follow the same Project-scoped isolation as other
+MCP server credentials SHALL follow the same RoleBinding-scoped access model as other
 integration credentials. The Control Plane SHOULD support dynamic credential updates
 without requiring full pod restarts.
 
@@ -267,38 +268,39 @@ This section defines how credentials are authorized at runtime. For credential K
 API endpoints, and provider enum definitions, see the
 [Ambient Data Model Spec](../api/ambient-model.spec.md).
 
-### Requirement: Project-Scoped Credential Sharing
+### Requirement: Credential Access via RoleBindings
 
-Credentials SHALL belong to a Project. All agents in the Project SHALL share the Project's
-credentials automatically — no explicit sharing or per-credential RoleBindings needed. At
-session start, the resolver SHALL list all credentials in the agent's Project and return
-the matching credential for each requested provider.
+Credentials SHALL be global resources. Access SHALL be granted via RoleBindings with
+`credential` scope — bind a credential to a Project to make it available to all agents in
+that Project. At session start, the resolver SHALL list all credentials the session's
+Project has access to (via RoleBindings) and return the matching credential for each
+requested provider.
 
 This follows the Kubernetes resource model:
 
 | Ambient | Kubernetes Analogy | Relationship |
 |---------|-------------------|--------------|
-| Project | Namespace | Isolation boundary, owns child resources |
+| Project | Namespace | Isolation boundary |
 | Agent | Deployment | Mutable definition, runs workloads |
 | Session | Pod | Ephemeral execution, created from Agent |
-| Credential | Secret | Project-scoped secret, available to all workloads in the Project |
+| Credential | Secret (cross-namespace) | Global resource, bound to Projects via RoleBindings |
 
 Named patterns:
-- **Project Robot Account** — credential created in a Project; all agents use it automatically.
-- **Multi-Project credential** — create the same credential (same PAT) in multiple Projects. Each Project gets its own Credential record.
-- **No credential** — Projects without credentials run sessions without provider integrations.
+- **Project Robot Account** — credential created globally and bound to a Project; all agents in the Project use it automatically.
+- **Multi-Project credential** — bind the same credential to multiple Projects via separate RoleBindings. No duplication of the Credential record.
+- **No credential** — Projects without credential bindings run sessions without provider integrations.
 
-#### Scenario: All agents share Project credentials
+#### Scenario: All agents access bound credentials
 
-- GIVEN a Project has a GitHub credential
+- GIVEN a GitHub credential is bound to a Project via RoleBinding
 - WHEN any agent in that Project starts a session
 - THEN the runner can fetch the GitHub credential token
 
-#### Scenario: Cross-Project credential isolation
+#### Scenario: Unbound credential not accessible
 
-- GIVEN Project A and Project B each have credentials
-- WHEN an agent in Project A requests credentials
-- THEN only Project A's credentials are returned
+- GIVEN Project A and Project B exist, and a credential is bound only to Project A
+- WHEN an agent in Project B requests credentials
+- THEN only credentials bound to Project B are returned
 
 ### Requirement: Token Reader Role Grant
 
@@ -306,20 +308,21 @@ The `credential:token-reader` role SHALL be granted to the runner service accoun
 platform at session start. It MUST NOT be granted via user-facing `POST /role_bindings`.
 It is a platform-internal binding managed by the operator.
 
-Credential CRUD SHALL be governed by the caller's project-level role — `project:owner` and
-`project:editor` can create/update/delete credentials; `project:viewer` can list/read
-metadata.
+Credential CRUD SHALL be governed by the `credential:owner` role. Users with
+`credential:owner` can create, update, and delete credentials they own and bind them
+to Projects where they hold `project:owner`. Users with `credential:viewer` can read
+metadata (not tokens) on credentials bound to Projects they have access to.
 
 #### Scenario: Runner can fetch token
 
 - GIVEN a runner SA with `credential:token-reader` bound at session start
-- WHEN the runner calls `GET /projects/{id}/credentials/{cred_id}/token`
+- WHEN the runner calls `GET /credentials/{cred_id}/token`
 - THEN the raw token is returned
 
 #### Scenario: Human user cannot fetch token
 
 - GIVEN a human user without `credential:token-reader`
-- WHEN they call `GET /projects/{id}/credentials/{cred_id}/token`
+- WHEN they call `GET /credentials/{cred_id}/token`
 - THEN the request is denied with 403
 
 ### Requirement: Proxy Authentication
@@ -356,7 +359,7 @@ These endpoints MUST validate the caller is cluster-internal to prevent token ex
 |  |  - watches API server     |  |   - own secrets only        |  |
 |  |  - reconciles to K8s     |  |   - own session CR only     |  |
 |  |  - writes status back    |  |   - user's SSO token        |  |
-|  |                           |  |   - project vertex cred     |  |
+|  |                           |  |   - bound vertex cred       |  |
 |  | [API Server]              |  |   +------------------+      |  |
 |  |  SA: (pod identity)       |  |   | MCP sidecar/pod  |      |  |
 |  |  - PostgreSQL backend     |  |   | - integration     |      |  |
@@ -375,7 +378,7 @@ These endpoints MUST validate the caller is cluster-internal to prevent token ex
 **Key Invariants:**
 1. No runner session can access another session's secrets or tokens
 2. No runner session can operate beyond the user's own authorization scope
-3. Integration credentials are Project-scoped and fetched at runtime, never baked in
+3. Integration credentials are global, bound to Projects via RoleBindings, and fetched at runtime, never baked in
 4. The Control Plane SA is the only identity that spans Projects
 5. MCP lifecycle (sidecar vs. pod) is determined by operational requirements, not security compromise
 
@@ -384,10 +387,10 @@ These endpoints MUST validate the caller is cluster-internal to prevent token ex
 | Decision | Rationale |
 |----------|-----------|
 | Agent ownership via RBAC, not a hardcoded FK | Ownership is expressed as a RoleBinding (`scope=agent`, `scope_id=agent_id`). Enables multi-owner and delegated ownership consistently across all Kinds. |
-| Credential is Project-scoped, like a Kubernetes Secret | Credentials live inside a Project. All agents in the Project share them automatically. Duplication across Projects is intentional and explicit — each Project gets its own Credential record, same as Kubernetes Secrets in different Namespaces. |
+| Credential is global, bound via RoleBindings | Credentials are global resources. Access is granted by binding a credential to a Project via a RoleBinding with `credential` scope. A single credential can be shared across multiple Projects without duplication. |
 | Credential token is write-only | Prevents token exfiltration via the standard REST API. Raw token only surfaced to runners via the runtime credentials path, not to end users. |
-| Four-scope RBAC (`global`, `project`, `agent`, `session`) | Credential access is implicit via Project membership — no dedicated `credential` scope needed. Simpler model with fewer moving parts. |
-| Credential CRUD governed by project roles | `project:owner` and `project:editor` can manage credentials. No separate `credential:owner` / `credential:reader` roles — project roles cover it. |
+| Five-scope RBAC (`global`, `project`, `agent`, `session`, `credential`) | Credential access is explicit via RoleBindings with `credential` scope. Enables cross-project sharing without credential duplication. |
+| Credential CRUD governed by credential roles | `credential:owner` manages CRUD and bindings. `credential:viewer` reads metadata. Self-service: users create their own credentials without admin intervention. |
 | `agent:runner` role | Pods get minimum viable credential: read agent definition, push session messages, send inbox. |
 | Union-only permissions | No deny rules — simpler mental model for fleet operators. |
 | Token stored in database, encrypted at rest | Single authoritative store. A future Vault integration can be adopted by pointing the DB row at a Vault path without changing the API surface. |
@@ -395,7 +398,7 @@ These endpoints MUST validate the caller is cluster-internal to prevent token ex
 | No validation on creation | First-use error is acceptable. Avoids a network call to the provider at creation time and the failure modes that come with it. |
 | Credential rotation is user-managed | Users update the token via `PATCH` or `acpctl credential update`. No platform-side rotation or expiry tracking. |
 | No migration utility for existing K8s Secrets | Users re-enter credentials via the new API. The old Secret-based path is removed when the new API is live. |
-| Dedicated tokens, not personal credentials | Users are expected to create dedicated Robot Accounts or PATs for each Project, not share their personal credentials. Each Project gets its own Credential records. |
+| Dedicated tokens, not personal credentials | Users are expected to create dedicated Robot Accounts or PATs, not share their personal credentials. A single credential can be bound to multiple Projects. |
 
 ## References
 

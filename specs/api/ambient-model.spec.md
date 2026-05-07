@@ -798,7 +798,7 @@ Credentials are global resources. Access is granted via RoleBindings — bind a 
 Project, Agent, or Session scope. At session start, the resolver lists all credentials the
 caller has access to (via RoleBindings) and returns matching credentials for each requested
 provider. A single Credential can be shared across multiple Projects without duplication.
-See [Security Spec — Project-Scoped Credential Sharing](../security/security.spec.md#requirement-project-scoped-credential-sharing) for
+See [Security Spec — Credential Access via RoleBindings](../security/security.spec.md#requirement-credential-access-via-rolebindings) for
 runtime authorization semantics.
 
 ### Built-in Roles
@@ -814,6 +814,8 @@ runtime authorization semantics.
 | `agent:editor` | Update prompt and metadata on a specific Agent |
 | `agent:observer` | Read a specific Agent and its sessions |
 | `agent:runner` | Minimum viable pod credential: read agent, push messages, send inbox |
+| `credential:owner` | Full CRUD on credentials the user created. Bind credentials to projects the user has `project:owner` on. |
+| `credential:viewer` | Read metadata (not token) on credentials bound to projects the user has access to. |
 | `credential:token-reader` | Fetch the raw token via `GET /credentials/{cred_id}/token`. Granted only to runner service accounts at session start. Human users do not hold this role. |
 
 ### Permission Matrix
@@ -829,6 +831,8 @@ runtime authorization semantics.
 | `agent:editor` | — | update | — | — | — | — | — |
 | `agent:observer` | — | read | read/list | — | — | — | — |
 | `agent:runner` | — | read | read | send | — | — | — |
+| `credential:owner` | — | — | — | — | create/update/delete + bind | — | — |
+| `credential:viewer` | — | — | — | — | read/list (metadata only) | — | — |
 | `credential:token-reader` | — | — | — | — | token: read | — | — |
 
 ### RBAC Endpoints
