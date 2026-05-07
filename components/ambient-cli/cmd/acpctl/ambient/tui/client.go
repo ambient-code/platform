@@ -872,7 +872,7 @@ func (tc *TUIClient) SuspendScheduledSession(projectID, id string) tea.Cmd {
 			return SuspendScheduledSessionMsg{Err: err}
 		}
 
-		ss, err := client.ScheduledSessions().Suspend(ctx, projectID, id)
+		ss, err := client.ScheduledSessions().SuspendInProject(ctx, projectID, id)
 		if err != nil {
 			return SuspendScheduledSessionMsg{Err: err}
 		}
@@ -891,7 +891,7 @@ func (tc *TUIClient) ResumeScheduledSession(projectID, id string) tea.Cmd {
 			return ResumeScheduledSessionMsg{Err: err}
 		}
 
-		ss, err := client.ScheduledSessions().Resume(ctx, projectID, id)
+		ss, err := client.ScheduledSessions().ResumeInProject(ctx, projectID, id)
 		if err != nil {
 			return ResumeScheduledSessionMsg{Err: err}
 		}
@@ -910,7 +910,7 @@ func (tc *TUIClient) TriggerScheduledSession(projectID, id string) tea.Cmd {
 			return TriggerScheduledSessionMsg{Err: err}
 		}
 
-		err = client.ScheduledSessions().Trigger(ctx, projectID, id)
+		err = client.ScheduledSessions().TriggerInProject(ctx, projectID, id)
 		return TriggerScheduledSessionMsg{Err: err}
 	}
 }
