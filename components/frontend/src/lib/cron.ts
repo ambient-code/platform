@@ -19,7 +19,7 @@ export function getCronDescription(cronExpr: string): string {
  */
 export function getNextRuns(cronExpr: string, count: number): Date[] {
   try {
-    const interval = CronExpressionParser.parse(cronExpr);
+    const interval = CronExpressionParser.parse(cronExpr, { tz: "UTC" });
     const dates: Date[] = [];
     for (let i = 0; i < count; i++) {
       dates.push(interval.next().toDate());

@@ -17,25 +17,29 @@ export class AmbientClient {
     if (!config.baseUrl) {
       throw new Error('baseUrl is required');
     }
-    if (!config.token) {
-      throw new Error('token is required');
+    if (config.token) {
+      if (config.token.length < 20) {
+        throw new Error('token is too short (minimum 20 characters)');
+      }
+      if (config.token === 'YOUR_TOKEN_HERE' || config.token === 'PLACEHOLDER_TOKEN') {
+        throw new Error('placeholder token is not allowed');
+      }
     }
-    if (config.token.length < 20) {
-      throw new Error('token is too short (minimum 20 characters)');
-    }
-    if (config.token === 'YOUR_TOKEN_HERE' || config.token === 'PLACEHOLDER_TOKEN') {
-      throw new Error('placeholder token is not allowed');
-    }
-    if (!config.project) {
-      throw new Error('project is required');
-    }
-    if (config.project.length > 63) {
+    if (config.project && config.project.length > 63) {
       throw new Error('project name cannot exceed 63 characters');
     }
 
-    const url = new URL(config.baseUrl);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-      throw new Error('only HTTP and HTTPS schemes are supported');
+    // Reject protocol-relative URLs (e.g. "//evil.com/path")
+    if (config.baseUrl.startsWith('//')) {
+      throw new Error('Protocol-relative URLs are not allowed for baseUrl');
+    }
+
+    // Skip URL parsing for relative paths (e.g. "/api/proxy")
+    if (!config.baseUrl.startsWith('/')) {
+      const url = new URL(config.baseUrl);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        throw new Error('only HTTP and HTTPS schemes are supported');
+      }
     }
 
     this.config = {
@@ -54,10 +58,7 @@ export class AmbientClient {
     if (!token) {
       throw new Error('AMBIENT_TOKEN environment variable is required');
     }
-    if (!project) {
-      throw new Error('AMBIENT_PROJECT environment variable is required');
-    }
 
-    return new AmbientClient({ baseUrl, token, project });
+    return new AmbientClient({ baseUrl, token, ...(project ? { project } : {}) });
   }
 }
