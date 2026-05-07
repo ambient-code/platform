@@ -804,12 +804,20 @@ func sortSessions(sessions []types.AgenticSession, sortBy, sortDirection string)
 		var vi, vj string
 		switch sortBy {
 		case "name":
-			if name, ok := sessions[i].Metadata["name"].(string); ok {
-				vi = strings.ToLower(name)
+			ni := sessions[i].Spec.DisplayName
+			if strings.TrimSpace(ni) == "" {
+				if name, ok := sessions[i].Metadata["name"].(string); ok {
+					ni = name
+				}
 			}
-			if name, ok := sessions[j].Metadata["name"].(string); ok {
-				vj = strings.ToLower(name)
+			nj := sessions[j].Spec.DisplayName
+			if strings.TrimSpace(nj) == "" {
+				if name, ok := sessions[j].Metadata["name"].(string); ok {
+					nj = name
+				}
 			}
+			vi = strings.ToLower(ni)
+			vj = strings.ToLower(nj)
 		default: // "created" or any unrecognized value
 			vi = getSessionCreationTimestamp(sessions[i])
 			vj = getSessionCreationTimestamp(sessions[j])

@@ -385,6 +385,50 @@ var _ = Describe("Sessions Handler", Label(test_constants.LabelUnit, test_consta
 			})
 		})
 
+		Context("With sortBy=name", func() {
+			BeforeEach(func() {
+				createTestSessionWithOptions("alpha-"+randomName, testNamespace, "Running", "", k8sUtils)
+				time.Sleep(100 * time.Millisecond)
+				createTestSessionWithOptions("beta-"+randomName, testNamespace, "Running", "", k8sUtils)
+			})
+
+			It("Should sort by name ascending", func() {
+				context := httpUtils.CreateTestGinContext("GET", "/api/projects/"+testNamespace+"/agentic-sessions?sortBy=name&sortDirection=asc", nil)
+				httpUtils.SetAuthHeader(testToken)
+				httpUtils.SetProjectContext(testNamespace)
+
+				ListSessions(context)
+
+				httpUtils.AssertHTTPStatus(http.StatusOK)
+				var response map[string]interface{}
+				httpUtils.GetResponseJSON(&response)
+				items := response["items"].([]interface{})
+				Expect(items).To(HaveLen(2))
+				firstName := items[0].(map[string]interface{})["metadata"].(map[string]interface{})["name"].(string)
+				secondName := items[1].(map[string]interface{})["metadata"].(map[string]interface{})["name"].(string)
+				Expect(firstName).To(HavePrefix("alpha-"))
+				Expect(secondName).To(HavePrefix("beta-"))
+			})
+
+			It("Should sort by name descending", func() {
+				context := httpUtils.CreateTestGinContext("GET", "/api/projects/"+testNamespace+"/agentic-sessions?sortBy=name&sortDirection=desc", nil)
+				httpUtils.SetAuthHeader(testToken)
+				httpUtils.SetProjectContext(testNamespace)
+
+				ListSessions(context)
+
+				httpUtils.AssertHTTPStatus(http.StatusOK)
+				var response map[string]interface{}
+				httpUtils.GetResponseJSON(&response)
+				items := response["items"].([]interface{})
+				Expect(items).To(HaveLen(2))
+				firstName := items[0].(map[string]interface{})["metadata"].(map[string]interface{})["name"].(string)
+				secondName := items[1].(map[string]interface{})["metadata"].(map[string]interface{})["name"].(string)
+				Expect(firstName).To(HavePrefix("beta-"))
+				Expect(secondName).To(HavePrefix("alpha-"))
+			})
+		})
+
 		Context("With combined filters", func() {
 			BeforeEach(func() {
 				createTestSessionWithOptions("running-match-"+randomName, testNamespace, "Running", "user-1", k8sUtils)

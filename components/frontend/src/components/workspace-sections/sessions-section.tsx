@@ -82,7 +82,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
   const debouncedSearch = useDebounce(searchInput, 300);
 
   // Current user for "My sessions" filter
-  const { data: currentUser } = useCurrentUser();
+  const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
 
   // Reset offset when search or filters change
   useEffect(() => {
@@ -115,7 +115,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
     offset,
     search: debouncedSearch || undefined,
     phase: phaseFilter || undefined,
-    userId: mySessionsOnly ? currentUser?.userId : undefined,
+    userId: mySessionsOnly && currentUser?.userId ? currentUser.userId : undefined,
     sortBy,
     sortDirection,
   });
@@ -270,6 +270,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
             variant={mySessionsOnly ? 'default' : 'outline'}
             size="sm"
             onClick={() => setMySessionsOnly(!mySessionsOnly)}
+            disabled={isCurrentUserLoading}
             className="h-9"
           >
             <User className="h-4 w-4 mr-1" />
@@ -328,12 +329,26 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                     <TableHead className="w-[20px] px-0"></TableHead>
                     <TableHead
                       className="min-w-[180px] cursor-pointer select-none"
+                      tabIndex={0}
+                      role="button"
+                      aria-sort={sortBy === 'name' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                       onClick={() => {
                         if (sortBy === 'name') {
                           setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
                         } else {
                           setSortBy('name');
                           setSortDirection('asc');
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          if (sortBy === 'name') {
+                            setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+                          } else {
+                            setSortBy('name');
+                            setSortDirection('asc');
+                          }
                         }
                       }}
                     >
@@ -346,12 +361,26 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                     <TableHead className="hidden md:table-cell">Model</TableHead>
                     <TableHead
                       className="hidden lg:table-cell cursor-pointer select-none"
+                      tabIndex={0}
+                      role="button"
+                      aria-sort={sortBy === 'created' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                       onClick={() => {
                         if (sortBy === 'created') {
                           setSortDirection(prev => prev === 'desc' ? 'asc' : 'desc');
                         } else {
                           setSortBy('created');
                           setSortDirection('desc');
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          if (sortBy === 'created') {
+                            setSortDirection(prev => prev === 'desc' ? 'asc' : 'desc');
+                          } else {
+                            setSortBy('created');
+                            setSortDirection('desc');
+                          }
                         }
                       }}
                     >
