@@ -53,7 +53,7 @@ func resolveScheduledSession(ctx context.Context, projectID, arg string) (string
 	if err != nil {
 		return "", err
 	}
-	ss, err := client.ScheduledSessions().Get(ctx, projectID, arg)
+	ss, err := client.ScheduledSessions().GetByProject(ctx, projectID, arg)
 	if err != nil {
 		ss, err = client.ScheduledSessions().GetByName(ctx, projectID, arg)
 		if err != nil {
@@ -98,7 +98,7 @@ var listCmd = &cobra.Command{
 		defer cancel()
 
 		opts := sdktypes.NewListOptions().Size(listArgs.limit).Build()
-		list, err := client.ScheduledSessions().List(ctx, projectID, opts)
+		list, err := client.ScheduledSessions().ListByProject(ctx, projectID, opts)
 		if err != nil {
 			return fmt.Errorf("list scheduled sessions: %w", err)
 		}
@@ -150,7 +150,7 @@ var getCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 		defer cancel()
 
-		ss, err := client.ScheduledSessions().Get(ctx, projectID, args[0])
+		ss, err := client.ScheduledSessions().GetByProject(ctx, projectID, args[0])
 		if err != nil {
 			ss, err = client.ScheduledSessions().GetByName(ctx, projectID, args[0])
 			if err != nil {
@@ -250,7 +250,7 @@ var createCmd = &cobra.Command{
 			return fmt.Errorf("build scheduled session: %w", err)
 		}
 
-		created, err := client.ScheduledSessions().Create(ctx, projectID, ss)
+		created, err := client.ScheduledSessions().CreateInProject(ctx, projectID, ss)
 		if err != nil {
 			return fmt.Errorf("create scheduled session: %w", err)
 		}
@@ -349,7 +349,7 @@ var updateCmd = &cobra.Command{
 			patch = patch.RunnerType(updateArgs.runnerType)
 		}
 
-		updated, err := client.ScheduledSessions().Update(ctx, projectID, id, patch.Build())
+		updated, err := client.ScheduledSessions().UpdateInProject(ctx, projectID, id, patch.Build())
 		if err != nil {
 			return fmt.Errorf("update scheduled session: %w", err)
 		}
@@ -401,7 +401,7 @@ var deleteCmd = &cobra.Command{
 			return err
 		}
 
-		if err := client.ScheduledSessions().Delete(ctx, projectID, id); err != nil {
+		if err := client.ScheduledSessions().DeleteInProject(ctx, projectID, id); err != nil {
 			return fmt.Errorf("delete scheduled session: %w", err)
 		}
 
