@@ -1,6 +1,9 @@
 // API configuration for frontend
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8080/api'
 
+// Ambient API Server URL (ambient-api-server microservice)
+export const API_SERVER_URL = process.env.API_SERVER_URL || 'http://localhost:8000'
+
 /**
  * Get the API base URL for frontend requests
  */
