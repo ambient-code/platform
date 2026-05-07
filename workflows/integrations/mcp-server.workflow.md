@@ -461,5 +461,5 @@ Lessons learned:
 - Full per-tool schemas, return shapes, and error tables: `specs/integrations/mcp-server.spec.md`
 - Annotation key conventions and fleet state protocol: `docs/internal/proposals/agent-fleet-state-schema.md`
 - Agent visual language (how purple SEND/WAIT blocks map to MCP tools): `docs/internal/proposals/agent-script-visual-language.md`
-- Platform data model: `specs/sessions/ambient-model.spec.md`
+- Platform data model: `specs/api/ambient-model.spec.md`
 - Component pipeline and wave pattern: `workflows/sessions/ambient-model.workflow.md`

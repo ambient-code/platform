@@ -52,6 +52,7 @@ A spec is **complete** when it is unambiguous enough that two engineers reading 
 | `ambient-model.spec.md` | All platform Kinds: Session, Agent, Project, Inbox, Role, RoleBinding, User |
 | `control-plane.spec.md` | Control plane gRPC protocol, session fan-out, runner contract |
 | `mcp-server.spec.md` | MCP server tools, annotation state, sidecar transport |
+| `security.spec.md` | Identity boundaries, credential authorization, per-session SA isolation |
 
 ### Guide files (`*.guide.md`)
 
@@ -65,7 +66,7 @@ Guides are **living documents**. Every time the workflow runs and something is d
 
 | Guide | Paired spec |
 |---|---|
-| `workflows/sessions/ambient-model.workflow.md` | `specs/sessions/ambient-model.spec.md` |
+| `workflows/sessions/ambient-model.workflow.md` | `specs/api/ambient-model.spec.md` |
 | `workflows/control-plane/control-plane.workflow.md` | `specs/control-plane/control-plane.spec.md` |
 | `workflows/integrations/mcp-server.workflow.md` | `specs/integrations/mcp-server.spec.md` |
 
@@ -133,6 +134,6 @@ Every time the loop stops because something was wrong, the documents get better.
 ## Reading Order for a New Contributor
 
 1. This README — the why
-2. `specs/sessions/ambient-model.spec.md` — what the platform is
+2. `specs/api/ambient-model.spec.md` — what the platform is
 3. `workflows/sessions/ambient-model.workflow.md` — how changes are made
 4. The context file for the component you are working on
