@@ -25,10 +25,11 @@ Desired state of the system, organized by capability domain.
 
 | Spec | Domain | Purpose |
 |------|--------|---------|
-| [Ambient Data Model](specs/sessions/ambient-model.spec.md) | sessions | Platform-wide data model: projects, agents, sessions, credentials, RBAC |
+| [Ambient Data Model](specs/api/ambient-model.spec.md) | api | Platform-wide data model: projects, agents, sessions, credentials, RBAC |
 | [Control Plane](specs/control-plane/control-plane.spec.md) | control-plane | CP architecture, runner structure, K8s provisioning |
 | [Runner](specs/agents/runner.spec.md) | agents | Runner subprocess lifecycle, bridges, gRPC/HTTP endpoints |
 | [MCP Server](specs/integrations/mcp-server.spec.md) | integrations | MCP tool definitions, sidecar and public endpoint modes |
+| [Security](specs/security/security.spec.md) | security | Identity boundaries, credential authorization, per-session isolation, design decisions |
 
 Feature specs remain in numbered directories under `specs/` (e.g., `specs/001-*/spec.md`).
 
