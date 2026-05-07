@@ -60,7 +60,7 @@ func (a *ScheduledSessionAPI) DeleteInProject(ctx context.Context, projectID, id
 	return a.client.do(ctx, http.MethodDelete, a.projectPath(projectID)+"/"+url.PathEscape(id), nil, http.StatusNoContent, nil)
 }
 
-func (a *ScheduledSessionAPI) Suspend(ctx context.Context, projectID, id string) (*types.ScheduledSession, error) {
+func (a *ScheduledSessionAPI) SuspendInProject(ctx context.Context, projectID, id string) (*types.ScheduledSession, error) {
 	var result types.ScheduledSession
 	path := a.projectPath(projectID) + "/" + url.PathEscape(id) + "/suspend"
 	if err := a.client.do(ctx, http.MethodPost, path, nil, http.StatusOK, &result); err != nil {
@@ -69,7 +69,7 @@ func (a *ScheduledSessionAPI) Suspend(ctx context.Context, projectID, id string)
 	return &result, nil
 }
 
-func (a *ScheduledSessionAPI) Resume(ctx context.Context, projectID, id string) (*types.ScheduledSession, error) {
+func (a *ScheduledSessionAPI) ResumeInProject(ctx context.Context, projectID, id string) (*types.ScheduledSession, error) {
 	var result types.ScheduledSession
 	path := a.projectPath(projectID) + "/" + url.PathEscape(id) + "/resume"
 	if err := a.client.do(ctx, http.MethodPost, path, nil, http.StatusOK, &result); err != nil {
@@ -78,12 +78,12 @@ func (a *ScheduledSessionAPI) Resume(ctx context.Context, projectID, id string) 
 	return &result, nil
 }
 
-func (a *ScheduledSessionAPI) Trigger(ctx context.Context, projectID, id string) error {
+func (a *ScheduledSessionAPI) TriggerInProject(ctx context.Context, projectID, id string) error {
 	path := a.projectPath(projectID) + "/" + url.PathEscape(id) + "/trigger"
 	return a.client.do(ctx, http.MethodPost, path, nil, http.StatusOK, nil)
 }
 
-func (a *ScheduledSessionAPI) Runs(ctx context.Context, projectID, id string, opts *types.ListOptions) (*types.SessionList, error) {
+func (a *ScheduledSessionAPI) RunsInProject(ctx context.Context, projectID, id string, opts *types.ListOptions) (*types.SessionList, error) {
 	var result types.SessionList
 	path := a.projectPath(projectID) + "/" + url.PathEscape(id) + "/runs"
 	if err := a.client.doWithQuery(ctx, http.MethodGet, path, nil, http.StatusOK, &result, opts); err != nil {
