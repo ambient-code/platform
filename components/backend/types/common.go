@@ -97,10 +97,14 @@ func IntPtr(i int) *int {
 
 // PaginationParams represents common pagination request parameters
 type PaginationParams struct {
-	Limit    int    `form:"limit"`    // Number of items per page (default: 20, max: 100)
-	Offset   int    `form:"offset"`   // Offset for offset-based pagination
-	Continue string `form:"continue"` // Continuation token for k8s-style pagination
-	Search   string `form:"search"`   // Search/filter term
+	Limit         int    `form:"limit"`         // Number of items per page (default: 20, max: 100)
+	Offset        int    `form:"offset"`         // Offset for offset-based pagination
+	Continue      string `form:"continue"`       // Continuation token for k8s-style pagination
+	Search        string `form:"search"`         // Search/filter term
+	Phase         string `form:"phase"`          // Comma-separated phases to filter by
+	UserID        string `form:"userId"`         // Filter by creator userId
+	SortBy        string `form:"sortBy"`         // Sort column (default: "created")
+	SortDirection string `form:"sortDirection"`  // "asc" or "desc" (default: "desc")
 }
 
 // PaginatedResponse is a generic paginated response structure
