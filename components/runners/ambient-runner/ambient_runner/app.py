@@ -554,7 +554,7 @@ async def _push_initial_prompt_via_http(prompt: str, session_id: str) -> None:
         except Exception as e:
             logger.warning(
                 f"INITIAL_PROMPT attempt {attempt}/{_AUTO_PROMPT_MAX_RETRIES} "
-                f"error: {e}, retrying in {backoff:.0f}s"
+                f"error: {type(e).__name__}: {e}, retrying in {backoff:.0f}s"
             )
 
         await asyncio.sleep(backoff)
