@@ -579,7 +579,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
           />
 
           {/* Toolbar — inside the container */}
-          <div className="flex items-center justify-between px-2 py-2">
+          <div className="flex items-center justify-between px-2 py-2 gap-1">
             {canInteract ? (
               <>
                 <div className="flex items-center gap-2">
@@ -629,7 +629,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
                         )}
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent align="start" side="top" className="w-[500px]">
+                    <PopoverContent align="start" side="top" className="w-[calc(100vw-2rem)] sm:w-[500px]">
                       <ToolbarItemList
                         items={agents}
                         type="agent"
@@ -655,7 +655,7 @@ export const ChatInputBox: React.FC<ChatInputBoxProps> = ({
                         )}
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent align="start" side="top" className="w-[500px]">
+                    <PopoverContent align="start" side="top" className="w-[calc(100vw-2rem)] sm:w-[500px]">
                       <ToolbarItemList
                         items={commands}
                         type="command"
