@@ -91,70 +91,64 @@ chmod 777 /workspace/file-uploads 2>/dev/null || true
 # - Directory contains cloned git repos (no secrets), so world-writable is acceptable
 chmod 777 /workspace/repos 2>/dev/null || true
 
-# Check if S3 is configured
-if [ -z "${S3_ENDPOINT}" ] || [ -z "${S3_BUCKET}" ] || [ -z "${AWS_ACCESS_KEY_ID}" ] || [ -z "${AWS_SECRET_ACCESS_KEY}" ]; then
-    echo "S3 not configured - using ephemeral storage only (no state persistence)"
-    echo "========================================="
-    exit 0
-fi
+# Check if S3 is configured and hydrate state if so
+if [ -n "${S3_ENDPOINT}" ] && [ -n "${S3_BUCKET}" ] && [ -n "${AWS_ACCESS_KEY_ID}" ] && [ -n "${AWS_SECRET_ACCESS_KEY}" ]; then
+    # Setup rclone
+    echo "Setting up rclone..."
+    setup_rclone
 
-# Setup rclone
-echo "Setting up rclone..."
-setup_rclone
+    S3_PATH="s3:${S3_BUCKET}/${NAMESPACE}/${SESSION_NAME}"
 
-S3_PATH="s3:${S3_BUCKET}/${NAMESPACE}/${SESSION_NAME}"
-
-# Test S3 connection
-echo "Testing S3 connection..."
-if ! rclone --config /tmp/.config/rclone/rclone.conf lsd "s3:${S3_BUCKET}/" --max-depth 1 2>&1; then
-    error_exit "Failed to connect to S3 at ${S3_ENDPOINT}. Check endpoint and credentials."
-fi
-echo "S3 connection successful"
-
-# Check if session state exists in S3
-echo "Checking for existing session state in S3..."
-if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_PATH}/" 2>/dev/null | grep -q .; then
-    echo "Found existing session state, downloading from S3..."
-
-    # Download framework state data to the framework data path
-    if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_PATH}/${RUNNER_STATE_DIR}/" 2>/dev/null | grep -q .; then
-        echo "  Downloading ${RUNNER_STATE_DIR}/..."
-        rclone --config /tmp/.config/rclone/rclone.conf copy "${S3_PATH}/${RUNNER_STATE_DIR}/" "${FRAMEWORK_DATA_PATH}/" \
-            --copy-links \
-            --transfers 8 \
-            --fast-list \
-            --progress 2>&1 || echo "  Warning: failed to download ${RUNNER_STATE_DIR}"
-    else
-        echo "  No data for ${RUNNER_STATE_DIR}/"
+    # Test S3 connection
+    echo "Testing S3 connection..."
+    if ! rclone --config /tmp/.config/rclone/rclone.conf lsd "s3:${S3_BUCKET}/" --max-depth 1 2>&1; then
+        error_exit "Failed to connect to S3 at ${S3_ENDPOINT}. Check endpoint and credentials."
     fi
+    echo "S3 connection successful"
 
-    # Download other sync paths to /workspace
-    for path in "${SYNC_PATHS[@]}"; do
-        if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_PATH}/${path}/" 2>/dev/null | grep -q .; then
-            echo "  Downloading ${path}/..."
-            rclone --config /tmp/.config/rclone/rclone.conf copy "${S3_PATH}/${path}/" "/workspace/${path}/" \
+    # Check if session state exists in S3
+    echo "Checking for existing session state in S3..."
+    if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_PATH}/" 2>/dev/null | grep -q .; then
+        echo "Found existing session state, downloading from S3..."
+
+        # Download framework state data to the framework data path
+        if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_PATH}/${RUNNER_STATE_DIR}/" 2>/dev/null | grep -q .; then
+            echo "  Downloading ${RUNNER_STATE_DIR}/..."
+            rclone --config /tmp/.config/rclone/rclone.conf copy "${S3_PATH}/${RUNNER_STATE_DIR}/" "${FRAMEWORK_DATA_PATH}/" \
                 --copy-links \
                 --transfers 8 \
                 --fast-list \
-                --progress 2>&1 || echo "  Warning: failed to download ${path}"
+                --progress 2>&1 || echo "  Warning: failed to download ${RUNNER_STATE_DIR}"
         else
-            echo "  No data for ${path}/"
+            echo "  No data for ${RUNNER_STATE_DIR}/"
         fi
-    done
 
-    echo "State hydration complete!"
+        # Download other sync paths to /workspace
+        for path in "${SYNC_PATHS[@]}"; do
+            if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_PATH}/${path}/" 2>/dev/null | grep -q .; then
+                echo "  Downloading ${path}/..."
+                rclone --config /tmp/.config/rclone/rclone.conf copy "${S3_PATH}/${path}/" "/workspace/${path}/" \
+                    --copy-links \
+                    --transfers 8 \
+                    --fast-list \
+                    --progress 2>&1 || echo "  Warning: failed to download ${path}"
+            else
+                echo "  No data for ${path}/"
+            fi
+        done
+
+        echo "State hydration complete!"
+    else
+        echo "No existing state found, starting fresh session"
+    fi
 else
-    echo "No existing state found, starting fresh session"
+    echo "S3 not configured - skipping state hydration (no persistence)"
 fi
 
-# Set ownership and permissions on subdirectories after S3 download
+# Set ownership and permissions on subdirectories
 echo "Setting ownership and permissions on subdirectories..."
-# Try chown first (works on standard K8s), fall back to 777 if blocked by SELinux/SCC
 chown -R 1001:0 "${FRAMEWORK_DATA_PATH}" /workspace/artifacts /workspace/file-uploads /workspace/repos 2>/dev/null || true
-# Framework data dir needs 777 for SDK internals
 chmod -R 777 "${FRAMEWORK_DATA_PATH}" 2>/dev/null || true
-# repos also needs write access for runtime repo additions (clone_repo_at_runtime)
-# See security rationale above for why 777 is used
 chmod -R 755 /workspace/artifacts 2>/dev/null || true
 chmod -R 777 /workspace/file-uploads 2>/dev/null || true
 chmod -R 777 /workspace/repos 2>/dev/null || true
@@ -354,117 +348,117 @@ if [ -n "$ACTIVE_WORKFLOW_GIT_URL" ] && [ "$ACTIVE_WORKFLOW_GIT_URL" != "null" ]
     fi
 fi
 
-# ========================================
-# Restore git repo state from S3 backup
-# ========================================
-echo "========================================="
-echo "Checking for git repo state backup..."
-echo "========================================="
+# Restore git repo state from S3 backup (only when S3 is available)
+if [ -n "${S3_PATH:-}" ]; then
+    echo "========================================="
+    echo "Checking for git repo state backup..."
+    echo "========================================="
 
-S3_REPO_STATE="${S3_PATH}/repo-state/"
+    S3_REPO_STATE="${S3_PATH}/repo-state/"
 
-if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_REPO_STATE}" 2>/dev/null | grep -q .; then
-    echo "Found git repo state backup, restoring..."
+    if rclone --config /tmp/.config/rclone/rclone.conf lsf "${S3_REPO_STATE}" 2>/dev/null | grep -q .; then
+        echo "Found git repo state backup, restoring..."
 
-    REPO_STATE_DIR="/tmp/repo-state"
-    rm -rf "${REPO_STATE_DIR}"
-    mkdir -p "${REPO_STATE_DIR}"
+        REPO_STATE_DIR="/tmp/repo-state"
+        rm -rf "${REPO_STATE_DIR}"
+        mkdir -p "${REPO_STATE_DIR}"
 
-    # Download repo state from S3
-    rclone --config /tmp/.config/rclone/rclone.conf copy "${S3_REPO_STATE}" "${REPO_STATE_DIR}/" \
-        --transfers 8 \
-        --fast-list \
-        --progress 2>&1 || echo "  Warning: failed to download repo state"
+        # Download repo state from S3
+        rclone --config /tmp/.config/rclone/rclone.conf copy "${S3_REPO_STATE}" "${REPO_STATE_DIR}/" \
+            --transfers 8 \
+            --fast-list \
+            --progress 2>&1 || echo "  Warning: failed to download repo state"
 
-    for repo_state_dir in "${REPO_STATE_DIR}"/*/; do
-        [ -d "${repo_state_dir}" ] || continue
+        for repo_state_dir in "${REPO_STATE_DIR}"/*/; do
+            [ -d "${repo_state_dir}" ] || continue
 
-        REPO_NAME=$(basename "${repo_state_dir}")
-        REPO_DIR="/workspace/repos/${REPO_NAME}"
-        METADATA_FILE="${repo_state_dir}/metadata.json"
+            REPO_NAME=$(basename "${repo_state_dir}")
+            REPO_DIR="/workspace/repos/${REPO_NAME}"
+            METADATA_FILE="${repo_state_dir}/metadata.json"
 
-        echo "  Restoring git state for ${REPO_NAME}..."
+            echo "  Restoring git state for ${REPO_NAME}..."
 
-        if [ ! -f "${METADATA_FILE}" ]; then
-            echo "  WARNING: No metadata.json for ${REPO_NAME}, skipping"
-            continue
-        fi
-
-        # Read metadata
-        REMOTE_URL=$(jq -r '.remoteUrl // empty' "${METADATA_FILE}" 2>/dev/null || echo "")
-        SAVED_BRANCH=$(jq -r '.currentBranch // "main"' "${METADATA_FILE}" 2>/dev/null || echo "main")
-        SAVED_HEAD=$(jq -r '.headSha // empty' "${METADATA_FILE}" 2>/dev/null || echo "")
-
-        # If repo was not already cloned (e.g., runtime-added repo), clone it
-        if [ ! -d "${REPO_DIR}" ] && [ -n "${REMOTE_URL}" ]; then
-            # Redact credentials from URL for logging
-            SAFE_URL=$(echo "${REMOTE_URL}" | sed 's|://[^@]*@|://|')
-            echo "  Cloning missing repo ${REPO_NAME} from ${SAFE_URL}..."
-            git config --global --add safe.directory "${REPO_DIR}" 2>/dev/null || true
-            git clone "${REMOTE_URL}" "${REPO_DIR}" 2>&1 || {
-                echo "  WARNING: Failed to clone ${REPO_NAME}, skipping restore"
+            if [ ! -f "${METADATA_FILE}" ]; then
+                echo "  WARNING: No metadata.json for ${REPO_NAME}, skipping"
                 continue
-            }
-        fi
+            fi
 
-        if [ ! -d "${REPO_DIR}/.git" ] && [ ! -f "${REPO_DIR}/.git" ]; then
-            echo "  WARNING: ${REPO_DIR} is not a git repo, skipping restore"
-            continue
-        fi
+            # Read metadata
+            REMOTE_URL=$(jq -r '.remoteUrl // empty' "${METADATA_FILE}" 2>/dev/null || echo "")
+            SAVED_BRANCH=$(jq -r '.currentBranch // "main"' "${METADATA_FILE}" 2>/dev/null || echo "main")
+            SAVED_HEAD=$(jq -r '.headSha // empty' "${METADATA_FILE}" 2>/dev/null || echo "")
 
-        git config --global --add safe.directory "${REPO_DIR}" 2>/dev/null || true
+            # If repo was not already cloned (e.g., runtime-added repo), clone it
+            if [ ! -d "${REPO_DIR}" ] && [ -n "${REMOTE_URL}" ]; then
+                # Redact credentials from URL for logging
+                SAFE_URL=$(echo "${REMOTE_URL}" | sed 's|://[^@]*@|://|')
+                echo "  Cloning missing repo ${REPO_NAME} from ${SAFE_URL}..."
+                git config --global --add safe.directory "${REPO_DIR}" 2>/dev/null || true
+                git clone "${REMOTE_URL}" "${REPO_DIR}" 2>&1 || {
+                    echo "  WARNING: Failed to clone ${REPO_NAME}, skipping restore"
+                    continue
+                }
+            fi
 
-        # Import local branches from bundle using fetch (creates local branch refs)
-        if [ -f "${repo_state_dir}/repo.bundle" ]; then
-            echo "  Fetching refs from bundle for ${REPO_NAME}..."
-            # Detach HEAD so fetch can update all branches (including the checked-out one)
-            git -C "${REPO_DIR}" checkout --detach 2>/dev/null || true
-            git -C "${REPO_DIR}" fetch "${repo_state_dir}/repo.bundle" "+refs/heads/*:refs/heads/*" 2>&1 || {
-                echo "  WARNING: Failed to fetch refs from bundle for ${REPO_NAME}"
-            }
-        fi
+            if [ ! -d "${REPO_DIR}/.git" ] && [ ! -f "${REPO_DIR}/.git" ]; then
+                echo "  WARNING: ${REPO_DIR} is not a git repo, skipping restore"
+                continue
+            fi
 
-        # Fetch all remotes to ensure refs are up to date
-        git -C "${REPO_DIR}" fetch --all 2>/dev/null || true
+            git config --global --add safe.directory "${REPO_DIR}" 2>/dev/null || true
 
-        # Checkout the saved branch
-        if [ "${SAVED_BRANCH}" != "unknown" ] && [ -n "${SAVED_BRANCH}" ]; then
-            echo "  Checking out branch: ${SAVED_BRANCH}"
-            git -C "${REPO_DIR}" checkout "${SAVED_BRANCH}" 2>&1 || {
-                echo "  WARNING: Failed to checkout ${SAVED_BRANCH}, staying on current branch"
-            }
-        fi
+            # Import local branches from bundle using fetch (creates local branch refs)
+            if [ -f "${repo_state_dir}/repo.bundle" ]; then
+                echo "  Fetching refs from bundle for ${REPO_NAME}..."
+                # Detach HEAD so fetch can update all branches (including the checked-out one)
+                git -C "${REPO_DIR}" checkout --detach 2>/dev/null || true
+                git -C "${REPO_DIR}" fetch "${repo_state_dir}/repo.bundle" "+refs/heads/*:refs/heads/*" 2>&1 || {
+                    echo "  WARNING: Failed to fetch refs from bundle for ${REPO_NAME}"
+                }
+            fi
 
-        # Apply uncommitted changes (best-effort)
-        if [ -f "${repo_state_dir}/uncommitted.patch" ] && [ -s "${repo_state_dir}/uncommitted.patch" ]; then
-            echo "  Applying uncommitted changes..."
-            git -C "${REPO_DIR}" apply --allow-empty "${repo_state_dir}/uncommitted.patch" 2>&1 || {
-                echo "  WARNING: Failed to apply uncommitted changes for ${REPO_NAME} (conflicts likely)"
-            }
-        fi
+            # Fetch all remotes to ensure refs are up to date
+            git -C "${REPO_DIR}" fetch --all 2>/dev/null || true
 
-        # Apply staged changes (best-effort)
-        if [ -f "${repo_state_dir}/staged.patch" ] && [ -s "${repo_state_dir}/staged.patch" ]; then
-            echo "  Applying staged changes..."
-            git -C "${REPO_DIR}" apply --cached --allow-empty "${repo_state_dir}/staged.patch" 2>&1 || {
-                echo "  WARNING: Failed to apply staged changes for ${REPO_NAME} (conflicts likely)"
-            }
-        fi
+            # Checkout the saved branch
+            if [ "${SAVED_BRANCH}" != "unknown" ] && [ -n "${SAVED_BRANCH}" ]; then
+                echo "  Checking out branch: ${SAVED_BRANCH}"
+                git -C "${REPO_DIR}" checkout "${SAVED_BRANCH}" 2>&1 || {
+                    echo "  WARNING: Failed to checkout ${SAVED_BRANCH}, staying on current branch"
+                }
+            fi
 
-        # Verify HEAD SHA matches expectation
-        CURRENT_HEAD=$(git -C "${REPO_DIR}" rev-parse HEAD 2>/dev/null || echo "")
-        if [ -n "${SAVED_HEAD}" ] && [ -n "${CURRENT_HEAD}" ] && [ "${SAVED_HEAD}" != "${CURRENT_HEAD}" ]; then
-            echo "  WARNING: HEAD diverged for ${REPO_NAME}: expected ${SAVED_HEAD:0:8}, got ${CURRENT_HEAD:0:8}"
-        fi
+            # Apply uncommitted changes (best-effort)
+            if [ -f "${repo_state_dir}/uncommitted.patch" ] && [ -s "${repo_state_dir}/uncommitted.patch" ]; then
+                echo "  Applying uncommitted changes..."
+                git -C "${REPO_DIR}" apply --allow-empty "${repo_state_dir}/uncommitted.patch" 2>&1 || {
+                    echo "  WARNING: Failed to apply uncommitted changes for ${REPO_NAME} (conflicts likely)"
+                }
+            fi
 
-        echo "  Restored ${REPO_NAME} (branch: ${SAVED_BRANCH})"
-    done
+            # Apply staged changes (best-effort)
+            if [ -f "${repo_state_dir}/staged.patch" ] && [ -s "${repo_state_dir}/staged.patch" ]; then
+                echo "  Applying staged changes..."
+                git -C "${REPO_DIR}" apply --cached --allow-empty "${repo_state_dir}/staged.patch" 2>&1 || {
+                    echo "  WARNING: Failed to apply staged changes for ${REPO_NAME} (conflicts likely)"
+                }
+            fi
 
-    # Clean up
-    rm -rf "${REPO_STATE_DIR}"
-    echo "Git repo state restore complete"
-else
-    echo "No git repo state backup found"
+            # Verify HEAD SHA matches expectation
+            CURRENT_HEAD=$(git -C "${REPO_DIR}" rev-parse HEAD 2>/dev/null || echo "")
+            if [ -n "${SAVED_HEAD}" ] && [ -n "${CURRENT_HEAD}" ] && [ "${SAVED_HEAD}" != "${CURRENT_HEAD}" ]; then
+                echo "  WARNING: HEAD diverged for ${REPO_NAME}: expected ${SAVED_HEAD:0:8}, got ${CURRENT_HEAD:0:8}"
+            fi
+
+            echo "  Restored ${REPO_NAME} (branch: ${SAVED_BRANCH})"
+        done
+
+        # Clean up
+        rm -rf "${REPO_STATE_DIR}"
+        echo "Git repo state restore complete"
+    else
+        echo "No git repo state backup found"
+    fi
 fi
 
 # Set permissions on repos after restore (repos may have been cloned or restored)
