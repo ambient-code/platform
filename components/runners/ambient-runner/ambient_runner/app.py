@@ -258,14 +258,20 @@ def add_ambient_endpoints(
     # This prevents cross-session attacks where an attacker uses another session's runner URL.
     _agui_token = os.getenv("AGUI_TOKEN", "").strip()
     if _agui_token:
+
         @app.middleware("http")
         async def _require_session_token(request: Request, call_next):
             if request.url.path not in ("/health", "/healthz"):
                 provided = request.headers.get("X-Ambient-Session-Token", "")
                 # Use constant-time comparison to prevent timing attacks
-                if not provided or not _secrets_mod.compare_digest(provided, _agui_token):
-                    return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+                if not provided or not _secrets_mod.compare_digest(
+                    provided, _agui_token
+                ):
+                    return JSONResponse(
+                        status_code=401, content={"detail": "Unauthorized"}
+                    )
             return await call_next(request)
+
         logger.info("AG-UI token authentication enabled")
 
     # Core endpoints (always registered)
@@ -516,6 +522,7 @@ async def _push_initial_prompt_via_http(prompt: str, session_id: str) -> None:
     }
 
     backoff = _AUTO_PROMPT_INITIAL_DELAY
+    last_exc: Exception | None = None
     for attempt in range(1, _AUTO_PROMPT_MAX_RETRIES + 1):
         # Re-read token each attempt — volume mount may not be ready at first try
         bot_token = get_bot_token()
@@ -552,9 +559,14 @@ async def _push_initial_prompt_via_http(prompt: str, session_id: str) -> None:
                         )
                         return
         except Exception as e:
+            last_exc = e
             logger.warning(
-                f"INITIAL_PROMPT attempt {attempt}/{_AUTO_PROMPT_MAX_RETRIES} "
-                f"error: {e}, retrying in {backoff:.0f}s"
+                "INITIAL_PROMPT attempt %d/%d error: %s(%s), retrying in %.0fs",
+                attempt,
+                _AUTO_PROMPT_MAX_RETRIES,
+                type(e).__name__,
+                e,
+                backoff,
             )
 
         await asyncio.sleep(backoff)
@@ -562,7 +574,10 @@ async def _push_initial_prompt_via_http(prompt: str, session_id: str) -> None:
         payload["runId"] = str(uuid.uuid4())
 
     logger.error(
-        f"INITIAL_PROMPT auto-execution failed after {_AUTO_PROMPT_MAX_RETRIES} attempts"
+        "INITIAL_PROMPT auto-execution failed after %d attempts (last error: %s(%s))",
+        _AUTO_PROMPT_MAX_RETRIES,
+        type(last_exc).__name__ if last_exc is not None else "unknown",
+        last_exc if last_exc is not None else "",
     )
 
 
