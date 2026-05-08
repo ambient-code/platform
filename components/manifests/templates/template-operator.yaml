@@ -12,6 +12,8 @@ parameters:
   value: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-operator-main
 - name: IMAGE_AMBIENT_RUNNER
   value: quay.io/redhat-services-prod/hcm-eng-prod-tenant/ambient-code-main/ambient-code-ambient-runner-main
+- name: ANTHROPIC_VERTEX_PROJECT_ID
+  value: itpc-gcp-hcm-pe-eng-claude
 objects:
 - apiVersion: apiextensions.k8s.io/v1
   kind: CustomResourceDefinition
@@ -1262,7 +1264,7 @@ objects:
     namespace: ambient-code
 - apiVersion: v1
   data:
-    ANTHROPIC_VERTEX_PROJECT_ID: ambient-code-platform
+    ANTHROPIC_VERTEX_PROJECT_ID: ${ANTHROPIC_VERTEX_PROJECT_ID}
     CLOUD_ML_REGION: global
     GOOGLE_APPLICATION_CREDENTIALS: /app/vertex/itpc-gcp-hcm-pe-eng.json
     USE_VERTEX: '1'
