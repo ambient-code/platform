@@ -1044,6 +1044,31 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 				Protocol:      corev1.ProtocolTCP,
 			}},
 
+			ReadinessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: "/health",
+						Port: intstr.FromInt32(runnerPort),
+					},
+				},
+				InitialDelaySeconds: 3,
+				PeriodSeconds:       5,
+				TimeoutSeconds:      2,
+				FailureThreshold:    3,
+			},
+			LivenessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: "/health",
+						Port: intstr.FromInt32(runnerPort),
+					},
+				},
+				InitialDelaySeconds: 20,
+				PeriodSeconds:       30,
+				TimeoutSeconds:      5,
+				FailureThreshold:    3,
+			},
+
 			VolumeMounts: runnerVolumeMounts,
 
 			// Lifecycle hook to copy Google credentials from read-only secret mount to writable workspace
