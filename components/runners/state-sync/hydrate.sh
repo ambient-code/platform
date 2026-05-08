@@ -340,11 +340,13 @@ if [ -n "$ACTIVE_WORKFLOW_GIT_URL" ] && [ "$ACTIVE_WORKFLOW_GIT_URL" != "null" ]
                 echo "  Available paths in repo:"
                 find "$WORKFLOW_TEMP" -maxdepth 3 -type d | head -10
                 echo "  Using entire repo instead"
+                mkdir -p "$(dirname "$WORKFLOW_FINAL")"
                 mv "$WORKFLOW_TEMP" "$WORKFLOW_FINAL"
                 echo "  ✓ Workflow ready at /workspace/workflows/${WORKFLOW_NAME}"
             fi
         else
             # No subpath - use entire repo
+            mkdir -p "$(dirname "$WORKFLOW_FINAL")"
             mv "$WORKFLOW_TEMP" "$WORKFLOW_FINAL"
             echo "  ✓ Workflow ready at /workspace/workflows/${WORKFLOW_NAME}"
         fi
@@ -467,9 +469,13 @@ else
     echo "No git repo state backup found"
 fi
 
-# Set permissions on repos after restore (repos may have been cloned or restored)
+# Set permissions on repos and workflows after restore
 chown -R 1001:0 /workspace/repos 2>/dev/null || true
 chmod -R 777 /workspace/repos 2>/dev/null || true
+if [ -d /workspace/workflows ]; then
+    chown -R 1001:0 /workspace/workflows 2>/dev/null || true
+    chmod -R 777 /workspace/workflows 2>/dev/null || true
+fi
 
 echo "========================================="
 echo "Workspace initialized successfully"
