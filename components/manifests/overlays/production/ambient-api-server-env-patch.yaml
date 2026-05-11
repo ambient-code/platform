@@ -10,3 +10,5 @@ spec:
           env:
             - name: AMBIENT_ENV
               value: production
+            - name: BACKEND_URL
+              value: "http://backend-service.ambient-code.svc:8080"
