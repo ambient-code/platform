@@ -18,6 +18,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o ambient-control-plane 
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 
+ARG GIT_COMMIT=unknown
+
 WORKDIR /app
 
 COPY --from=builder /workspace/ambient-control-plane/ambient-control-plane /usr/local/bin/
@@ -32,4 +34,5 @@ LABEL name="ambient-control-plane" \
       vendor="Ambient" \
       version="0.0.1" \
       summary="Ambient Control Plane" \
-      description="Kubernetes reconciler for the Ambient Code Platform"
+      description="Kubernetes reconciler for the Ambient Code Platform" \
+      org.opencontainers.image.revision=$GIT_COMMIT
