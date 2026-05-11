@@ -7,6 +7,8 @@ export function createWorkflowsAdapter(api: WorkflowsApi): WorkflowsPort {
   return {
     listOOTBWorkflows: api.listOOTBWorkflows,
     getWorkflowMetadata: api.getWorkflowMetadata,
+    getWorkflowSources: api.getWorkflowSources,
+    updateWorkflowSources: api.updateWorkflowSources,
   }
 }
 
