@@ -350,6 +350,21 @@ func ensureFreshRunnerToken(ctx context.Context, session *unstructured.Unstructu
 	return nil
 }
 
+// runnerSessionToken reads the agui-token from the runner token secret.
+// This token must be sent as X-Ambient-Session-Token on all operator→runner
+// HTTP calls; the runner middleware rejects unauthenticated requests with 401.
+func runnerSessionToken(namespace, sessionName string) string {
+	secretName := fmt.Sprintf("%s%s", defaultRunnerTokenSecretPrefix, sessionName)
+	secret, err := config.K8sClient.CoreV1().Secrets(namespace).Get(
+		context.TODO(), secretName, v1.GetOptions{},
+	)
+	if err != nil {
+		log.Printf("[Runner] Warning: could not read agui-token for session %s/%s: %v", namespace, sessionName, err)
+		return ""
+	}
+	return strings.TrimSpace(string(secret.Data["agui-token"]))
+}
+
 var vertexDeprecationOnce sync.Once
 
 // IsVertexEnabled checks whether Vertex AI is enabled via environment variables.
