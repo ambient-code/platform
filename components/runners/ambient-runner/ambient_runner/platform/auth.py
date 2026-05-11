@@ -30,10 +30,11 @@ _credential_expiry: dict[str, float] = {}
 # How many seconds before expiry to trigger a proactive refresh.
 _EXPIRY_BUFFER_SEC = 5 * 60
 
-# Hardcoded path for Google Workspace MCP credentials (must match populate and clear).
-_GOOGLE_WORKSPACE_CREDS_FILE = Path(
-    "/workspace/.google_workspace_mcp/credentials/credentials.json"
+_GOOGLE_WORKSPACE_CREDS_DIR = Path(
+    "/workspace/.google_workspace_mcp/credentials"
 )
+
+_GOOGLE_WORKSPACE_LEGACY_CREDS_FILE = _GOOGLE_WORKSPACE_CREDS_DIR / "credentials.json"
 
 # Token files written on every credential refresh so the git credential helper
 # can read the latest token even after the CLI subprocess has already been spawned.
@@ -423,8 +424,10 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     elif google_creds.get("token") or google_creds.get("accessToken"):
         try:
             if google_creds.get("accessToken"):
-                creds_dir = _GOOGLE_WORKSPACE_CREDS_FILE.parent
-                creds_dir.mkdir(parents=True, exist_ok=True)
+                _GOOGLE_WORKSPACE_CREDS_DIR.mkdir(parents=True, exist_ok=True)
+                expiry_raw = google_creds.get("expiresAt", "")
+                if isinstance(expiry_raw, str) and expiry_raw.endswith("Z"):
+                    expiry_raw = expiry_raw[:-1]
                 creds_data = {
                     "token": google_creds.get("accessToken"),
                     "refresh_token": google_creds.get("refreshToken", ""),
@@ -432,19 +435,28 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
                     "client_id": os.getenv("GOOGLE_OAUTH_CLIENT_ID", ""),
                     "client_secret": os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", ""),
                     "scopes": google_creds.get("scopes", []),
-                    "expiry": google_creds.get("expiresAt", ""),
+                    "expiry": expiry_raw,
                 }
-                with open(_GOOGLE_WORKSPACE_CREDS_FILE, "w") as f:
+                user_email = google_creds.get("email", "")
+                if user_email and user_email != _PLACEHOLDER_EMAIL:
+                    creds_filename = f"{user_email}.json"
+                else:
+                    creds_filename = "credentials.json"
+                creds_file = _GOOGLE_WORKSPACE_CREDS_DIR / creds_filename
+                if _GOOGLE_WORKSPACE_LEGACY_CREDS_FILE.exists() and creds_filename != "credentials.json":
+                    _GOOGLE_WORKSPACE_LEGACY_CREDS_FILE.unlink(missing_ok=True)
+                    logger.info("Removed legacy credentials.json in favor of %s", creds_filename)
+                with open(creds_file, "w") as f:
                     _json.dump(creds_data, f, indent=2)
-                _GOOGLE_WORKSPACE_CREDS_FILE.chmod(0o600)
-                logger.info("Updated Google credentials file for workspace-mcp")
+                creds_file.chmod(0o600)
+                logger.info("Updated Google credentials file for workspace-mcp: %s", creds_filename)
             else:
                 sa_json = google_creds["token"]
                 gac_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
                 if gac_path:
                     creds_path = Path(gac_path)
                 else:
-                    creds_path = _GOOGLE_WORKSPACE_CREDS_FILE
+                    creds_path = _GOOGLE_WORKSPACE_LEGACY_CREDS_FILE
                 creds_path.parent.mkdir(parents=True, exist_ok=True)
                 creds_path.write_text(sa_json)
                 creds_path.chmod(0o600)
