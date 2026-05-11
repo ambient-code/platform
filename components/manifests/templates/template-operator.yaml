@@ -1422,11 +1422,11 @@ objects:
             periodSeconds: 10
           resources:
             limits:
-              cpu: 200m
-              memory: 512Mi
+              cpu: 2
+              memory: 4Gi
             requests:
-              cpu: 50m
-              memory: 128Mi
+              cpu: 100m
+              memory: 512Mi
           volumeMounts:
           - mountPath: /config/models
             name: model-manifest
