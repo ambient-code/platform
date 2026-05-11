@@ -1148,6 +1148,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 				// Core session env vars
 				base = append(base,
 					corev1.EnvVar{Name: "INITIAL_PROMPT", Value: prompt},
+					corev1.EnvVar{Name: "INITIAL_PROMPT_DELAY_SECONDS", Value: "10"},
 					corev1.EnvVar{Name: "LLM_MODEL", Value: model},
 					corev1.EnvVar{Name: "LLM_TEMPERATURE", Value: fmt.Sprintf("%.2f", temperature)},
 					corev1.EnvVar{Name: "LLM_MAX_TOKENS", Value: fmt.Sprintf("%d", maxTokens)},
