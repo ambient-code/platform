@@ -10,6 +10,7 @@ resources:
 - platform
 - ambient-control-plane-service.yml
 - ambient-control-plane-token-svc.yaml
+- runner-networkpolicy.yaml
 
 # Default images (can be overridden by overlays)
 images:
