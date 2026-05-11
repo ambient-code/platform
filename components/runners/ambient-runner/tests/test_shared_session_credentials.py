@@ -153,7 +153,7 @@ class TestClearRuntimeCredentials:
         fake_cred_file = tmp_path / "credentials.json"
         fake_cred_file.write_text('{"token": "test-access-token"}')
         monkeypatch.setattr(
-            "ambient_runner.platform.auth._GOOGLE_WORKSPACE_CREDS_FILE",
+            "ambient_runner.platform.auth._GOOGLE_WORKSPACE_LEGACY_CREDS_FILE",
             fake_cred_file,
         )
 
@@ -611,7 +611,7 @@ class TestPopulateCredentialsResponseFormats:
                     body = {
                         "accessToken": "ya29.access",
                         "refreshToken": "1//refresh",
-                        "email": "u@example.com",
+                        "email": "test-google@example.com",
                         "scopes": ["drive"],
                         "expiresAt": "2099-01-01T00:00:00Z",
                     }
@@ -635,7 +635,7 @@ class TestPopulateCredentialsResponseFormats:
 
         import tempfile
 
-        tmp_creds = Path(tempfile.mkdtemp()) / "credentials.json"
+        tmp_creds_dir = Path(tempfile.mkdtemp())
 
         try:
             with (
@@ -653,23 +653,29 @@ class TestPopulateCredentialsResponseFormats:
                     return_value="bot-tok",
                 ),
                 patch(
-                    "ambient_runner.platform.auth._GOOGLE_WORKSPACE_CREDS_FILE",
-                    tmp_creds,
+                    "ambient_runner.platform.auth._GOOGLE_WORKSPACE_CREDS_DIR",
+                    tmp_creds_dir,
+                ),
+                patch(
+                    "ambient_runner.platform.auth._GOOGLE_WORKSPACE_LEGACY_CREDS_FILE",
+                    tmp_creds_dir / "credentials.json",
                 ),
             ):
                 os.environ.pop("CREDENTIAL_IDS", None)
                 ctx = _make_context(session_id="s1")
                 await populate_runtime_credentials(ctx)
 
-                assert tmp_creds.exists()
-                written = json.loads(tmp_creds.read_text())
+                creds_file = tmp_creds_dir / "test-google@example.com.json"
+                assert creds_file.exists(), f"Expected {creds_file} to exist"
+                written = json.loads(creds_file.read_text())
                 assert written["token"] == "ya29.access"
                 assert written["refresh_token"] == "1//refresh"
+                assert written["expiry"] == "2099-01-01T00:00:00"
         finally:
             server.server_close()
             thread.join(timeout=2)
-            tmp_creds.unlink(missing_ok=True)
-            tmp_creds.parent.rmdir()
+            import shutil
+            shutil.rmtree(tmp_creds_dir, ignore_errors=True)
             clear_runtime_credentials()
 
     @pytest.mark.asyncio
