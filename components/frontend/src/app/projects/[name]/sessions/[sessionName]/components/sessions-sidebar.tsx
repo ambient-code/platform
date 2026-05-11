@@ -48,6 +48,7 @@ import {
   useContinueSession,
   useUpdateSessionDisplayName,
 } from "@/services/queries/use-sessions";
+import { useProject } from "@/services/queries/use-projects";
 import { useProjectAccess } from "@/services/queries/use-project-access";
 import { useCurrentUser } from "@/services/queries/use-auth";
 import { useVersion } from "@/services/queries/use-version";
@@ -92,6 +93,8 @@ export function SessionsSidebar({
   const router = useRouter();
   const pathname = usePathname();
   const { data: version } = useVersion();
+  const { data: project } = useProject(collapsed ? "" : projectName);
+  const workspaceName = project?.displayName || projectName;
   const [showAll, setShowAll] = useState(false);
   const { data, isLoading, isFetching, dataUpdatedAt, refetch } = useSessionsPaginated(
     collapsed ? "" : projectName,
@@ -315,8 +318,8 @@ export function SessionsSidebar({
               <ChevronLeft className="w-4 h-4 mr-2" />
               Workspaces
             </span>
-            <span className="text-xs font-semibold text-foreground truncate max-w-[60%]" title={projectName}>
-              {projectName}
+            <span className="text-xs font-semibold text-foreground truncate max-w-[60%]" title={workspaceName}>
+              {workspaceName}
             </span>
           </Button>
         </Link>
