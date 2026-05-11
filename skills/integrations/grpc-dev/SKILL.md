@@ -1,8 +1,12 @@
-# Skill: grpc-dev
-
-**Activates when:** Working on gRPC streaming, AG-UI event flow, WatchSessionMessages, control plane ↔ runner protocol, or debugging gRPC connectivity.
-
 ---
+name: grpc-dev
+description: >
+  Use when working on gRPC streaming, AG-UI event flow,
+  WatchSessionMessages, the control-plane-to-runner protocol, or
+  debugging gRPC connectivity in Ambient.
+---
+
+# gRPC Development
 
 ## Architecture
 
