@@ -12,6 +12,9 @@ export class {{.Resource.Name}}API {
 
 {{- if .Resource.IsSubResource}}
   private basePath(): string {
+    if (!this.config.project) {
+      throw new Error('project is required for {{.Resource.Name}} operations');
+    }
     return '/{{.Resource.PathSegment}}'.replace('{id}', encodeURIComponent(this.config.project));
   }
 {{end}}
@@ -69,11 +72,11 @@ export class {{.Resource.Name}}API {
   }
 {{end}}
 {{- range .Resource.Actions}}
-  async {{.}}(id: string, opts?: RequestOptions): Promise<{{$.Resource.Name}}> {
+  async {{.Name}}(id: string, opts?: RequestOptions): Promise<{{if .ReturnType}}{{.ReturnType}}{{else}}Record<string, unknown>{{end}}> {
 {{- if $.Resource.IsSubResource}}
-    return ambientFetch<{{$.Resource.Name}}>(this.config, 'POST', `${this.basePath()}/${id}/{{.}}`, undefined, opts);
+    return ambientFetch<{{if .ReturnType}}{{.ReturnType}}{{else}}Record<string, unknown>{{end}}>(this.config, '{{.Method | upper}}', `${this.basePath()}/${id}/{{.Name}}`, undefined, opts);
 {{- else}}
-    return ambientFetch<{{$.Resource.Name}}>(this.config, 'POST', `/{{$.Resource.PathSegment}}/${id}/{{.}}`, undefined, opts);
+    return ambientFetch<{{if .ReturnType}}{{.ReturnType}}{{else}}Record<string, unknown>{{end}}>(this.config, '{{.Method | upper}}', `/{{$.Resource.PathSegment}}/${id}/{{.Name}}`, undefined, opts);
 {{- end}}
   }
 {{end}}

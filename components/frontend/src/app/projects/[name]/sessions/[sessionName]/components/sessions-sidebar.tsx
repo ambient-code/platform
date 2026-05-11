@@ -48,6 +48,7 @@ import {
   useContinueSession,
   useUpdateSessionDisplayName,
 } from "@/services/queries/use-sessions";
+import { useProject } from "@/services/queries/use-projects";
 import { useProjectAccess } from "@/services/queries/use-project-access";
 import { useCurrentUser } from "@/services/queries/use-auth";
 import { useVersion } from "@/services/queries/use-version";
@@ -92,6 +93,8 @@ export function SessionsSidebar({
   const router = useRouter();
   const pathname = usePathname();
   const { data: version } = useVersion();
+  const { data: project } = useProject(collapsed ? "" : projectName);
+  const workspaceName = project?.displayName || projectName;
   const [showAll, setShowAll] = useState(false);
   const { data, isLoading, isFetching, dataUpdatedAt, refetch } = useSessionsPaginated(
     collapsed ? "" : projectName,
@@ -315,8 +318,8 @@ export function SessionsSidebar({
               <ChevronLeft className="w-4 h-4 mr-2" />
               Workspaces
             </span>
-            <span className="text-xs font-semibold text-foreground truncate max-w-[60%]" title={projectName}>
-              {projectName}
+            <span className="text-xs font-semibold text-foreground truncate max-w-[60%]" title={workspaceName}>
+              {workspaceName}
             </span>
           </Button>
         </Link>
@@ -445,7 +448,7 @@ export function SessionsSidebar({
                           <Link
                             href={sessionHref(session.metadata.name)}
                             onClick={() => onSessionSelect?.()}
-                            className="flex items-center gap-2 flex-1 min-w-0 px-2 py-2"
+                            className="flex items-center gap-2 flex-1 min-w-0 px-2 py-2.5 md:py-2"
                           >
                             <AgentStatusIndicator
                               status={agentStatus}
@@ -631,7 +634,7 @@ function SidebarSessionActions({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 flex items-center justify-center h-6 w-6 rounded-sm flex-shrink-0 mr-1 text-muted-foreground hover:text-foreground hover:bg-accent-foreground/10 transition-colors"
+          className="md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 flex items-center justify-center h-8 w-8 md:h-6 md:w-6 rounded-sm flex-shrink-0 mr-1 text-muted-foreground hover:text-foreground hover:bg-accent-foreground/10 transition-colors"
         >
           <MoreVertical className="h-3.5 w-3.5" />
           <span className="sr-only">Session actions</span>
