@@ -34,6 +34,10 @@ vi.mock('@/services/queries/use-project-access', () => ({
   useProjectAccess: () => ({ data: { userRole: 'admin' } }),
 }));
 
+vi.mock('@/services/queries/use-projects', () => ({
+  useProject: () => ({ data: { displayName: 'Test Workspace', name: 'test-project' } }),
+}));
+
 const mockCurrentUser = vi.fn(() => ({ data: { authenticated: true, userId: 'user-1', displayName: 'Test User' } }));
 vi.mock('@/services/queries/use-auth', () => ({
   useCurrentUser: () => mockCurrentUser(),
