@@ -1275,6 +1275,23 @@ objects:
       deployment-type: openshift
     name: operator-config
     namespace: ambient-code
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: allow-from-runner-namespaces
+    namespace: ${NAMESPACE}
+  spec:
+    podSelector:
+      matchLabels:
+        app: backend-api
+    policyTypes:
+    - Ingress
+    ingress:
+    - from:
+      - namespaceSelector: {}
+        podSelector:
+          matchLabels:
+            app: ambient-code-runner
 - apiVersion: apps/v1
   kind: Deployment
   metadata:
