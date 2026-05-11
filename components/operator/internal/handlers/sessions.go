@@ -1812,6 +1812,7 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 	// AG-UI pattern: Call runner's REST endpoints to update configuration
 	// Runner will restart Claude SDK client with new repo configuration
 	runnerBaseURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:%d", sessionName, sessionNamespace, getRunnerPort(sessionNamespace, sessionName))
+	aguiToken := runnerSessionToken(sessionNamespace, sessionName)
 
 	// Add new repos
 	for _, repo := range toAdd {
@@ -1830,6 +1831,9 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 			continue
 		}
 		req.Header.Set("Content-Type", "application/json")
+		if aguiToken != "" {
+			req.Header.Set("X-Ambient-Session-Token", aguiToken)
+		}
 
 		client := &http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Do(req)
@@ -1862,6 +1866,9 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 			continue
 		}
 		req.Header.Set("Content-Type", "application/json")
+		if aguiToken != "" {
+			req.Header.Set("X-Ambient-Session-Token", aguiToken)
+		}
 
 		client := &http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Do(req)
@@ -1891,6 +1898,9 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 			continue
 		}
 		req.Header.Set("Content-Type", "application/json")
+		if aguiToken != "" {
+			req.Header.Set("X-Ambient-Session-Token", aguiToken)
+		}
 
 		client := &http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Do(req)
@@ -1983,6 +1993,9 @@ func reconcileActiveWorkflowWithPatch(sessionNamespace, sessionName string, spec
 		return fmt.Errorf("failed to create workflow request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if tok := runnerSessionToken(sessionNamespace, sessionName); tok != "" {
+		req.Header.Set("X-Ambient-Session-Token", tok)
+	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
