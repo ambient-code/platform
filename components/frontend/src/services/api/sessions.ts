@@ -55,6 +55,10 @@ export async function listSessionsPaginated(
   if (params.offset) searchParams.set('offset', params.offset.toString());
   if (params.search) searchParams.set('search', params.search);
   if (params.continue) searchParams.set('continue', params.continue);
+  if (params.phase) searchParams.set('phase', params.phase);
+  if (params.userId) searchParams.set('userId', params.userId);
+  if (params.sortBy) searchParams.set('sortBy', params.sortBy);
+  if (params.sortDirection) searchParams.set('sortDirection', params.sortDirection);
 
   const queryString = searchParams.toString();
   const url = queryString

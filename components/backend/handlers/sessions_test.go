@@ -252,6 +252,204 @@ var _ = Describe("Sessions Handler", Label(test_constants.LabelUnit, test_consta
 				logger.Log("Unauthorized project returned empty list")
 			})
 		})
+
+		Context("With phase filter", func() {
+			BeforeEach(func() {
+				createTestSessionWithOptions("running-"+randomName, testNamespace, "Running", "", k8sUtils)
+				createTestSessionWithOptions("completed-"+randomName, testNamespace, "Completed", "", k8sUtils)
+				createTestSessionWithOptions("failed-"+randomName, testNamespace, "Failed", "", k8sUtils)
+			})
+
+			It("Should filter by single phase", func() {
+				context := httpUtils.CreateTestGinContext("GET", "/api/projects/"+testNamespace+"/agentic-sessions?phase=Running", nil)
+				httpUtils.SetAuthHeader(testToken)
+				httpUtils.SetProjectContext(testNamespace)
+
+				ListSessions(context)
+
+				httpUtils.AssertHTTPStatus(http.StatusOK)
+				var response map[string]interface{}
+				httpUtils.GetResponseJSON(&response)
+				items := response["items"].([]interface{})
+				Expect(items).To(HaveLen(1))
+			})
+
+			It("Should filter by multiple phases", func() {
+				context := httpUtils.CreateTestGinContext("GET", "/api/projects/"+testNamespace+"/agentic-sessions?phase=Running,Failed", nil)
+				httpUtils.SetAuthHeader(testToken)
+				httpUtils.SetProjectContext(testNamespace)
+
+				ListSessions(context)
+
+				httpUtils.AssertHTTPStatus(http.StatusOK)
+				var response map[string]interface{}
+				httpUtils.GetResponseJSON(&response)
+				items := response["items"].([]interface{})
+				Expect(items).To(HaveLen(2))
+			})
+
+			It("Should return all sessions when no phase filter", func() {
+				context := httpUtils.CreateTestGinContext("GET", "/api/projects/"+testNamespace+"/agentic-sessions", nil)
+				httpUtils.SetAuthHeader(testToken)
+				httpUtils.SetProjectContext(testNamespace)
+
+				ListSessions(context)
+
+				httpUtils.AssertHTTPStatus(http.StatusOK)
+				var response map[string]interface{}
+				httpUtils.GetResponseJSON(&response)
+				items := response["items"].([]interface{})
+				Expect(items).To(HaveLen(3))
+			})
+		})
+
+		Context("With userId filter", func() {
+			BeforeEach(func() {
+				createTestSessionWithOptions("user1-session-"+randomName, testNamespace, "Running", "user-1", k8sUtils)
+				createTestSessionWithOptions("user2-session-"+randomName, testNamespace, "Running", "user-2", k8sUtils)
+				createTestSessionWithOptions("no-user-session-"+randomName, testNamespace, "Running", "", k8sUtils)
+			})
+
+			It("Should filter by userId", func() {
+				context := httpUtils.CreateTestGinContext("GET", "/api/projects/"+testNamespace+"/agentic-sessions?userId=user-1", nil)
+				httpUtils.SetAuthHeader(testToken)
+				httpUtils.SetProjectContext(testNamespace)
+
+				ListSessions(context)
+
+				httpUtils.AssertHTTPStatus(http.StatusOK)
+				var response map[string]interface{}
+				httpUtils.GetResponseJSON(&response)
+				items := response["items"].([]interface{})
+				Expect(items).To(HaveLen(1))
+			})
+
+			It("Should return all sessions when no userId filter", func() {
+				context := httpUtils.CreateTestGinContext("GET", "/api/projects/"+testNamespace+"/agentic-sessions", nil)
+				httpUtils.SetAuthHeader(testToken)
+				httpUtils.SetProjectContext(testNamespace)
+
+				ListSessions(context)
+
+				httpUtils.AssertHTTPStatus(http.StatusOK)
+				var response map[string]interface{}
+				httpUtils.GetResponseJSON(&response)
+				items := response["items"].([]interface{})
+				Expect(items).To(HaveLen(3))
+			})
+		})
+
+		Context("With sort direction", func() {
+			BeforeEach(func() {
+				createTestSessionWithOptions("alpha-"+randomName, testNamespace, "Running", "", k8sUtils)
+				time.Sleep(100 * time.Millisecond)
+				createTestSessionWithOptions("beta-"+randomName, testNamespace, "Running", "", k8sUtils)
+			})
+
+			It("Should sort ascending when sortDirection=asc", func() {
+				context := httpUtils.CreateTestGinContext("GET", "/api/projects/"+testNamespace+"/agentic-sessions?sortDirection=asc", nil)
+				httpUtils.SetAuthHeader(testToken)
+				httpUtils.SetProjectContext(testNamespace)
+
+				ListSessions(context)
+
+				httpUtils.AssertHTTPStatus(http.StatusOK)
+				var response map[string]interface{}
+				httpUtils.GetResponseJSON(&response)
+				items := response["items"].([]interface{})
+				Expect(items).To(HaveLen(2))
+				// First item should be the oldest (alpha was created first)
+				firstItem := items[0].(map[string]interface{})
+				metadata := firstItem["metadata"].(map[string]interface{})
+				name := metadata["name"].(string)
+				Expect(name).To(HavePrefix("alpha-"))
+			})
+
+			It("Should sort descending by default", func() {
+				context := httpUtils.CreateTestGinContext("GET", "/api/projects/"+testNamespace+"/agentic-sessions", nil)
+				httpUtils.SetAuthHeader(testToken)
+				httpUtils.SetProjectContext(testNamespace)
+
+				ListSessions(context)
+
+				httpUtils.AssertHTTPStatus(http.StatusOK)
+				var response map[string]interface{}
+				httpUtils.GetResponseJSON(&response)
+				items := response["items"].([]interface{})
+				Expect(items).To(HaveLen(2))
+				// First item should be the newest (beta was created second)
+				firstItem := items[0].(map[string]interface{})
+				metadata := firstItem["metadata"].(map[string]interface{})
+				name := metadata["name"].(string)
+				Expect(name).To(HavePrefix("beta-"))
+			})
+		})
+
+		Context("With sortBy=name", func() {
+			BeforeEach(func() {
+				createTestSessionWithOptions("alpha-"+randomName, testNamespace, "Running", "", k8sUtils)
+				time.Sleep(100 * time.Millisecond)
+				createTestSessionWithOptions("beta-"+randomName, testNamespace, "Running", "", k8sUtils)
+			})
+
+			It("Should sort by name ascending", func() {
+				context := httpUtils.CreateTestGinContext("GET", "/api/projects/"+testNamespace+"/agentic-sessions?sortBy=name&sortDirection=asc", nil)
+				httpUtils.SetAuthHeader(testToken)
+				httpUtils.SetProjectContext(testNamespace)
+
+				ListSessions(context)
+
+				httpUtils.AssertHTTPStatus(http.StatusOK)
+				var response map[string]interface{}
+				httpUtils.GetResponseJSON(&response)
+				items := response["items"].([]interface{})
+				Expect(items).To(HaveLen(2))
+				firstName := items[0].(map[string]interface{})["metadata"].(map[string]interface{})["name"].(string)
+				secondName := items[1].(map[string]interface{})["metadata"].(map[string]interface{})["name"].(string)
+				Expect(firstName).To(HavePrefix("alpha-"))
+				Expect(secondName).To(HavePrefix("beta-"))
+			})
+
+			It("Should sort by name descending", func() {
+				context := httpUtils.CreateTestGinContext("GET", "/api/projects/"+testNamespace+"/agentic-sessions?sortBy=name&sortDirection=desc", nil)
+				httpUtils.SetAuthHeader(testToken)
+				httpUtils.SetProjectContext(testNamespace)
+
+				ListSessions(context)
+
+				httpUtils.AssertHTTPStatus(http.StatusOK)
+				var response map[string]interface{}
+				httpUtils.GetResponseJSON(&response)
+				items := response["items"].([]interface{})
+				Expect(items).To(HaveLen(2))
+				firstName := items[0].(map[string]interface{})["metadata"].(map[string]interface{})["name"].(string)
+				secondName := items[1].(map[string]interface{})["metadata"].(map[string]interface{})["name"].(string)
+				Expect(firstName).To(HavePrefix("beta-"))
+				Expect(secondName).To(HavePrefix("alpha-"))
+			})
+		})
+
+		Context("With combined filters", func() {
+			BeforeEach(func() {
+				createTestSessionWithOptions("running-match-"+randomName, testNamespace, "Running", "user-1", k8sUtils)
+				createTestSessionWithOptions("completed-match-"+randomName, testNamespace, "Completed", "user-1", k8sUtils)
+				createTestSessionWithOptions("running-other-"+randomName, testNamespace, "Running", "user-2", k8sUtils)
+			})
+
+			It("Should apply both phase and userId filters", func() {
+				context := httpUtils.CreateTestGinContext("GET", "/api/projects/"+testNamespace+"/agentic-sessions?phase=Running&userId=user-1", nil)
+				httpUtils.SetAuthHeader(testToken)
+				httpUtils.SetProjectContext(testNamespace)
+
+				ListSessions(context)
+
+				httpUtils.AssertHTTPStatus(http.StatusOK)
+				var response map[string]interface{}
+				httpUtils.GetResponseJSON(&response)
+				items := response["items"].([]interface{})
+				Expect(items).To(HaveLen(1))
+			})
+		})
 	})
 
 	Describe("CreateSession", func() {
@@ -978,6 +1176,46 @@ func createTestSession(name, namespace string, k8sUtils *test_utils.K8sTestUtils
 		// Use Ginkgo's Fail() instead of panic for proper test failure reporting
 		Fail(fmt.Sprintf("Failed to create test session %s: %v", name, err))
 		return nil // Will not be reached, but satisfies return type
+	}
+	return created
+}
+
+func createTestSessionWithOptions(name, namespace, phase, userId string, k8sUtils *test_utils.K8sTestUtils) *unstructured.Unstructured {
+	session := &unstructured.Unstructured{}
+	session.SetAPIVersion("vteam.ambient-code/v1alpha1")
+	session.SetKind("AgenticSession")
+	session.SetName(name)
+	session.SetNamespace(namespace)
+	session.SetLabels(map[string]string{"test-framework": "ambient-code-backend"})
+
+	unstructured.SetNestedField(session.Object, "Test prompt for "+name, "spec", "initialPrompt")
+	repos := []interface{}{
+		map[string]interface{}{"url": "https://github.com/test/repo.git", "branch": "main"},
+	}
+	unstructured.SetNestedSlice(session.Object, repos, "spec", "repos")
+
+	if phase != "" {
+		unstructured.SetNestedField(session.Object, phase, "status", "phase")
+	} else {
+		unstructured.SetNestedField(session.Object, "Pending", "status", "phase")
+	}
+
+	if userId != "" {
+		unstructured.SetNestedField(session.Object, userId, "spec", "userContext", "userId")
+	}
+
+	sessionGVR := schema.GroupVersionResource{
+		Group:    "vteam.ambient-code",
+		Version:  "v1alpha1",
+		Resource: "agenticsessions",
+	}
+
+	created, err := k8sUtils.DynamicClient.Resource(sessionGVR).Namespace(namespace).Create(
+		context.Background(), session, v1.CreateOptions{},
+	)
+	if err != nil {
+		Fail(fmt.Sprintf("Failed to create test session %s: %v", name, err))
+		return nil
 	}
 	return created
 }

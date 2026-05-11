@@ -23,6 +23,10 @@ export type PaginationParams = {
   offset?: number;
   search?: string;
   continue?: string;
+  phase?: string;
+  userId?: string;
+  sortBy?: string;
+  sortDirection?: 'asc' | 'desc';
 };
 
 /**

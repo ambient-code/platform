@@ -687,8 +687,18 @@ func ListSessions(c *gin.Context) {
 		sessions = filterSessionsBySearch(sessions, params.Search)
 	}
 
-	// Sort by creation timestamp (newest first)
-	sortSessionsByCreationTime(sessions)
+	// Apply phase filter if provided
+	if params.Phase != "" {
+		sessions = filterSessionsByPhase(sessions, params.Phase)
+	}
+
+	// Apply userId filter if provided
+	if params.UserID != "" {
+		sessions = filterSessionsByUserID(sessions, params.UserID)
+	}
+
+	// Sort sessions
+	sortSessions(sessions, params.SortBy, params.SortDirection)
 
 	// Apply pagination
 	totalCount := len(sessions)
@@ -747,14 +757,75 @@ func filterSessionsBySearch(sessions []types.AgenticSession, search string) []ty
 	return filtered
 }
 
-// sortSessionsByCreationTime sorts sessions by creation timestamp (newest first)
-func sortSessionsByCreationTime(sessions []types.AgenticSession) {
-	// Use sort.Slice for O(n log n) performance
+// filterSessionsByPhase filters sessions by one or more comma-separated phase values
+func filterSessionsByPhase(sessions []types.AgenticSession, phaseParam string) []types.AgenticSession {
+	if phaseParam == "" {
+		return sessions
+	}
+	phases := strings.Split(phaseParam, ",")
+	phaseSet := make(map[string]bool, len(phases))
+	for _, p := range phases {
+		phaseSet[strings.TrimSpace(p)] = true
+	}
+	filtered := make([]types.AgenticSession, 0, len(sessions))
+	for _, session := range sessions {
+		if session.Status != nil && phaseSet[session.Status.Phase] {
+			filtered = append(filtered, session)
+		}
+	}
+	return filtered
+}
+
+// filterSessionsByUserID filters sessions by creator userId
+func filterSessionsByUserID(sessions []types.AgenticSession, userID string) []types.AgenticSession {
+	if userID == "" {
+		return sessions
+	}
+	filtered := make([]types.AgenticSession, 0, len(sessions))
+	for _, session := range sessions {
+		if session.Spec.UserContext != nil && session.Spec.UserContext.UserID == userID {
+			filtered = append(filtered, session)
+		}
+	}
+	return filtered
+}
+
+// sortSessions sorts sessions by the given column and direction
+func sortSessions(sessions []types.AgenticSession, sortBy, sortDirection string) {
+	if sortBy == "" {
+		sortBy = "created"
+	}
+	if sortDirection == "" {
+		sortDirection = "desc"
+	}
+	ascending := sortDirection == "asc"
+
 	sort.Slice(sessions, func(i, j int) bool {
-		ts1 := getSessionCreationTimestamp(sessions[i])
-		ts2 := getSessionCreationTimestamp(sessions[j])
-		// Sort descending (newest first) - RFC3339 timestamps sort lexicographically
-		return ts1 > ts2
+		var vi, vj string
+		switch sortBy {
+		case "name":
+			ni := sessions[i].Spec.DisplayName
+			if strings.TrimSpace(ni) == "" {
+				if name, ok := sessions[i].Metadata["name"].(string); ok {
+					ni = name
+				}
+			}
+			nj := sessions[j].Spec.DisplayName
+			if strings.TrimSpace(nj) == "" {
+				if name, ok := sessions[j].Metadata["name"].(string); ok {
+					nj = name
+				}
+			}
+			vi = strings.ToLower(ni)
+			vj = strings.ToLower(nj)
+		default: // "created" or any unrecognized value
+			vi = getSessionCreationTimestamp(sessions[i])
+			vj = getSessionCreationTimestamp(sessions[j])
+		}
+		if ascending {
+			return vi < vj
+		}
+		return vi > vj
 	})
 }
 
