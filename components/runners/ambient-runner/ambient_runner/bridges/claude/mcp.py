@@ -19,6 +19,9 @@ from ambient_runner.platform.utils import get_bot_token
 
 logger = logging.getLogger(__name__)
 
+_WORKSPACE_CREDS_DIR = Path("/workspace/.google_workspace_mcp/credentials")
+_SECRET_CREDS_DIR = Path("/app/.google_workspace_mcp/credentials")
+
 
 DEFAULT_ALLOWED_TOOLS = [
     "Read",
@@ -169,19 +172,16 @@ def log_auth_status(mcp_servers: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _read_google_credentials(
-    workspace_path: Path, secret_path: Path
-) -> dict[str, Any] | None:
-    cred_path = workspace_path if workspace_path.exists() else secret_path
-    if not cred_path.exists():
+def _load_credential_file(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
         return None
     try:
-        if cred_path.stat().st_size == 0:
+        if path.stat().st_size == 0:
             return None
-        with open(cred_path, "r") as f:
+        with open(path, "r") as f:
             return json.load(f)
     except (json.JSONDecodeError, OSError) as e:
-        logger.warning(f"Failed to read Google credentials: {e}")
+        logger.warning(f"Failed to read Google credentials from {path.name}: {e}")
         return None
 
 
@@ -226,11 +226,17 @@ def _validate_google_token(
 def check_mcp_authentication(server_name: str) -> tuple[bool | None, str | None]:
     """Check if credentials are available and valid for known MCP servers."""
     if server_name == "google-workspace":
-        workspace_path = Path(
-            "/workspace/.google_workspace_mcp/credentials/credentials.json"
-        )
-        secret_path = Path("/app/.google_workspace_mcp/credentials/credentials.json")
-        creds = _read_google_credentials(workspace_path, secret_path)
+        creds = None
+        for creds_dir in (_WORKSPACE_CREDS_DIR, _SECRET_CREDS_DIR):
+            if creds_dir.is_dir():
+                for json_file in sorted(creds_dir.glob("*.json")):
+                    candidate = _load_credential_file(json_file)
+                    if candidate is not None:
+                        logger.debug("Using Google credentials from %s", json_file)
+                        creds = candidate
+                        break
+            if creds is not None:
+                break
         if creds is None:
             return (
                 False,
