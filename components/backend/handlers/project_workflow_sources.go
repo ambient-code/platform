@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -97,6 +99,26 @@ func UpdateProjectWorkflowSources(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
+	}
+
+	const maxWorkflowSources = 20
+	if len(req.Sources) > maxWorkflowSources {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Maximum %d workflow sources allowed", maxWorkflowSources)})
+		return
+	}
+	for i, src := range req.Sources {
+		if strings.TrimSpace(src.Name) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Source %d: name is required", i+1)})
+			return
+		}
+		if strings.TrimSpace(src.GitURL) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Source %d: gitUrl is required", i+1)})
+			return
+		}
+		if !strings.HasPrefix(src.GitURL, "https://") && !strings.HasPrefix(src.GitURL, "http://") && !strings.HasPrefix(src.GitURL, "git@") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Source %d: gitUrl must be a valid Git URL (https://, http://, or git@)", i+1)})
+			return
+		}
 	}
 
 	gvr := GetProjectSettingsResource()

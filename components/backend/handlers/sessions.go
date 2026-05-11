@@ -2777,7 +2777,7 @@ func fetchCustomSourceWorkflows(c *gin.Context, project, token string) []OOTBWor
 			srcPath = "workflows"
 		}
 
-		workflows := fetchWorkflowsFromSource(c, srcIdx, srcName, srcGitURL, srcBranch, srcPath, token)
+		workflows := fetchWorkflowsFromSource(c, project, srcIdx, srcName, srcGitURL, srcBranch, srcPath, token)
 		allWorkflows = append(allWorkflows, workflows...)
 	}
 
@@ -2786,8 +2786,8 @@ func fetchCustomSourceWorkflows(c *gin.Context, project, token string) []OOTBWor
 
 // fetchWorkflowsFromSource discovers workflows from a single custom source repository.
 // Uses per-source caching with 5-min TTL via customSourceCaches.
-func fetchWorkflowsFromSource(c *gin.Context, srcIdx int, srcName, srcGitURL, srcBranch, srcPath, token string) []OOTBWorkflow {
-	cacheKey := fmt.Sprintf("%s|%s|%s", srcGitURL, srcBranch, srcPath)
+func fetchWorkflowsFromSource(c *gin.Context, project string, srcIdx int, srcName, srcGitURL, srcBranch, srcPath, token string) []OOTBWorkflow {
+	cacheKey := fmt.Sprintf("%s|%s|%s|%s", project, srcGitURL, srcBranch, srcPath)
 
 	// Check per-source cache
 	if cached, ok := customSourceCaches.Load(cacheKey); ok {
