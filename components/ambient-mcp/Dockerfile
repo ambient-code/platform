@@ -19,6 +19,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o ambient-mcp .
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 
+ARG GIT_COMMIT=unknown
+
 WORKDIR /app
 
 RUN microdnf install -y procps && microdnf clean all
@@ -26,6 +28,8 @@ RUN microdnf install -y procps && microdnf clean all
 COPY --from=builder /app/ambient-mcp .
 
 RUN chmod +x ./ambient-mcp && chmod 775 /app
+
+LABEL org.opencontainers.image.revision=$GIT_COMMIT
 
 USER 1001
 
