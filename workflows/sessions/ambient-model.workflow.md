@@ -551,16 +551,22 @@ The Agent model has 8 fields (`repo_url`, `workflow_id`, `llm_model`, `llm_tempe
 
 **Rule:** When auditing field propagation from Agent → Session, read `ignite_handler.go` specifically. The two handlers have different responsibilities: `start_handler.go` handles the idempotency check and session status; `ignite_handler.go` handles the full field copy and session initialization.
 
-### Credential Scoping Gap Must Be Explicitly Documented
+### Credential Scoping — Migrated to Global (2026-05-12)
 
-The spec defines credentials as global at `/api/ambient/v1/credentials`. The implementation uses project-scoped paths at `/api/ambient/v1/projects/{id}/credentials`. This is a design gap, not a bug — the intended target is global, but the current implementation is project-scoped.
+Credentials were previously project-scoped at `/api/ambient/v1/projects/{id}/credentials` with a required `project_id` field on the model. The spec targets global resources at `/api/ambient/v1/credentials`.
 
-This gap surfaces in three places:
-1. **Spec API Reference:** Note added that global paths are the target; project-scoped are current.
-2. **OpenAPI:** Not changed — the OpenAPI reflects the actual (project-scoped) routes.
-3. **CLI table:** Changed from 🔲 to ✅ (project-scoped) with a scoping note.
+Migration applied in one wave touching 7 files:
+1. `openapi.credentials.yaml` — paths changed to `/credentials`; `project_id` removed from schema
+2. `model.go` — removed `ProjectID string` field
+3. `migration.go` — added `dropProjectIDMigration()` with `ALTER TABLE IF EXISTS ... DROP COLUMN IF EXISTS project_id`; kept prior `addProjectIDMigration()` so existing DBs apply and then immediately undo
+4. `handler.go` — removed all `projectID := mux.Vars(r)["id"]` guards and project-filter injection in List
+5. `presenter.go` — removed `ProjectId` from `PresentCredential`; updated `ConvertCredential` signature
+6. `plugin.go` — changed subrouter from `/projects` prefix to `/credentials`; registered `dropProjectIDMigration()`
+7. `factory_test.go` — removed `ProjectID: "test-project"` from factory struct
 
-**Rule:** When the spec and implementation intentionally diverge (design intent vs current state), document both explicitly in the spec. Do not silently change the spec to match the code or the code to match the spec without the user's decision. Capture the gap with a clear "Implementation gap:" note and the intended direction.
+**SDK impact:** Generator produced `/credentials` base path correctly. `credential_extensions.go` used `a.basePath()` which no longer exists for top-level resources (generator inlines paths). Fixed by replacing with literal `/credentials/{id}/token`.
+
+**Rule:** When the generator is used for top-level (non-nested) resources, it does NOT generate a `basePath()` method — it inlines paths. Any hand-written extension file that calls `a.basePath()` must be updated to use the literal path after changing a resource from nested to global.
 
 ### Factory Test Files Must Be Checked When Removing Model Fields
 
