@@ -490,7 +490,6 @@ func ProjectDetail(p sdktypes.Project) []DetailLine {
 	lines := []DetailLine{
 		{Key: "ID", Value: p.ID},
 		{Key: "Name", Value: p.Name},
-		{Key: "Display Name", Value: p.DisplayName},
 		{Key: "Description", Value: p.Description},
 		{Key: "Status", Value: p.Status},
 		{Key: "Prompt", Value: p.Prompt},
@@ -543,7 +542,6 @@ func SessionDetail(s sdktypes.Session) []DetailLine {
 		{Key: "Project ID", Value: s.ProjectID},
 		{Key: "Agent ID", Value: s.AgentID},
 		{Key: "Prompt", Value: s.Prompt},
-		{Key: "Triggered By", Value: s.TriggeredByUserID},
 		{Key: "Assigned User", Value: s.AssignedUserID},
 		{Key: "Created By", Value: s.CreatedByUserID},
 		{Key: "Bot Account", Value: s.BotAccountName},
