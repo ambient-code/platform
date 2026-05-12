@@ -32,16 +32,13 @@ func TestProjectGRPCCrud(t *testing.T) {
 	client := pb.NewProjectServiceClient(conn)
 	ctx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer "+token)
 
-	displayName := "Test Project Display"
 	created, err := client.CreateProject(ctx, &pb.CreateProjectRequest{
-		Name:        "grpc-test-project",
-		DisplayName: &displayName,
+		Name: "grpc-test-project",
 	})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(created.GetName()).To(Equal("grpc-test-project"))
 	Expect(created.GetMetadata().GetId()).NotTo(BeEmpty())
 	Expect(created.GetMetadata().GetKind()).To(Equal("Project"))
-	Expect(created.GetDisplayName()).To(Equal("Test Project Display"))
 
 	got, err := client.GetProject(ctx, &pb.GetProjectRequest{Id: created.GetMetadata().GetId()})
 	Expect(err).NotTo(HaveOccurred())

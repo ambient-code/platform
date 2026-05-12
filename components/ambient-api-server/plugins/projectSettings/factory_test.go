@@ -18,7 +18,6 @@ func newParentProject() (*projects.Project, error) {
 	projectService := projects.Service(&environments.Environment().Services)
 	result, svcErr := projectService.Create(context.Background(), &projects.Project{
 		Name:        fmt.Sprintf("test-project-%d", projectCounter),
-		DisplayName: stringPtr("Test Project"),
 		Description: stringPtr("test-description"),
 		Status:      stringPtr("active"),
 	})

@@ -40,3 +40,15 @@ func promptMigration() *gormigrate.Migration {
 		},
 	}
 }
+
+func dropDisplayNameMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202505090001",
+		Migrate: func(tx *gorm.DB) error {
+			return tx.Exec(`ALTER TABLE IF EXISTS projects DROP COLUMN IF EXISTS display_name`).Error
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return tx.Exec(`ALTER TABLE IF EXISTS projects ADD COLUMN IF NOT EXISTS display_name TEXT`).Error
+		},
+	}
+}
