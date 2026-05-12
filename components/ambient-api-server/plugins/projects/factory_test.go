@@ -18,7 +18,6 @@ func newProject(suffix string) (*projects.Project, error) {
 
 	project := &projects.Project{
 		Name:        fmt.Sprintf("proj-%s-%d", suffix, projectCounter),
-		DisplayName: stringPtr("Test Project"),
 		Description: stringPtr("test-description"),
 		Status:      stringPtr("active"),
 	}
