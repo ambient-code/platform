@@ -9,6 +9,8 @@ spec:
   ingress:
   - {}
   - from:
+    - podSelector: {}
+  - from:
     - namespaceSelector: {}
       podSelector:
         matchLabels:
