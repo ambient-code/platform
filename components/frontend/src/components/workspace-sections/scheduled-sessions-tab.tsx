@@ -35,7 +35,7 @@ export function SchedulesSection({ projectName }: SchedulesSectionProps) {
   const resumeMutation = useResumeScheduledSession();
   const triggerMutation = useTriggerScheduledSession();
 
-  const items = scheduledSessions ?? [];
+  const items = useMemo(() => scheduledSessions ?? [], [scheduledSessions]);
 
   const handleTrigger = (name: string) => {
     triggerMutation.mutate(

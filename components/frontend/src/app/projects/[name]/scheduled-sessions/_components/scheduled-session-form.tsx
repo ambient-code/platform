@@ -210,7 +210,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
       }
       form.setValue("model", modelsData.defaultModel, { shouldDirty: false });
     }
-  }, [modelsData?.defaultModel, form, isEdit, initialData]);
+  }, [modelsData, form, isEdit, initialData]);
 
   // Resolve workflow state once OOTB workflows finish loading. The Skeleton
   // guard on the Select (workflowsLoading || !workflowResolved) ensures Radix
