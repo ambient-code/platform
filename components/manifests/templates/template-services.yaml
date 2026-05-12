@@ -686,6 +686,8 @@ objects:
           - --tls-cert=/etc/tls/private/tls.crt
           - --tls-key=/etc/tls/private/tls.key
           - --cookie-secret-file=/etc/oauth-cookie/cookie_secret
+          - --cookie-expire=24h
+          - --cookie-refresh=1h
           - --pass-access-token
           - --scope=user:full
           - --upstream-timeout=5m
