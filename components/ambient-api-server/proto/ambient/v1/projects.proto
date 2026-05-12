@@ -9,6 +9,8 @@ import "ambient/v1/common.proto";
 message Project {
   ObjectReference metadata = 1;
   string name = 2;
+  // TODO(proto-cleanup): display_name was removed from model.go (migration 202505090001).
+  // Remove this field and regenerate with `buf generate` when buf is available.
   optional string display_name = 3;
   optional string description = 4;
   optional string labels = 5;
@@ -18,6 +20,7 @@ message Project {
 
 message CreateProjectRequest {
   string name = 1;
+  // TODO(proto-cleanup): display_name removed from model.go; remove here and regenerate.
   optional string display_name = 2;
   optional string description = 3;
   optional string labels = 4;
@@ -31,6 +34,7 @@ message GetProjectRequest {
 message UpdateProjectRequest {
   string id = 1;
   optional string name = 2;
+  // TODO(proto-cleanup): display_name removed from model.go; remove here and regenerate.
   optional string display_name = 3;
   optional string description = 4;
   optional string labels = 5;
