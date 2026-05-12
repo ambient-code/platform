@@ -127,4 +127,5 @@ func init() {
 
 	db.RegisterMigration(migration())
 	db.RegisterMigration(promptMigration())
+	db.RegisterMigration(dropDisplayNameMigration())
 }
