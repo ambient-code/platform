@@ -389,6 +389,24 @@ The deployment manifests SHALL be updated to support the new authentication mode
 - THEN the backend ServiceAccount has a ClusterRoleBinding granting `impersonate` verb
   on `users`, `groups`, and `serviceaccounts` resources
 
+## Roadmap
+
+This spec covers **Phase 1** of a broader IAM consolidation. The full roadmap, informed
+by the [IAM consolidation proposal](../../docs/internal/proposals/iam-consolidation-plan.md)
+(PR #1466), is:
+
+| Phase | Scope | Depends on |
+|-------|-------|------------|
+| **1. SSO user auth + impersonation** (this spec) | Frontend BFF, backend JWT validation, K8s impersonation. API keys and runner auth unchanged. | SSO confidential client registration |
+| **2. API keys → SSO service accounts** | Replace K8s SA-based API keys with Keycloak confidential clients. Eliminates TokenReview fallback, K8s SA creation, and `last-used-at` annotation patching. | Keycloak Admin API access (`manage-clients` realm role) |
+| **3. Runner auth → OIDC token exchange** | Replace RSA keypair exchange with RFC 8693 token exchange. Runner exchanges projected K8s SA token for an SSO-issued JWT. Eliminates CP token server, RSA bootstrap, and operator 45-min refresh loop. | SSO token exchange enabled; SSO trusts cluster JWKS as identity provider |
+| **4. DB RBAC reconciler** | DB `role_bindings` table becomes single write plane. Reconciler syncs K8s RoleBindings from DB state. Eliminates dual-grant problem (K8s RBAC + DB RBAC). | Phases 1-2 complete |
+| **5. Credential consolidation** | Move per-user OAuth integration tokens (GitLab, Google, Jira, Gerrit, CodeRabbit) from K8s Secrets to the `credentials` table. Single audit trail and access control. | Phase 4 (DB RBAC) |
+
+Phase 1 is designed to be independently shippable. Each subsequent phase removes a
+category of K8s-managed identity state and moves it to SSO or the database, converging
+toward a single IAM plane.
+
 ## Design Decisions
 
 | Decision | Rationale |
@@ -412,3 +430,4 @@ The deployment manifests SHALL be updated to support the new authentication mode
 - [OAuth 2.0 for Browser-Based Applications](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-browser-based-apps) — BFF recommendation
 - [K8s User Impersonation](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#user-impersonation)
 - Migration workflow: `workflows/security/sso-migration.workflow.md`
+- [IAM consolidation proposal](../../docs/internal/proposals/iam-consolidation-plan.md) (PR #1466) — full IAM audit and long-term consolidation plan

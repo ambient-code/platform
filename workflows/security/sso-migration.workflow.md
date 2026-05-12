@@ -141,6 +141,66 @@ Keep: `DISABLE_AUTH` (mock mode for local dev)
 - Frontend Deployment: remove OAuth proxy sidecar container
 - E2E overlay: test JWT generation instead of SA token
 
+## Future Phases (from IAM Consolidation Proposal)
+
+This workflow covers **Phase 1** only. The following phases are defined in
+`docs/internal/proposals/iam-consolidation-plan.md` (PR #1466) and should be specced
+separately when ready.
+
+### Phase 2: API keys → SSO service accounts
+
+Replace `CreateProjectKey()` (which creates K8s SAs + TokenRequest) with Keycloak Admin
+API calls to create confidential clients. Users receive `client_id`/`client_secret`
+instead of a K8s SA JWT.
+
+**What goes away:**
+- `ambient-key-*` ServiceAccount creation in `handlers/permissions.go`
+- `ambient-key-*` RoleBinding creation
+- TokenRequest minting for access keys
+- `updateAccessKeyLastUsedAnnotation()` (SA annotation patching)
+- TokenReview fallback in the auth middleware (all tokens become SSO JWTs)
+
+**What's new:**
+- Keycloak Admin API client in the backend
+- `SSO_ADMIN_CLIENT_ID` / `SSO_ADMIN_CLIENT_SECRET` credentials
+- Keycloak client roles mapping to `project:admin/edit/view`
+
+**Prerequisite:** Keycloak Admin API access with `manage-clients` realm role.
+
+### Phase 3: Runner auth → OIDC token exchange (RFC 8693)
+
+Replace the RSA keypair exchange between runner and control plane with standard OIDC
+token exchange. The runner exchanges its projected K8s SA token for an SSO-issued JWT.
+
+**What goes away:**
+- Operator: SA creation for `ambient-session-*`, TokenRequest minting, 45-min refresh loop
+- Operator: Secret `ambient-runner-token-*` creation
+- Control plane: entire `internal/tokenserver/` and `internal/keypair/` packages
+- Control plane: Secret `ambient-cp-token-keypair`
+
+**What's new:**
+- Runner: OIDC token exchange on startup (exchange K8s SA token → SSO JWT)
+- SSO: `ambient-runner-exchange` client with token exchange permission
+- SSO: cluster JWKS registered as identity provider (so SSO can validate K8s SA tokens)
+
+**Prerequisite:** SSO token exchange enabled; SSO trusts cluster JWKS.
+
+### Phase 4: DB RBAC reconciler
+
+Make the DB `role_bindings` table the single write plane for permissions. A reconciler
+in the control plane watches DB changes and syncs K8s RoleBindings.
+
+**Role mapping:** `project:owner` → `ambient-project-admin`, `project:editor` →
+`ambient-project-edit`, `project:viewer` → `ambient-project-view`.
+
+Fine-grained permissions (`credential:token-reader`, etc.) remain DB-only — K8s RBAC
+enforces the coarse gate (project access), DB RBAC enforces fine-grained actions.
+
+### Phase 5: Credential consolidation
+
+Move per-user OAuth integration tokens from K8s Secrets to the `credentials` table.
+Add `user_id` and `scope` columns. New routes: `GET/POST/DELETE /users/me/credentials`.
+
 ## ADR-0002 Supersedence
 
 ADR-0002 chose "User token for all operations" (raw token passthrough) over impersonation
