@@ -1002,9 +1002,6 @@ func triggerDisplayNameGenerationIfNeeded(projectName, sessionName string, messa
 		return
 	}
 
-	// Fixes #1561: removed initialPrompt skip that blocked fallback when
-	// CreateSession's async generation failed. ShouldGenerateDisplayName
-	// already prevents double-generation by checking if displayName is set.
 	if !handlers.ShouldGenerateDisplayName(spec) {
 		return
 	}
