@@ -8,7 +8,6 @@ import (
 type Project struct {
 	api.Meta
 	Name        string  `json:"name" gorm:"uniqueIndex;not null"`
-	DisplayName *string `json:"display_name"`
 	Description *string `json:"description"`
 	Prompt      *string `json:"prompt" gorm:"type:text"`
 	Labels      *string `json:"labels"`
@@ -34,7 +33,6 @@ func (d *Project) BeforeCreate(tx *gorm.DB) error {
 
 type ProjectPatchRequest struct {
 	Name        *string `json:"name,omitempty"`
-	DisplayName *string `json:"display_name,omitempty"`
 	Description *string `json:"description,omitempty"`
 	Prompt      *string `json:"prompt,omitempty"`
 	Labels      *string `json:"labels,omitempty"`
