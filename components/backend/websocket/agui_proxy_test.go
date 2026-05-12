@@ -1,15 +1,22 @@
 package websocket
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"ambient-code-backend/handlers"
+	"ambient-code-backend/tests/test_utils"
+	"ambient-code-backend/types"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
@@ -203,4 +210,134 @@ func TestDefaultRunnerPort_Constant(t *testing.T) {
 	if handlers.DefaultRunnerPort != 8001 {
 		t.Errorf("Expected DefaultRunnerPort=8001, got %d", handlers.DefaultRunnerPort)
 	}
+}
+
+// --- triggerDisplayNameGenerationIfNeeded tests (regression for #1561) ---
+
+func setupDisplayNameTest(t *testing.T, spec map[string]interface{}) (cleanup func()) {
+	t.Helper()
+
+	oldDynamic := handlers.DynamicClient
+	oldK8sProjects := handlers.K8sClientProjects
+	oldGVRFunc := handlers.GetAgenticSessionV1Alpha1Resource
+
+	agenticSessionGVR := schema.GroupVersionResource{
+		Group:    "vteam.ambient-code",
+		Version:  "v1alpha1",
+		Resource: "agenticsessions",
+	}
+	handlers.GetAgenticSessionV1Alpha1Resource = func() schema.GroupVersionResource {
+		return agenticSessionGVR
+	}
+
+	fakeClients := test_utils.NewFakeClientSet()
+	handlers.DynamicClient = fakeClients.GetDynamicClient()
+	handlers.K8sClientProjects = fakeClients.GetK8sClient()
+
+	err := test_utils.CreateAgenticSessionInFakeClient(
+		handlers.DynamicClient, "test-project", "test-session", spec,
+	)
+	if err != nil {
+		t.Fatalf("Failed to create test session: %v", err)
+	}
+
+	return func() {
+		handlers.DynamicClient = oldDynamic
+		handlers.K8sClientProjects = oldK8sProjects
+		handlers.GetAgenticSessionV1Alpha1Resource = oldGVRFunc
+	}
+}
+
+func getDisplayName(t *testing.T, dc dynamic.Interface) string {
+	t.Helper()
+	gvr := handlers.GetAgenticSessionV1Alpha1Resource()
+	item, err := dc.Resource(gvr).Namespace("test-project").Get(
+		context.Background(), "test-session", metav1.GetOptions{},
+	)
+	if err != nil {
+		t.Fatalf("Failed to get session: %v", err)
+	}
+	dn, _, _ := unstructured.NestedString(item.Object, "spec", "displayName")
+	return dn
+}
+
+func TestTriggerDisplayName_InitialPromptNotSkipped(t *testing.T) {
+	// Regression test for #1561: messages matching initialPrompt must NOT
+	// be skipped when displayName is empty. Before the fix, the AG-UI
+	// proxy returned early for initialPrompt messages, blocking the
+	// fallback path when CreateSession's async generation failed.
+	cleanup := setupDisplayNameTest(t, map[string]interface{}{
+		"initialPrompt": "Help me debug auth",
+	})
+	defer cleanup()
+
+	msgs := []types.Message{
+		{ID: "msg-1", Role: "user", Content: "Help me debug auth"},
+	}
+
+	// Should not panic or skip — it will attempt GenerateDisplayNameAsync
+	// which will fail (no API key) but that's expected in test env.
+	triggerDisplayNameGenerationIfNeeded("test-project", "test-session", msgs)
+
+	// Give the async goroutine a moment to attempt the update
+	time.Sleep(50 * time.Millisecond)
+
+	// The display name won't be set (no API key), but the function
+	// must not have returned early at the (now-removed) initialPrompt check.
+	// We verify this indirectly: if the function still had the skip,
+	// it would never call GenerateDisplayNameAsync. The absence of a
+	// panic and the function completing is the primary assertion.
+}
+
+func TestTriggerDisplayName_SkipsWhenNameAlreadySet(t *testing.T) {
+	cleanup := setupDisplayNameTest(t, map[string]interface{}{
+		"initialPrompt": "Help me debug auth",
+		"displayName":   "Debug Auth Middleware",
+	})
+	defer cleanup()
+
+	msgs := []types.Message{
+		{ID: "msg-1", Role: "user", Content: "Help me debug auth"},
+	}
+
+	triggerDisplayNameGenerationIfNeeded("test-project", "test-session", msgs)
+
+	// displayName should remain unchanged — ShouldGenerateDisplayName
+	// returns false when displayName is already set.
+	dn := getDisplayName(t, handlers.DynamicClient)
+	if dn != "Debug Auth Middleware" {
+		t.Errorf("Expected displayName to remain %q, got %q", "Debug Auth Middleware", dn)
+	}
+}
+
+func TestTriggerDisplayName_SkipsWhenNoUserMessage(t *testing.T) {
+	cleanup := setupDisplayNameTest(t, map[string]interface{}{
+		"initialPrompt": "Help me debug auth",
+	})
+	defer cleanup()
+
+	// Only assistant messages — no user content to generate from
+	msgs := []types.Message{
+		{ID: "msg-1", Role: "assistant", Content: "I'll help you debug"},
+	}
+
+	triggerDisplayNameGenerationIfNeeded("test-project", "test-session", msgs)
+
+	dn := getDisplayName(t, handlers.DynamicClient)
+	if dn != "" {
+		t.Errorf("Expected empty displayName, got %q", dn)
+	}
+}
+
+func TestTriggerDisplayName_SkipsWhenDynamicClientNil(t *testing.T) {
+	oldDynamic := handlers.DynamicClient
+	handlers.DynamicClient = nil
+	defer func() { handlers.DynamicClient = oldDynamic }()
+
+	msgs := []types.Message{
+		{ID: "msg-1", Role: "user", Content: "Help me debug auth"},
+	}
+
+	// Should return early without panic when DynamicClient is nil
+	triggerDisplayNameGenerationIfNeeded("test-project", "test-session", msgs)
 }

@@ -1002,12 +1002,9 @@ func triggerDisplayNameGenerationIfNeeded(projectName, sessionName string, messa
 		return
 	}
 
-	// Skip if this message is the auto-sent initialPrompt
-	initialPrompt, _, _ := unstructured.NestedString(spec, "initialPrompt")
-	if initialPrompt != "" && strings.TrimSpace(userMessage) == strings.TrimSpace(initialPrompt) {
-		return
-	}
-
+	// Fixes #1561: removed initialPrompt skip that blocked fallback when
+	// CreateSession's async generation failed. ShouldGenerateDisplayName
+	// already prevents double-generation by checking if displayName is set.
 	if !handlers.ShouldGenerateDisplayName(spec) {
 		return
 	}
