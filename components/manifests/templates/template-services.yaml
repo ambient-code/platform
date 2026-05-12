@@ -681,7 +681,6 @@ objects:
           - --provider=openshift
           - --client-id=ambient-code
           - --client-secret-file=/etc/oauth-client/client_secret
-          - --upstream=http://backend-service:8080/api/
           - --upstream=http://localhost:3000
           - --tls-cert=/etc/tls/private/tls.crt
           - --tls-key=/etc/tls/private/tls.key
