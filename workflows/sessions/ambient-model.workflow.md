@@ -83,7 +83,7 @@ Compare the spec against the current state of the code. For each component, ask:
 
 | Component    | What to check                                                                                         |
 | ------------ | ----------------------------------------------------------------------------------------------------- |
-| **API**      | Does `openapi/openapi.yaml` have all spec entities, routes, and fields? **Read the actual fragments.**|
+| **API**      | Does `openapi/openapi.yaml` have all spec entities, routes, and fields? **Read the actual fragments.** For every Kind, check the schema `required[]` array against the spec ERD — field-level, not just route-level. |
 | **SDK**      | Do generated types/builders/clients exist for all spec entities?                                      |
 | **BE**       | Read `plugins/<kind>/model.go` for every Kind. Compare field-by-field against the Spec. Drift here is the most common source of gaps. |
 | **CP**       | Does middleware handle new RBAC scopes and auth requirements?                                         |
@@ -92,7 +92,12 @@ Compare the spec against the current state of the code. For each component, ask:
 | **Runners**  | Does the runner drain inbox at session start and push correct event types?                            |
 | **FE**       | Do API service layer, queries, and components exist for all new entities?                             |
 
-**The gap table must compare Spec against every component simultaneously.** A field removal touches API, SDK, BE (model + migration), and CLI — all four must be in the gap table from the start. Do not discover mid-wave that the CLI still has a flag the API no longer accepts.
+**The gap table must compare Spec against every component simultaneously, field by field.** A field removal touches API, SDK, BE (model + migration), and CLI — all four must be in the gap table from the start. Do not discover mid-wave that the CLI still has a flag the API no longer accepts.
+
+Check all three directions for every Kind:
+1. Spec ERD → `model.go` — spec says field exists; is it in the model?
+2. `model.go` → Spec ERD — model has a field; is it documented in the spec?
+3. OpenAPI `required[]` → Spec ERD — OpenAPI marks it required; does the spec agree?
 
 Produce a gap table:
 
@@ -573,3 +578,22 @@ Migration applied in one wave touching 7 files:
 Removing a field from a model struct causes `go vet` to fail on any test factory that references the field as a struct literal key. `plugins/projectSettings/factory_test.go` had `DisplayName: stringPtr("Test Project")` that was not found by the initial grep targeting only the `projects/` plugin directory.
 
 **Rule:** When removing a field from `plugins/{kind}/model.go`, grep the entire `plugins/` tree (not just the plugin directory) for the field name. Test factories in other plugins that create the model as a dependency will reference it too.
+
+### Step 3 Must Produce a Field-Level Diff, Not Just a Route-Level Diff
+
+During the credentials globalization run, Step 3 found the route `/projects/{id}/credentials` in `openapi.yaml` and marked it ✅. It did not compare the OpenAPI schema's `required` array (`["project_id", "name", "provider"]`) against the spec's Credential ERD (no `project_id`). The implementation diverged from the spec for the entire life of the feature, undetected.
+
+**Rule:** For every Kind, Step 3 must check all three directions:
+1. Spec ERD → `model.go` (spec says field exists; does the model have it?)
+2. `model.go` → Spec ERD (model has a field; is it in the spec ERD?)
+3. OpenAPI `required[]` → Spec ERD (OpenAPI marks a field required; does the spec agree?)
+
+A route existing in openapi.yaml is necessary but not sufficient. Field-level drift is the most common and hardest-to-catch form of divergence.
+
+### Integration Tests Must Assert the Spec-Correct Route, Not an Implementation-Convenient One
+
+`plugins/credentials/factory_test.go` created credentials with `ProjectID: "test-project"` (wrong field) and `Provider: "test-provider"` (invalid enum value). These tests encoded the wrong implementation shape. Because no test ever called `POST /credentials` (the spec-correct global path), the divergence from spec went undetected for the entire history of the feature.
+
+**Rule:** Integration tests for a resource must use the route the spec defines, not a route that happens to work in the current implementation. For a global resource (no project scope), the factory and every integration test must call the global path. If the test is written against a nested path for a resource the spec defines as global, the test is wrong — fix the test, not just the implementation.
+
+**Corollary:** Factory test `Provider` values must use valid enum values. A factory that passes `"test-provider"` will compile and run even if the API rejects it — use `"github"` or another value from the spec's provider enum table.
