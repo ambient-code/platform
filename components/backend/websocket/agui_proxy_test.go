@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"ambient-code-backend/handlers"
 	"ambient-code-backend/tests/test_utils"
@@ -262,31 +261,27 @@ func getDisplayName(t *testing.T, dc dynamic.Interface) string {
 }
 
 func TestTriggerDisplayName_InitialPromptNotSkipped(t *testing.T) {
-	// Regression test for #1561: messages matching initialPrompt must NOT
-	// be skipped when displayName is empty. Before the fix, the AG-UI
-	// proxy returned early for initialPrompt messages, blocking the
-	// fallback path when CreateSession's async generation failed.
 	cleanup := setupDisplayNameTest(t, map[string]interface{}{
 		"initialPrompt": "Help me debug auth",
 	})
 	defer cleanup()
 
+	called := false
+	oldFn := handlers.GenerateDisplayNameAsync
+	handlers.GenerateDisplayNameAsync = func(projectName, sessionName, userMessage string, sessionCtx handlers.SessionContext) {
+		called = true
+	}
+	defer func() { handlers.GenerateDisplayNameAsync = oldFn }()
+
 	msgs := []types.Message{
 		{ID: "msg-1", Role: "user", Content: "Help me debug auth"},
 	}
 
-	// Should not panic or skip — it will attempt GenerateDisplayNameAsync
-	// which will fail (no API key) but that's expected in test env.
 	triggerDisplayNameGenerationIfNeeded("test-project", "test-session", msgs)
 
-	// Give the async goroutine a moment to attempt the update
-	time.Sleep(50 * time.Millisecond)
-
-	// The display name won't be set (no API key), but the function
-	// must not have returned early at the (now-removed) initialPrompt check.
-	// We verify this indirectly: if the function still had the skip,
-	// it would never call GenerateDisplayNameAsync. The absence of a
-	// panic and the function completing is the primary assertion.
+	if !called {
+		t.Error("Expected GenerateDisplayNameAsync to be called for initialPrompt message when displayName is empty")
+	}
 }
 
 func TestTriggerDisplayName_SkipsWhenNameAlreadySet(t *testing.T) {
