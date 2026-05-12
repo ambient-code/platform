@@ -508,3 +508,62 @@ The `apply` command imported `yaml.v3` but the CLI `go.mod` didn't declare it. T
 The gap between what the spec said (🔲 everywhere for agents/inbox) and what the code had (full implementations) was only discoverable by reading actual source files. An implementation coverage matrix embedded in the spec — with direct references to SDK method names and CLI commands — turns the spec into a live index that can be scanned in seconds.
 
 **Rule:** The coverage matrix in `ambient-model.spec.md` is the primary index. Update it immediately when a component ships a feature. Do not rely on the CLI table alone — it maps REST→CLI but doesn't tell you what the SDK exposes.
+
+---
+
+## Lessons Learned (Run Log — 2026-05-09)
+
+### Step 3 Gap Analysis Must Go Field-Level, Not Just Route-Level
+
+The first pass of Step 3 during this run checked only for route existence in `openapi.yaml` and handler stubs. It found no gaps. The real gaps were at the **field level**:
+
+- `Agent` model had 22 fields in `model.go` but the spec ERD documented only 10.
+- `ScheduledSession` had 4 runtime fields (`timeout`, `inactivity_timeout`, `stop_on_run_finished`, `runner_type`) not in the spec.
+- `Session.llm_max_tokens`, `timeout`, `sdk_restart_count` were `int` in the spec but `int32` in the model.
+- `triggered_by_user_id` existed only in `openapi.sessions.yaml` — not in `model.go` and not in the spec. It was an OpenAPI schema artifact from an earlier design that was never implemented.
+
+**Fix applied to Step 3:** The gap table instructions now explicitly say: "Read `plugins/<kind>/model.go` for every Kind. Compare field-by-field against the Spec. Drift here is the most common source of gaps."
+
+**Rule:** The field-level diff of `model.go` is the highest-signal check in Step 3. Route existence is a necessary but not sufficient check. An API can have all routes defined and still have significant undocumented fields, wrong types, or phantom fields in the OpenAPI that don't exist in the model.
+
+### Spec and OpenAPI Can Diverge From Each Other Too
+
+`triggered_by_user_id` was present in `openapi.sessions.yaml` but absent from both the Go model and the spec. The spec → code comparison caught the spec gap, but the OpenAPI → model comparison caught a different gap: the OpenAPI had a field the model never had.
+
+**Rule:** The gap analysis must check all three directions:
+1. Spec → model (spec says field exists; does the model have it?)
+2. Model → spec (model has field; is it documented in the spec?)
+3. OpenAPI → model (OpenAPI declares field; is it in the model?)
+
+### `display_name` Was Removed From Project — Proto Lags Behind
+
+The `display_name` field was removed from `plugins/projects/model.go`, `openapi.projects.yaml`, `grpc_handler.go`, and `grpc_presenter.go`. A drop-column migration (`202505090001`) was added. However, `proto/ambient/v1/projects.proto` still declares `display_name` because the `buf` tool is not installed in the development environment and proto regeneration was deferred.
+
+**Consequence:** The proto wire format still carries `display_name` as an optional field, but Go code no longer populates it. Per proto3 semantics this is safe — the field transmits as zero value (empty string) and is silently ignored by consumers. It is not a protocol break.
+
+**Rule:** Before removing any field from the Go model, check `proto/ambient/v1/*.proto`. If the field appears in proto, the removal requires `buf generate` to regenerate `*.pb.go`. Do not edit `*.pb.go` manually. If `buf` is unavailable, document the proto lag explicitly in the commit message and as a follow-up task.
+
+**Follow-up task:** Remove `display_name` from `proto/ambient/v1/projects.proto` and regenerate when `buf` is available.
+
+### Agent Fields Propagated Through ignite_handler, Not start_handler
+
+The Agent model has 8 fields (`repo_url`, `workflow_id`, `llm_model`, `llm_temperature`, `llm_max_tokens`, `bot_account_name`, `resource_overrides`, `environment_variables`) that are copied to Session when an agent is ignited. This happens in `plugins/agents/ignite_handler.go`, not in `start_handler.go`. `start_handler.go` does minimal field copying.
+
+**Rule:** When auditing field propagation from Agent → Session, read `ignite_handler.go` specifically. The two handlers have different responsibilities: `start_handler.go` handles the idempotency check and session status; `ignite_handler.go` handles the full field copy and session initialization.
+
+### Credential Scoping Gap Must Be Explicitly Documented
+
+The spec defines credentials as global at `/api/ambient/v1/credentials`. The implementation uses project-scoped paths at `/api/ambient/v1/projects/{id}/credentials`. This is a design gap, not a bug — the intended target is global, but the current implementation is project-scoped.
+
+This gap surfaces in three places:
+1. **Spec API Reference:** Note added that global paths are the target; project-scoped are current.
+2. **OpenAPI:** Not changed — the OpenAPI reflects the actual (project-scoped) routes.
+3. **CLI table:** Changed from 🔲 to ✅ (project-scoped) with a scoping note.
+
+**Rule:** When the spec and implementation intentionally diverge (design intent vs current state), document both explicitly in the spec. Do not silently change the spec to match the code or the code to match the spec without the user's decision. Capture the gap with a clear "Implementation gap:" note and the intended direction.
+
+### Factory Test Files Must Be Checked When Removing Model Fields
+
+Removing a field from a model struct causes `go vet` to fail on any test factory that references the field as a struct literal key. `plugins/projectSettings/factory_test.go` had `DisplayName: stringPtr("Test Project")` that was not found by the initial grep targeting only the `projects/` plugin directory.
+
+**Rule:** When removing a field from `plugins/{kind}/model.go`, grep the entire `plugins/` tree (not just the plugin directory) for the field name. Test factories in other plugins that create the model as a dependency will reference it too.
