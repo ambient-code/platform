@@ -10,7 +10,7 @@ import (
 
 func (a *CredentialAPI) GetToken(ctx context.Context, id string) (*types.CredentialTokenResponse, error) {
 	var result types.CredentialTokenResponse
-	if err := a.client.do(ctx, http.MethodGet, a.basePath()+"/"+url.PathEscape(id)+"/token", nil, http.StatusOK, &result); err != nil {
+	if err := a.client.do(ctx, http.MethodGet, "/credentials/"+url.PathEscape(id)+"/token", nil, http.StatusOK, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil

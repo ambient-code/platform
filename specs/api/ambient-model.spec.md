@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-20
 **Status:** Active
-**Last Updated:** 2026-05-09 — spec reconciliation: fix stale coverage matrix (credentials, RBAC, project update all implemented); document Agent full field set (12 undocumented fields added); add ScheduledSession runtime fields; document credential scoping gap (spec=global, impl=project-scoped); fix RBAC scoped role_bindings gaps; remove display_name from Project; add vertex provider; fix int32 types; update status to Active
+**Last Updated:** 2026-05-12 — migrate Credentials from project-scoped to global routes (`/credentials`); remove `project_id` from model, OpenAPI, and SDK; add drop-column migration; update coverage matrix
 **Workflow:** `../../workflows/sessions/ambient-model.workflow.md` — implementation waves, gap table, build commands, run log
 **Design:** `credentials-session.md` — full Credential Kind design spec and rationale
 
@@ -446,18 +446,16 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | `POST /sessions/{id}/tasks/{task_id}/stop` | `acpctl session tasks stop <id> <task-id>` | 🔲 planned |
 | `GET /sessions/{id}/tasks/{task_id}/output` | `acpctl session tasks output <id> <task-id>` | 🔲 planned |
 
-#### Credentials (Global — CLI implemented project-scoped)
+#### Credentials (Global)
 
-> **Scoping note:** The CLI commands below are implemented and operational, but against the project-scoped API (`/api/ambient/v1/projects/{id}/credentials/...`) rather than the global paths shown here. Global paths are the spec target state and pending migration.
-
-| REST API (target — global) | `acpctl` Command | Status |
+| REST API | `acpctl` Command | Status |
 |---|---|---|
-| `GET /credentials` | `acpctl credential list [--provider <p>]` | ✅ implemented (project-scoped) |
-| `POST /credentials` | `acpctl credential create --name <n> --provider <p> --token <t\|@->  [--url <u>] [--email <e>] [--description <d>]` | ✅ implemented (project-scoped) |
-| `GET /credentials/{cred_id}` | `acpctl credential get <id>` | ✅ implemented (project-scoped) |
-| `PATCH /credentials/{cred_id}` | `acpctl credential update <id> [--token <t>] [--description <d>]` | ✅ implemented (project-scoped) |
-| `DELETE /credentials/{cred_id}` | `acpctl credential delete <id> --confirm` | ✅ implemented (project-scoped) |
-| `GET /credentials/{cred_id}/token` | `acpctl credential token <id>` | ✅ implemented (project-scoped) |
+| `GET /credentials` | `acpctl credential list [--provider <p>]` | ✅ implemented |
+| `POST /credentials` | `acpctl credential create --name <n> --provider <p> --token <t\|@->  [--url <u>] [--email <e>] [--description <d>]` | ✅ implemented |
+| `GET /credentials/{cred_id}` | `acpctl credential get <id>` | ✅ implemented |
+| `PATCH /credentials/{cred_id}` | `acpctl credential update <id> [--token <t>] [--description <d>]` | ✅ implemented |
+| `DELETE /credentials/{cred_id}` | `acpctl credential delete <id> --confirm` | ✅ implemented |
+| `GET /credentials/{cred_id}/token` | `acpctl credential token <id>` | ✅ implemented |
 | `POST /role_bindings` | `acpctl credential bind <cred-name> --scope project --scope-id <project>` | 🔲 planned |
 
 #### RBAC
@@ -783,7 +781,7 @@ DELETE /api/ambient/v1/credentials/{cred_id}                              soft d
 GET    /api/ambient/v1/credentials/{cred_id}/token                        fetch raw token — restricted to credential:token-reader
 ```
 
-> **Implementation gap:** The current implementation scopes credentials to a project rather than the platform. Actual routes are `/api/ambient/v1/projects/{id}/credentials[/{cred_id}[/token]]` with a required `project_id` field on the model. The global path design above is the target state. Until migrated, `credential bind` (via `POST /role_bindings`) is also not yet implemented — credentials are bound implicitly by project ownership.
+> **Note:** `credential bind` (via `POST /role_bindings` with `scope=credential`) is planned but not yet implemented.
 
 `token` is accepted on `POST` and `PATCH` but **never returned** by standard read endpoints.
 `GET .../token` is gated by `credential:token-reader`. See
@@ -1236,7 +1234,7 @@ _Last updated: 2026-04-28. Use this as the authoritative index — click into co
 | **RBAC — roles** | ✅ full CRUD | ✅ `RoleAPI` | ✅ `create role`, `get roles`, `get roles <id>`, `delete role` | |
 | **RBAC — role bindings** | ✅ full CRUD | ✅ `RoleBindingAPI` | ✅ `create role-binding`, `get role-bindings`, `get role-bindings <id>`, `delete role-binding` | |
 | **RBAC — scoped role_bindings queries** | ✅ agents only; 🔲 users/projects/sessions/credentials | n/a | n/a | `GET /projects/{id}/agents/{agent_id}/role_bindings` implemented; other 4 scoped endpoints not yet |
-| **Credentials — CRUD** | ✅ `plugins/credentials/` (project-scoped at `/projects/{id}/credentials`) | ✅ `credential_api.go` + `credential_extensions.go` | ✅ `credential list/get/create/update/delete/token` | **Scoping gap:** impl is project-scoped; spec target is global. `credential bind` not implemented. |
+| **Credentials — CRUD** | ✅ `plugins/credentials/` (global at `/credentials`) | ✅ `credential_api.go` + `credential_extensions.go` | ✅ `credential list/get/create/update/delete/token` | `credential bind` not yet implemented. |
 | **Credentials — token fetch** | ✅ `GET /projects/{id}/credentials/{cred_id}/token` | ✅ `GetToken()` in `credential_extensions.go` | ✅ `credential token <id>` | Gated by `credential:token-reader`; granted to runner SA by operator |
 | **ScheduledSessions — CRUD** | ✅ scheduledSessions plugin | ✅ `ScheduledSessionAPI.{List,Get,Create,Update,Delete,GetByName}` | ✅ `scheduled-session list/get/create/update/delete` | |
 | **ScheduledSessions — lifecycle** | ✅ suspend/resume/trigger/runs handlers | ✅ `ScheduledSessionAPI.{Suspend,Resume,Trigger,Runs}` | ✅ `scheduled-session suspend/resume/trigger/runs` | |
