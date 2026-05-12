@@ -217,8 +217,6 @@ components:
           properties:
             name:
               type: string
-            display_name:
-              type: string
             description:
               type: string
             labels:
@@ -249,8 +247,6 @@ components:
       type: object
       properties:
         name:
-          type: string
-        display_name:
           type: string
         description:
           type: string
