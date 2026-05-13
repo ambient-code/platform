@@ -47,10 +47,9 @@ func TestRoleBindingPost(t *testing.T) {
 	ctx := h.NewAuthenticatedContext(account)
 
 	roleBindingInput := openapi.RoleBinding{
-		UserId:  "test-user_id",
-		RoleId:  "test-role_id",
-		Scope:   "test-scope",
-		ScopeId: openapi.PtrString("test-scope_id"),
+		RoleId: "test-role_id",
+		Scope:  "project",
+		UserId: openapi.PtrString("test-user_id"),
 	}
 
 	roleBindingOutput, resp, err := client.DefaultAPI.ApiAmbientV1RoleBindingsPost(ctx).RoleBinding(roleBindingInput).Execute()
