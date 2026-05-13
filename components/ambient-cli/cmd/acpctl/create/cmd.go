@@ -128,7 +128,7 @@ func printCreated(cmd *cobra.Command, kind, id string, obj interface{}) error {
 }
 
 func createSession(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
-	warnUnusedFlags(cmd, "display-name", "project-id", "owner-user-id", "permissions", "user-id", "role-id", "scope", "scope-id", "recipient-agent-id", "body")
+	warnUnusedFlags(cmd, "display-name", "owner-user-id", "permissions", "user-id", "role-id", "scope", "scope-id", "recipient-agent-id", "body")
 
 	if createArgs.name == "" {
 		return fmt.Errorf("--name is required")
@@ -140,12 +140,15 @@ func createSession(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	currentProject := cfg.GetProject()
-	if currentProject == "" {
-		return fmt.Errorf("no project set; run 'acpctl project <name>' first")
+	projectID := cfg.GetProject()
+	if cmd.Flags().Changed("project-id") {
+		projectID = createArgs.projectID
+	}
+	if projectID == "" {
+		return fmt.Errorf("no project set; use --project-id or run 'acpctl project <name>' first")
 	}
 
-	builder := sdktypes.NewSessionBuilder().Name(createArgs.name).ProjectID(currentProject)
+	builder := sdktypes.NewSessionBuilder().Name(createArgs.name).ProjectID(projectID)
 
 	if createArgs.prompt != "" {
 		builder = builder.Prompt(createArgs.prompt)
@@ -175,7 +178,7 @@ func createSession(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 	if err != nil {
 		var apiErr *sdktypes.APIError
 		if errors.As(err, &apiErr) && apiErr.StatusCode == 404 {
-			return fmt.Errorf("project %q does not exist; run 'acpctl project <name>' to switch projects", currentProject)
+			return fmt.Errorf("project %q does not exist; run 'acpctl project <name>' to switch projects", projectID)
 		}
 		return fmt.Errorf("create session: %w", err)
 	}
