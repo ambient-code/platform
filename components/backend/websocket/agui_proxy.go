@@ -1002,12 +1002,6 @@ func triggerDisplayNameGenerationIfNeeded(projectName, sessionName string, messa
 		return
 	}
 
-	// Skip if this message is the auto-sent initialPrompt
-	initialPrompt, _, _ := unstructured.NestedString(spec, "initialPrompt")
-	if initialPrompt != "" && strings.TrimSpace(userMessage) == strings.TrimSpace(initialPrompt) {
-		return
-	}
-
 	if !handlers.ShouldGenerateDisplayName(spec) {
 		return
 	}
