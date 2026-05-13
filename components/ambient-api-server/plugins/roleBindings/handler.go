@@ -62,17 +62,26 @@ func (h roleBindingHandler) Patch(w http.ResponseWriter, r *http.Request) {
 				return nil, err
 			}
 
-			if patch.UserId != nil {
-				found.UserId = *patch.UserId
-			}
 			if patch.RoleId != nil {
 				found.RoleId = *patch.RoleId
 			}
 			if patch.Scope != nil {
 				found.Scope = *patch.Scope
 			}
-			if patch.ScopeId != nil {
-				found.ScopeId = patch.ScopeId
+			if patch.UserId != nil {
+				found.UserId = patch.UserId
+			}
+			if patch.ProjectId != nil {
+				found.ProjectId = patch.ProjectId
+			}
+			if patch.AgentId != nil {
+				found.AgentId = patch.AgentId
+			}
+			if patch.SessionId != nil {
+				found.SessionId = patch.SessionId
+			}
+			if patch.CredentialId != nil {
+				found.CredentialId = patch.CredentialId
 			}
 
 			roleBindingModel, err := h.roleBinding.Replace(ctx, found)
