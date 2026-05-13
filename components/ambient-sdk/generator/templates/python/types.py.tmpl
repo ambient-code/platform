@@ -34,6 +34,8 @@ class {{.Resource.Name}}:
 {{- range .Resource.Fields}}
 {{- if isDateTime .}}
             {{.PythonName}}=_parse_datetime(data.get("{{.Name}}")),
+{{- else if eq .PythonType "Optional[str]"}}
+            {{.PythonName}}=data.get("{{.Name}}"),
 {{- else if eq .PythonType "int"}}
             {{.PythonName}}=data.get("{{.Name}}", 0),
 {{- else if eq .PythonType "float"}}
