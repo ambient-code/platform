@@ -1,8 +1,9 @@
 "use client";
 
+import { useMemo } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { Plus, RefreshCw, MoreVertical, Play, Pause, Pencil, PlayCircle, Trash2, Calendar, Loader2, AlertCircle } from "lucide-react";
-import { getCronDescription } from "@/lib/cron";
+import { getCronDescriptionWithLocal } from "@/lib/cron";
 import { formatScheduleTime } from "@/lib/format-timestamp";
 
 import { Button } from "@/components/ui/button";
@@ -35,7 +36,12 @@ export function SchedulesSection({ projectName }: SchedulesSectionProps) {
   const resumeMutation = useResumeScheduledSession();
   const triggerMutation = useTriggerScheduledSession();
 
-  const items = scheduledSessions ?? [];
+  const items = useMemo(() => scheduledSessions ?? [], [scheduledSessions]);
+
+  const cronDescriptions = useMemo(
+    () => new Map(items.map((ss) => [ss.name, getCronDescriptionWithLocal(ss.schedule)])),
+    [items]
+  );
 
   const handleTrigger = (name: string) => {
     triggerMutation.mutate(
@@ -124,7 +130,7 @@ export function SchedulesSection({ projectName }: SchedulesSectionProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead className="min-w-[180px]">Name</TableHead>
-                  <TableHead>Schedule (UTC)</TableHead>
+                  <TableHead>Schedule</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="hidden md:table-cell">Last Run</TableHead>
                   <TableHead className="w-[50px]">Actions</TableHead>
@@ -154,7 +160,7 @@ export function SchedulesSection({ projectName }: SchedulesSectionProps) {
                         </Link>
                       </TableCell>
                       <TableCell>
-                        <div className="text-sm">{getCronDescription(ss.schedule)}</div>
+                        <div className="text-sm">{cronDescriptions.get(ss.name)}</div>
                         <div className="text-xs text-muted-foreground font-mono">{ss.schedule}</div>
                       </TableCell>
                       <TableCell>
