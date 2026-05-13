@@ -62,6 +62,8 @@ Custom images MUST NOT remove, relocate, or change the response format of these 
 
 Custom images SHALL provide Python 3.12+ and SHALL have the `ambient_runner` package installed. The runner process MUST use the same Python major.minor version as the base image.
 
+The base image installs packages to system Python. Custom images MAY use virtual environments for additional Python dependencies, provided the `ambient_runner` package remains importable by the runner process.
+
 Custom tools MAY use different Python versions via explicit interpreter paths, but the runner's uvicorn process MUST run under the base image's Python.
 
 #### Scenario: Missing ambient_runner package
@@ -201,7 +203,7 @@ The field SHALL contain a fully qualified container image reference: `registry/r
 The CP SHALL select the runner image using the following precedence (highest to lowest):
 
 1. **ProjectSettings `runner_image`** — workspace admin override
-2. **Agent registry `container.image`** — per-agent-type default
+2. **Agent registry `container.image`** — per-agent-type default (the agent registry ConfigMap defines runtime configuration — image, port, resources, sandbox — for each agent type)
 3. **Operator `RUNNER_IMAGE` env var** — cluster-level default
 4. **Hardcoded fallback**
 
@@ -224,6 +226,8 @@ Custom images MUST contain the bridge implementation for every agent type that s
 - AND a session with a specific runner type
 - WHEN the CP provisions the pod
 - THEN the pod uses the image from the agent registry entry for that runner type
+
+When `runner_image` is unset, the agent registry provides one default image per runner type. When `runner_image` is set, it overrides the image for all runner types within the project — the custom image MUST include bridge implementations for every runner type the project uses.
 
 ---
 
@@ -393,7 +397,7 @@ Runner pods — including those using custom images — SHALL be subject to the 
 
 The platform's runner pods communicate only with cluster-internal services (API server, CP token endpoint, gRPC). Custom tools that require external network access (cloud provider APIs, package registries) are subject to the project namespace's egress policies, which are managed by the cluster operator.
 
-Custom images MUST NOT require changes to the platform's NetworkPolicy configuration. Cluster operators MAY configure project-level egress rules to accommodate custom tool requirements.
+Custom images MUST NOT require changes to the platform's NetworkPolicy configuration. Cluster operators MAY configure project-level egress rules to accommodate custom tool requirements. The platform MAY adopt additional network-level controls (egress filtering, DNS-based policies) as they become available. Such controls are additive — custom images are not affected.
 
 #### Scenario: Custom image with external tool access
 
@@ -442,3 +446,31 @@ The CP MAY log a warning if the contract version does not match the expected ver
 - WHEN the CP creates the pod
 - THEN the CP logs a warning
 - AND the pod is created normally
+
+### Requirement: Conformance Test Suite
+
+The platform SHALL publish a conformance test suite that validates a custom runner image against the stable contract. The test suite SHALL verify:
+
+- AG-UI endpoints respond correctly (`/health`, `/capabilities`, `/`)
+- Required filesystem paths exist and are writeable
+- The runner process starts within the expected timeout
+- The runner runs as a non-root user
+- CP-injected environment variables are not overridden by the image
+
+The test suite SHALL produce a pass/fail result suitable for CI/CD integration.
+
+The test suite SHOULD include security checks: non-root user verification, no SUID binaries, and base image provenance validation. Operators MAY extend the suite with additional security scanning (vulnerability scanning, SBOM generation) using their existing tooling.
+
+#### Scenario: Custom image passes conformance
+
+- GIVEN a custom image built FROM the base
+- AND no contract requirements violated
+- WHEN the conformance test suite runs against the image
+- THEN all checks pass
+
+#### Scenario: Custom image fails conformance
+
+- GIVEN a custom image that removed the `/workspace` directory
+- WHEN the conformance test suite runs
+- THEN the filesystem check fails
+- AND the test suite reports the specific violation
