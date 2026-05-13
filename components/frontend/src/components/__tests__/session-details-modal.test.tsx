@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { SessionDetailsModal } from '../session-details-modal';
 import type { AgenticSession } from '@/types/agentic-session';
 
-const mockUseProject = vi.fn(() => ({ data: undefined }));
+const mockUseProject = vi.fn(() => ({ data: undefined as { displayName: string; name: string } | undefined }));
 vi.mock('@/services/queries', () => ({
   useProject: () => mockUseProject(),
 }));
