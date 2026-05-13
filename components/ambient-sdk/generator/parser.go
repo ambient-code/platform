@@ -342,6 +342,7 @@ func extractFields(schemaMap map[string]interface{}) ([]Field, []string, error) 
 			propType, _ := propMap["type"].(string)
 			propFormat, _ := propMap["format"].(string)
 			readOnly, _ := propMap["readOnly"].(bool)
+			nullable, _ := propMap["nullable"].(bool)
 
 			isRequired := false
 			for _, r := range requiredFields {
@@ -358,10 +359,11 @@ func extractFields(schemaMap map[string]interface{}) ([]Field, []string, error) 
 				TSName:     toCamelCase(propName),
 				Type:       propType,
 				Format:     propFormat,
-				GoType:     toGoType(propType, propFormat),
-				PythonType: toPythonType(propType, propFormat),
+				GoType:     toGoType(propType, propFormat, nullable),
+				PythonType: toPythonType(propType, propFormat, nullable),
 				TSType:     toTSType(propType, propFormat),
 				Required:   isRequired,
+				Nullable:   nullable,
 				ReadOnly:   readOnly,
 				JSONTag:    jsonTag(propName, isRequired),
 			}
@@ -397,6 +399,7 @@ func extractPatchFields(schemaMap map[string]interface{}) ([]Field, []string, er
 
 		propType, _ := propMap["type"].(string)
 		propFormat, _ := propMap["format"].(string)
+		propNullable, _ := propMap["nullable"].(bool)
 
 		f := Field{
 			Name:       propName,
@@ -405,10 +408,11 @@ func extractPatchFields(schemaMap map[string]interface{}) ([]Field, []string, er
 			TSName:     toCamelCase(propName),
 			Type:       propType,
 			Format:     propFormat,
-			GoType:     toGoType(propType, propFormat),
-			PythonType: toPythonType(propType, propFormat),
+			GoType:     toGoType(propType, propFormat, propNullable),
+			PythonType: toPythonType(propType, propFormat, propNullable),
 			TSType:     toTSType(propType, propFormat),
 			Required:   false,
+			Nullable:   propNullable,
 			JSONTag:    jsonTag(propName, false),
 		}
 
