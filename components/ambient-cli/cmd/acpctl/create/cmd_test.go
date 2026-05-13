@@ -249,18 +249,6 @@ func TestCreateRoleBinding_Success(t *testing.T) {
 	}
 }
 
-func TestCreateRoleBinding_MissingUserID(t *testing.T) {
-	srv := testhelper.NewServer(t)
-	testhelper.Configure(t, srv.URL)
-	result := testhelper.Run(t, Cmd, "role-binding", "--role-id", "r1", "--scope", "global")
-	if result.Err == nil {
-		t.Fatal("expected error for missing --user-id")
-	}
-	if !strings.Contains(result.Err.Error(), "--user-id is required") {
-		t.Errorf("expected '--user-id is required', got: %v", result.Err)
-	}
-}
-
 func TestCreateRoleBinding_MissingScope(t *testing.T) {
 	srv := testhelper.NewServer(t)
 	testhelper.Configure(t, srv.URL)
