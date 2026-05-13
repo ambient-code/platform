@@ -36,6 +36,10 @@ The browser SHALL receive an opaque, httpOnly, secure, SameSite OIDC session coo
 never a raw JWT. The frontend server SHALL exchange the OIDC session for a JWT when
 proxying requests to backend services.
 
+The OIDC callback route SHALL coexist with existing integration auth routes under
+`/api/auth/` (GitHub, GitLab, Jira, Google, Gerrit, CodeRabbit). The OIDC callback
+MUST NOT conflict with or disrupt those routes.
+
 #### Scenario: User login
 
 - GIVEN a user navigates to the platform
@@ -46,10 +50,17 @@ proxying requests to backend services.
 #### Scenario: OIDC callback
 
 - GIVEN the user completes SSO authentication
-- WHEN SSO redirects to the frontend callback URL
+- WHEN SSO redirects to the frontend OIDC callback route
 - THEN the frontend exchanges the authorization code for tokens
 - AND stores the OIDC session server-side
 - AND sets an httpOnly, secure, SameSite cookie on the browser
+
+#### Scenario: OIDC routes coexist with integration auth routes
+
+- GIVEN existing integration auth routes at `/api/auth/{provider}/connect`, `/api/auth/{provider}/status`, etc.
+- WHEN the OIDC callback route is added
+- THEN integration auth routes continue to function unchanged
+- AND the OIDC route does not shadow or intercept integration auth requests
 
 #### Scenario: Authenticated API request
 
@@ -381,6 +392,33 @@ The deployment manifests SHALL be updated to support the new authentication mode
 - WHEN the frontend pod starts
 - THEN a K8s Secret containing `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET`, and `SSO_ISSUER_URL`
   is mounted into the frontend container
+
+### Requirement: SSO Client Configuration
+
+Each deployed environment SHALL have its own OIDC confidential client registered in
+Red Hat SSO. The client SHALL be configured with:
+
+- Client authentication enabled (confidential)
+- Authorization Code grant type
+- Valid redirect URI pointing to the frontend OIDC callback route
+- Valid post-logout redirect URI pointing to the frontend root
+- Web origins matching the frontend host (for CORS on the token endpoint)
+
+Local development environments (Kind, local-dev) SHALL NOT require an SSO client.
+
+#### Scenario: One client per environment
+
+- GIVEN stage and production deployments
+- WHEN SSO clients are registered
+- THEN each environment has its own client with its own secret
+- AND a compromised secret in one environment does not affect others
+
+#### Scenario: Audience isolation
+
+- GIVEN separate clients for stage and production
+- WHEN a JWT is minted for the stage client
+- THEN the `aud` claim contains the stage client ID
+- AND the production backend rejects it because the audience does not match
 
 #### Scenario: Backend impersonation RBAC provisioned
 
