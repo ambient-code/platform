@@ -6,7 +6,7 @@ import { Info } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { getCronDescription, getNextRuns } from "@/lib/cron";
+import { getCronDescriptionWithLocal, getNextRuns } from "@/lib/cron";
 import { formatScheduleDateTime, formatScheduleTime } from "@/lib/format-timestamp";
 import { INACTIVITY_TIMEOUT_TOOLTIP } from "@/lib/constants";
 import { useRunnerTypes } from "@/services/queries/use-runner-types";
@@ -51,11 +51,11 @@ export function ScheduledSessionDetailsCard({
             <dd className="font-mono">{scheduledSession.name}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Schedule (UTC)</dt>
+            <dt className="text-muted-foreground">Schedule</dt>
             <dd>
               <span className="font-mono">{scheduledSession.schedule}</span>
               <span className="text-muted-foreground ml-2">
-                ({getCronDescription(scheduledSession.schedule)})
+                ({getCronDescriptionWithLocal(scheduledSession.schedule)})
               </span>
             </dd>
           </div>
