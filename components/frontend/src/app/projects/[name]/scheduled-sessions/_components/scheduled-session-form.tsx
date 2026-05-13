@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { ArrowLeft, Loader2, AlertCircle, X, Info } from "lucide-react";
-import { getCronDescription, getNextRuns } from "@/lib/cron";
+import { getCronDescriptionWithLocal, getNextRuns } from "@/lib/cron";
 import { formatScheduleDateTime } from "@/lib/format-timestamp";
 
 import { Button } from "@/components/ui/button";
@@ -210,7 +210,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
       }
       form.setValue("model", modelsData.defaultModel, { shouldDirty: false });
     }
-  }, [modelsData?.defaultModel, form, isEdit, initialData]);
+  }, [modelsData, form, isEdit, initialData]);
 
   // Resolve workflow state once OOTB workflows finish loading. The Skeleton
   // guard on the Select (workflowsLoading || !workflowResolved) ensures Radix
@@ -233,7 +233,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
 
   const effectiveCron = schedulePreset === "custom" ? (customCron ?? "") : schedulePreset;
   const nextRuns = useMemo(() => getNextRuns(effectiveCron, 3), [effectiveCron]);
-  const cronDescription = useMemo(() => effectiveCron ? getCronDescription(effectiveCron) : "", [effectiveCron]);
+  const cronDescription = useMemo(() => effectiveCron ? getCronDescriptionWithLocal(effectiveCron) : "", [effectiveCron]);
 
   const handleRunnerTypeChange = (value: string, onChange: (v: string) => void) => {
     onChange(value);
@@ -393,6 +393,7 @@ export function ScheduledSessionForm({ projectName, mode, initialData }: Schedul
                       </SelectContent>
                     </Select>
                     <FormMessage />
+                    <p className="text-xs text-muted-foreground">Times are in UTC</p>
                   </FormItem>
                 )}
               />
