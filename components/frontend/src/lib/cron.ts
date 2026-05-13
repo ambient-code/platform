@@ -1,5 +1,6 @@
 import cronstrue from "cronstrue";
 import { CronExpressionParser } from "cron-parser";
+import { formatTimeLocal } from "./format-timestamp";
 
 /**
  * Returns a human-readable description of a cron expression.
@@ -28,4 +29,39 @@ export function getNextRuns(cronExpr: string, count: number): Date[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * Returns a cron description with UTC and local timezone labels.
+ * Sub-daily schedules return the plain description without timezone annotation.
+ */
+export function getCronDescriptionWithLocal(cronExpr: string): string {
+  const description = getCronDescription(cronExpr);
+
+  const runs = getNextRuns(cronExpr, 2);
+  if (runs.length < 2) {
+    return description;
+  }
+
+  const subDaily = runs[1].getTime() - runs[0].getTime() < 24 * 60 * 60 * 1000;
+
+  if (subDaily) {
+    return description;
+  }
+
+  const timePattern = /(\d{1,2}:\d{2}(\s*[AP]M)?)/;
+
+  if (!timePattern.test(description)) {
+    return description;
+  }
+
+  const withUtc = description.replace(timePattern, "$1 UTC");
+
+  const local = formatTimeLocal(runs[0]);
+
+  if (local.endsWith("UTC")) {
+    return withUtc;
+  }
+
+  return `${withUtc} (${local})`;
 }
