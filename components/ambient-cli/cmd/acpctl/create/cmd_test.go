@@ -141,6 +141,35 @@ func TestCreateSession_Success(t *testing.T) {
 	}
 }
 
+func TestCreateSession_ProjectIDFlag(t *testing.T) {
+	srv := testhelper.NewServer(t)
+	srv.Handle("/api/ambient/v1/sessions", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		srv.RespondJSON(t, w, http.StatusCreated, &types.Session{
+			ObjectReference: types.ObjectReference{ID: "s-flag"},
+			Name:            "flag-session",
+			ProjectID:       "explicit-project",
+		})
+	})
+
+	testhelper.Configure(t, srv.URL)
+	result := testhelper.Run(t, Cmd, "session",
+		"--name", "flag-session",
+		"--project-id", "explicit-project",
+	)
+	if result.Err != nil {
+		t.Fatalf("unexpected error: %v\nstdout: %s\nstderr: %s", result.Err, result.Stdout, result.Stderr)
+	}
+	if !strings.Contains(result.Stdout, "session/s-flag") {
+		t.Errorf("expected 'session/s-flag created', got: %s", result.Stdout)
+	}
+	if strings.Contains(result.Stderr, "not applicable") {
+		t.Errorf("--project-id should not produce 'not applicable' warning, stderr: %s", result.Stderr)
+	}
+}
+
 func TestCreateSession_MissingName(t *testing.T) {
 	srv := testhelper.NewServer(t)
 	testhelper.Configure(t, srv.URL)
