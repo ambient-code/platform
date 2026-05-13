@@ -7,6 +7,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+
+	"ambient-code-operator/internal/types"
 )
 
 func TestSanitizeName(t *testing.T) {
@@ -165,7 +167,7 @@ func TestApplyFeatureFlagOverrides(t *testing.T) {
 			if tt.configMapData != nil {
 				configMap := &corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "feature-flag-overrides",
+						Name:      types.FeatureFlagOverridesConfigMap,
 						Namespace: "test-namespace",
 					},
 					Data: tt.configMapData,

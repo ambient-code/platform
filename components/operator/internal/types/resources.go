@@ -11,6 +11,15 @@ const (
 	// manually on private-CA clusters. See issue #1247.
 	TrustedCABundleConfigMapName = "trusted-ca-bundle"
 
+	// FeatureFlagOverridesConfigMap is the ConfigMap containing workspace feature flag overrides
+	FeatureFlagOverridesConfigMap = "feature-flag-overrides"
+
+	// JiraWriteFlagKey enables write operations for Jira MCP tools
+	JiraWriteFlagKey = "jira-write"
+
+	// JiraReadOnlyModeEnvVar controls read-only mode for Jira integration
+	JiraReadOnlyModeEnvVar = "JIRA_READ_ONLY_MODE"
+
 	// CopiedFromAnnotation is the annotation key used to track secrets copied by the operator
 	CopiedFromAnnotation = "vteam.ambient-code/copied-from"
 )
