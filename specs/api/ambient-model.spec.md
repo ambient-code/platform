@@ -1,8 +1,8 @@
 # Ambient Platform Data Model Spec
 
 **Date:** 2026-03-20
-**Status:** Proposed — Pending Consensus
-**Last Updated:** 2026-04-28 — added `ScheduledSession` Kind; added session operational sub-resources (workspace, files, git, repos, tasks, runner protocol); added generic proxy surface for backend passthrough; updated coverage matrix: all ScheduledSession commands implemented; session sub-resources (workspace/files/git/repos/operational/runner protocol) implemented in API server; generic proxy plugin implemented
+**Status:** Active
+**Last Updated:** 2026-05-12 — migrate Credentials from project-scoped to global routes (`/credentials`); remove `project_id` from model, OpenAPI, and SDK; add drop-column migration; update coverage matrix
 **Workflow:** `../../workflows/sessions/ambient-model.workflow.md` — implementation waves, gap table, build commands, run log
 **Design:** `credentials-session.md` — full Credential Kind design spec and rationale
 
@@ -70,8 +70,20 @@ erDiagram
     Agent {
         string ID PK "KSUID"
         string project_id FK
+        string parent_agent_id FK "nullable — parent agent for sub-agents"
+        string owner_user_id FK "user who owns this agent"
         string name "human-readable; unique within project"
+        string display_name "nullable — human-friendly display label"
+        string description "nullable — purpose description"
         string prompt "who this agent is — mutable; access controlled via RBAC"
+        string repo_url "nullable — primary repository for agent sessions"
+        string workflow_id "nullable — default workflow for agent sessions"
+        string llm_model "active LLM; default claude-sonnet-4-6"
+        float  llm_temperature "default 0.7"
+        int32  llm_max_tokens "default 4000"
+        string bot_account_name "nullable — service account for git ops"
+        string resource_overrides "nullable — JSON pod resource overrides"
+        string environment_variables "nullable — JSON extra env vars"
         string current_session_id FK "nullable — denormalized for fast reads"
         jsonb  labels
         jsonb  annotations
@@ -110,8 +122,8 @@ erDiagram
         string  workflow_id "nullable — JSON-encoded workflow config"
         string  llm_model "active LLM; default claude-sonnet-4-6"
         float   llm_temperature "default 0.7"
-        int     llm_max_tokens "default 4000"
-        int     timeout "nullable — max session duration in seconds"
+        int32   llm_max_tokens "default 4000"
+        int32   timeout "nullable — max session duration in seconds"
         string  bot_account_name "nullable — service account for git ops"
         string  resource_overrides "nullable — JSON pod resource overrides"
         string  environment_variables "nullable — JSON extra env vars"
@@ -124,7 +136,7 @@ erDiagram
         string  kube_cr_uid
         string  kube_namespace
         string  sdk_session_id
-        int     sdk_restart_count
+        int32   sdk_restart_count
         string  conditions
         string  reconciled_repos
         string  reconciled_workflow
@@ -191,13 +203,17 @@ erDiagram
     ScheduledSession {
         string ID PK "KSUID"
         string project_id FK
-        string agent_id FK "which Agent to ignite on each trigger"
+        string agent_id FK "nullable — which Agent to ignite on each trigger"
         string name "human-readable; unique within project"
         string description
         string schedule "cron expression"
         string timezone "IANA timezone; default UTC"
         bool   enabled "false = suspended; schedule not evaluated"
         string session_prompt "injected as Session.prompt on each trigger"
+        int32  timeout "nullable — max session duration in seconds for triggered sessions"
+        int32  inactivity_timeout "nullable — idle timeout in seconds"
+        bool   stop_on_run_finished "nullable — stop session when run completes"
+        string runner_type "nullable — override runner type for triggered sessions"
         time   last_run_at "nullable; wall-clock time of last trigger"
         time   next_run_at "nullable; computed from schedule + timezone"
         time   created_at
@@ -237,10 +253,24 @@ Agent is scoped to a Project. The stable address is `{project_name}/{agent_name}
 | Field | Notes |
 |-------|-------|
 | `name` | Human-readable, unique within the project. Used as display name and in addressing. |
+| `display_name` | Nullable. Human-friendly label for UI display; does not affect addressing. |
+| `description` | Nullable. Free-text purpose description. |
 | `prompt` | Defines who the agent is. Mutable via PATCH. Access controlled by RBAC (`agent:editor` or higher). |
+| `parent_agent_id` | Nullable FK. Set when this agent was spawned as a sub-agent by another agent. |
+| `owner_user_id` | FK to the User who owns this agent. Set at creation; matches the authenticated caller. |
+| `repo_url` | Nullable. Primary repository URL cloned into every session the agent starts. Copied to `Session.repo_url` on ignite. |
+| `workflow_id` | Nullable. Default workflow identifier injected into sessions. Copied to `Session.workflow_id` on ignite. |
+| `llm_model` | Active LLM model name. Default: `claude-sonnet-4-6`. Copied to `Session.llm_model` on ignite. |
+| `llm_temperature` | LLM sampling temperature. Default: `0.7`. Copied to `Session.llm_temperature` on ignite. |
+| `llm_max_tokens` | Max tokens per LLM response. `int32`, default: `4000`. Copied to `Session.llm_max_tokens` on ignite. |
+| `bot_account_name` | Nullable. Service account name for git operations inside sessions. Copied to `Session.bot_account_name` on ignite. |
+| `resource_overrides` | Nullable. JSON-encoded pod resource requests/limits override for sessions spawned by this agent. Copied to `Session.resource_overrides` on ignite. |
+| `environment_variables` | Nullable. JSON-encoded extra environment variables injected into session pods. Copied to `Session.environment_variables` on ignite. |
 | `current_session_id` | Denormalized FK to the active Session. Null when no session is running. Used by Project Home for fast reads. |
 
 **Agent is mutable.** PATCH updates in place. There is no versioning. If you need to track prompt history, use `labels`/`annotations` or an external audit log.
+
+**Field propagation on ignite:** When `POST /agents/{id}/start` creates a new Session, the `ignite_handler` copies `repo_url`, `workflow_id`, `llm_model`, `llm_temperature`, `llm_max_tokens`, `bot_account_name`, `resource_overrides`, and `environment_variables` from the Agent to the new Session. Fields set directly in the start request body override these defaults.
 
 ```
 POST /projects/{id}/agents          → create agent in this project
@@ -340,7 +370,7 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | `GET /projects` | `acpctl get projects` | ✅ implemented |
 | `GET /projects/{id}` | `acpctl get project <name>` | ✅ implemented |
 | `POST /projects` | `acpctl create project --name <n> [--description <d>]` | ✅ implemented |
-| `PATCH /projects/{id}` | _(not yet exposed)_ | 🔲 planned |
+| `PATCH /projects/{id}` | `acpctl project update [--name <n>] [--description <d>] [--prompt <p>]` | ✅ implemented |
 | `DELETE /projects/{id}` | `acpctl delete project <name>` | ✅ implemented |
 | _(context switch)_ | `acpctl project <name>` | ✅ implemented |
 | _(context view)_ | `acpctl project current` | ✅ implemented |
@@ -420,23 +450,26 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 
 | REST API | `acpctl` Command | Status |
 |---|---|---|
-| `GET /credentials` | `acpctl credential list [--provider <p>]` | 🔲 planned |
-| `POST /credentials` | `acpctl credential create --name <n> --provider <p> --token <t\|@->  [--url <u>] [--email <e>] [--description <d>]` | 🔲 planned |
-| `GET /credentials/{cred_id}` | `acpctl credential get <id>` | 🔲 planned |
-| `PATCH /credentials/{cred_id}` | `acpctl credential update <id> [--token <t>] [--description <d>]` | 🔲 planned |
-| `DELETE /credentials/{cred_id}` | `acpctl credential delete <id> --confirm` | 🔲 planned |
-| `GET /credentials/{cred_id}/token` | `acpctl credential token <id>` | 🔲 planned |
+| `GET /credentials` | `acpctl credential list [--provider <p>]` | ✅ implemented |
+| `POST /credentials` | `acpctl credential create --name <n> --provider <p> --token <t\|@->  [--url <u>] [--email <e>] [--description <d>]` | ✅ implemented |
+| `GET /credentials/{cred_id}` | `acpctl credential get <id>` | ✅ implemented |
+| `PATCH /credentials/{cred_id}` | `acpctl credential update <id> [--token <t>] [--description <d>]` | ✅ implemented |
+| `DELETE /credentials/{cred_id}` | `acpctl credential delete <id> --confirm` | ✅ implemented |
+| `GET /credentials/{cred_id}/token` | `acpctl credential token <id>` | ✅ implemented |
 | `POST /role_bindings` | `acpctl credential bind <cred-name> --scope project --scope-id <project>` | 🔲 planned |
 
 #### RBAC
 
 | REST API | `acpctl` Command | Status |
 |---|---|---|
-| `GET /roles` | _(not yet exposed)_ | 🔲 planned |
+| `GET /roles` | `acpctl get roles` | ✅ implemented |
+| `GET /roles/{id}` | `acpctl get roles <id>` | ✅ implemented |
 | `POST /roles` | `acpctl create role --name <n> [--permissions <json>]` | ✅ implemented |
-| `GET /role_bindings` | _(not yet exposed)_ | 🔲 planned |
+| `DELETE /roles/{id}` | `acpctl delete role <id>` | ✅ implemented |
+| `GET /role_bindings` | `acpctl get role-bindings` | ✅ implemented |
+| `GET /role_bindings/{id}` | `acpctl get role-bindings <id>` | ✅ implemented |
 | `POST /role_bindings` | `acpctl create role-binding --user-id <u> --role-id <r> --scope <s> [--scope-id <id>]` | ✅ implemented |
-| `DELETE /role_bindings/{id}` | _(not yet exposed)_ | 🔲 planned |
+| `DELETE /role_bindings/{id}` | `acpctl delete role-binding <id>` | ✅ implemented |
 
 #### Auth & Context
 
@@ -637,7 +670,7 @@ GET    /api/ambient/v1/projects/{id}/agents/{agent_id}/role_bindings    RBAC bin
     "id": "2abc...",
     "agent_id": "1def...",
     "phase": "pending",
-    "triggered_by_user_id": "...",
+    "created_by_user_id": "...",
     "created_at": "2026-03-20T00:00:00Z"
   },
   "start_context": "# Agent: API\n\nYou are API...\n\n## Inbox\n...\n\n## Task\n..."
@@ -737,6 +770,7 @@ POST   /api/ambient/v1/sessions/{id}/tasks/{task_id}/stop                    sto
 Credentials are global resources. Access to credentials is granted via RoleBindings — bind a
 credential to a Project, Agent, or Session scope to make it available to runners in that scope.
 
+**Designed paths (global — pending implementation):**
 ```
 GET    /api/ambient/v1/credentials                                        list credentials (filtered by caller's RoleBindings)
 GET    /api/ambient/v1/credentials?provider={provider}                    filter by provider
@@ -746,6 +780,8 @@ PATCH  /api/ambient/v1/credentials/{cred_id}                              update
 DELETE /api/ambient/v1/credentials/{cred_id}                              soft delete
 GET    /api/ambient/v1/credentials/{cred_id}/token                        fetch raw token — restricted to credential:token-reader
 ```
+
+> **Note:** `credential bind` (via `POST /role_bindings` with `scope=credential`) is planned but not yet implemented.
 
 `token` is accepted on `POST` and `PATCH` but **never returned** by standard read endpoints.
 `GET .../token` is gated by `credential:token-reader`. See
@@ -838,21 +874,23 @@ runtime authorization semantics.
 ### RBAC Endpoints
 
 ```
-GET    /api/ambient/v1/roles
-GET    /api/ambient/v1/roles/{id}
-POST   /api/ambient/v1/roles
-PATCH  /api/ambient/v1/roles/{id}
-DELETE /api/ambient/v1/roles/{id}
+GET    /api/ambient/v1/roles                                              ✅ implemented
+GET    /api/ambient/v1/roles/{id}                                         ✅ implemented
+POST   /api/ambient/v1/roles                                              ✅ implemented
+PATCH  /api/ambient/v1/roles/{id}                                         ✅ implemented
+DELETE /api/ambient/v1/roles/{id}                                         ✅ implemented
 
-GET    /api/ambient/v1/role_bindings
-POST   /api/ambient/v1/role_bindings
-DELETE /api/ambient/v1/role_bindings/{id}
+GET    /api/ambient/v1/role_bindings                                      ✅ implemented
+GET    /api/ambient/v1/role_bindings/{id}                                 ✅ implemented
+POST   /api/ambient/v1/role_bindings                                      ✅ implemented
+PATCH  /api/ambient/v1/role_bindings/{id}                                 ✅ implemented
+DELETE /api/ambient/v1/role_bindings/{id}                                 ✅ implemented
 
-GET    /api/ambient/v1/users/{id}/role_bindings
-GET    /api/ambient/v1/projects/{id}/role_bindings
-GET    /api/ambient/v1/projects/{id}/agents/{agent_id}/role_bindings
-GET    /api/ambient/v1/sessions/{id}/role_bindings
-GET    /api/ambient/v1/credentials/{cred_id}/role_bindings
+GET    /api/ambient/v1/projects/{id}/agents/{agent_id}/role_bindings      ✅ implemented
+GET    /api/ambient/v1/users/{id}/role_bindings                           🔲 planned
+GET    /api/ambient/v1/projects/{id}/role_bindings                        🔲 planned
+GET    /api/ambient/v1/sessions/{id}/role_bindings                        🔲 planned
+GET    /api/ambient/v1/credentials/{cred_id}/role_bindings                🔲 planned
 ```
 
 The `credential:token-reader` role is platform-internal. Credential CRUD is governed by
@@ -1191,12 +1229,13 @@ _Last updated: 2026-04-28. Use this as the authoritative index — click into co
 | **Agents — labels/annotations** | ✅ PATCH accepts `labels`/`annotations` | ✅ fields on `ProjectAgent` type; `UpdateInProject(patch map[string]any)` | ⚠️ via `agent update` with raw patch; no typed helpers | |
 | **Inbox — list/send** | ✅ GET/POST `/inbox` | ✅ `InboxMessageAPI.{ListByAgent,Send}` + `ProjectAgentAPI.{ListInboxInProject,SendInboxInProject}` | ✅ `inbox list`, `inbox send` | |
 | **Inbox — mark-read/delete** | ✅ PATCH/DELETE `/inbox/{id}` | ✅ `InboxMessageAPI.{MarkRead,DeleteMessage}` | ✅ `inbox mark-read`, `inbox delete` | |
-| **Projects — CRUD** | ✅ | ✅ `ProjectAPI.{Get,List,Create,Update,Delete}` | ✅ `get/create/delete project`, `project set/current` | `project patch` not exposed in CLI |
+| **Projects — CRUD** | ✅ | ✅ `ProjectAPI.{Get,List,Create,Update,Delete}` | ✅ `get/create/delete project`, `project set/current`, `project update` | |
 | **Projects — labels/annotations** | ✅ PATCH accepts `labels`/`annotations` | ✅ fields on `Project` type; `ProjectAPI.Update(patch map[string]any)` | ⚠️ no dedicated subcommand | |
-| **RBAC — roles** | ✅ | ✅ `RoleAPI` | ✅ `create role` only; list/get not exposed | |
-| **RBAC — role bindings** | ✅ | ✅ `RoleBindingAPI` | ✅ `create role-binding` only; list/delete not exposed | |
-| **Credentials — CRUD** | 🔲 | 🔲 | 🔲 `credential list/get/create/update/delete` | Global; bound to Projects via RoleBindings; not yet implemented |
-| **Credentials — token fetch (runner)** | 🔲 `GET /credentials/{cred_id}/token` | 🔲 | n/a | Gated by `credential:token-reader`; granted to runner SA by operator |
+| **RBAC — roles** | ✅ full CRUD | ✅ `RoleAPI` | ✅ `create role`, `get roles`, `get roles <id>`, `delete role` | |
+| **RBAC — role bindings** | ✅ full CRUD | ✅ `RoleBindingAPI` | ✅ `create role-binding`, `get role-bindings`, `get role-bindings <id>`, `delete role-binding` | |
+| **RBAC — scoped role_bindings queries** | ✅ agents only; 🔲 users/projects/sessions/credentials | n/a | n/a | `GET /projects/{id}/agents/{agent_id}/role_bindings` implemented; other 4 scoped endpoints not yet |
+| **Credentials — CRUD** | ✅ `plugins/credentials/` (global at `/credentials`) | ✅ `credential_api.go` + `credential_extensions.go` | ✅ `credential list/get/create/update/delete/token` | `credential bind` not yet implemented. |
+| **Credentials — token fetch** | ✅ `GET /projects/{id}/credentials/{cred_id}/token` | ✅ `GetToken()` in `credential_extensions.go` | ✅ `credential token <id>` | Gated by `credential:token-reader`; granted to runner SA by operator |
 | **ScheduledSessions — CRUD** | ✅ scheduledSessions plugin | ✅ `ScheduledSessionAPI.{List,Get,Create,Update,Delete,GetByName}` | ✅ `scheduled-session list/get/create/update/delete` | |
 | **ScheduledSessions — lifecycle** | ✅ suspend/resume/trigger/runs handlers | ✅ `ScheduledSessionAPI.{Suspend,Resume,Trigger,Runs}` | ✅ `scheduled-session suspend/resume/trigger/runs` | |
 | **Generic proxy — project config** | ✅ proxy plugin (`plugins/proxy`); forwards non-`/api/ambient/` paths to `BACKEND_URL` | n/a | 🔲 raw HTTP fallback | Permissions, keys, MCP servers, secrets, feature flags |
@@ -1219,10 +1258,9 @@ All Kinds with `labels`/`annotations` store them as JSON strings in the DB (`*st
 
 | Command | Status | Path to close |
 |---|---|---|
-| `PATCH /projects/{id}` | 🔲 no CLI project-patch command | add `acpctl project update` subcommand |
 | Project/Agent/Session label subcommands | 🔲 no `acpctl label`/`acpctl annotate` | add typed label helpers to SDK first, then CLI |
-| `GET /roles`, `GET /role_bindings` | 🔲 list/get not exposed | add to `get` command resource switch |
-| `DELETE /role_bindings/{id}` | 🔲 not exposed | add to `delete` command resource switch |
+| `acpctl credential bind` | 🔲 not implemented | depends on global credential path migration |
+| Session workspace/files/git/repos subcommands | 🔲 planned | see Session Operations table above |
 
 
  Manual Test
