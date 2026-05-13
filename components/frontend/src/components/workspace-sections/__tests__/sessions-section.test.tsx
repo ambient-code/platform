@@ -8,7 +8,7 @@ vi.mock('next/link', () => ({
   ),
 }));
 
-const mockUseProject = vi.fn(() => ({ data: undefined }));
+const mockUseProject = vi.fn(() => ({ data: undefined as { displayName: string; name: string } | undefined }));
 vi.mock('@/services/queries', () => ({
   useSessionsPaginated: () => ({ data: { items: [], totalCount: 0, hasMore: false }, isFetching: false, refetch: vi.fn() }),
   useStopSession: () => ({ mutate: vi.fn(), isPending: false }),
