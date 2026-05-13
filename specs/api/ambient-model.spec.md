@@ -461,7 +461,7 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | `PATCH /credentials/{cred_id}` | `acpctl credential update <id> [--token <t>] [--description <d>]` | ✅ implemented |
 | `DELETE /credentials/{cred_id}` | `acpctl credential delete <id> --confirm` | ✅ implemented |
 | `GET /credentials/{cred_id}/token` | `acpctl credential token <id>` | ✅ implemented |
-| `POST /role_bindings` | `acpctl credential bind <cred-name> --project <project>` | 🔲 planned |
+| `POST /role_bindings` | `acpctl credential bind <cred-name> --project <project>` | ✅ implemented |
 
 #### RBAC
 
@@ -1309,7 +1309,7 @@ All Kinds with `labels`/`annotations` store them as JSON strings in the DB (`*st
   acpctl apply -f /tmp/cred.yaml && rm /tmp/cred.yaml
 
   # 4. Bind credential to project
-  acpctl credential bind github-pat-test --scope project --scope-id test-cred-1
+  acpctl credential bind github-pat-test --project test-cred-1
 
   CRED_ID=$(acpctl credential list -o json | python3 -c "import sys,json; print(next(i['id'] for i in json.load(sys.stdin)['items'] if i['name']=='github-pat-test'))")
   echo "CRED_ID=$CRED_ID"

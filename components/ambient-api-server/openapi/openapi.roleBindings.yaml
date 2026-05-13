@@ -219,18 +219,34 @@ components:
         - $ref: 'openapi.yaml#/components/schemas/ObjectReference'
         - type: object
           required:
-            - user_id
             - role_id
             - scope
           properties:
-            user_id:
-              type: string
             role_id:
               type: string
             scope:
               type: string
-            scope_id:
+              enum: [global, project, agent, session, credential]
+            user_id:
               type: string
+              nullable: true
+              description: Nullable — set when the binding is user-specific
+            project_id:
+              type: string
+              nullable: true
+              description: Nullable — set when scope=project or when binding a credential to a project
+            agent_id:
+              type: string
+              nullable: true
+              description: Nullable — set when scope=agent
+            session_id:
+              type: string
+              nullable: true
+              description: Nullable — set when scope=session
+            credential_id:
+              type: string
+              nullable: true
+              description: Nullable — set when scope=credential
     # NEW SCHEMA START
     RoleBindingList:
     # NEW SCHEMA END
@@ -247,14 +263,26 @@ components:
     # NEW SCHEMA END
       type: object
       properties:
-        user_id:
-          type: string
         role_id:
           type: string
         scope:
           type: string
-        scope_id:
+          enum: [global, project, agent, session, credential]
+        user_id:
           type: string
+          nullable: true
+        project_id:
+          type: string
+          nullable: true
+        agent_id:
+          type: string
+          nullable: true
+        session_id:
+          type: string
+          nullable: true
+        credential_id:
+          type: string
+          nullable: true
   parameters:
       id:
         name: id
