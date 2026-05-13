@@ -38,10 +38,10 @@ func addProjectIDMigration() *gormigrate.Migration {
 	return &gormigrate.Migration{
 		ID: "202604101200",
 		Migrate: func(tx *gorm.DB) error {
-			return tx.Exec("ALTER TABLE credentials ADD COLUMN IF NOT EXISTS project_id TEXT NOT NULL DEFAULT ''").Error
+			return tx.Exec("ALTER TABLE IF EXISTS credentials ADD COLUMN IF NOT EXISTS project_id TEXT NOT NULL DEFAULT ''").Error
 		},
 		Rollback: func(tx *gorm.DB) error {
-			return tx.Exec("ALTER TABLE credentials DROP COLUMN IF EXISTS project_id").Error
+			return tx.Exec("ALTER TABLE IF EXISTS credentials DROP COLUMN IF EXISTS project_id").Error
 		},
 	}
 }
@@ -102,6 +102,18 @@ func rolesMigration() *gormigrate.Migration {
 				names[i] = r.name
 			}
 			return tx.Exec("DELETE FROM roles WHERE name IN ?", names).Error
+		},
+	}
+}
+
+func dropProjectIDMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202505120001",
+		Migrate: func(tx *gorm.DB) error {
+			return tx.Exec(`ALTER TABLE IF EXISTS credentials DROP COLUMN IF EXISTS project_id`).Error
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return tx.Exec(`ALTER TABLE IF EXISTS credentials ADD COLUMN IF NOT EXISTS project_id TEXT NOT NULL DEFAULT ''`).Error
 		},
 	}
 }

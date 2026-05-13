@@ -51,7 +51,6 @@ func (h *projectGRPCHandler) CreateProject(ctx context.Context, req *pb.CreatePr
 
 	project := &Project{
 		Name:        req.GetName(),
-		DisplayName: req.DisplayName,
 		Description: req.Description,
 		Labels:      req.Labels,
 		Annotations: req.Annotations,
@@ -77,9 +76,6 @@ func (h *projectGRPCHandler) UpdateProject(ctx context.Context, req *pb.UpdatePr
 
 	if req.Name != nil {
 		found.Name = *req.Name
-	}
-	if req.DisplayName != nil {
-		found.DisplayName = req.DisplayName
 	}
 	if req.Description != nil {
 		found.Description = req.Description
