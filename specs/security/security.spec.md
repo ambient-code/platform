@@ -270,11 +270,11 @@ API endpoints, and provider enum definitions, see the
 
 ### Requirement: Credential Access via RoleBindings
 
-Credentials SHALL be global resources. Access SHALL be granted via RoleBindings with
-`credential` scope — bind a credential to a Project to make it available to all agents in
-that Project. At session start, the resolver SHALL list all credentials the session's
-Project has access to (via RoleBindings) and return the matching credential for each
-requested provider.
+Credentials SHALL be global resources. Access SHALL be granted via a RoleBinding with
+`scope=credential`, `credential_id=<cred>`, and `project_id=<project>` — `user_id` is
+null because the grant is project-level, not user-specific. At session start, the resolver
+SHALL list all `scope=credential` RoleBindings where `project_id` matches the session's
+project and return the matching credential for each requested provider.
 
 This follows the Kubernetes resource model:
 
@@ -386,8 +386,9 @@ These endpoints MUST validate the caller is cluster-internal to prevent token ex
 
 | Decision | Rationale |
 |----------|-----------|
-| Agent ownership via RBAC, not a hardcoded FK | Ownership is expressed as a RoleBinding (`scope=agent`, `scope_id=agent_id`). Enables multi-owner and delegated ownership consistently across all Kinds. |
-| Credential is global, bound via RoleBindings | Credentials are global resources. Access is granted by binding a credential to a Project via a RoleBinding with `credential` scope. A single credential can be shared across multiple Projects without duplication. |
+| Agent ownership via RBAC, not a hardcoded FK | Ownership is expressed as a RoleBinding (`scope=agent`, `agent_id=<id>`, `user_id=<owner>`). Enables multi-owner and delegated ownership consistently across all Kinds. |
+| Credential is global, bound via RoleBindings | Credentials are global resources. Access is granted by a RoleBinding with `scope=credential`, `credential_id=<cred>`, `project_id=<project>`, `user_id=NULL`. A single credential can be shared across multiple Projects without duplication. |
+| RoleBinding uses typed nullable FKs, not a polymorphic scope_id string | Each FK (`user_id`, `project_id`, `agent_id`, `session_id`, `credential_id`) is nullable. `scope` discriminates which FK identifies the bound resource. Enables real referential integrity constraints; `user_id` is null for non-user grants (e.g. project-level credential access). |
 | Credential token is write-only | Prevents token exfiltration via the standard REST API. Raw token only surfaced to runners via the runtime credentials path, not to end users. |
 | Five-scope RBAC (`global`, `project`, `agent`, `session`, `credential`) | Credential access is explicit via RoleBindings with `credential` scope. Enables cross-project sharing without credential duplication. |
 | Credential CRUD governed by credential roles | `credential:owner` manages CRUD and bindings. `credential:viewer` reads metadata. Self-service: users create their own credentials without admin intervention. |
