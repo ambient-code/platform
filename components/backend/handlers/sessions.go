@@ -64,6 +64,10 @@ type ootbWorkflowsCache struct {
 var (
 	ootbCache    = &ootbWorkflowsCache{}
 	ootbCacheTTL = 5 * time.Minute // Cache OOTB workflows for 5 minutes
+
+	// customSourceCaches provides per-source caching for custom workflow sources.
+	// Key: "gitUrl|branch|path" -> *ootbWorkflowsCache
+	customSourceCaches sync.Map
 )
 
 // allowedSdkOptionKeys defines the SDK options that users are allowed to configure.
@@ -2549,6 +2553,7 @@ type OOTBWorkflow struct {
 	Branch      string `json:"branch"`
 	Path        string `json:"path,omitempty"`
 	Enabled     bool   `json:"enabled"`
+	Source      string `json:"source,omitempty"`
 }
 
 // ListOOTBWorkflows returns the list of out-of-the-box workflows dynamically discovered from GitHub
@@ -2575,12 +2580,21 @@ func ListOOTBWorkflows(c *gin.Context) {
 	// Build cache key from repo configuration
 	cacheKey := fmt.Sprintf("%s|%s|%s", ootbRepo, ootbBranch, ootbWorkflowsPath)
 
-	// Check cache first (read lock)
+	// Read project query param early - needed for both cache-hit and cache-miss paths
+	project := c.Query("project") // Optional query parameter
+
+	// Check OOTB cache first (read lock)
 	ootbCache.mu.RLock()
 	if ootbCache.cacheKey == cacheKey && time.Since(ootbCache.cachedAt) < ootbCacheTTL && len(ootbCache.workflows) > 0 {
-		workflows := ootbCache.workflows
+		workflows := make([]OOTBWorkflow, len(ootbCache.workflows))
+		copy(workflows, ootbCache.workflows)
 		ootbCache.mu.RUnlock()
-		log.Printf("ListOOTBWorkflows: returning %d cached workflows (age: %v)", len(workflows), time.Since(ootbCache.cachedAt).Round(time.Second))
+		log.Printf("ListOOTBWorkflows: returning %d cached OOTB workflows (age: %v)", len(workflows), time.Since(ootbCache.cachedAt).Round(time.Second))
+		// Append custom source workflows if project is specified
+		if project != "" {
+			customWorkflows := fetchCustomSourceWorkflows(c, project, "")
+			workflows = append(workflows, customWorkflows...)
+		}
 		c.JSON(http.StatusOK, gin.H{"workflows": workflows})
 		return
 	}
@@ -2590,7 +2604,6 @@ func ListOOTBWorkflows(c *gin.Context) {
 	// Try to get user's GitHub token (best effort - not required)
 	// This gives better rate limits (5000/hr vs 60/hr) and supports private repos
 	token := ""
-	project := c.Query("project") // Optional query parameter
 	if project != "" {
 		usrID, _ := c.Get("userID")
 		k8sClt, sessDyn := GetK8sClientsForRequest(c)
@@ -2689,6 +2702,7 @@ func ListOOTBWorkflows(c *gin.Context) {
 			Branch:      ootbBranch,
 			Path:        fmt.Sprintf("%s/%s", ootbWorkflowsPath, entryName),
 			Enabled:     true,
+			Source:      "ootb",
 		})
 	}
 
@@ -2700,7 +2714,179 @@ func ListOOTBWorkflows(c *gin.Context) {
 	ootbCache.mu.Unlock()
 
 	log.Printf("ListOOTBWorkflows: discovered %d workflows from %s (cached for %v)", len(workflows), ootbRepo, ootbCacheTTL)
+
+	// Append workflows from custom sources if project is specified
+	if project != "" {
+		customWorkflows := fetchCustomSourceWorkflows(c, project, token)
+		workflows = append(workflows, customWorkflows...)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"workflows": workflows})
+}
+
+// fetchCustomSourceWorkflows reads custom workflow sources from the ProjectSettings CR
+// and discovers workflows from each source's GitHub repository.
+// Failures on individual sources are logged but do not block other sources.
+func fetchCustomSourceWorkflows(c *gin.Context, project, token string) []OOTBWorkflow {
+	_, k8sDyn := GetK8sClientsForRequest(c)
+	if k8sDyn == nil {
+		return nil
+	}
+
+	gvr := GetProjectSettingsResource()
+	ps, err := k8sDyn.Resource(gvr).Namespace(project).Get(context.TODO(), "projectsettings", v1.GetOptions{})
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			log.Printf("fetchCustomSourceWorkflows: failed to get project settings for %s: %v", project, err)
+		}
+		return nil
+	}
+
+	spec, ok := ps.Object["spec"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	rawSources, ok := spec["workflowSources"].([]interface{})
+	if !ok || len(rawSources) == 0 {
+		return nil
+	}
+
+	var allWorkflows []OOTBWorkflow
+
+	for srcIdx, raw := range rawSources {
+		srcMap, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		srcName, _ := srcMap["name"].(string)
+		srcGitURL, _ := srcMap["gitUrl"].(string)
+		if srcGitURL == "" {
+			log.Printf("fetchCustomSourceWorkflows: skipping source %d with empty gitUrl in project %s", srcIdx, project)
+			continue
+		}
+
+		srcBranch, _ := srcMap["branch"].(string)
+		if srcBranch == "" {
+			srcBranch = "main"
+		}
+
+		srcPath, _ := srcMap["path"].(string)
+		if srcPath == "" {
+			srcPath = "workflows"
+		}
+
+		workflows := fetchWorkflowsFromSource(c, project, srcIdx, srcName, srcGitURL, srcBranch, srcPath, token)
+		allWorkflows = append(allWorkflows, workflows...)
+	}
+
+	return allWorkflows
+}
+
+// fetchWorkflowsFromSource discovers workflows from a single custom source repository.
+// Uses per-source caching with 5-min TTL via customSourceCaches.
+func fetchWorkflowsFromSource(c *gin.Context, project string, srcIdx int, srcName, srcGitURL, srcBranch, srcPath, token string) []OOTBWorkflow {
+	cacheKey := fmt.Sprintf("%s|%s|%s|%s", project, srcGitURL, srcBranch, srcPath)
+
+	// Check per-source cache
+	if cached, ok := customSourceCaches.Load(cacheKey); ok {
+		entry := cached.(*ootbWorkflowsCache)
+		entry.mu.RLock()
+		if time.Since(entry.cachedAt) < ootbCacheTTL && len(entry.workflows) > 0 {
+			workflows := make([]OOTBWorkflow, len(entry.workflows))
+			copy(workflows, entry.workflows)
+			entry.mu.RUnlock()
+			log.Printf("fetchWorkflowsFromSource: returning %d cached workflows for source %q (age: %v)", len(workflows), srcName, time.Since(entry.cachedAt).Round(time.Second))
+			return workflows
+		}
+		entry.mu.RUnlock()
+	}
+
+	// Parse the source git URL
+	owner, repoName, err := git.ParseGitHubURL(srcGitURL)
+	if err != nil {
+		log.Printf("fetchWorkflowsFromSource: invalid git URL %q for source %q: %v", srcGitURL, srcName, err)
+		return nil
+	}
+
+	// List workflow directories from the source
+	entries, err := fetchGitHubDirectoryListing(c.Request.Context(), owner, repoName, srcBranch, srcPath, token)
+	if err != nil {
+		log.Printf("fetchWorkflowsFromSource: failed to list directory for source %q (%s): %v", srcName, srcGitURL, err)
+		// Return stale cache if available
+		if cached, ok := customSourceCaches.Load(cacheKey); ok {
+			entry := cached.(*ootbWorkflowsCache)
+			entry.mu.RLock()
+			if len(entry.workflows) > 0 {
+				workflows := make([]OOTBWorkflow, len(entry.workflows))
+				copy(workflows, entry.workflows)
+				entry.mu.RUnlock()
+				log.Printf("fetchWorkflowsFromSource: returning stale cached workflows for source %q due to error", srcName)
+				return workflows
+			}
+			entry.mu.RUnlock()
+		}
+		return nil
+	}
+
+	// Scan each subdirectory for ambient.json
+	var workflows []OOTBWorkflow
+	for _, entry := range entries {
+		entryType, _ := entry["type"].(string)
+		entryName, _ := entry["name"].(string)
+		if entryType != "dir" {
+			continue
+		}
+
+		// Try to fetch ambient.json from this workflow directory
+		ambientPath := fmt.Sprintf("%s/%s/.ambient/ambient.json", srcPath, entryName)
+		ambientData, fetchErr := fetchGitHubFileContent(c.Request.Context(), owner, repoName, srcBranch, ambientPath, token)
+
+		var ambientConfig struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+			Enabled     *bool  `json:"enabled,omitempty"`
+		}
+		if fetchErr == nil {
+			if parseErr := json.Unmarshal(ambientData, &ambientConfig); parseErr != nil {
+				log.Printf("fetchWorkflowsFromSource: failed to parse ambient.json for %s/%s: %v", srcName, entryName, parseErr)
+			}
+		}
+
+		// Skip workflows explicitly disabled in ambient.json
+		if ambientConfig.Enabled != nil && !*ambientConfig.Enabled {
+			log.Printf("fetchWorkflowsFromSource: skipping disabled workflow %s/%s", srcName, entryName)
+			continue
+		}
+
+		workflowName := ambientConfig.Name
+		if workflowName == "" {
+			workflowName = strings.ReplaceAll(entryName, "-", " ")
+			workflowName = strings.Title(workflowName)
+		}
+
+		workflows = append(workflows, OOTBWorkflow{
+			ID:          fmt.Sprintf("%d-%s", srcIdx, entryName),
+			Name:        workflowName,
+			Description: ambientConfig.Description,
+			GitURL:      srcGitURL,
+			Branch:      srcBranch,
+			Path:        fmt.Sprintf("%s/%s", srcPath, entryName),
+			Enabled:     true,
+			Source:      srcName,
+		})
+	}
+
+	// Update per-source cache
+	newEntry := &ootbWorkflowsCache{}
+	newEntry.workflows = workflows
+	newEntry.cachedAt = time.Now()
+	newEntry.cacheKey = cacheKey
+	customSourceCaches.Store(cacheKey, newEntry)
+
+	log.Printf("fetchWorkflowsFromSource: discovered %d workflows from source %q (%s, cached for %v)", len(workflows), srcName, srcGitURL, ootbCacheTTL)
+	return workflows
 }
 
 func DeleteSession(c *gin.Context) {
