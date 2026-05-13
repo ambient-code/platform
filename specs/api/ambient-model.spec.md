@@ -461,7 +461,7 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | `PATCH /credentials/{cred_id}` | `acpctl credential update <id> [--token <t>] [--description <d>]` | ✅ implemented |
 | `DELETE /credentials/{cred_id}` | `acpctl credential delete <id> --confirm` | ✅ implemented |
 | `GET /credentials/{cred_id}/token` | `acpctl credential token <id>` | ✅ implemented |
-| `POST /role_bindings` | `acpctl credential bind <cred-name> --project <project>` | 🔲 planned |
+| `POST /role_bindings` | `acpctl credential bind <cred-name> --project <project>` | ✅ implemented |
 
 #### RBAC
 
