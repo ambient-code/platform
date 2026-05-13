@@ -1203,9 +1203,8 @@ func CreateSession(c *gin.Context) {
 	// This ensures consistent behavior whether sessions are created via API or kubectl.
 
 	// Trigger async display name generation when initialPrompt is provided
-	// but no explicit displayName was set. The AG-UI proxy skips the
-	// initialPrompt message, so sessions created with only an initialPrompt
-	// (e.g., from the new-session page) would never get a generated name.
+	// but no explicit displayName was set. The AG-UI proxy also generates
+	// on the first /agui/run message as a fallback if this call fails.
 	if strings.TrimSpace(req.InitialPrompt) != "" && strings.TrimSpace(req.DisplayName) == "" {
 		spec, ok := created.Object["spec"].(map[string]interface{})
 		if ok {
