@@ -13,10 +13,13 @@ func ConvertRoleBinding(roleBinding openapi.RoleBinding) *RoleBinding {
 			ID: util.NilToEmptyString(roleBinding.Id),
 		},
 	}
-	c.UserId = roleBinding.UserId
 	c.RoleId = roleBinding.RoleId
 	c.Scope = roleBinding.Scope
-	c.ScopeId = roleBinding.ScopeId
+	c.UserId = roleBinding.UserId
+	c.ProjectId = roleBinding.ProjectId
+	c.AgentId = roleBinding.AgentId
+	c.SessionId = roleBinding.SessionId
+	c.CredentialId = roleBinding.CredentialId
 
 	if roleBinding.CreatedAt != nil {
 		c.CreatedAt = *roleBinding.CreatedAt
@@ -29,14 +32,17 @@ func ConvertRoleBinding(roleBinding openapi.RoleBinding) *RoleBinding {
 func PresentRoleBinding(roleBinding *RoleBinding) openapi.RoleBinding {
 	reference := presenters.PresentReference(roleBinding.ID, roleBinding)
 	return openapi.RoleBinding{
-		Id:        reference.Id,
-		Kind:      reference.Kind,
-		Href:      reference.Href,
-		CreatedAt: openapi.PtrTime(roleBinding.CreatedAt),
-		UpdatedAt: openapi.PtrTime(roleBinding.UpdatedAt),
-		UserId:    roleBinding.UserId,
-		RoleId:    roleBinding.RoleId,
-		Scope:     roleBinding.Scope,
-		ScopeId:   roleBinding.ScopeId,
+		Id:           reference.Id,
+		Kind:         reference.Kind,
+		Href:         reference.Href,
+		CreatedAt:    openapi.PtrTime(roleBinding.CreatedAt),
+		UpdatedAt:    openapi.PtrTime(roleBinding.UpdatedAt),
+		RoleId:       roleBinding.RoleId,
+		Scope:        roleBinding.Scope,
+		UserId:       roleBinding.UserId,
+		ProjectId:    roleBinding.ProjectId,
+		AgentId:      roleBinding.AgentId,
+		SessionId:    roleBinding.SessionId,
+		CredentialId: roleBinding.CredentialId,
 	}
 }
