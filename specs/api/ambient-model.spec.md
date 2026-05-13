@@ -18,7 +18,7 @@ The Ambient API server provides a coordination layer for orchestrating fleets of
 - **Message** — a single AG-UI event in the LLM conversation. Append-only; the canonical record of what happened in a session.
 - **Inbox** — a persistent message queue on an Agent. Messages survive across sessions and are drained into the start context at the next run.
 - **Credential** — a global secret. Stores a Personal Access Token or equivalent for an external provider (GitHub, GitLab, Jira, Google, Vertex AI, Kubeconfig). Consumed by runners at session start. Bound to Projects via RoleBindings — a single Credential can be shared across multiple Projects without duplication.
-- **RoleBinding** — binds a Resource to a Role at a given scope (`global`, `project`, `agent`, `session`). Ownership and access for all Kinds is expressed through RoleBindings.
+- **RoleBinding** — binds a Role to a subject (user or project) at a given scope. Ownership and access for all Kinds is expressed through RoleBindings. The subject and scope are each represented as typed nullable FKs — exactly one FK is non-null, determined by `scope`.
 
 The stable address of an agent is `{project_name}/{agent_name}`. It holds the inbox and links to the active session.
 
@@ -172,10 +172,13 @@ erDiagram
 
     RoleBinding {
         string ID PK
-        string user_id FK
         string role_id FK
-        string scope    "global | project | agent | session | credential"
-        string scope_id "empty for global"
+        string scope         "global | project | agent | session | credential"
+        string user_id FK    "nullable — set when scope identifies a user subject"
+        string project_id FK "nullable — set when scope=project"
+        string agent_id FK   "nullable — set when scope=agent"
+        string session_id FK "nullable — set when scope=session"
+        string credential_id FK "nullable — set when scope=credential"
         time   created_at
         time   updated_at
         time   deleted_at
@@ -225,12 +228,14 @@ erDiagram
 
     Project         ||--o{ ProjectSettings  : "has"
     Project         ||--o{ Agent            : "owns"
-    RoleBinding     }o--o| Credential       : "grants_access"
+    RoleBinding     }o--o| Credential       : "credential_id"
     Project         ||--o{ ScheduledSession : "owns"
 
-    User            ||--o{ RoleBinding      : "bound_to"
+    User            }o--o{ RoleBinding      : "user_id"
+    Project         }o--o{ RoleBinding      : "project_id"
 
-    RoleBinding     }o--o| Agent            : "owns"
+    RoleBinding     }o--o| Agent            : "agent_id"
+    RoleBinding     }o--o| Session          : "session_id"
 
     Agent           ||--o{ Session          : "runs"
     Agent           ||--o| Session          : "current_session"
@@ -456,7 +461,7 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | `PATCH /credentials/{cred_id}` | `acpctl credential update <id> [--token <t>] [--description <d>]` | ✅ implemented |
 | `DELETE /credentials/{cred_id}` | `acpctl credential delete <id> --confirm` | ✅ implemented |
 | `GET /credentials/{cred_id}/token` | `acpctl credential token <id>` | ✅ implemented |
-| `POST /role_bindings` | `acpctl credential bind <cred-name> --scope project --scope-id <project>` | 🔲 planned |
+| `POST /role_bindings` | `acpctl credential bind <cred-name> --project <project>` | 🔲 planned |
 
 #### RBAC
 
@@ -468,7 +473,7 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | `DELETE /roles/{id}` | `acpctl delete role <id>` | ✅ implemented |
 | `GET /role_bindings` | `acpctl get role-bindings` | ✅ implemented |
 | `GET /role_bindings/{id}` | `acpctl get role-bindings <id>` | ✅ implemented |
-| `POST /role_bindings` | `acpctl create role-binding --user-id <u> --role-id <r> --scope <s> [--scope-id <id>]` | ✅ implemented |
+| `POST /role_bindings` | `acpctl create role-binding --role-id <r> --scope <s> [--user-id <u>] [--project-id <p>] [--agent-id <a>] [--session-id <s>] [--credential-id <c>]` | ✅ implemented |
 | `DELETE /role_bindings/{id}` | `acpctl delete role-binding <id>` | ✅ implemented |
 
 #### Auth & Context
@@ -781,7 +786,7 @@ DELETE /api/ambient/v1/credentials/{cred_id}                              soft d
 GET    /api/ambient/v1/credentials/{cred_id}/token                        fetch raw token — restricted to credential:token-reader
 ```
 
-> **Note:** `credential bind` (via `POST /role_bindings` with `scope=credential`) is planned but not yet implemented.
+> **Note:** `credential bind` (via `POST /role_bindings` with `scope=credential`, `credential_id`, and `project_id`) is planned but not yet implemented.
 
 `token` is accepted on `POST` and `PATCH` but **never returned** by standard read endpoints.
 `GET .../token` is gated by `credential:token-reader`. See
@@ -816,26 +821,48 @@ When a runner fetches a credential, the response payload shape is consistent acr
 
 ## RBAC
 
+### RoleBinding — Nullable FK Design
+
+`RoleBinding` is a typed nullable FK table. Each row has exactly one non-null FK, determined by `scope`. There is no polymorphic `scope_id` string — every FK points to a real table with referential integrity.
+
+| `scope` value | Non-null FK | Meaning |
+|---|---|---|
+| `global` | _(none)_ | Role applies across the entire platform |
+| `project` | `project_id` | Role applies within a specific project |
+| `agent` | `agent_id` | Role applies to a specific agent |
+| `session` | `session_id` | Role applies to a specific session run |
+| `credential` | `credential_id` | Role governs access to a specific credential |
+
+`user_id` is a **separate, independently nullable FK** — it identifies the user who holds the binding when the grant is user-specific. It is null when the grant is project-level (not tied to a specific human):
+
+| Use case | `user_id` | scope FK | Meaning |
+|---|---|---|---|
+| User A owns Credential Y | `user_id=A` | `credential_id=Y` | A can CRUD credential Y |
+| Credential Y bound to Project X | `user_id=NULL` | `credential_id=Y` + `project_id=X` | Project X can access credential Y |
+| User A is project:owner of Project X | `user_id=A` | `project_id=X` | A owns project X |
+| Global platform:admin grant | `user_id=A` | _(none)_ | A has platform-wide admin |
+
+For credential→project bindings, both `credential_id` and `project_id` are non-null. This is the one exception to the "single FK per row" pattern — a credential binding names both the credential (the resource) and the project (the recipient). `user_id` is null because the grant is not user-specific; it applies to the entire project.
+
 ### Scopes
 
-| Scope | Meaning |
-|---|---|
-| `global` | Applies across the entire platform |
-| `project` | Applies to all resources in a project (Agents, Sessions) and Credentials bound to the project |
-| `agent` | Applies to one Agent and all its sessions |
-| `session` | Applies to one session run only |
-| `credential` | Grants access to a specific Credential (used to bind credentials to projects) |
+| Scope | FK set | Meaning |
+|---|---|---|
+| `global` | _(none)_ | Applies across the entire platform |
+| `project` | `project_id` | Applies to all resources in a specific project |
+| `agent` | `agent_id` | Applies to a specific Agent and all its sessions |
+| `session` | `session_id` | Applies to one session run only |
+| `credential` | `credential_id` | Governs access to a specific Credential |
 
 Effective permissions = union of all applicable bindings (global ∪ project ∪ agent ∪ session). No deny rules.
 
 #### Credential Access — Global with RoleBinding Grants
 
-Credentials are global resources. Access is granted via RoleBindings — bind a credential to a
-Project, Agent, or Session scope. At session start, the resolver lists all credentials the
-caller has access to (via RoleBindings) and returns matching credentials for each requested
-provider. A single Credential can be shared across multiple Projects without duplication.
-See [Security Spec — Credential Access via RoleBindings](../security/security.spec.md#requirement-credential-access-via-rolebindings) for
-runtime authorization semantics.
+Credentials are global resources. A credential is made accessible to a Project by creating a RoleBinding with `scope=credential`, `credential_id=<cred>`, `project_id=<project>`, and `user_id=NULL`. At session start, the resolver finds all `scope=credential` bindings where `project_id` matches the session's project and returns the matching credentials.
+
+A single Credential can be shared across multiple Projects by creating one binding per project — no duplication of the Credential record.
+
+See [Security Spec — Credential Access via RoleBindings](../security/security.spec.md#requirement-credential-access-via-rolebindings) for runtime authorization semantics.
 
 ### Built-in Roles
 
@@ -1127,7 +1154,7 @@ This structure means you can define and compose bespoke agent suites — entire 
 |---|---|
 | Agent is project-scoped, not global | Simplicity. An agent's identity and prompt are contextual to the project it serves. No indirection via a global registry. |
 | Agent.prompt is mutable | Prompt editing is a routine operational task. RBAC controls who can change it. No versioning overhead. |
-| Agent ownership via RBAC, not a hardcoded FK | Ownership is expressed as a RoleBinding (`scope=agent`, `scope_id=agent_id`). Enables multi-owner and delegated ownership consistently across all Kinds. |
+| Agent ownership via RBAC, not a hardcoded FK | Ownership is expressed as a RoleBinding (`scope=agent`, `agent_id=<id>`, `user_id=<owner>`). Enables multi-owner and delegated ownership consistently across all Kinds. |
 | One active Session per Agent | Avoids concurrent conflicting runs; start is idempotent |
 | Inbox on Agent, not Session | Messages persist across re-ignitions; addressed to the agent, not the run |
 | Inbox drained at start | Unread messages become part of the start context; session picks up where things left off |
@@ -1157,10 +1184,10 @@ echo "$GITLAB_PAT" | acpctl credential create --name my-gitlab-pat --provider gi
   --token @- --url https://gitlab.myco.com
 
 # Bind credential to a project (grants access to all agents in the project)
-acpctl credential bind my-gitlab-pat --scope project --scope-id my-project
+acpctl credential bind my-gitlab-pat --project my-project
 
 # Bind the same credential to another project (no duplication)
-acpctl credential bind my-gitlab-pat --scope project --scope-id other-project
+acpctl credential bind my-gitlab-pat --project other-project
 
 # List credentials (filtered by caller's RoleBindings)
 acpctl credential list
@@ -1190,7 +1217,7 @@ acpctl apply -f credential.yaml
 # credential/platform-gitlab-pat created
 
 # Then bind to the desired project
-acpctl credential bind platform-gitlab-pat --scope project --scope-id my-project
+acpctl credential bind platform-gitlab-pat --project my-project
 ```
 
 ---
@@ -1235,7 +1262,7 @@ _Last updated: 2026-04-28. Use this as the authoritative index — click into co
 | **RBAC — role bindings** | ✅ full CRUD | ✅ `RoleBindingAPI` | ✅ `create role-binding`, `get role-bindings`, `get role-bindings <id>`, `delete role-binding` | |
 | **RBAC — scoped role_bindings queries** | ✅ agents only; 🔲 users/projects/sessions/credentials | n/a | n/a | `GET /projects/{id}/agents/{agent_id}/role_bindings` implemented; other 4 scoped endpoints not yet |
 | **Credentials — CRUD** | ✅ `plugins/credentials/` (global at `/credentials`) | ✅ `credential_api.go` + `credential_extensions.go` | ✅ `credential list/get/create/update/delete/token` | `credential bind` not yet implemented. |
-| **Credentials — token fetch** | ✅ `GET /projects/{id}/credentials/{cred_id}/token` | ✅ `GetToken()` in `credential_extensions.go` | ✅ `credential token <id>` | Gated by `credential:token-reader`; granted to runner SA by operator |
+| **Credentials — token fetch** | ✅ `GET /credentials/{cred_id}/token` | ✅ `GetToken()` in `credential_extensions.go` | ✅ `credential token <id>` | Gated by `credential:token-reader`; granted to runner SA by operator |
 | **ScheduledSessions — CRUD** | ✅ scheduledSessions plugin | ✅ `ScheduledSessionAPI.{List,Get,Create,Update,Delete,GetByName}` | ✅ `scheduled-session list/get/create/update/delete` | |
 | **ScheduledSessions — lifecycle** | ✅ suspend/resume/trigger/runs handlers | ✅ `ScheduledSessionAPI.{Suspend,Resume,Trigger,Runs}` | ✅ `scheduled-session suspend/resume/trigger/runs` | |
 | **Generic proxy — project config** | ✅ proxy plugin (`plugins/proxy`); forwards non-`/api/ambient/` paths to `BACKEND_URL` | n/a | 🔲 raw HTTP fallback | Permissions, keys, MCP servers, secrets, feature flags |
@@ -1243,7 +1270,7 @@ _Last updated: 2026-04-28. Use this as the authoritative index — click into co
 | **Generic proxy — auth integrations** | ✅ proxy plugin | n/a | n/a | GitHub/GitLab/Google/Jira/Gerrit/CodeRabbit/MCP OAuth flows |
 | **Generic proxy — cluster/platform** | ✅ proxy plugin | n/a | 🔲 `acpctl version`, `acpctl cluster-info` | cluster-info, version, health, LDAP, OOTB workflows |
 | **Declarative apply** | n/a | uses SDK | ✅ `apply -f`, `apply -k` | Upsert semantics; supports inbox seeding |
-| **Declarative apply — Credential kind** | n/a | 🔲 | 🔲 | Planned; global resource; token sourced from env var in YAML |
+| **Declarative apply — Credential kind** | n/a | uses SDK | ✅ `apply -f credential.yaml` | Global resource; token sourced from env var in YAML |
 | **Declarative apply — ScheduledSession kind** | n/a | 🔲 | 🔲 | Planned; schedule and agent reference in YAML |
 
 ### Labels/Annotations — SDK Ergonomics Gap
@@ -1259,7 +1286,7 @@ All Kinds with `labels`/`annotations` store them as JSON strings in the DB (`*st
 | Command | Status | Path to close |
 |---|---|---|
 | Project/Agent/Session label subcommands | 🔲 no `acpctl label`/`acpctl annotate` | add typed label helpers to SDK first, then CLI |
-| `acpctl credential bind` | 🔲 not implemented | depends on global credential path migration |
+| `acpctl credential bind` | 🔲 not implemented | `POST /role_bindings` with `scope=credential`; global migration complete, command not yet written |
 | Session workspace/files/git/repos subcommands | 🔲 planned | see Session Operations table above |
 
 
