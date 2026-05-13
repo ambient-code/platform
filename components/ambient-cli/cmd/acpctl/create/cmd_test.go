@@ -223,12 +223,14 @@ func TestCreateRoleBinding_Success(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Errorf("expected POST, got %s", r.Method)
 		}
+		userID := "user-1"
+		projectID := "my-project"
 		srv.RespondJSON(t, w, http.StatusCreated, &types.RoleBinding{
 			ObjectReference: types.ObjectReference{ID: "rb-new"},
-			UserID:          "user-1",
+			UserID:          &userID,
 			RoleID:          "r-1",
 			Scope:           "project",
-			ScopeID:         "my-project",
+			ProjectID:       &projectID,
 		})
 	})
 
@@ -237,25 +239,13 @@ func TestCreateRoleBinding_Success(t *testing.T) {
 		"--user-id", "user-1",
 		"--role-id", "r-1",
 		"--scope", "project",
-		"--scope-id", "my-project",
+		"--project-id-fk", "my-project",
 	)
 	if result.Err != nil {
 		t.Fatalf("unexpected error: %v\nstdout: %s\nstderr: %s", result.Err, result.Stdout, result.Stderr)
 	}
 	if !strings.Contains(result.Stdout, "role-binding/rb-new") {
 		t.Errorf("expected 'role-binding/rb-new created', got: %s", result.Stdout)
-	}
-}
-
-func TestCreateRoleBinding_MissingUserID(t *testing.T) {
-	srv := testhelper.NewServer(t)
-	testhelper.Configure(t, srv.URL)
-	result := testhelper.Run(t, Cmd, "role-binding", "--role-id", "r1", "--scope", "global")
-	if result.Err == nil {
-		t.Fatal("expected error for missing --user-id")
-	}
-	if !strings.Contains(result.Err.Error(), "--user-id is required") {
-		t.Errorf("expected '--user-id is required', got: %v", result.Err)
 	}
 }
 
@@ -274,9 +264,10 @@ func TestCreateRoleBinding_MissingScope(t *testing.T) {
 func TestCreateRoleBinding_Aliases(t *testing.T) {
 	srv := testhelper.NewServer(t)
 	srv.Handle("/api/ambient/v1/role_bindings", func(w http.ResponseWriter, r *http.Request) {
+		u1 := "u1"
 		srv.RespondJSON(t, w, http.StatusCreated, &types.RoleBinding{
 			ObjectReference: types.ObjectReference{ID: "rb-1"},
-			UserID:          "u1", RoleID: "r1", Scope: "global",
+			UserID:          &u1, RoleID: "r1", Scope: "global",
 		})
 	})
 
