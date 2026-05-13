@@ -90,6 +90,9 @@ dmypy.json
 .claude/settings.local.json
 .claude/worktrees/
 
+# Beads issue tracker (local Dolt DB, passive export)
+.beads/issues.jsonl
+
 # Git worktrees
 .worktrees/
 
