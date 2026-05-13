@@ -14,9 +14,9 @@ import (
 //
 //	pending              -> yellow (33)
 //	running / active     -> orange (214)
-//	succeeded / completed -> dim   (240)
+//	succeeded / completed -> light gray (245)
 //	failed               -> red    (31)
-//	cancelled / idle     -> dim    (240)
+//	cancelled / idle     -> light gray (245)
 func PhaseColor(phase string) lipgloss.Color {
 	switch strings.ToLower(phase) {
 	case "pending":
@@ -24,13 +24,13 @@ func PhaseColor(phase string) lipgloss.Color {
 	case "running", "active":
 		return lipgloss.Color("214") // orange
 	case "succeeded", "completed":
-		return lipgloss.Color("240") // dim
+		return lipgloss.Color("245") // light gray — readable on dark backgrounds
 	case "failed":
 		return lipgloss.Color("31") // red
 	case "cancelled", "idle":
-		return lipgloss.Color("240") // dim
+		return lipgloss.Color("245") // light gray — readable on dark backgrounds
 	default:
-		return lipgloss.Color("240") // dim
+		return lipgloss.Color("245") // light gray — readable on dark backgrounds
 	}
 }
 
