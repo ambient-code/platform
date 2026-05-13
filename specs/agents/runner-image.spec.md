@@ -83,7 +83,7 @@ A custom runner image SHALL preserve the following filesystem layout:
 | Path | Constraint |
 |------|------------|
 | `/workspace` | MUST exist; EmptyDir mounted by CP at pod creation |
-| `/app` | MUST exist; writeable by UID 1001; serves as `HOME` |
+| `/app` | MUST exist; writeable by the runtime non-root UID (base image default: 1001); serves as `HOME` |
 | `/app/ambient-runner` | MUST contain installed `ambient_runner` package |
 | `/app/vertex` | MUST tolerate read-only Secret mount by CP (when Vertex AI enabled) |
 | `/tmp` | MUST be writeable |
@@ -260,6 +260,8 @@ When the allowlist is unset, the CP SHALL accept any registry. Operators SHOULD 
 
 The ProjectSettings resource SHALL support a `runner_image_pull_secret` field (string) containing the name of a Kubernetes Secret (type `kubernetes.io/dockerconfigjson`) in the project's namespace.
 
+The CP SHALL only look up `runner_image_pull_secret` in the project's own namespace. References that resolve to a Secret in a different namespace SHALL be rejected.
+
 When set, the CP SHALL validate that the referenced Secret exists and is of type `kubernetes.io/dockerconfigjson` before creating the pod. When the Secret does not exist or is the wrong type, the session SHALL transition to `Failed` with a descriptive condition.
 
 When `RUNNER_IMAGE_ALLOWED_REGISTRIES` is configured, the CP SHALL verify that the `runner_image` registry is in the allowlist regardless of which pull secret is provided. The pull secret controls authentication, not trust — registry trust is governed by the allowlist.
@@ -290,6 +292,8 @@ The CP SHALL set `imagePullPolicy` based on the image reference:
 | `@sha256:` digest | `IfNotPresent` |
 | `localhost/` prefix | `IfNotPresent` |
 | All others (tags) | `Always` |
+
+Workspace admins SHOULD pin production images by digest to guarantee reproducibility and avoid unnecessary registry round-trips on pod start.
 
 ---
 
@@ -456,6 +460,7 @@ The platform SHALL publish a conformance test suite that validates a custom runn
 - The runner process starts within the expected timeout
 - The runner runs as a non-root user
 - CP-injected environment variables are not overridden by the image
+- Required bridge implementations are present and loadable for each supported `RUNNER_TYPE`
 
 The test suite SHALL produce a pass/fail result suitable for CI/CD integration.
 
