@@ -7,7 +7,7 @@ export async function GET(request: Request) {
     const userId = headers['X-Forwarded-User'] || '';
     const email = headers['X-Forwarded-Email'] || '';
     const username = headers['X-Forwarded-Preferred-Username'] || '';
-    const token = headers['X-Forwarded-Access-Token'] || '';
+    const token = headers['X-Forwarded-Access-Token'] || headers['Authorization'] || '';
 
     if (!userId && !username && !email && !token) {
       return Response.json({ authenticated: false }, { status: 200 });

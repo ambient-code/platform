@@ -26,9 +26,11 @@ export function Navigation({ feedbackUrl }: NavigationProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
-    // Redirect to oauth-proxy logout endpoint
-    // This clears the OpenShift OAuth session and redirects back to login
-    window.location.href = '/oauth/sign_out';
+    if (process.env.NEXT_PUBLIC_SSO_ENABLED === 'true') {
+      window.location.href = '/api/auth/sso/logout';
+    } else {
+      window.location.href = '/oauth/sign_out';
+    }
   };
 
   const handleMobileNav = (path: string) => {
