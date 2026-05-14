@@ -24,11 +24,11 @@ export async function GET(request: NextRequest) {
       callbackUrl.searchParams.set(key, value);
     });
 
-    // Remap the iss parameter from the public URL to the internal URL
-    // so openid-client's RFC 9207 issuer validation passes.
-    const publicIssuer = process.env.SSO_PUBLIC_ISSUER_URL;
+    // Keycloak sends iss matching KC_HOSTNAME (internal URL). If it somehow
+    // doesn't match (e.g., KC_HOSTNAME not set), remap to the configured issuer.
     const internalIssuer = process.env.SSO_ISSUER_URL;
-    if (publicIssuer && internalIssuer && callbackUrl.searchParams.get("iss") === publicIssuer) {
+    const callbackIss = callbackUrl.searchParams.get("iss");
+    if (internalIssuer && callbackIss && callbackIss !== internalIssuer) {
       callbackUrl.searchParams.set("iss", internalIssuer);
     }
     const tokens = await exchangeCode(callbackUrl, codeVerifier, expectedState);

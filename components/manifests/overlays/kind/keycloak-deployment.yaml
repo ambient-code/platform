@@ -23,12 +23,10 @@ spec:
             - start-dev
             - --import-realm
           env:
-            - name: KC_HOSTNAME_STRICT
-              value: "false"
+            - name: KC_HOSTNAME
+              value: "http://keycloak-service:8080"
             - name: KC_HTTP_ENABLED
               value: "true"
-            - name: KC_PROXY_HEADERS
-              value: "xforwarded"
             - name: KEYCLOAK_ADMIN
               value: admin
             - name: KEYCLOAK_ADMIN_PASSWORD
