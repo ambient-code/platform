@@ -152,7 +152,46 @@ export async function refreshOIDCTokens(refreshToken: string): Promise<{
   expiresAt: number;
 }> {
   const config = await getOIDCConfig();
-  const tokens = await client.refreshTokenGrant(config, refreshToken);
+  const hasSplitUrls = !!process.env.SSO_PUBLIC_ISSUER_URL
+    && process.env.SSO_PUBLIC_ISSUER_URL !== process.env.SSO_ISSUER_URL;
+
+  if (!hasSplitUrls) {
+    const tokens = await client.refreshTokenGrant(config, refreshToken);
+    return {
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token ?? refreshToken,
+      idToken: tokens.id_token ?? "",
+      expiresAt: Math.floor(Date.now() / 1000) + (tokens.expires_in ?? 300),
+    };
+  }
+
+  const metadata = config.serverMetadata();
+  const tokenEndpoint = String(metadata.token_endpoint);
+
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
+    client_id: process.env.SSO_CLIENT_ID!,
+    client_secret: process.env.SSO_CLIENT_SECRET!,
+  });
+
+  const resp = await fetch(tokenEndpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Token refresh failed (${resp.status}): ${text}`);
+  }
+
+  const tokens = await resp.json() as {
+    access_token: string;
+    refresh_token?: string;
+    id_token?: string;
+    expires_in?: number;
+  };
 
   return {
     accessToken: tokens.access_token,
