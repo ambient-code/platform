@@ -72,14 +72,20 @@ Creates kind cluster and deploys platform with Quay.io images.
 **What it does:**
 1. Creates minimal kind cluster (no ingress)
 2. Deploys platform (backend, frontend, operator, minio)
-3. Initializes MinIO storage
-4. Extracts test token to `e2e/.env.test`
+3. Deploys Keycloak with pre-configured realm (`ambient-code`)
+4. Initializes MinIO storage
+5. Extracts test token to `e2e/.env.test`
 
 **Access:**
 - Run `make kind-port-forward` in another terminal
-- Frontend: `http://localhost:8080`
-- Backend: `http://localhost:8081`
-- Token: `kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d`
+- Frontend: `http://localhost:<port>` (port shown in output)
+- Backend: `http://localhost:<port>`
+
+**Authentication:**
+- The frontend redirects to Keycloak for login automatically
+- Dev credentials: `developer` / `developer` (or `admin` / `admin`)
+- Keycloak admin console: port-forward `svc/keycloak-service 30090:8080`
+- Sessions last 30 minutes; access tokens refresh silently every 5 minutes
 
 ### `make test-e2e`
 
