@@ -81,4 +81,5 @@ func init() {
 	presenters.RegisterKind(&RoleBinding{}, "RoleBinding")
 
 	db.RegisterMigration(migration())
+	db.RegisterMigration(typedFKMigration())
 }

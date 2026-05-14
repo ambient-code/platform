@@ -489,6 +489,7 @@ func loadTemplate(path string) (*template.Template, error) {
 	funcMap := template.FuncMap{
 		"snakeCase": toSnakeCase,
 		"lower":     strings.ToLower,
+		"upper":     strings.ToUpper,
 		"title": func(s string) string {
 			if s == "" {
 				return s
@@ -498,7 +499,10 @@ func loadTemplate(path string) (*template.Template, error) {
 			return string(r)
 		},
 		"goName":        toGoName,
-		"pythonDefault": func(f Field) string { return pythonDefault(f.Type, f.Format) },
+		"pythonDefault":    func(f Field) string { return pythonDefault(f.Type, f.Format, f.Nullable) },
+		"goBuilderParam":   goBuilderParam,
+		"goBuilderAssign":  goBuilderAssign,
+		"isNullablePtr":    func(f Field) bool { return f.GoType == "*string" || f.GoType == "*time.Time" },
 		"isDateTime":    isDateTimeField,
 		"isWritable":    func(f Field) bool { return !f.ReadOnly },
 		"camelCase":     toCamelCase,

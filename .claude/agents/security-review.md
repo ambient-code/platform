@@ -19,7 +19,7 @@ Cross-cutting security review against documented security standards.
 
 Load these files before running checks:
 
-1. `docs/security-standards.md`
+1. `specs/standards/security/security.spec.md`
 
 ## Checks
 

@@ -840,6 +840,7 @@ func (r *SimpleKubeReconciler) buildMCPSidecar(sessionID string) interface{} {
 		envVar("AMBIENT_CP_TOKEN_URL", r.cfg.CPTokenURL),
 		envVar("AMBIENT_CP_TOKEN_PUBLIC_KEY", r.cfg.CPTokenPublicKey),
 		envVar("SESSION_ID", sessionID),
+		envVar("SSL_CERT_FILE", "/etc/pki/ca-trust/extracted/pem/service-ca.crt"),
 	}
 	if r.cfg.HTTPProxy != "" {
 		env = append(env, envVar("HTTP_PROXY", r.cfg.HTTPProxy))
@@ -862,6 +863,14 @@ func (r *SimpleKubeReconciler) buildMCPSidecar(sessionID string) interface{} {
 			},
 		},
 		"env": env,
+		"volumeMounts": []interface{}{
+			map[string]interface{}{
+				"name":      "service-ca",
+				"mountPath": "/etc/pki/ca-trust/extracted/pem/service-ca.crt",
+				"subPath":   "service-ca.crt",
+				"readOnly":  true,
+			},
+		},
 		"resources": map[string]interface{}{
 			"requests": map[string]interface{}{
 				"cpu":    "100m",

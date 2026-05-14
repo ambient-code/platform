@@ -381,6 +381,47 @@ staleTime: Infinity
 "Error: ECONNREFUSED 127.0.0.1:3000"
 ```
 
+## Onboarding Wizard
+
+The FTUE (first-time user experience) wizard lives in `src/components/onboarding/`. It is a dedicated shared component (deliberate exception to colocation) because it may be triggered from multiple entry points.
+
+### Architecture
+
+```
+components/onboarding/
+  welcome-wizard.tsx              # Thin state machine shell (<100 lines)
+  integration-registry.ts         # INTEGRATION_REGISTRY + IntegrationEntry type
+  use-should-show-onboarding.ts   # Trigger hook (zero projects + localStorage)
+  use-app-config.ts               # Reads server config from <meta> tags
+  steps/
+    welcome-step.tsx              # Step 1: intro
+    create-workspace-step.tsx     # Step 2: workspace creation
+    integrations-step.tsx         # Step 3: connect integrations
+    completion-step.tsx           # Step 4: redirect CTAs
+```
+
+### WelcomeWizard composition
+
+The wizard shell is a thin state machine driven by a `STEPS` array. Each step receives `WizardStepProps` (`onNext`, `onSkip`, `wizardState`) and is self-contained. To add a new step, create the component and append it to the `STEPS` array.
+
+### Integration Registry (INTEGRATION_REGISTRY)
+
+A typed array of `IntegrationEntry` objects. Each entry provides `id`, `name`, `description`, `isConnected(status)`, and `renderCard(props)`. The integrations step iterates the registry; it never imports individual `*ConnectionCard` components directly.
+
+A compile-time guard ensures every key of `IntegrationsStatus` (excluding `mcpServers`) has a registry entry. Adding a new integration to the API type without a registry entry causes a build error.
+
+### WorkspaceForm callback interface
+
+`WorkspaceForm` (in `src/components/workspace-form.tsx`) does NOT own any mutation. It exposes `onSubmit(data)`, `onError(err)`, and `isSubmitting` callbacks so consumers control what happens on success. Both `CreateWorkspaceDialog` and the onboarding wizard use the same form.
+
+### Invariants (agent review checklist)
+
+- `welcome-wizard.tsx` must stay under 100 lines
+- `WorkspaceForm` must not import `useCreateProject`
+- `integrations-step.tsx` must not import individual connection cards
+- `INTEGRATION_REGISTRY` must cover all non-MCP keys of `IntegrationsStatus`
+- Wizard state persisted to `sessionStorage` for GitHub OAuth redirect must be cleared on completion/dismissal
+
 ## Summary
 
 Key patterns:

@@ -1,20 +1,16 @@
-/**
- * React Query hooks for GitHub integration
- */
-
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import * as githubApi from '../api/github';
+import { githubAdapter } from '../adapters/github';
+import type { GitHubPort } from '../ports/github';
 import type {
   CreateForkRequest,
   CreatePRRequest,
   GitHubConnectRequest,
 } from '@/types/api';
+import { BACKEND_VERSION } from './query-keys';
+import { integrationsKeys } from './use-integrations';
 
-/**
- * Query keys for GitHub
- */
 export const githubKeys = {
-  all: ['github'] as const,
+  all: [BACKEND_VERSION, 'github'] as const,
   status: () => [...githubKeys.all, 'status'] as const,
   forks: () => [...githubKeys.all, 'forks'] as const,
   forksForProject: (projectName: string, upstreamRepo?: string) =>
@@ -23,88 +19,64 @@ export const githubKeys = {
     [...githubKeys.all, 'diff', owner, repo, prNumber] as const,
 };
 
-/**
- * Hook to fetch GitHub connection status
- */
-export function useGitHubStatus() {
+export function useGitHubStatus(port: GitHubPort = githubAdapter) {
   return useQuery({
     queryKey: githubKeys.status(),
-    queryFn: githubApi.getGitHubStatus,
-    // Check status less frequently
-    staleTime: 60 * 1000, // 1 minute
+    queryFn: port.getGitHubStatus,
+    staleTime: 60 * 1000,
   });
 }
 
-/**
- * Hook to fetch GitHub forks
- */
-export function useGitHubForks(projectName?: string, upstreamRepo?: string) {
+export function useGitHubForks(projectName?: string, upstreamRepo?: string, port: GitHubPort = githubAdapter) {
   return useQuery({
     queryKey: githubKeys.forksForProject(projectName || '', upstreamRepo),
-    queryFn: () => githubApi.listGitHubForks(projectName, upstreamRepo),
-    // Only fetch if both projectName and upstreamRepo are provided
+    queryFn: () => port.listGitHubForks(projectName, upstreamRepo),
     enabled: !!projectName && !!upstreamRepo,
-    // Forks don't change often
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 }
 
-/**
- * Hook to fetch PR diff
- */
 export function usePRDiff(
   owner: string,
   repo: string,
   prNumber: number,
-  projectName?: string
+  projectName?: string,
+  port: GitHubPort = githubAdapter,
 ) {
   return useQuery({
     queryKey: githubKeys.diff(owner, repo, prNumber),
-    queryFn: () => githubApi.getPRDiff(owner, repo, prNumber, projectName),
+    queryFn: () => port.getPRDiff(owner, repo, prNumber, projectName),
     enabled: !!owner && !!repo && !!prNumber,
-    // Diffs are relatively static
-    staleTime: 60 * 1000, // 1 minute
+    staleTime: 60 * 1000,
   });
 }
 
-/**
- * Hook to connect GitHub
- */
-export function useConnectGitHub() {
+export function useConnectGitHub(port: GitHubPort = githubAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data: GitHubConnectRequest) => githubApi.connectGitHub(data),
+    mutationFn: (data: GitHubConnectRequest) => port.connectGitHub(data),
     onSuccess: () => {
-      // Invalidate both GitHub-specific and unified integrations status
       queryClient.invalidateQueries({ queryKey: githubKeys.status() });
-      queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] });
+      queryClient.invalidateQueries({ queryKey: integrationsKeys.status() });
     },
   });
 }
 
-/**
- * Hook to disconnect GitHub
- */
-export function useDisconnectGitHub() {
+export function useDisconnectGitHub(port: GitHubPort = githubAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: githubApi.disconnectGitHub,
+    mutationFn: port.disconnectGitHub,
     onSuccess: () => {
-      // Invalidate both GitHub-specific and unified integrations status
       queryClient.invalidateQueries({ queryKey: githubKeys.status() });
-      queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] });
-      // Clear forks cache
+      queryClient.invalidateQueries({ queryKey: integrationsKeys.status() });
       queryClient.invalidateQueries({ queryKey: githubKeys.forks() });
     },
   });
 }
 
-/**
- * Hook to create a GitHub fork
- */
-export function useCreateGitHubFork() {
+export function useCreateGitHubFork(port: GitHubPort = githubAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -114,9 +86,8 @@ export function useCreateGitHubFork() {
     }: {
       data: CreateForkRequest;
       projectName?: string;
-    }) => githubApi.createGitHubFork(data, projectName),
+    }) => port.createGitHubFork(data, projectName),
     onSuccess: (_fork, { projectName }) => {
-      // Invalidate all forks queries for this project
       if (projectName) {
         queryClient.invalidateQueries({
           queryKey: githubKeys.forksForProject(projectName),
@@ -128,10 +99,7 @@ export function useCreateGitHubFork() {
   });
 }
 
-/**
- * Hook to create a pull request
- */
-export function useCreatePullRequest() {
+export function useCreatePullRequest(port: GitHubPort = githubAdapter) {
   return useMutation({
     mutationFn: ({
       data,
@@ -139,49 +107,40 @@ export function useCreatePullRequest() {
     }: {
       data: CreatePRRequest;
       projectName?: string;
-    }) => githubApi.createPullRequest(data, projectName),
+    }) => port.createPullRequest(data, projectName),
   });
 }
 
-/**
- * Hook to get GitHub PAT status
- */
-export function useGitHubPATStatus() {
+export function useGitHubPATStatus(port: GitHubPort = githubAdapter) {
   return useQuery({
     queryKey: [...githubKeys.all, 'pat', 'status'],
-    queryFn: githubApi.getGitHubPATStatus,
-    staleTime: 60 * 1000, // 1 minute
+    queryFn: port.getGitHubPATStatus,
+    staleTime: 60 * 1000,
   });
 }
 
-/**
- * Hook to save GitHub PAT
- */
-export function useSaveGitHubPAT() {
+export function useSaveGitHubPAT(port: GitHubPort = githubAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (token: string) => githubApi.saveGitHubPAT(token),
+    mutationFn: (token: string) => port.saveGitHubPAT(token),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [...githubKeys.all, 'pat', 'status'] });
       queryClient.invalidateQueries({ queryKey: githubKeys.status() });
-      queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] });
+      queryClient.invalidateQueries({ queryKey: integrationsKeys.status() });
     },
   });
 }
 
-/**
- * Hook to delete GitHub PAT
- */
-export function useDeleteGitHubPAT() {
+export function useDeleteGitHubPAT(port: GitHubPort = githubAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: githubApi.deleteGitHubPAT,
+    mutationFn: port.deleteGitHubPAT,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [...githubKeys.all, 'pat', 'status'] });
       queryClient.invalidateQueries({ queryKey: githubKeys.status() });
-      queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] });
+      queryClient.invalidateQueries({ queryKey: integrationsKeys.status() });
     },
   });
 }

@@ -18,8 +18,14 @@ type Resource struct {
 	HasDelete         bool
 	HasPatch          bool
 	HasStatusPatch    bool
-	Actions           []string
+	Actions           []Action
 	IsSubResource     bool
+}
+
+type Action struct {
+	Name       string
+	Method     string
+	ReturnType string
 }
 
 type Field struct {
@@ -33,6 +39,7 @@ type Field struct {
 	PythonType string
 	TSType     string
 	Required   bool
+	Nullable   bool
 	ReadOnly   bool
 	JSONTag    string
 }
@@ -71,11 +78,14 @@ var commonAcronyms = map[string]string{
 	"UI":   "UI",
 }
 
-func toGoType(openAPIType, format string) string {
+func toGoType(openAPIType, format string, nullable bool) string {
 	switch openAPIType {
 	case "string":
 		if format == "date-time" {
 			return "*time.Time"
+		}
+		if nullable {
+			return "*string"
 		}
 		return "string"
 	case "integer":
@@ -91,15 +101,38 @@ func toGoType(openAPIType, format string) string {
 	case "boolean":
 		return "bool"
 	default:
+		if nullable {
+			return "*string"
+		}
 		return "string"
 	}
 }
 
-func toPythonType(openAPIType, format string) string {
+func goBuilderParam(goType string) string {
+	if goType == "*string" {
+		return "string"
+	}
+	if goType == "*time.Time" {
+		return "time.Time"
+	}
+	return goType
+}
+
+func goBuilderAssign(goType, fieldName string) string {
+	if goType == "*string" || goType == "*time.Time" {
+		return "&v"
+	}
+	return "v"
+}
+
+func toPythonType(openAPIType, format string, nullable bool) string {
 	switch openAPIType {
 	case "string":
 		if format == "date-time" {
 			return "Optional[datetime]"
+		}
+		if nullable {
+			return "Optional[str]"
 		}
 		return "str"
 	case "integer":
@@ -109,11 +142,17 @@ func toPythonType(openAPIType, format string) string {
 	case "boolean":
 		return "bool"
 	default:
+		if nullable {
+			return "Optional[str]"
+		}
 		return "str"
 	}
 }
 
-func pythonDefault(openAPIType, format string) string {
+func pythonDefault(openAPIType, format string, nullable bool) string {
+	if nullable {
+		return "None"
+	}
 	switch openAPIType {
 	case "string":
 		if format == "date-time" {

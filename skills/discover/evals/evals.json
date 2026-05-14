@@ -1,0 +1,26 @@
+[
+  {
+    "input": "/discover",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "discover" },
+    "description": "Direct slash command to discover domain skills"
+  },
+  {
+    "input": "I need to fix a bug in the session status handling",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "discover" },
+    "description": "Implementation task should trigger domain discovery first"
+  },
+  {
+    "input": "update the runner spec to add a new field",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "discover" },
+    "description": "Spec change should trigger domain discovery first"
+  },
+  {
+    "input": "/discover sessions control-plane",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "discover", "args": "sessions control-plane" },
+    "description": "Explicit multi-domain discovery"
+  }
+]

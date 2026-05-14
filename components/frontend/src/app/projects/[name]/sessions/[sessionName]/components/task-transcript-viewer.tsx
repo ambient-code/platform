@@ -6,6 +6,7 @@ import { RefreshCw, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { StreamMessage } from "@/components/ui/stream-message"
 import { getTaskOutput, stopBackgroundTask } from "@/services/api/tasks"
+import { BACKEND_VERSION } from "@/services/queries/query-keys"
 import { transformTaskTranscript } from "@/lib/transform-task-transcript"
 import { StatusIcon, statusLabel, formatDuration, formatTokens } from "@/lib/task-utils"
 import type { BackgroundTask } from "@/types/background-task"
@@ -29,7 +30,7 @@ export function TaskTranscriptViewer({
   const isRunning = task?.status === "running"
 
   const { data, isLoading, error, refetch, isFetching } = useQuery({
-    queryKey: ["task-output", projectName, sessionName, taskId],
+    queryKey: [BACKEND_VERSION, "task-output", projectName, sessionName, taskId],
     queryFn: () => getTaskOutput(projectName, sessionName, taskId),
     refetchInterval: isActive && isRunning ? 5000 : false,
   })

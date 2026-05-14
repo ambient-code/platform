@@ -494,6 +494,7 @@ func protoSessionToSDK(s *pb.Session) types.Session {
 		LlmMaxTokens:         int(s.GetLlmMaxTokens()),
 		Timeout:              int(s.GetTimeout()),
 		ProjectID:            s.GetProjectId(),
+		AgentID:              s.GetAgentId(),
 		WorkflowID:           s.GetWorkflowId(),
 		BotAccountName:       s.GetBotAccountName(),
 		Labels:               s.GetLabels(),

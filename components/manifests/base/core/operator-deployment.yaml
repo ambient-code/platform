@@ -125,6 +125,14 @@ spec:
               name: google-workflow-app-secret
               key: GOOGLE_OAUTH_CLIENT_SECRET
               optional: true
+        # Public backend URL used to build the OAuth redirect URI injected into runner pods.
+        # Must match the redirect URI registered in the Google Cloud Console OAuth app.
+        - name: BACKEND_PUBLIC_URL
+          valueFrom:
+            secretKeyRef:
+              name: google-workflow-app-secret
+              key: BACKEND_URL
+              optional: true
         # S3 state sync configuration (defaults - can be overridden per-project in settings)
         - name: STATE_SYNC_IMAGE
           value: "quay.io/ambient_code/vteam_state_sync:latest"

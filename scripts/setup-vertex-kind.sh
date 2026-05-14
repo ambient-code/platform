@@ -24,14 +24,14 @@
 #
 #   CLOUD_ML_REGION
 #       GCP region for Vertex AI API calls.
-#       Example: us-east5 (Claude is available in limited regions)
+#       Example: global (recommended for cost optimization)
 #
 # SETUP:
 #   Add these to your shell profile (~/.zshrc or ~/.bashrc):
 #
 #     export GOOGLE_APPLICATION_CREDENTIALS="$HOME/.config/gcloud/your-sa-key.json"
 #     export ANTHROPIC_VERTEX_PROJECT_ID="your-gcp-project-id"
-#     export CLOUD_ML_REGION="us-east5"
+#     export CLOUD_ML_REGION="global"
 #
 #   Then reload your shell: source ~/.zshrc
 #
@@ -109,7 +109,7 @@ fi
 
 if [ -z "$CLOUD_ML_REGION" ]; then
     echo "  [MISSING] CLOUD_ML_REGION"
-    echo "            GCP region (e.g., us-east5)"
+    echo "            GCP region (e.g., global)"
     echo ""
     missing_vars=1
 else
@@ -122,7 +122,7 @@ if [ $missing_vars -eq 1 ]; then
     echo ""
     echo '  export GOOGLE_APPLICATION_CREDENTIALS="$HOME/.config/gcloud/your-sa-key.json"'
     echo '  export ANTHROPIC_VERTEX_PROJECT_ID="your-gcp-project-id"'
-    echo '  export CLOUD_ML_REGION="us-east5"'
+    echo '  export CLOUD_ML_REGION="global"'
     echo ""
     echo "Then reload: source ~/.zshrc"
     exit 1

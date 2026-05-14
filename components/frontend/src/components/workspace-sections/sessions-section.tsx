@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Plus, RefreshCw, MoreVertical, Square, Trash2, ArrowRight, Brain, Search, Pencil, Clock, Cpu, MessageSquare, NotepadText, User } from 'lucide-react';
+import { Plus, RefreshCw, MoreVertical, Square, Trash2, ArrowRight, Brain, Search, Pencil, Clock, Cpu, MessageSquare, NotepadText, User, FolderOpen } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -27,7 +27,7 @@ import { AgentStatusIndicator } from '@/components/agent-status-indicator';
 import { deriveAgentStatusFromPhase } from '@/hooks/use-agent-status';
 import { EditSessionNameDialog } from '@/components/edit-session-name-dialog';
 
-import { useSessionsPaginated, useStopSession, useDeleteSession, useContinueSession, useUpdateSessionDisplayName, useRunnerTypes } from '@/services/queries';
+import { useSessionsPaginated, useStopSession, useDeleteSession, useContinueSession, useUpdateSessionDisplayName, useRunnerTypes, useProject } from '@/services/queries';
 import { toast } from 'sonner';
 import { useWorkspaceList } from '@/services/queries/use-workspace';
 import { useProjectAccess } from '@/services/queries/use-project-access';
@@ -84,6 +84,9 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
   const canCreate = access?.userRole === 'edit' || access?.userRole === 'admin';
   const canDelete = access?.userRole === 'admin';
   const canModify = !!access?.userRole && access.userRole !== 'view';
+
+  const { data: project } = useProject(projectName);
+  const workspaceName = project?.displayName || projectName;
 
   // Runner type lookup for display names
   const { data: runnerTypes } = useRunnerTypes(projectName);
@@ -214,7 +217,7 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
           <div>
             <CardTitle>Sessions</CardTitle>
             <CardDescription>
-              Sessions scoped to this workspace
+              Workspace: {workspaceName}
             </CardDescription>
           </div>
           <div className="flex gap-2">
@@ -324,6 +327,10 @@ export function SessionsSection({ projectName }: SessionsSectionProps) {
                                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                     <User className="h-3 w-3" />
                                     <span>{session.spec.userContext?.displayName || session.spec.userContext?.userId || '—'}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    <FolderOpen className="h-3 w-3" />
+                                    <span className="truncate">{workspaceName}</span>
                                   </div>
                                   {session.spec.initialPrompt && (
                                     <div className="flex items-start gap-1.5 text-xs text-muted-foreground pt-1">

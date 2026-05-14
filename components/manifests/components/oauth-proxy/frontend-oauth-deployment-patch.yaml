@@ -24,14 +24,19 @@ spec:
         image: registry.redhat.io/openshift4/ose-oauth-proxy-rhel9:v4.18.0-202506230505.p0.gcbd44ad.assembly.stream.el9
         imagePullPolicy: IfNotPresent
         args:
-        - --https-address=:8443
+        - --http-address=:8443
+        - --https-address=
         - --provider=openshift
-        - --openshift-service-account=frontend
+        - --client-id=ambient-code
+        - --client-secret-file=/etc/oauth-client/client_secret
         - --upstream=http://localhost:3000
-        - --openshift-delegate-urls={"/api":{"resource":"namespaces","verb":"get","name":"ambient-code","namespace":"ambient-code"},"/federate":{"resource":"namespaces","verb":"get","name":"ambient-code","namespace":"ambient-code"}}
         - --tls-cert=/etc/tls/private/tls.crt
         - --tls-key=/etc/tls/private/tls.key
-        - --cookie-secret-file=/var/run/secrets/kubernetes.io/serviceaccount/token
+        - --cookie-secret-file=/etc/oauth-cookie/cookie_secret
+        - --cookie-expire=24h
+        - --cookie-refresh=1h
+        - --pass-access-token
+        - --scope=user:full
         - --upstream-timeout=5m
         - --skip-auth-regex=^/metrics
         ports:

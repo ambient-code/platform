@@ -1,19 +1,18 @@
-import { useQuery } from "@tanstack/react-query";
-import { getRunnerTypes } from "../api/runner-types";
+import { useQuery } from '@tanstack/react-query';
+import { runnerTypesAdapter } from '../adapters/runner-types';
+import type { RunnerTypesPort } from '../ports/runner-types';
+import { BACKEND_VERSION } from './query-keys';
 
 export const runnerTypeKeys = {
-  all: ["runner-types"] as const,
-  global: () => [...runnerTypeKeys.all, "global"] as const,
+  all: [BACKEND_VERSION, 'runner-types'] as const,
+  global: () => [...runnerTypeKeys.all, 'global'] as const,
   forProject: (projectName: string) => [...runnerTypeKeys.all, projectName] as const,
 };
 
-/**
- * Fetch available runner types for a project (with workspace override support).
- */
-export function useRunnerTypes(projectName: string) {
+export function useRunnerTypes(projectName: string, port: RunnerTypesPort = runnerTypesAdapter) {
   return useQuery({
     queryKey: runnerTypeKeys.forProject(projectName),
-    queryFn: () => getRunnerTypes(projectName),
+    queryFn: () => port.getRunnerTypes(projectName),
     enabled: !!projectName,
     staleTime: 5 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
