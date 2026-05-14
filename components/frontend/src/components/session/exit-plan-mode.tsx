@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ClipboardCheck, CheckCircle2, Send } from "lucide-react";
 import { formatTimestamp } from "@/lib/format-timestamp";
+import { hasToolResult } from "@/lib/hitl-tools";
 import type { ToolUseBlock, ToolResultBlock } from "@/types/agentic-session";
 
 export type ExitPlanModeMessageProps = {
@@ -23,14 +24,6 @@ type AllowedPrompt = {
   prompt: string;
 };
 
-function hasResult(resultBlock?: ToolResultBlock): boolean {
-  if (!resultBlock) return false;
-  const content = resultBlock.content;
-  if (!content) return false;
-  if (typeof content === "string" && content.trim() === "") return false;
-  return true;
-}
-
 export const ExitPlanModeMessage: React.FC<ExitPlanModeMessageProps> = ({
   toolUseBlock,
   resultBlock,
@@ -41,7 +34,7 @@ export const ExitPlanModeMessage: React.FC<ExitPlanModeMessageProps> = ({
   const input = toolUseBlock.input;
   const planContent = (input.planContent as string) || "";
   const allowedPrompts = (input.allowedPrompts as AllowedPrompt[]) || [];
-  const alreadyAnswered = hasResult(resultBlock);
+  const alreadyAnswered = hasToolResult(resultBlock);
   const formattedTime = formatTimestamp(timestamp);
 
   const [submitted, setSubmitted] = useState(false);
@@ -114,8 +107,8 @@ export const ExitPlanModeMessage: React.FC<ExitPlanModeMessageProps> = ({
               <div className="mb-3">
                 <p className="text-xs font-medium text-muted-foreground mb-1">Requested permissions:</p>
                 <ul className="space-y-0.5">
-                  {allowedPrompts.map((p, i) => (
-                    <li key={i} className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  {allowedPrompts.map((p) => (
+                    <li key={`${p.tool}:${p.prompt}`} className="text-xs text-muted-foreground flex items-center gap-1.5">
                       <span className="inline-block w-1 h-1 rounded-full bg-muted-foreground/50 flex-shrink-0" />
                       <span className="font-mono">{p.tool}</span>: {p.prompt}
                     </li>

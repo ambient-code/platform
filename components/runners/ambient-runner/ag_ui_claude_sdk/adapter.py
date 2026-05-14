@@ -81,6 +81,9 @@ from .handlers import (
 BUILTIN_FRONTEND_TOOLS: set[str] = {"AskUserQuestion", "ExitPlanMode"}
 
 
+_PLAN_FILE_MAX_BYTES = 100 * 1024  # 100 KB
+
+
 def _read_plan_file(options: Any) -> str | None:
     """Read the most recent plan file from .claude/plans/ in the cwd."""
     cwd = None
@@ -99,7 +102,10 @@ def _read_plan_file(options: Any) -> str | None:
     if not plan_files:
         return None
     try:
-        return plan_files[0].read_text(encoding="utf-8")
+        content = plan_files[0].read_text(encoding="utf-8")
+        if len(content.encode("utf-8")) > _PLAN_FILE_MAX_BYTES:
+            content = content[: _PLAN_FILE_MAX_BYTES] + "\n\n[truncated]"
+        return content
     except OSError:
         return None
 
@@ -1082,8 +1088,8 @@ class ClaudeAgentAdapter:
                                             args = json.loads(last_tc.function.arguments) if last_tc.function.arguments else {}
                                             args["planContent"] = plan_content
                                             last_tc.function.arguments = json.dumps(args)
-                                        except (json.JSONDecodeError, AttributeError):
-                                            pass
+                                        except (json.JSONDecodeError, AttributeError) as e:
+                                            logger.debug("Failed to enrich ExitPlanMode with plan content: %s", e)
 
                                 # Flush before halt (message_stop won't fire after interrupt)
                                 flush_pending_msg()

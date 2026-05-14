@@ -10,6 +10,7 @@ import { ThinkingMessage } from "@/components/ui/thinking-message";
 import { SystemMessage } from "@/components/ui/system-message";
 import { Button } from "@/components/ui/button";
 import { FeedbackButtons } from "@/components/feedback";
+import { isAskUserQuestionTool, isExitPlanModeTool } from "@/lib/hitl-tools";
 
 export type StreamMessageProps = {
   message: (MessageObject | ToolUseMessages | HierarchicalToolMessage) & { streaming?: boolean };
@@ -20,16 +21,6 @@ export type StreamMessageProps = {
   agentName?: string;
   currentUserId?: string;
 };
-
-function isAskUserQuestionTool(name: string): boolean {
-  const normalized = name.toLowerCase().replace(/[^a-z]/g, "");
-  return normalized === "askuserquestion";
-}
-
-function isExitPlanModeTool(name: string): boolean {
-  const normalized = name.toLowerCase().replace(/[^a-z]/g, "");
-  return normalized === "exitplanmode";
-}
 
 const getRandomAgentMessage = () => {
   const messages = [

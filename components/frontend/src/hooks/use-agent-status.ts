@@ -4,11 +4,7 @@ import type {
   AgentStatus,
 } from "@/types/agentic-session";
 import type { PlatformMessage } from "@/types/agui";
-
-function isHITLTool(name: string): boolean {
-  const normalized = name.toLowerCase().replace(/[^a-z]/g, "");
-  return normalized === "askuserquestion" || normalized === "exitplanmode";
-}
+import { isHITLTool } from "@/lib/hitl-tools";
 
 /**
  * Derive agent status from session data and the raw AG-UI message stream.
