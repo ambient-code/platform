@@ -398,9 +398,13 @@ In Kind environments, E2E tests SHALL use the local Keycloak instance.
 ### Requirement: Feature-Flagged Migration
 
 The transition from OAuth proxy to SSO authentication SHALL be gated behind a feature
-flag. During migration, the platform SHALL support both authentication modes
-simultaneously. The feature flag SHALL control which authentication path is active
-per deployment.
+flag (`sso-authentication` in Unleash). During migration, the platform SHALL support
+both authentication modes simultaneously. The feature flag SHALL control which
+authentication path is active per deployment.
+
+This is an infrastructure flag, not a user-facing feature toggle. It is not visible
+in workspace settings and is not user-configurable. The ops team enables it
+per-environment as part of the SSO rollout.
 
 #### Scenario: Legacy mode (flag off)
 

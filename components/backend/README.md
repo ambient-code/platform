@@ -36,11 +36,13 @@ make dev
 
 ### Authentication
 
-The backend supports two auth modes, controlled by the `sso-authentication` Unleash feature flag:
+The backend supports two auth modes, controlled by the `sso-authentication` Unleash feature flag. This is an **infrastructure flag** — it is not visible in the workspace settings UI and is not user-configurable. It is enabled per-environment by the ops team during SSO migration.
 
 **SSO mode (flag on):** The backend validates JWTs from Keycloak against the JWKS endpoint, extracts identity from OIDC claims (`email`, `preferred_username`, `groups`), and uses K8s impersonation for all API calls. API keys (K8s ServiceAccount tokens) are accepted via TokenReview fallback.
 
 **Legacy mode (flag off):** The backend reads `X-Forwarded-Access-Token` or `Authorization: Bearer` headers and uses the raw token as the K8s bearer token (OAuth proxy flow).
+
+In the Kind dev cluster, this flag is created and enabled automatically during bootstrap.
 
 #### Local development (Kind)
 
