@@ -7,7 +7,9 @@ export async function GET(request: NextRequest) {
   const idToken = session.idToken || "";
   session.destroy();
 
-  const postLogoutRedirectUri = request.nextUrl.origin;
+  const postLogoutRedirectUri = process.env.SSO_REDIRECT_URI
+    ? new URL(process.env.SSO_REDIRECT_URI).origin
+    : request.nextUrl.origin;
 
   if (process.env.SSO_ISSUER_URL && idToken) {
     const endSessionUrl = await getEndSessionUrl(idToken, postLogoutRedirectUri);

@@ -10,10 +10,9 @@ export async function GET(request: NextRequest) {
   const returnTo = cookieStore.get("oidc_return_to")?.value || "/";
 
   if (!codeVerifier || !expectedState) {
-    return NextResponse.json(
-      { error: "Missing OIDC state — please try logging in again" },
-      { status: 400 },
-    );
+    const loginUrl = new URL("/api/auth/sso/login", request.url);
+    loginUrl.searchParams.set("returnTo", returnTo);
+    return NextResponse.redirect(loginUrl);
   }
 
   try {
@@ -48,10 +47,12 @@ export async function GET(request: NextRequest) {
       : request.nextUrl.origin;
     return NextResponse.redirect(new URL(returnTo, origin));
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json(
-      { error: "OIDC callback failed", detail: message },
-      { status: 500 },
-    );
+    console.error("OIDC callback failed:", err instanceof Error ? err.message : err);
+    cookieStore.delete("oidc_code_verifier");
+    cookieStore.delete("oidc_state");
+    cookieStore.delete("oidc_return_to");
+    const loginUrl = new URL("/api/auth/sso/login", request.url);
+    loginUrl.searchParams.set("returnTo", returnTo);
+    return NextResponse.redirect(loginUrl);
   }
 }
