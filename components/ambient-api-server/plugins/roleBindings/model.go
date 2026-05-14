@@ -7,10 +7,13 @@ import (
 
 type RoleBinding struct {
 	api.Meta
-	UserId  string  `json:"user_id"  gorm:"not null;index"`
-	RoleId  string  `json:"role_id"  gorm:"not null;index"`
-	Scope   string  `json:"scope"    gorm:"not null"`
-	ScopeId *string `json:"scope_id"`
+	RoleId       string  `json:"role_id"       gorm:"not null;index"`
+	Scope        string  `json:"scope"         gorm:"not null"`
+	UserId       *string `json:"user_id"       gorm:"index"`
+	ProjectId    *string `json:"project_id"    gorm:"index"`
+	AgentId      *string `json:"agent_id"      gorm:"index"`
+	SessionId    *string `json:"session_id"    gorm:"index"`
+	CredentialId *string `json:"credential_id" gorm:"index"`
 }
 
 type RoleBindingList []*RoleBinding
@@ -30,5 +33,11 @@ func (d *RoleBinding) BeforeCreate(tx *gorm.DB) error {
 }
 
 type RoleBindingPatchRequest struct {
-	ScopeId *string `json:"scope_id,omitempty"`
+	RoleId       *string `json:"role_id,omitempty"`
+	Scope        *string `json:"scope,omitempty"`
+	UserId       *string `json:"user_id,omitempty"`
+	ProjectId    *string `json:"project_id,omitempty"`
+	AgentId      *string `json:"agent_id,omitempty"`
+	SessionId    *string `json:"session_id,omitempty"`
+	CredentialId *string `json:"credential_id,omitempty"`
 }

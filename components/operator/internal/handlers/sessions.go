@@ -675,8 +675,9 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 
 	// Extract spec information from the fresh object
 	spec, _, _ := unstructured.NestedMap(currentObj.Object, "spec")
-	_ = reconcileSpecReposWithPatch(sessionNamespace, name, spec, currentObj, statusPatch)
-	_ = reconcileActiveWorkflowWithPatch(sessionNamespace, name, spec, currentObj, statusPatch)
+	if err := reconcileSpecReposWithPatch(sessionNamespace, name, spec, currentObj, statusPatch); err != nil {
+		log.Printf("[Reconcile] Failed to reconcile repos during pending phase for %s/%s: %v", sessionNamespace, name, err)
+	}
 	prompt, _, _ := unstructured.NestedString(spec, "initialPrompt")
 	timeout, _, _ := unstructured.NestedInt64(spec, "timeout")
 	llmSettings, _, _ := unstructured.NestedMap(spec, "llmSettings")
@@ -1042,6 +1043,31 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 				ContainerPort: runnerPort,
 				Protocol:      corev1.ProtocolTCP,
 			}},
+
+			ReadinessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: "/health",
+						Port: intstr.FromInt32(runnerPort),
+					},
+				},
+				InitialDelaySeconds: 3,
+				PeriodSeconds:       5,
+				TimeoutSeconds:      2,
+				FailureThreshold:    3,
+			},
+			LivenessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: "/health",
+						Port: intstr.FromInt32(runnerPort),
+					},
+				},
+				InitialDelaySeconds: 20,
+				PeriodSeconds:       30,
+				TimeoutSeconds:      5,
+				FailureThreshold:    3,
+			},
 
 			VolumeMounts: runnerVolumeMounts,
 
@@ -1786,6 +1812,7 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 	// AG-UI pattern: Call runner's REST endpoints to update configuration
 	// Runner will restart Claude SDK client with new repo configuration
 	runnerBaseURL := fmt.Sprintf("http://session-%s.%s.svc.cluster.local:%d", sessionName, sessionNamespace, getRunnerPort(sessionNamespace, sessionName))
+	aguiToken := runnerSessionToken(sessionNamespace, sessionName)
 
 	// Add new repos
 	for _, repo := range toAdd {
@@ -1804,6 +1831,9 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 			continue
 		}
 		req.Header.Set("Content-Type", "application/json")
+		if aguiToken != "" {
+			req.Header.Set("X-Ambient-Session-Token", aguiToken)
+		}
 
 		client := &http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Do(req)
@@ -1836,6 +1866,9 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 			continue
 		}
 		req.Header.Set("Content-Type", "application/json")
+		if aguiToken != "" {
+			req.Header.Set("X-Ambient-Session-Token", aguiToken)
+		}
 
 		client := &http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Do(req)
@@ -1865,6 +1898,9 @@ func reconcileSpecReposWithPatch(sessionNamespace, sessionName string, spec map[
 			continue
 		}
 		req.Header.Set("Content-Type", "application/json")
+		if aguiToken != "" {
+			req.Header.Set("X-Ambient-Session-Token", aguiToken)
+		}
 
 		client := &http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Do(req)
@@ -1957,6 +1993,9 @@ func reconcileActiveWorkflowWithPatch(sessionNamespace, sessionName string, spec
 		return fmt.Errorf("failed to create workflow request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if tok := runnerSessionToken(sessionNamespace, sessionName); tok != "" {
+		req.Header.Set("X-Ambient-Session-Token", tok)
+	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)

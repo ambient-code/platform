@@ -10,32 +10,6 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-func seedWithRunner(t *testing.T, svc SessionService) *Session {
-	t.Helper()
-	proj := "proj-runner"
-	sess, err := svc.Create(t.Context(), &Session{
-		Name:      "runner-session",
-		ProjectId: &proj,
-	})
-	if err != nil {
-		t.Fatalf("seed runner session: %v", err)
-	}
-	// Populate KubeCrName + KubeNamespace so runnerBaseURL returns a non-empty URL.
-	crName := "test-runner"
-	ns := "test-ns"
-	sess.KubeCrName = &crName
-	sess.KubeNamespace = &ns
-	updated, err := svc.Replace(t.Context(), sess)
-	if err != nil {
-		t.Fatalf("set runner fields: %v", err)
-	}
-	return updated
-}
-
-// ---------------------------------------------------------------------------
 // Workspace list
 // ---------------------------------------------------------------------------
 

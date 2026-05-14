@@ -22,16 +22,19 @@ var _ MappedNullable = &ScheduledSessionList{}
 
 // ScheduledSessionList struct for ScheduledSessionList
 type ScheduledSessionList struct {
-	Kind  string              `json:"kind"`
-	Page  int32               `json:"page"`
-	Size  int32               `json:"size"`
-	Total int32               `json:"total"`
-	Items []ScheduledSession  `json:"items"`
+	Kind  string             `json:"kind"`
+	Page  int32              `json:"page"`
+	Size  int32              `json:"size"`
+	Total int32              `json:"total"`
+	Items []ScheduledSession `json:"items"`
 }
 
 type _ScheduledSessionList ScheduledSessionList
 
 // NewScheduledSessionList instantiates a new ScheduledSessionList object
+// This constructor will assign default values to properties that have it defined,
+// and makes sure properties required by API are set, but the set of arguments
+// will change when the set of required properties is changed
 func NewScheduledSessionList(kind string, page int32, size int32, total int32, items []ScheduledSession) *ScheduledSessionList {
 	this := ScheduledSessionList{}
 	this.Kind = kind
@@ -42,10 +45,132 @@ func NewScheduledSessionList(kind string, page int32, size int32, total int32, i
 	return &this
 }
 
-// NewScheduledSessionListWithDefaults instantiates a new ScheduledSessionList object with defaults
+// NewScheduledSessionListWithDefaults instantiates a new ScheduledSessionList object
+// This constructor will only assign default values to properties that have it defined,
+// but it doesn't guarantee that properties required by API are set
 func NewScheduledSessionListWithDefaults() *ScheduledSessionList {
 	this := ScheduledSessionList{}
 	return &this
+}
+
+// GetKind returns the Kind field value
+func (o *ScheduledSessionList) GetKind() string {
+	if o == nil {
+		var ret string
+		return ret
+	}
+
+	return o.Kind
+}
+
+// GetKindOk returns a tuple with the Kind field value
+// and a boolean to check if the value has been set.
+func (o *ScheduledSessionList) GetKindOk() (*string, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.Kind, true
+}
+
+// SetKind sets field value
+func (o *ScheduledSessionList) SetKind(v string) {
+	o.Kind = v
+}
+
+// GetPage returns the Page field value
+func (o *ScheduledSessionList) GetPage() int32 {
+	if o == nil {
+		var ret int32
+		return ret
+	}
+
+	return o.Page
+}
+
+// GetPageOk returns a tuple with the Page field value
+// and a boolean to check if the value has been set.
+func (o *ScheduledSessionList) GetPageOk() (*int32, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.Page, true
+}
+
+// SetPage sets field value
+func (o *ScheduledSessionList) SetPage(v int32) {
+	o.Page = v
+}
+
+// GetSize returns the Size field value
+func (o *ScheduledSessionList) GetSize() int32 {
+	if o == nil {
+		var ret int32
+		return ret
+	}
+
+	return o.Size
+}
+
+// GetSizeOk returns a tuple with the Size field value
+// and a boolean to check if the value has been set.
+func (o *ScheduledSessionList) GetSizeOk() (*int32, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.Size, true
+}
+
+// SetSize sets field value
+func (o *ScheduledSessionList) SetSize(v int32) {
+	o.Size = v
+}
+
+// GetTotal returns the Total field value
+func (o *ScheduledSessionList) GetTotal() int32 {
+	if o == nil {
+		var ret int32
+		return ret
+	}
+
+	return o.Total
+}
+
+// GetTotalOk returns a tuple with the Total field value
+// and a boolean to check if the value has been set.
+func (o *ScheduledSessionList) GetTotalOk() (*int32, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.Total, true
+}
+
+// SetTotal sets field value
+func (o *ScheduledSessionList) SetTotal(v int32) {
+	o.Total = v
+}
+
+// GetItems returns the Items field value
+func (o *ScheduledSessionList) GetItems() []ScheduledSession {
+	if o == nil {
+		var ret []ScheduledSession
+		return ret
+	}
+
+	return o.Items
+}
+
+// GetItemsOk returns a tuple with the Items field value
+// and a boolean to check if the value has been set.
+func (o *ScheduledSessionList) GetItemsOk() ([]ScheduledSession, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return o.Items, true
+}
+
+// SetItems sets field value
+func (o *ScheduledSessionList) SetItems(v []ScheduledSession) {
+	o.Items = v
 }
 
 func (o ScheduledSessionList) MarshalJSON() ([]byte, error) {
@@ -67,6 +192,9 @@ func (o ScheduledSessionList) ToMap() (map[string]interface{}, error) {
 }
 
 func (o *ScheduledSessionList) UnmarshalJSON(data []byte) (err error) {
+	// This validates that all required properties are included in the JSON object
+	// by unmarshalling the object into a generic map with string keys and checking
+	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
 		"kind",
 		"page",
@@ -76,7 +204,9 @@ func (o *ScheduledSessionList) UnmarshalJSON(data []byte) (err error) {
 	}
 
 	allProperties := make(map[string]interface{})
+
 	err = json.Unmarshal(data, &allProperties)
+
 	if err != nil {
 		return err
 	}
@@ -88,14 +218,17 @@ func (o *ScheduledSessionList) UnmarshalJSON(data []byte) (err error) {
 	}
 
 	varScheduledSessionList := _ScheduledSessionList{}
+
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&varScheduledSessionList)
+
 	if err != nil {
 		return err
 	}
 
 	*o = ScheduledSessionList(varScheduledSessionList)
+
 	return err
 }
 

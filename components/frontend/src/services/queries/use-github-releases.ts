@@ -4,9 +4,10 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { getGitHubReleases } from "../api/github-releases";
+import { BACKEND_VERSION } from "./query-keys";
 
 export const githubReleasesKeys = {
-  all: ["github-releases"] as const,
+  all: [BACKEND_VERSION, "github-releases"] as const,
   list: () => [...githubReleasesKeys.all, "list"] as const,
 };
 

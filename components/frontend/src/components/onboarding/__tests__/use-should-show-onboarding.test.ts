@@ -6,6 +6,17 @@ import { useShouldShowOnboarding, ONBOARDING_FLAG } from '../use-should-show-onb
 
 vi.mock('@/services/api/projects', () => ({
   listProjectsPaginated: vi.fn(),
+  getProject: vi.fn(),
+  createProject: vi.fn(),
+  updateProject: vi.fn(),
+  deleteProject: vi.fn(),
+  getProjectIntegrationStatus: vi.fn(),
+  getProjectMcpServers: vi.fn(),
+  updateProjectMcpServers: vi.fn(),
+  getProjectAccess: vi.fn(),
+  getProjectPermissions: vi.fn(),
+  addProjectPermission: vi.fn(),
+  removeProjectPermission: vi.fn(),
 }));
 
 import * as projectsApi from '@/services/api/projects';

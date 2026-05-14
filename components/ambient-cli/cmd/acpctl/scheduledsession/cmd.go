@@ -53,7 +53,7 @@ func resolveScheduledSession(ctx context.Context, projectID, arg string) (string
 	if err != nil {
 		return "", err
 	}
-	ss, err := client.ScheduledSessions().Get(ctx, projectID, arg)
+	ss, err := client.ScheduledSessions().GetByProject(ctx, projectID, arg)
 	if err != nil {
 		ss, err = client.ScheduledSessions().GetByName(ctx, projectID, arg)
 		if err != nil {
@@ -98,7 +98,7 @@ var listCmd = &cobra.Command{
 		defer cancel()
 
 		opts := sdktypes.NewListOptions().Size(listArgs.limit).Build()
-		list, err := client.ScheduledSessions().List(ctx, projectID, opts)
+		list, err := client.ScheduledSessions().ListByProject(ctx, projectID, opts)
 		if err != nil {
 			return fmt.Errorf("list scheduled sessions: %w", err)
 		}
@@ -150,7 +150,7 @@ var getCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 		defer cancel()
 
-		ss, err := client.ScheduledSessions().Get(ctx, projectID, args[0])
+		ss, err := client.ScheduledSessions().GetByProject(ctx, projectID, args[0])
 		if err != nil {
 			ss, err = client.ScheduledSessions().GetByName(ctx, projectID, args[0])
 			if err != nil {
@@ -176,21 +176,26 @@ var getCmd = &cobra.Command{
 // ---------------------------------------------------------------------------
 
 var createArgs struct {
-	projectID     string
-	name          string
-	agentID       string
-	schedule      string
-	timezone      string
-	sessionPrompt string
-	description   string
-	outputFormat  string
+	projectID         string
+	name              string
+	agentID           string
+	schedule          string
+	timezone          string
+	sessionPrompt     string
+	description       string
+	outputFormat      string
+	timeout           int32
+	inactivityTimeout int32
+	stopOnRunFinished bool
+	runnerType        string
 }
 
 var createCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a scheduled session",
-	Example: `  acpctl scheduled-session create --name daily --agent-id <id> --schedule "0 9 * * *"
-  acpctl scheduled-session create --name daily --agent-id <id> --schedule "0 9 * * 1-5" --timezone America/New_York`,
+	Example: `  acpctl scheduled-session create --name daily --schedule "0 9 * * *"
+  acpctl scheduled-session create --name daily --agent-id <id> --schedule "0 9 * * 1-5" --timezone America/New_York
+  acpctl scheduled-session create --name nightly --schedule "0 22 * * *" --timeout 3600 --runner-type claude-code`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectID, err := resolveProject(createArgs.projectID)
 		if err != nil {
@@ -213,9 +218,11 @@ var createCmd = &cobra.Command{
 		builder := sdktypes.NewScheduledSessionBuilder().
 			ProjectID(projectID).
 			Name(createArgs.name).
-			AgentID(createArgs.agentID).
 			Schedule(createArgs.schedule)
 
+		if createArgs.agentID != "" {
+			builder = builder.AgentID(createArgs.agentID)
+		}
 		if createArgs.timezone != "" {
 			builder = builder.Timezone(createArgs.timezone)
 		}
@@ -225,13 +232,25 @@ var createCmd = &cobra.Command{
 		if createArgs.description != "" {
 			builder = builder.Description(createArgs.description)
 		}
+		if cmd.Flags().Changed("timeout") {
+			builder = builder.Timeout(createArgs.timeout)
+		}
+		if cmd.Flags().Changed("inactivity-timeout") {
+			builder = builder.InactivityTimeout(createArgs.inactivityTimeout)
+		}
+		if cmd.Flags().Changed("stop-on-run-finished") {
+			builder = builder.StopOnRunFinished(createArgs.stopOnRunFinished)
+		}
+		if createArgs.runnerType != "" {
+			builder = builder.RunnerType(createArgs.runnerType)
+		}
 
 		ss, err := builder.Build()
 		if err != nil {
 			return fmt.Errorf("build scheduled session: %w", err)
 		}
 
-		created, err := client.ScheduledSessions().Create(ctx, projectID, ss)
+		created, err := client.ScheduledSessions().CreateInProject(ctx, projectID, ss)
 		if err != nil {
 			return fmt.Errorf("create scheduled session: %w", err)
 		}
@@ -255,12 +274,17 @@ var createCmd = &cobra.Command{
 // ---------------------------------------------------------------------------
 
 var updateArgs struct {
-	projectID     string
-	name          string
-	schedule      string
-	timezone      string
-	sessionPrompt string
-	description   string
+	projectID         string
+	name              string
+	agentID           string
+	schedule          string
+	timezone          string
+	sessionPrompt     string
+	description       string
+	timeout           int32
+	inactivityTimeout int32
+	stopOnRunFinished bool
+	runnerType        string
 }
 
 var updateCmd = &cobra.Command{
@@ -297,6 +321,9 @@ var updateCmd = &cobra.Command{
 		if cmd.Flags().Changed("name") {
 			patch = patch.Name(updateArgs.name)
 		}
+		if cmd.Flags().Changed("agent-id") {
+			patch = patch.AgentID(updateArgs.agentID)
+		}
 		if cmd.Flags().Changed("schedule") {
 			patch = patch.Schedule(updateArgs.schedule)
 		}
@@ -309,8 +336,20 @@ var updateCmd = &cobra.Command{
 		if cmd.Flags().Changed("description") {
 			patch = patch.Description(updateArgs.description)
 		}
+		if cmd.Flags().Changed("timeout") {
+			patch = patch.Timeout(updateArgs.timeout)
+		}
+		if cmd.Flags().Changed("inactivity-timeout") {
+			patch = patch.InactivityTimeout(updateArgs.inactivityTimeout)
+		}
+		if cmd.Flags().Changed("stop-on-run-finished") {
+			patch = patch.StopOnRunFinished(updateArgs.stopOnRunFinished)
+		}
+		if cmd.Flags().Changed("runner-type") {
+			patch = patch.RunnerType(updateArgs.runnerType)
+		}
 
-		updated, err := client.ScheduledSessions().Update(ctx, projectID, id, patch.Build())
+		updated, err := client.ScheduledSessions().UpdateInProject(ctx, projectID, id, patch.Build())
 		if err != nil {
 			return fmt.Errorf("update scheduled session: %w", err)
 		}
@@ -362,7 +401,7 @@ var deleteCmd = &cobra.Command{
 			return err
 		}
 
-		if err := client.ScheduledSessions().Delete(ctx, projectID, id); err != nil {
+		if err := client.ScheduledSessions().DeleteInProject(ctx, projectID, id); err != nil {
 			return fmt.Errorf("delete scheduled session: %w", err)
 		}
 
@@ -409,7 +448,7 @@ var suspendCmd = &cobra.Command{
 			return err
 		}
 
-		ss, err := client.ScheduledSessions().Suspend(ctx, projectID, id)
+		ss, err := client.ScheduledSessions().SuspendInProject(ctx, projectID, id)
 		if err != nil {
 			return fmt.Errorf("suspend scheduled session: %w", err)
 		}
@@ -457,7 +496,7 @@ var resumeCmd = &cobra.Command{
 			return err
 		}
 
-		ss, err := client.ScheduledSessions().Resume(ctx, projectID, id)
+		ss, err := client.ScheduledSessions().ResumeInProject(ctx, projectID, id)
 		if err != nil {
 			return fmt.Errorf("resume scheduled session: %w", err)
 		}
@@ -505,7 +544,7 @@ var triggerCmd = &cobra.Command{
 			return err
 		}
 
-		if err := client.ScheduledSessions().Trigger(ctx, projectID, id); err != nil {
+		if err := client.ScheduledSessions().TriggerInProject(ctx, projectID, id); err != nil {
 			return fmt.Errorf("trigger scheduled session: %w", err)
 		}
 
@@ -555,7 +594,7 @@ var runsCmd = &cobra.Command{
 		}
 
 		opts := sdktypes.NewListOptions().Size(runsArgs.limit).Build()
-		list, err := client.ScheduledSessions().Runs(ctx, projectID, id, opts)
+		list, err := client.ScheduledSessions().RunsInProject(ctx, projectID, id, opts)
 		if err != nil {
 			return fmt.Errorf("list runs: %w", err)
 		}
@@ -594,19 +633,28 @@ func init() {
 
 	createCmd.Flags().StringVar(&createArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
 	createCmd.Flags().StringVar(&createArgs.name, "name", "", "Scheduled session name (required)")
-	createCmd.Flags().StringVar(&createArgs.agentID, "agent-id", "", "Agent ID to run (required)")
+	createCmd.Flags().StringVar(&createArgs.agentID, "agent-id", "", "Agent ID to run")
 	createCmd.Flags().StringVar(&createArgs.schedule, "schedule", "", "Cron expression, e.g. \"0 9 * * 1-5\" (required)")
 	createCmd.Flags().StringVar(&createArgs.timezone, "timezone", "", "IANA timezone, e.g. America/New_York")
 	createCmd.Flags().StringVar(&createArgs.sessionPrompt, "prompt", "", "Session prompt for each run")
 	createCmd.Flags().StringVar(&createArgs.description, "description", "", "Description")
 	createCmd.Flags().StringVarP(&createArgs.outputFormat, "output", "o", "", "Output format: json")
+	createCmd.Flags().Int32Var(&createArgs.timeout, "timeout", 0, "Session timeout in seconds")
+	createCmd.Flags().Int32Var(&createArgs.inactivityTimeout, "inactivity-timeout", 0, "Inactivity timeout in seconds")
+	createCmd.Flags().BoolVar(&createArgs.stopOnRunFinished, "stop-on-run-finished", false, "Stop session when run finishes")
+	createCmd.Flags().StringVar(&createArgs.runnerType, "runner-type", "", "Runner type (e.g. claude-code)")
 
 	updateCmd.Flags().StringVar(&updateArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
 	updateCmd.Flags().StringVar(&updateArgs.name, "name", "", "New name")
+	updateCmd.Flags().StringVar(&updateArgs.agentID, "agent-id", "", "New agent ID")
 	updateCmd.Flags().StringVar(&updateArgs.schedule, "schedule", "", "New cron expression")
 	updateCmd.Flags().StringVar(&updateArgs.timezone, "timezone", "", "New timezone")
 	updateCmd.Flags().StringVar(&updateArgs.sessionPrompt, "prompt", "", "New session prompt")
 	updateCmd.Flags().StringVar(&updateArgs.description, "description", "", "New description")
+	updateCmd.Flags().Int32Var(&updateArgs.timeout, "timeout", 0, "New session timeout in seconds")
+	updateCmd.Flags().Int32Var(&updateArgs.inactivityTimeout, "inactivity-timeout", 0, "New inactivity timeout in seconds")
+	updateCmd.Flags().BoolVar(&updateArgs.stopOnRunFinished, "stop-on-run-finished", false, "Stop session when run finishes")
+	updateCmd.Flags().StringVar(&updateArgs.runnerType, "runner-type", "", "New runner type")
 
 	deleteCmd.Flags().StringVar(&deleteArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
 	deleteCmd.Flags().BoolVar(&deleteArgs.confirm, "confirm", false, "Confirm deletion")

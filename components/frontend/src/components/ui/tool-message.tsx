@@ -15,7 +15,9 @@ import {
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
 import { formatTimestamp } from "@/lib/format-timestamp";
+import { sharedMarkdownComponents } from "@/lib/markdown-components";
 
 export type ToolMessageProps = {
   toolUseBlock?: ToolUseBlock;
@@ -62,39 +64,12 @@ const ExpandableMarkdown: React.FC<ExpandableMarkdownProps> = ({
   const shouldTruncate = content.length > maxLength;
   const display = expanded || !shouldTruncate ? content : content.substring(0, maxLength);
 
-  // Match Message.tsx rendering so headers/code look correct
-  const markdownComponents: Components = {
-    code: ({
-      inline,
-      className,
-      children,
-      ...props
-    }: {
-      inline?: boolean;
-      className?: string;
-      children?: React.ReactNode;
-    } & React.HTMLAttributes<HTMLElement>) => {
-      return inline ? (
-        <code className="bg-muted px-1 py-0.5 rounded text-xs" {...(props as React.HTMLAttributes<HTMLElement>)}>
-          {children}
-        </code>
-      ) : (
-        <pre className="bg-slate-950 dark:bg-black text-slate-50 p-2 rounded text-xs overflow-x-auto">
-          <code className={className} {...(props as React.HTMLAttributes<HTMLElement>)}>
-            {children}
-          </code>
-        </pre>
-      );
-    },
-    p: ({ children }) => <div className="text-muted-foreground leading-relaxed mb-2 text-sm">{children}</div>,
-    h1: ({ children }) => <h1 className="text-lg font-bold text-foreground mb-2">{children}</h1>,
-    h2: ({ children }) => <h2 className="text-md font-semibold text-foreground mb-2">{children}</h2>,
-    h3: ({ children }) => <h3 className="text-sm font-medium text-foreground mb-1">{children}</h3>,
-  };
+  // Use shared markdown components for consistent rendering with Message.tsx
+  const markdownComponents: Components = sharedMarkdownComponents;
 
   return (
     <div className={cn("max-w-none", className)}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={markdownComponents}>
         {display}
       </ReactMarkdown>
       {shouldTruncate && (
@@ -704,8 +679,8 @@ export const ToolMessage = React.forwardRef<HTMLDivElement, ToolMessageProps>(
                     {toolUseBlock?.input && (
                       <div>
                         <h4 className="text-xs font-medium text-foreground/80 mb-1">Input</h4>
-                        <div className="bg-slate-950 dark:bg-black rounded text-xs p-2 overflow-x-auto">
-                          <pre className="text-gray-100">
+                        <div className="bg-muted rounded text-xs p-2 overflow-x-auto border">
+                          <pre className="text-foreground">
                             {formatToolInput(JSON.stringify(toolUseBlock.input))}
                           </pre>
                         </div>
