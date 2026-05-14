@@ -63,4 +63,4 @@ spec:
         - name: SSO_REDIRECT_URI
           value: "http://localhost:11646/api/auth/sso/callback"
         - name: SSO_PUBLIC_ISSUER_URL
-          value: "http://localhost:30090/realms/ambient-code"
+          value: "http://localhost:11646/sso/realms/ambient-code"
