@@ -13,16 +13,15 @@
       "publicClient": false,
       "secret": "dev-secret-do-not-use-in-prod",
       "redirectUris": [
-        "http://localhost:*/*",
+        "http://localhost/*",
         "http://frontend-service:3000/*",
         "http://frontend-service.ambient-code.svc.cluster.local:3000/*"
       ],
       "attributes": {
-        "post.logout.redirect.uris": "http://localhost:*/*##http://frontend-service:3000/*"
+        "post.logout.redirect.uris": "http://localhost/*##http://frontend-service:3000/*"
       },
       "webOrigins": [
-        "http://localhost:*",
-        "http://frontend-service:3000"
+        "+"
       ],
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": true,
