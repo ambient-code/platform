@@ -24,7 +24,11 @@ spec:
             - --import-realm
           env:
             - name: KC_HOSTNAME
-              value: "http://keycloak-service:8080"
+              value: "http://localhost:11646/sso"
+            - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC
+              value: "true"
+            - name: KC_PROXY_HEADERS
+              value: "xforwarded"
             - name: KC_HTTP_ENABLED
               value: "true"
             - name: KEYCLOAK_ADMIN

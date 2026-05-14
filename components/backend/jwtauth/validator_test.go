@@ -304,9 +304,12 @@ func TestDiscoverJWKSURL(t *testing.T) {
 	defer server.Close()
 	serverURL = server.URL
 
-	jwksURL, err := discoverJWKSURL(server.URL)
+	issuer, jwksURL, err := discoverOIDCConfig(server.URL)
 	if err != nil {
-		t.Fatalf("discoverJWKSURL: %v", err)
+		t.Fatalf("discoverOIDCConfig: %v", err)
+	}
+	if issuer != server.URL {
+		t.Errorf("issuer = %q, want %q", issuer, server.URL)
 	}
 	expected := server.URL + "/jwks"
 	if jwksURL != expected {

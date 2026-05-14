@@ -34,7 +34,7 @@ func NewValidator(issuerURL, audience string) (*Validator, error) {
 		return nil, fmt.Errorf("issuer URL is required")
 	}
 
-	jwksURL, err := discoverJWKSURL(issuerURL)
+	discoveredIssuer, jwksURL, err := discoverOIDCConfig(issuerURL)
 	if err != nil {
 		return nil, fmt.Errorf("OIDC discovery failed: %w", err)
 	}
@@ -45,7 +45,6 @@ func NewValidator(issuerURL, audience string) (*Validator, error) {
 		return nil, fmt.Errorf("failed to register JWKS URL: %w", err)
 	}
 
-	// Pre-fetch keys to fail fast on misconfiguration
 	if _, err := cache.Refresh(ctx, jwksURL); err != nil {
 		return nil, fmt.Errorf("failed to fetch JWKS: %w", err)
 	}
@@ -53,7 +52,7 @@ func NewValidator(issuerURL, audience string) (*Validator, error) {
 	return &Validator{
 		jwksCache: cache,
 		jwksURL:   jwksURL,
-		issuer:    issuerURL,
+		issuer:    discoveredIssuer,
 		audience:  audience,
 	}, nil
 }
@@ -163,30 +162,36 @@ func (v *Validator) isAcceptedIssuer(iss string) bool {
 	return false
 }
 
-func discoverJWKSURL(issuerURL string) (string, error) {
+func discoverOIDCConfig(issuerURL string) (discoveredIssuer string, jwksURL string, err error) {
 	wellKnownURL := issuerURL + "/.well-known/openid-configuration"
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(wellKnownURL)
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	resp, err := httpClient.Get(wellKnownURL)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch OIDC configuration: %w", err)
+		return "", "", fmt.Errorf("failed to fetch OIDC configuration: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("OIDC configuration returned status %d", resp.StatusCode)
+		return "", "", fmt.Errorf("OIDC configuration returned status %d", resp.StatusCode)
 	}
 
 	var config struct {
+		Issuer  string `json:"issuer"`
 		JWKSURI string `json:"jwks_uri"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&config); err != nil {
-		return "", fmt.Errorf("failed to decode OIDC configuration: %w", err)
+		return "", "", fmt.Errorf("failed to decode OIDC configuration: %w", err)
 	}
 
 	if config.JWKSURI == "" {
-		return "", fmt.Errorf("OIDC configuration missing jwks_uri")
+		return "", "", fmt.Errorf("OIDC configuration missing jwks_uri")
 	}
 
-	return config.JWKSURI, nil
+	issuer := config.Issuer
+	if issuer == "" {
+		issuer = issuerURL
+	}
+
+	return issuer, config.JWKSURI, nil
 }
