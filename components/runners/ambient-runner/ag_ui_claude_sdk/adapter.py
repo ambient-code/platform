@@ -103,8 +103,9 @@ def _read_plan_file(options: Any) -> str | None:
         return None
     try:
         content = plan_files[0].read_text(encoding="utf-8")
-        if len(content.encode("utf-8")) > _PLAN_FILE_MAX_BYTES:
-            content = content[: _PLAN_FILE_MAX_BYTES] + "\n\n[truncated]"
+        content_bytes = content.encode("utf-8")
+        if len(content_bytes) > _PLAN_FILE_MAX_BYTES:
+            content = content_bytes[:_PLAN_FILE_MAX_BYTES].decode("utf-8", errors="ignore") + "\n\n[truncated]"
         return content
     except OSError:
         return None

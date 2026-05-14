@@ -32,8 +32,8 @@ export const ExitPlanModeMessage: React.FC<ExitPlanModeMessageProps> = ({
   isNewest = false,
 }) => {
   const input = toolUseBlock.input;
-  const planContent = (input.planContent as string) || "";
-  const allowedPrompts = (input.allowedPrompts as AllowedPrompt[]) || [];
+  const planContent = typeof input.planContent === "string" ? input.planContent : "";
+  const allowedPrompts = Array.isArray(input.allowedPrompts) ? input.allowedPrompts as AllowedPrompt[] : [];
   const alreadyAnswered = hasToolResult(resultBlock);
   const formattedTime = formatTimestamp(timestamp);
 
