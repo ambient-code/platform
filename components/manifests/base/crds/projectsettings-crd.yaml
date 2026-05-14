@@ -62,6 +62,12 @@ spec:
                       - "github"
                       - "gitlab"
                       description: "Git hosting provider (auto-detected from URL if not specified)"
+              runnerImage:
+                type: string
+                description: "Custom runner container image for sessions in this project. Overrides the default and agent-registry images."
+              runnerImagePullSecret:
+                type: string
+                description: "Name of a kubernetes.io/dockerconfigjson Secret in this namespace for pulling the custom runner image."
               inactivityTimeoutSeconds:
                 type: integer
                 minimum: 0

@@ -12,12 +12,13 @@ import { Save, Loader2, Info, AlertTriangle } from "lucide-react";
 import { Plus, Trash2, Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { useProject, useUpdateProject } from "@/services/queries/use-projects";
+import { useProject, useUpdateProject, useProjectSettings, useUpdateProjectSettings } from "@/services/queries/use-projects";
 import { useSecretsValues, useUpdateSecrets, useIntegrationSecrets, useUpdateIntegrationSecrets } from "@/services/queries/use-secrets";
 import { useClusterInfo } from "@/hooks/use-cluster-info";
 import { FeatureFlagsSection } from "./feature-flags-section";
 import { ProjectMcpSection } from "./project-mcp-section";
 import { useRunnerTypes } from "@/services/queries/use-runner-types";
+import { useWorkspaceFlag } from "@/services/queries/use-feature-flags-admin";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMemo } from "react";
@@ -46,6 +47,12 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
   const [s3SecretKey, setS3SecretKey] = useState<string>("");
   const [showS3SecretKey, setShowS3SecretKey] = useState<boolean>(false);
   const [s3Expanded, setS3Expanded] = useState<boolean>(false);
+  const [customRunnerExpanded, setCustomRunnerExpanded] = useState<boolean>(false);
+  const [runnerImageMode, setRunnerImageMode] = useState<"default" | "custom">("default");
+  const [runnerImage, setRunnerImage] = useState<string>("");
+  const [runnerImagePullSecret, setRunnerImagePullSecret] = useState<string>("");
+
+  const { enabled: customRunnerImageEnabled } = useWorkspaceFlag(projectName, "feature.custom-runner-image.enabled");
 
   // Derive runner API key definitions from the runner-types registry.
   // Falls back to a hardcoded list if the fetch fails.
@@ -96,6 +103,8 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
   const updateProjectMutation = useUpdateProject();
   const updateSecretsMutation = useUpdateSecrets();
   const updateIntegrationSecretsMutation = useUpdateIntegrationSecrets();
+  const { data: projectSettings, isLoading: projectSettingsLoading } = useProjectSettings(projectName);
+  const updateProjectSettingsMutation = useUpdateProjectSettings(projectName);
 
   // Sync project data to form
   useEffect(() => {
@@ -126,6 +135,32 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
       setSecrets(allSecretsArr.filter(s => !FIXED_KEYS.includes(s.key)));
     }
   }, [runnerSecrets, integrationSecrets, FIXED_KEYS, allRequiredSecrets]);
+
+  useEffect(() => {
+    if (projectSettings) {
+      const hasCustomImage = !!projectSettings.runner_image;
+      setRunnerImageMode(hasCustomImage ? "custom" : "default");
+      setRunnerImage(projectSettings.runner_image || "");
+      setRunnerImagePullSecret(projectSettings.runner_image_pull_secret || "");
+    }
+  }, [projectSettings]);
+
+  const handleSaveRunnerImage = () => {
+    if (!projectSettings?.id) return;
+    const patch = runnerImageMode === "custom"
+      ? { runner_image: runnerImage, runner_image_pull_secret: runnerImagePullSecret || undefined }
+      : { runner_image: "", runner_image_pull_secret: "" };
+    updateProjectSettingsMutation.mutate(
+      { settingsId: projectSettings.id, patch },
+      {
+        onSuccess: () => { toast.success("Runner image settings saved"); },
+        onError: (error) => {
+          const message = error instanceof Error ? error.message : "Failed to save runner image settings";
+          toast.error(message);
+        },
+      }
+    );
+  };
 
   const handleSave = () => {
     if (!project) return;
@@ -410,6 +445,117 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
               </div>
             )}
           </div>
+
+          {/* Custom Runner Image Section */}
+          {customRunnerImageEnabled && (
+            <div className="border rounded-lg">
+              <button
+                type="button"
+                onClick={() => setCustomRunnerExpanded(!customRunnerExpanded)}
+                className="w-full flex items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg"
+                aria-expanded={customRunnerExpanded}
+                aria-controls="custom-runner-image-panel"
+              >
+                <div className="flex items-center gap-2">
+                  {customRunnerExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  <span className="font-semibold">Custom Runner Image</span>
+                  {runnerImageMode === "custom" && runnerImage && <span className="text-xs text-muted-foreground">(configured)</span>}
+                </div>
+              </button>
+              {customRunnerExpanded && (
+                <div id="custom-runner-image-panel" className="px-3 pb-3 space-y-3 border-t pt-3">
+                  {projectSettingsLoading ? (
+                    <div className="space-y-4">
+                      <Skeleton className="h-4 w-[200px]" />
+                      <Skeleton className="h-10 w-full" />
+                    </div>
+                  ) : (
+                    <>
+                      <Alert>
+                        <Info className="h-4 w-4" />
+                        <AlertDescription>
+                          Override the default runner container image for this workspace. Custom images must include all required runner dependencies.
+                        </AlertDescription>
+                      </Alert>
+                      <RadioGroup value={runnerImageMode} onValueChange={(v) => setRunnerImageMode(v as "default" | "custom")}>
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="default" id="runner-image-default" />
+                            <Label htmlFor="runner-image-default" className="cursor-pointer font-normal">
+                              Use default runner image
+                            </Label>
+                          </div>
+                          <div className="text-xs text-muted-foreground ml-6">
+                            Uses the platform-managed runner image (recommended).
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="custom" id="runner-image-custom" />
+                            <Label htmlFor="runner-image-custom" className="cursor-pointer font-normal">
+                              Use custom image
+                            </Label>
+                          </div>
+                          <div className="text-xs text-muted-foreground ml-6">
+                            Specify a custom container image for runners in this workspace.
+                          </div>
+                        </div>
+                      </RadioGroup>
+                      {runnerImageMode === "custom" && (
+                        <div className="space-y-3">
+                          <div className="space-y-2">
+                            <Label htmlFor="runnerImage">Image Reference</Label>
+                            <div className="text-xs text-muted-foreground">
+                              Full image reference including registry, repository, and tag or digest.
+                            </div>
+                            <Input
+                              id="runnerImage"
+                              type="text"
+                              placeholder="registry.example.com/my-runner:latest"
+                              value={runnerImage}
+                              onChange={(e) => setRunnerImage(e.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="runnerImagePullSecret">Image Pull Secret (optional)</Label>
+                            <div className="text-xs text-muted-foreground">
+                              Name of a Kubernetes docker-registry secret in the project namespace for pulling the custom image.
+                            </div>
+                            <Input
+                              id="runnerImagePullSecret"
+                              type="text"
+                              placeholder="my-registry-credentials"
+                              value={runnerImagePullSecret}
+                              onChange={(e) => setRunnerImagePullSecret(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      <div className="pt-2">
+                        <Button
+                          onClick={handleSaveRunnerImage}
+                          disabled={updateProjectSettingsMutation.isPending || !projectSettings?.id}
+                          size="sm"
+                        >
+                          {updateProjectSettingsMutation.isPending ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="w-4 h-4 mr-2" />
+                              Save Runner Image
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Migration Notice */}
           <div className="border rounded-lg p-4 bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">

@@ -35,6 +35,8 @@ function makeFakeApi() {
     getProjectMcpServers: vi.fn().mockResolvedValue({}),
     updateProjectMcpServers: vi.fn().mockResolvedValue({}),
     getProjectAccess: vi.fn(),
+    getProjectSettings: vi.fn(),
+    updateProjectSettings: vi.fn(),
   }
 }
 

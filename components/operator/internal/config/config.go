@@ -21,15 +21,17 @@ var (
 
 // Config holds the operator configuration
 type Config struct {
-	Namespace              string
-	BackendNamespace       string
-	BackendPublicURL       string
-	AmbientCodeRunnerImage string
-	StateSyncImage         string
-	ImagePullPolicy        corev1.PullPolicy
-	S3Endpoint             string
-	S3Bucket               string
-	PodFSGroup             *int64
+	Namespace                    string
+	BackendNamespace             string
+	BackendPublicURL             string
+	AmbientCodeRunnerImage       string
+	StateSyncImage               string
+	ImagePullPolicy              corev1.PullPolicy
+	S3Endpoint                   string
+	S3Bucket                     string
+	PodFSGroup                   *int64
+	RunnerImageAllowedRegistries string
+	CustomRunnerImageEnabled     bool
 }
 
 // InitK8sClients initializes the Kubernetes clients
@@ -123,16 +125,20 @@ func LoadConfig() *Config {
 	}
 
 	backendPublicURL := os.Getenv("BACKEND_PUBLIC_URL")
+	runnerImageAllowedRegistries := os.Getenv("RUNNER_IMAGE_ALLOWED_REGISTRIES")
+	customRunnerImageEnabled := os.Getenv("CUSTOM_RUNNER_IMAGE_ENABLED") == "true" || os.Getenv("CUSTOM_RUNNER_IMAGE_ENABLED") == "1"
 
 	return &Config{
-		Namespace:              namespace,
-		BackendNamespace:       backendNamespace,
-		BackendPublicURL:       backendPublicURL,
-		AmbientCodeRunnerImage: ambientCodeRunnerImage,
-		StateSyncImage:         stateSyncImage,
-		ImagePullPolicy:        imagePullPolicy,
-		S3Endpoint:             s3Endpoint,
-		S3Bucket:               s3Bucket,
-		PodFSGroup:             podFSGroup,
+		Namespace:                    namespace,
+		BackendNamespace:             backendNamespace,
+		BackendPublicURL:             backendPublicURL,
+		AmbientCodeRunnerImage:       ambientCodeRunnerImage,
+		StateSyncImage:               stateSyncImage,
+		ImagePullPolicy:              imagePullPolicy,
+		S3Endpoint:                   s3Endpoint,
+		S3Bucket:                     s3Bucket,
+		PodFSGroup:                   podFSGroup,
+		RunnerImageAllowedRegistries: runnerImageAllowedRegistries,
+		CustomRunnerImageEnabled:     customRunnerImageEnabled,
 	}
 }

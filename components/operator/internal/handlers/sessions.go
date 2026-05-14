@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"ambient-code-operator/internal/config"
+	"ambient-code-operator/internal/imageref"
 	"ambient-code-operator/internal/models"
 	"ambient-code-operator/internal/types"
 
@@ -814,6 +815,77 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		runnerImage = runtime.Container.Image
 	}
 
+	// Custom runner image override from ProjectSettings (highest precedence)
+	var customImagePullSecrets []corev1.LocalObjectReference
+	if appConfig.CustomRunnerImageEnabled {
+		psGVR := types.GetProjectSettingsResource()
+		if ps, psErr := config.DynamicClient.Resource(psGVR).Namespace(sessionNamespace).Get(context.TODO(), "projectsettings", v1.GetOptions{}); psErr == nil {
+			psSpec, _, _ := unstructured.NestedMap(ps.Object, "spec")
+			if psSpec != nil {
+				customImage, _, _ := unstructured.NestedString(psSpec, "runnerImage")
+				if customImage != "" {
+					if _, _, _, parseErr := imageref.ParseImageReference(customImage); parseErr != nil {
+						statusPatch.SetField("phase", "Failed")
+						statusPatch.AddCondition(conditionUpdate{
+							Type:    "RunnerImageInvalid",
+							Status:  "True",
+							Reason:  "InvalidImageReference",
+							Message: fmt.Sprintf("Custom runner image reference is invalid: %v", parseErr),
+						})
+						_ = statusPatch.Apply()
+						return fmt.Errorf("invalid custom runner image %q: %w", customImage, parseErr)
+					}
+					allowlist := imageref.ParseAllowlist(appConfig.RunnerImageAllowedRegistries)
+					if err := imageref.ValidateRegistryAllowlist(customImage, allowlist); err != nil {
+						statusPatch.SetField("phase", "Failed")
+						statusPatch.AddCondition(conditionUpdate{
+							Type:    "RunnerImageInvalid",
+							Status:  "True",
+							Reason:  "RegistryNotAllowed",
+							Message: fmt.Sprintf("Custom runner image registry not allowed: %v", err),
+						})
+						_ = statusPatch.Apply()
+						return fmt.Errorf("custom runner image registry not allowed for %q: %w", customImage, err)
+					}
+					runnerImage = customImage
+					pullSecretName, _, _ := unstructured.NestedString(psSpec, "runnerImagePullSecret")
+					if pullSecretName != "" {
+						secret, secretErr := config.K8sClient.CoreV1().Secrets(sessionNamespace).Get(context.TODO(), pullSecretName, v1.GetOptions{})
+						if secretErr != nil {
+							statusPatch.SetField("phase", "Failed")
+							statusPatch.AddCondition(conditionUpdate{
+								Type:    "RunnerImageInvalid",
+								Status:  "True",
+								Reason:  "PullSecretNotFound",
+								Message: fmt.Sprintf("Pull secret %q not found in namespace %s: %v", pullSecretName, sessionNamespace, secretErr),
+							})
+							_ = statusPatch.Apply()
+							return fmt.Errorf("pull secret %q not found: %w", pullSecretName, secretErr)
+						}
+						if secret.Type != corev1.SecretTypeDockerConfigJson {
+							statusPatch.SetField("phase", "Failed")
+							statusPatch.AddCondition(conditionUpdate{
+								Type:    "RunnerImageInvalid",
+								Status:  "True",
+								Reason:  "PullSecretWrongType",
+								Message: fmt.Sprintf("Pull secret %q must be type %s, got %s", pullSecretName, corev1.SecretTypeDockerConfigJson, secret.Type),
+							})
+							_ = statusPatch.Apply()
+							return fmt.Errorf("pull secret %q has wrong type %s", pullSecretName, secret.Type)
+						}
+						customImagePullSecrets = append(customImagePullSecrets, corev1.LocalObjectReference{Name: pullSecretName})
+					}
+					log.Printf("Using custom runner image from ProjectSettings: %s", runnerImage)
+				}
+			}
+		}
+	}
+
+	runnerImagePullPolicy := appConfig.ImagePullPolicy
+	if len(customImagePullSecrets) > 0 || runnerImage != appConfig.AmbientCodeRunnerImage {
+		runnerImagePullPolicy = corev1.PullPolicy(imageref.DetermineImagePullPolicy(runnerImage))
+	}
+
 	stateSyncImage := appConfig.StateSyncImage
 	if runtime != nil && runtime.Sandbox.StateSyncImage != "" {
 		stateSyncImage = runtime.Sandbox.StateSyncImage
@@ -1028,7 +1100,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 		{
 			Name:            "ambient-code-runner",
 			Image:           runnerImage,
-			ImagePullPolicy: appConfig.ImagePullPolicy,
+			ImagePullPolicy: runnerImagePullPolicy,
 			SecurityContext: &corev1.SecurityContext{
 				AllowPrivilegeEscalation: boolPtr(false),
 				ReadOnlyRootFilesystem:   boolPtr(false),
@@ -1448,6 +1520,10 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 			FSGroup:             appConfig.PodFSGroup,
 			FSGroupChangePolicy: func() *corev1.PodFSGroupChangePolicy { p := corev1.FSGroupChangeOnRootMismatch; return &p }(),
 		}
+	}
+
+	if len(customImagePullSecrets) > 0 {
+		podSpec.ImagePullSecrets = customImagePullSecrets
 	}
 
 	pod := &corev1.Pod{

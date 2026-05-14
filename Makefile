@@ -194,6 +194,10 @@ build-runner: ## Build Claude Code runner image
 		-t $(RUNNER_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Runner built: $(RUNNER_IMAGE)"
 
+test-runner-conformance: ## Run conformance tests against runner image
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running runner conformance tests against $(RUNNER_IMAGE)..."
+	@bash components/runners/conformance/run-conformance.sh $(RUNNER_IMAGE)
+
 build-state-sync: ## Build state-sync image for S3 persistence
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building state-sync with $(CONTAINER_ENGINE)..."
 	@cd components/runners/state-sync && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \

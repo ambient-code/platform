@@ -9,6 +9,8 @@ export type ProjectSettings = ObjectReference & {
   group_access: string;
   project_id: string;
   repositories: string;
+  runner_image: string;
+  runner_image_pull_secret: string;
 };
 
 export type ProjectSettingsList = ListMeta & {
@@ -19,12 +21,16 @@ export type ProjectSettingsCreateRequest = {
   group_access?: string;
   project_id: string;
   repositories?: string;
+  runner_image?: string;
+  runner_image_pull_secret?: string;
 };
 
 export type ProjectSettingsPatchRequest = {
   group_access?: string;
   project_id?: string;
   repositories?: string;
+  runner_image?: string;
+  runner_image_pull_secret?: string;
 };
 
 export class ProjectSettingsBuilder {
@@ -43,6 +49,16 @@ export class ProjectSettingsBuilder {
 
   repositories(value: string): this {
     this.data['repositories'] = value;
+    return this;
+  }
+
+  runnerImage(value: string): this {
+    this.data['runner_image'] = value;
+    return this;
+  }
+
+  runnerImagePullSecret(value: string): this {
+    this.data['runner_image_pull_secret'] = value;
     return this;
   }
 
@@ -70,6 +86,16 @@ export class ProjectSettingsPatchBuilder {
 
   repositories(value: string): this {
     this.data['repositories'] = value;
+    return this;
+  }
+
+  runnerImage(value: string): this {
+    this.data['runner_image'] = value;
+    return this;
+  }
+
+  runnerImagePullSecret(value: string): this {
+    this.data['runner_image_pull_secret'] = value;
     return this;
   }
 

@@ -16,6 +16,8 @@ func ConvertProjectSettings(ps openapi.ProjectSettings) *ProjectSettings {
 	c.ProjectId = ps.ProjectId
 	c.GroupAccess = ps.GroupAccess
 	c.Repositories = ps.Repositories
+	c.RunnerImage = ps.RunnerImage
+	c.RunnerImagePullSecret = ps.RunnerImagePullSecret
 
 	if ps.CreatedAt != nil {
 		c.CreatedAt = *ps.CreatedAt
@@ -30,13 +32,15 @@ func ConvertProjectSettings(ps openapi.ProjectSettings) *ProjectSettings {
 func PresentProjectSettings(ps *ProjectSettings) openapi.ProjectSettings {
 	reference := presenters.PresentReference(ps.ID, ps)
 	return openapi.ProjectSettings{
-		Id:           reference.Id,
-		Kind:         reference.Kind,
-		Href:         reference.Href,
-		CreatedAt:    openapi.PtrTime(ps.CreatedAt),
-		UpdatedAt:    openapi.PtrTime(ps.UpdatedAt),
-		ProjectId:    ps.ProjectId,
-		GroupAccess:  ps.GroupAccess,
-		Repositories: ps.Repositories,
+		Id:                    reference.Id,
+		Kind:                  reference.Kind,
+		Href:                  reference.Href,
+		CreatedAt:             openapi.PtrTime(ps.CreatedAt),
+		UpdatedAt:             openapi.PtrTime(ps.UpdatedAt),
+		ProjectId:             ps.ProjectId,
+		GroupAccess:           ps.GroupAccess,
+		Repositories:          ps.Repositories,
+		RunnerImage:           ps.RunnerImage,
+		RunnerImagePullSecret: ps.RunnerImagePullSecret,
 	}
 }

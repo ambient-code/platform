@@ -22,6 +22,8 @@ class ProjectSettings:
     group_access: str = ""
     project_id: str = ""
     repositories: str = ""
+    runner_image: str = ""
+    runner_image_pull_secret: str = ""
 
     @classmethod
     def from_dict(cls, data: dict) -> ProjectSettings:
@@ -34,6 +36,8 @@ class ProjectSettings:
             group_access=data.get("group_access", ""),
             project_id=data.get("project_id", ""),
             repositories=data.get("repositories", ""),
+            runner_image=data.get("runner_image", ""),
+            runner_image_pull_secret=data.get("runner_image_pull_secret", ""),
         )
 
     @classmethod
@@ -77,6 +81,14 @@ class ProjectSettingsBuilder:
         self._data["repositories"] = value
         return self
 
+    def runner_image(self, value: str) -> ProjectSettingsBuilder:
+        self._data["runner_image"] = value
+        return self
+
+    def runner_image_pull_secret(self, value: str) -> ProjectSettingsBuilder:
+        self._data["runner_image_pull_secret"] = value
+        return self
+
     def build(self) -> dict:
         if "project_id" not in self._data:
             raise ValueError("project_id is required")
@@ -98,6 +110,14 @@ class ProjectSettingsPatch:
 
     def repositories(self, value: str) -> ProjectSettingsPatch:
         self._data["repositories"] = value
+        return self
+
+    def runner_image(self, value: str) -> ProjectSettingsPatch:
+        self._data["runner_image"] = value
+        return self
+
+    def runner_image_pull_secret(self, value: str) -> ProjectSettingsPatch:
+        self._data["runner_image_pull_secret"] = value
         return self
 
     def to_dict(self) -> dict:
