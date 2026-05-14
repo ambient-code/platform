@@ -170,7 +170,7 @@ export async function getProjectSettings(
   projectName: string
 ): Promise<ProjectSettingsResponse | null> {
   const response = await apiClient.get<{ items: ProjectSettingsResponse[] }>(
-    `/ambient/v1/project_settings?search=project_id%3D${encodeURIComponent(projectName)}`
+    `/ambient/v1/project_settings?search=${encodeURIComponent(`project_id = '${projectName}'`)}`
   );
   return response.items?.[0] ?? null;
 }

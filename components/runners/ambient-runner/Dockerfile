@@ -61,6 +61,11 @@ ENV AGUI_PORT=8001
 RUN echo "umask 0022" >> /etc/profile && \
     echo "umask 0022" >> /root/.bashrc
 
+# Create directories required by platform runtime and conformance tests
+RUN mkdir -p /workspace /home/user && \
+    chown 1001:0 /workspace /home/user && \
+    chmod 775 /workspace /home/user
+
 # OpenShift compatibility
 RUN chmod -R g=u /app && chmod -R g=u /usr/local && chmod g=u /etc/passwd
 
