@@ -5,9 +5,9 @@ import type {
 } from "@/types/agentic-session";
 import type { PlatformMessage } from "@/types/agui";
 
-function isAskUserQuestionTool(name: string): boolean {
+function isHITLTool(name: string): boolean {
   const normalized = name.toLowerCase().replace(/[^a-z]/g, "");
-  return normalized === "askuserquestion";
+  return normalized === "askuserquestion" || normalized === "exitplanmode";
 }
 
 /**
@@ -30,7 +30,7 @@ export function useAgentStatus(
     // Non-running phases
     if (phase !== "Running") return "idle";
 
-    // Scan backwards for the last tool call to check for unanswered AskUserQuestion.
+    // Scan backwards for the last tool call to check for unanswered HITL tools.
     // Raw AG-UI messages store tool calls in msg.toolCalls[] (PlatformToolCall[]).
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
@@ -38,7 +38,7 @@ export function useAgentStatus(
 
       // Check the last tool call on this message
       const lastTc = msg.toolCalls[msg.toolCalls.length - 1];
-      if (lastTc.function?.name && isAskUserQuestionTool(lastTc.function.name)) {
+      if (lastTc.function?.name && isHITLTool(lastTc.function.name)) {
         const hasResult =
           lastTc.result !== undefined &&
           lastTc.result !== null &&

@@ -1128,17 +1128,19 @@ func updateLastActivityTime(projectName, sessionName string, immediate bool) {
 	}()
 }
 
-// isAskUserQuestionToolCall checks if a tool call name is the AskUserQuestion HITL tool.
-// Uses case-insensitive comparison after stripping non-alpha characters,
-// matching the frontend pattern in use-agent-status.ts.
-func isAskUserQuestionToolCall(name string) bool {
+// isHITLToolCall checks if a tool call name is a HITL (human-in-the-loop) tool.
+// Matches AskUserQuestion and ExitPlanMode using case-insensitive comparison
+// after stripping non-alpha characters, matching the frontend pattern in
+// use-agent-status.ts.
+func isHITLToolCall(name string) bool {
 	var clean strings.Builder
 	for _, r := range strings.ToLower(name) {
 		if r >= 'a' && r <= 'z' {
 			clean.WriteRune(r)
 		}
 	}
-	return clean.String() == "askuserquestion"
+	normalized := clean.String()
+	return normalized == "askuserquestion" || normalized == "exitplanmode"
 }
 
 // ─── Between-Run Listener ────────────────────────────────────────────

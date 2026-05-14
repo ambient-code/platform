@@ -5,6 +5,7 @@ import { MessageObject, ToolUseMessages, HierarchicalToolMessage } from "@/types
 import { LoadingDots, Message } from "@/components/ui/message";
 import { ToolMessage } from "@/components/ui/tool-message";
 import { AskUserQuestionMessage } from "@/components/session/ask-user-question";
+import { ExitPlanModeMessage } from "@/components/session/exit-plan-mode";
 import { ThinkingMessage } from "@/components/ui/thinking-message";
 import { SystemMessage } from "@/components/ui/system-message";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,11 @@ export type StreamMessageProps = {
 function isAskUserQuestionTool(name: string): boolean {
   const normalized = name.toLowerCase().replace(/[^a-z]/g, "");
   return normalized === "askuserquestion";
+}
+
+function isExitPlanModeTool(name: string): boolean {
+  const normalized = name.toLowerCase().replace(/[^a-z]/g, "");
+  return normalized === "exitplanmode";
 }
 
 const getRandomAgentMessage = () => {
@@ -50,6 +56,19 @@ export const StreamMessage: React.FC<StreamMessageProps> = ({ message, onGoToRes
     if (isAskUserQuestionTool(message.toolUseBlock.name)) {
       return (
         <AskUserQuestionMessage
+          toolUseBlock={message.toolUseBlock}
+          resultBlock={message.resultBlock}
+          timestamp={message.timestamp}
+          onSubmitAnswer={onSubmitAnswer}
+          isNewest={isNewest}
+        />
+      );
+    }
+
+    // Render ExitPlanMode with plan approval component
+    if (isExitPlanModeTool(message.toolUseBlock.name)) {
+      return (
+        <ExitPlanModeMessage
           toolUseBlock={message.toolUseBlock}
           resultBlock={message.resultBlock}
           timestamp={message.timestamp}
