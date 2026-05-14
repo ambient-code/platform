@@ -1,3 +1,4 @@
+// Package jwtauth provides JWT validation against OIDC providers using JWKS.
 package jwtauth
 
 import (
