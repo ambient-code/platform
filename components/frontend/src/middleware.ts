@@ -10,6 +10,20 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // RSC/fetch requests can't follow cross-origin redirects to Keycloak.
+  // Return 401 so the client-side SessionExpiredDialog handles it.
+  const isRSC = request.headers.get("rsc") === "1"
+    || request.headers.get("next-router-state-tree") !== null;
+  const isFetch = request.headers.get("accept")?.includes("application/json")
+    || request.headers.get("x-requested-with") === "XMLHttpRequest";
+
+  if (isRSC || isFetch) {
+    return NextResponse.json(
+      { error: "Session expired" },
+      { status: 401 },
+    );
+  }
+
   const loginUrl = new URL("/api/auth/sso/login", request.url);
   loginUrl.searchParams.set("returnTo", request.nextUrl.pathname);
   return NextResponse.redirect(loginUrl);

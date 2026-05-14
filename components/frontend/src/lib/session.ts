@@ -37,6 +37,7 @@ export async function getAccessToken(): Promise<string | undefined> {
   }
 
   try {
+    console.log("SSO: refreshing access token (expired at", new Date(session.expiresAt * 1000).toISOString(), ")");
     const { refreshOIDCTokens } = await import("./oidc");
     const tokens = await refreshOIDCTokens(session.refreshToken);
     session.accessToken = tokens.accessToken;
@@ -44,8 +45,10 @@ export async function getAccessToken(): Promise<string | undefined> {
     session.idToken = tokens.idToken;
     session.expiresAt = tokens.expiresAt;
     await session.save();
+    console.log("SSO: token refreshed, new expiry", new Date(tokens.expiresAt * 1000).toISOString());
     return session.accessToken;
-  } catch {
+  } catch (err) {
+    console.error("SSO: token refresh failed, destroying session:", err instanceof Error ? err.message : err);
     session.destroy();
     return undefined;
   }
