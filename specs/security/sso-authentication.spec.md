@@ -297,24 +297,72 @@ is a public client (it cannot hold a client secret).
 
 ### Requirement: Local Development Authentication
 
-The platform SHALL support local development on Kind clusters without requiring an
-SSO instance. A development mode SHALL allow authentication via:
+The Kind and local-dev environments SHALL include a Keycloak instance as part of the
+dev stack, providing a real OIDC flow without requiring VPN access to Red Hat SSO.
+This replaces the static JWKS ConfigMap, `DISABLE_AUTH=true` mock mode, and
+`OC_TOKEN` / `ENABLE_OC_WHOAMI` env vars as the primary local auth mechanism.
 
-1. A static JWT token generated from a local JWKS (for automated testing)
-2. A mock identity mode that bypasses JWT validation (for rapid iteration)
+Keycloak SHALL start with a pre-configured realm requiring no manual setup.
+The realm configuration SHALL be version-controlled in the repository as a
+Keycloak realm export (JSON).
 
-Mock identity mode MUST NOT be available in production deployments.
+The pre-configured realm SHALL include:
 
-#### Scenario: Kind cluster with test JWT
+- A confidential client for the frontend BFF (redirect URI to localhost)
+- A public client for the CLI (PKCE, redirect to localhost callback)
+- A default dev user with admin-level project access and standard OIDC claims
+  (`email`, `preferred_username`, `groups`)
 
-- GIVEN a Kind cluster with the backend configured with a local JWKS
-- WHEN a developer generates a test JWT signed by the local JWKS key
-- THEN the backend validates it against the local JWKS
-- AND impersonation works with the claims in the test JWT
+The backend and API server SHALL validate JWTs against the local Keycloak's JWKS
+endpoint using the same code path as production. No special dev-only validation
+logic SHALL exist — the only difference is which JWKS endpoint is configured.
 
-#### Scenario: Mock identity mode
+Mock identity mode (`DISABLE_AUTH=true`) MAY be retained as a lightweight fallback
+for rapid iteration when the full OIDC flow is not needed. Mock identity mode
+MUST NOT be available in production deployments.
 
-- GIVEN `DISABLE_AUTH=true` is set
+#### Scenario: Kind cluster bootstrap includes Keycloak
+
+- GIVEN a developer runs the Kind cluster bootstrap
+- WHEN the cluster is ready
+- THEN a Keycloak instance is running with the pre-configured realm
+- AND the frontend, backend, and API server are configured to use it
+- AND no manual Keycloak setup is required
+
+#### Scenario: Developer login via local Keycloak
+
+- GIVEN a running Kind cluster with Keycloak
+- WHEN a developer navigates to the frontend
+- THEN they are redirected to the local Keycloak login page
+- AND they can log in with the pre-configured dev credentials
+- AND the frontend receives a real JWT and establishes an OIDC session cookie
+
+#### Scenario: Backend validates local Keycloak JWTs
+
+- GIVEN a Kind cluster with Keycloak
+- WHEN the backend receives a JWT signed by the local Keycloak
+- THEN it validates the JWT against Keycloak's JWKS endpoint
+- AND extracts identity from standard OIDC claims
+- AND impersonation works with the dev user's identity
+- AND the validation code path is identical to production
+
+#### Scenario: CLI authenticates against local Keycloak
+
+- GIVEN a running Kind cluster with Keycloak
+- WHEN a developer runs the CLI login command targeting the local environment
+- THEN the CLI performs OIDC auth code + PKCE against the local Keycloak
+- AND receives a valid JWT
+
+#### Scenario: Realm config is version-controlled
+
+- GIVEN the Keycloak realm export JSON is stored in the repository
+- WHEN a developer modifies the realm config (adds a client, changes roles)
+- THEN the change is reviewed via normal pull request process
+- AND all developers get the updated config on their next cluster bootstrap
+
+#### Scenario: Mock identity fallback
+
+- GIVEN `DISABLE_AUTH=true` is set in a local dev environment
 - WHEN a request arrives without a JWT
 - THEN the backend uses a configurable mock identity
 - AND impersonation is set to the mock user
@@ -324,20 +372,21 @@ Mock identity mode MUST NOT be available in production deployments.
 
 End-to-end tests SHALL authenticate without requiring interactive SSO login. The
 platform SHALL support a non-interactive authentication path for test automation.
+In Kind environments, E2E tests SHALL use the local Keycloak instance.
 
 #### Scenario: E2E test with client_credentials grant
 
-- GIVEN an E2E test environment with an SSO service account (client_credentials client)
+- GIVEN an E2E test environment with a Keycloak client_credentials client
 - WHEN the test suite starts
-- THEN it obtains a JWT via the client_credentials grant
+- THEN it obtains a JWT via the client_credentials grant against Keycloak
 - AND uses the JWT for all API requests during the test run
 
-#### Scenario: E2E test with pre-generated JWT
+#### Scenario: E2E test against local Keycloak
 
-- GIVEN a test environment with a local JWKS
-- WHEN the test suite starts
-- THEN it uses a pre-generated JWT signed by the local JWKS key
-- AND the backend validates it normally
+- GIVEN a Kind cluster with the local Keycloak running
+- WHEN the E2E test suite starts
+- THEN it authenticates against the local Keycloak using pre-configured test credentials
+- AND the backend validates the resulting JWT normally
 
 #### Scenario: E2E token not exposed to browser
 
@@ -404,7 +453,13 @@ Red Hat SSO. The client SHALL be configured with:
 - Valid post-logout redirect URI pointing to the frontend root
 - Web origins matching the frontend host (for CORS on the token endpoint)
 
-Local development environments (Kind, local-dev) SHALL NOT require an SSO client.
+Local development environments (Kind, local-dev) SHALL use a local Keycloak instance
+with pre-configured clients instead of registering clients in Red Hat SSO.
+
+In deployed environments where the platform operates its own Keycloak instance, that
+instance MAY be federated to Red Hat SSO via Identity Brokering — Keycloak delegates
+login to RH SSO but issues its own tokens. This provides full client management
+autonomy without requiring RH SSO realm admin access.
 
 #### Scenario: One client per environment
 
@@ -458,6 +513,8 @@ toward a single IAM plane.
 | Dual-path auth (JWT + TokenReview) | API keys are K8s ServiceAccount tokens that cannot be replaced with SSO JWTs. The backend tries JWT first, falls back to TokenReview, preserving both authentication paths. |
 | SSAR cache includes impersonated identity | Under impersonation, the bearer token is shared (backend SA). Caching by token alone would leak authorization decisions across users. |
 | E2E tokens injected server-side | Browser-exposed test tokens (via `NEXT_PUBLIC_*` env vars) are an XSS risk. Server-side injection via cookies or API routes prevents accidental token exposure. |
+| Local Keycloak for dev (not mock mode or static JWKS) | Real OIDC flow in dev catches integration issues early. Same validation code path as production — no dev-only auth logic to maintain. Replaces ad-hoc static JWKS ConfigMap, `DISABLE_AUTH`, and `OC_TOKEN` env vars. |
+| Keycloak Identity Brokering for deployed environments | Federating to RH SSO provides full client management autonomy without requiring realm admin access. Only one client registration needed in RH SSO (the Keycloak instance itself). |
 
 ## References
 
