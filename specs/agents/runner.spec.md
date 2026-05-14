@@ -1,7 +1,7 @@
 # Ambient Runner Spec
 
 **Date:** 2026-04-05
-**Status:** Living Document — current state documented
+**Status:** Living Document
 **Related:** `../control-plane/control-plane.spec.md` — CP provisioning, token endpoint, start context assembly
 
 ---
@@ -373,11 +373,6 @@ Claude can call these tools to interact with the Ambient platform:
 ---
 
 ## Tool Permission Model
-
-> **Implementation gap (issue #1583):** The current `DEFAULT_ALLOWED_TOOLS` list is incomplete —
-> it contains only 10 of the 22 Tier 1 tools listed below. `ExitPlanMode` is not yet registered
-> as a HITL-halt tool. This section defines the target state. The requirements below drive the
-> implementation to close the gap.
 
 The runner operates a **pre-approval security model**. ACP sessions are headless — there is no
 interactive terminal to display permission prompts. Instead, the runner configures the SDK to
