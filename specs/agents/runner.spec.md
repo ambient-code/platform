@@ -374,8 +374,6 @@ Claude can call these tools to interact with the Ambient platform:
 
 ## Tool Permission Model
 
-**Tracking:** #1583
-
 The runner operates a **pre-approval security model**. ACP sessions are headless — there is no
 interactive terminal to display permission prompts. Instead, the runner configures the SDK to
 pre-approve all tools Claude should be able to use, and halts the stream for tools that require
