@@ -109,6 +109,17 @@ func getEditor() string {
 // AppModel — the TUI model with full navigation hierarchy
 // ---------------------------------------------------------------------------
 
+// dataFetcher is the subset of TUIClient used by fetchActiveView for polling.
+// Extracted as an interface to enable unit testing of view-scoping logic.
+type dataFetcher interface {
+	FetchProjects() tea.Cmd
+	FetchAgents(projectID string) tea.Cmd
+	FetchSessions(projectID string) tea.Cmd
+	FetchAllSessions() tea.Cmd
+	FetchScheduledSessions(projectID string) tea.Cmd
+	FetchInbox(projectID, agentID string) tea.Cmd
+}
+
 // AppModel is the top-level Bubbletea model for the rewritten TUI.
 // It coexists with the legacy Model type in model.go until migration is
 // complete.
@@ -187,6 +198,10 @@ type AppModel struct {
 
 	// Rate-limit backoff: skip the next poll cycle when a 429 is received.
 	skipNextPoll bool
+
+	// fetcher overrides client for fetchActiveView. Tests set this to a fake;
+	// production code leaves it nil (fetchActiveView uses m.client).
+	fetcher dataFetcher
 
 	// Project shortcuts for number-key switching (like k9s namespace shortcuts).
 	// Holds project names in alphabetical order, refreshed on ProjectsMsg.
@@ -440,36 +455,40 @@ func (m *AppModel) popView() tea.Cmd {
 	return m.fetchActiveView()
 }
 
+func (m *AppModel) dataFetcher() dataFetcher {
+	if m.fetcher != nil {
+		return m.fetcher
+	}
+	return m.client
+}
+
 // fetchActiveView returns a tea.Cmd to fetch data for the currently active view.
 func (m *AppModel) fetchActiveView() tea.Cmd {
+	f := m.dataFetcher()
 	switch m.activeView {
 	case "projects":
-		return m.client.FetchProjects()
+		return f.FetchProjects()
 	case "agents":
 		if m.currentProject != "" {
-			return m.client.FetchAgents(m.currentProject)
+			return f.FetchAgents(m.currentProject)
 		}
-		// Fall back to config project if no drill-down context.
 		if ctx := m.config.Current(); ctx != nil && ctx.Project != "" {
-			return m.client.FetchAgents(ctx.Project)
+			return f.FetchAgents(ctx.Project)
 		}
 		return nil
 	case "sessions":
-		if m.currentAgentID != "" && m.currentProject != "" {
-			// Agent-scoped sessions — fetch project sessions and filter client-side
-			// in the handler.
-			return m.client.FetchSessions(m.currentProject)
+		if m.currentProject != "" {
+			return f.FetchSessions(m.currentProject)
 		}
-		// Global sessions view.
-		return m.client.FetchAllSessions()
+		return f.FetchAllSessions()
 	case "inbox":
 		if m.currentAgentID != "" && m.currentProject != "" {
-			return m.client.FetchInbox(m.currentProject, m.currentAgentID)
+			return f.FetchInbox(m.currentProject, m.currentAgentID)
 		}
 		return nil
 	case "scheduledsessions":
 		if m.currentProject != "" {
-			return m.client.FetchScheduledSessions(m.currentProject)
+			return f.FetchScheduledSessions(m.currentProject)
 		}
 		return nil
 	case "messages":
@@ -2542,6 +2561,21 @@ func (m *AppModel) executeCommand(input string) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(
 				m.client.FetchSessions(m.currentProject),
 				m.setInfo("Viewing sessions for agent "+m.currentAgent),
+			)
+		}
+
+		if m.currentProject != "" {
+			// Project-scoped sessions (no specific agent).
+			m.sessionTable.SetScope(m.currentProject)
+			m.navStack = append(m.navStack[:0],
+				NavEntry{Kind: "projects", Scope: "all"},
+				NavEntry{Kind: "sessions", Scope: m.currentProject},
+			)
+			m.activeView = "sessions"
+			m.pollInFlight = true
+			return m, tea.Batch(
+				m.client.FetchSessions(m.currentProject),
+				m.setInfo("Viewing sessions in project "+m.currentProject),
 			)
 		}
 
