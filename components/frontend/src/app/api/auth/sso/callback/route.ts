@@ -23,6 +23,14 @@ export async function GET(request: NextRequest) {
     incomingUrl.searchParams.forEach((value, key) => {
       callbackUrl.searchParams.set(key, value);
     });
+
+    // Remap the iss parameter from the public URL to the internal URL
+    // so openid-client's RFC 9207 issuer validation passes.
+    const publicIssuer = process.env.SSO_PUBLIC_ISSUER_URL;
+    const internalIssuer = process.env.SSO_ISSUER_URL;
+    if (publicIssuer && internalIssuer && callbackUrl.searchParams.get("iss") === publicIssuer) {
+      callbackUrl.searchParams.set("iss", internalIssuer);
+    }
     const tokens = await exchangeCode(callbackUrl, codeVerifier, expectedState);
     const session = await getSession();
     session.accessToken = tokens.accessToken;
