@@ -952,6 +952,9 @@ func getUserSubjectFromContext(c *gin.Context) (string, error) {
 	if userName, exists := c.Get("userName"); exists && userName != nil {
 		return fmt.Sprintf("%v", userName), nil
 	}
+	if userID, exists := c.Get("userID"); exists && userID != nil {
+		return fmt.Sprintf("%v", userID), nil
+	}
 
 	return "", fmt.Errorf("no user subject found in token")
 }
