@@ -122,4 +122,3 @@ func setIdentityFromTokenReview(c *gin.Context, userName string, groups []string
 
 	c.Set("authIdentity", userName)
 }
-

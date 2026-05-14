@@ -96,9 +96,9 @@ func TestValidate(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		buildToken func() string
-		wantErr   bool
+		name        string
+		buildToken  func() string
+		wantErr     bool
 		checkClaims func(*testing.T, *Claims)
 	}{
 		{
@@ -108,7 +108,7 @@ func TestValidate(t *testing.T) {
 					Subject("f:abc:jsell").
 					Issuer(server.URL).
 					Audience([]string{"ambient-frontend"}).
-					Expiration(time.Now().Add(5 * time.Minute)).
+					Expiration(time.Now().Add(5*time.Minute)).
 					IssuedAt(time.Now()).
 					Claim("email", "jsell@redhat.com").
 					Claim("preferred_username", "jsell").

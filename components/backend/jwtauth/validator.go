@@ -14,7 +14,7 @@ import (
 type Claims struct {
 	Sub               string
 	Email             string
-	PreferredUsername  string
+	PreferredUsername string
 	Groups            []string
 	Issuer            string
 	Audience          []string
@@ -22,11 +22,11 @@ type Claims struct {
 }
 
 type Validator struct {
-	jwksCache      *jwk.Cache
-	jwksURL        string
-	issuer         string
-	altIssuers     []string
-	audience       string
+	jwksCache  *jwk.Cache
+	jwksURL    string
+	issuer     string
+	altIssuers []string
+	audience   string
 }
 
 func NewValidator(issuerURL, audience string) (*Validator, error) {
