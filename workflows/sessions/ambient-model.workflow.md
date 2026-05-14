@@ -83,7 +83,7 @@ Compare the spec against the current state of the code. For each component, ask:
 
 | Component    | What to check                                                                                         |
 | ------------ | ----------------------------------------------------------------------------------------------------- |
-| **API**      | Does `openapi/openapi.yaml` have all spec entities, routes, and fields? **Read the actual fragments.**|
+| **API**      | Does `openapi/openapi.yaml` have all spec entities, routes, and fields? **Read the actual fragments.** For every Kind, check the schema `required[]` array against the spec ERD — field-level, not just route-level. |
 | **SDK**      | Do generated types/builders/clients exist for all spec entities?                                      |
 | **BE**       | Read `plugins/<kind>/model.go` for every Kind. Compare field-by-field against the Spec. Drift here is the most common source of gaps. |
 | **CP**       | Does middleware handle new RBAC scopes and auth requirements?                                         |
@@ -92,7 +92,12 @@ Compare the spec against the current state of the code. For each component, ask:
 | **Runners**  | Does the runner drain inbox at session start and push correct event types?                            |
 | **FE**       | Do API service layer, queries, and components exist for all new entities?                             |
 
-**The gap table must compare Spec against every component simultaneously.** A field removal touches API, SDK, BE (model + migration), and CLI — all four must be in the gap table from the start. Do not discover mid-wave that the CLI still has a flag the API no longer accepts.
+**The gap table must compare Spec against every component simultaneously, field by field.** A field removal touches API, SDK, BE (model + migration), and CLI — all four must be in the gap table from the start. Do not discover mid-wave that the CLI still has a flag the API no longer accepts.
+
+Check all three directions for every Kind:
+1. Spec ERD → `model.go` — spec says field exists; is it in the model?
+2. `model.go` → Spec ERD — model has a field; is it documented in the spec?
+3. OpenAPI `required[]` → Spec ERD — OpenAPI marks it required; does the spec agree?
 
 Produce a gap table:
 
@@ -551,19 +556,44 @@ The Agent model has 8 fields (`repo_url`, `workflow_id`, `llm_model`, `llm_tempe
 
 **Rule:** When auditing field propagation from Agent → Session, read `ignite_handler.go` specifically. The two handlers have different responsibilities: `start_handler.go` handles the idempotency check and session status; `ignite_handler.go` handles the full field copy and session initialization.
 
-### Credential Scoping Gap Must Be Explicitly Documented
+### Credential Scoping — Migrated to Global (2026-05-12)
 
-The spec defines credentials as global at `/api/ambient/v1/credentials`. The implementation uses project-scoped paths at `/api/ambient/v1/projects/{id}/credentials`. This is a design gap, not a bug — the intended target is global, but the current implementation is project-scoped.
+Credentials were previously project-scoped at `/api/ambient/v1/projects/{id}/credentials` with a required `project_id` field on the model. The spec targets global resources at `/api/ambient/v1/credentials`.
 
-This gap surfaces in three places:
-1. **Spec API Reference:** Note added that global paths are the target; project-scoped are current.
-2. **OpenAPI:** Not changed — the OpenAPI reflects the actual (project-scoped) routes.
-3. **CLI table:** Changed from 🔲 to ✅ (project-scoped) with a scoping note.
+Migration applied in one wave touching 7 files:
+1. `openapi.credentials.yaml` — paths changed to `/credentials`; `project_id` removed from schema
+2. `model.go` — removed `ProjectID string` field
+3. `migration.go` — added `dropProjectIDMigration()` with `ALTER TABLE IF EXISTS ... DROP COLUMN IF EXISTS project_id`; kept prior `addProjectIDMigration()` so existing DBs apply and then immediately undo
+4. `handler.go` — removed all `projectID := mux.Vars(r)["id"]` guards and project-filter injection in List
+5. `presenter.go` — removed `ProjectId` from `PresentCredential`; updated `ConvertCredential` signature
+6. `plugin.go` — changed subrouter from `/projects` prefix to `/credentials`; registered `dropProjectIDMigration()`
+7. `factory_test.go` — removed `ProjectID: "test-project"` from factory struct
 
-**Rule:** When the spec and implementation intentionally diverge (design intent vs current state), document both explicitly in the spec. Do not silently change the spec to match the code or the code to match the spec without the user's decision. Capture the gap with a clear "Implementation gap:" note and the intended direction.
+**SDK impact:** Generator produced `/credentials` base path correctly. `credential_extensions.go` used `a.basePath()` which no longer exists for top-level resources (generator inlines paths). Fixed by replacing with literal `/credentials/{id}/token`.
+
+**Rule:** When the generator is used for top-level (non-nested) resources, it does NOT generate a `basePath()` method — it inlines paths. Any hand-written extension file that calls `a.basePath()` must be updated to use the literal path after changing a resource from nested to global.
 
 ### Factory Test Files Must Be Checked When Removing Model Fields
 
 Removing a field from a model struct causes `go vet` to fail on any test factory that references the field as a struct literal key. `plugins/projectSettings/factory_test.go` had `DisplayName: stringPtr("Test Project")` that was not found by the initial grep targeting only the `projects/` plugin directory.
 
 **Rule:** When removing a field from `plugins/{kind}/model.go`, grep the entire `plugins/` tree (not just the plugin directory) for the field name. Test factories in other plugins that create the model as a dependency will reference it too.
+
+### Step 3 Must Produce a Field-Level Diff, Not Just a Route-Level Diff
+
+During the credentials globalization run, Step 3 found the route `/projects/{id}/credentials` in `openapi.yaml` and marked it ✅. It did not compare the OpenAPI schema's `required` array (`["project_id", "name", "provider"]`) against the spec's Credential ERD (no `project_id`). The implementation diverged from the spec for the entire life of the feature, undetected.
+
+**Rule:** For every Kind, Step 3 must check all three directions:
+1. Spec ERD → `model.go` (spec says field exists; does the model have it?)
+2. `model.go` → Spec ERD (model has a field; is it in the spec ERD?)
+3. OpenAPI `required[]` → Spec ERD (OpenAPI marks a field required; does the spec agree?)
+
+A route existing in openapi.yaml is necessary but not sufficient. Field-level drift is the most common and hardest-to-catch form of divergence.
+
+### Integration Tests Must Assert the Spec-Correct Route, Not an Implementation-Convenient One
+
+`plugins/credentials/factory_test.go` created credentials with `ProjectID: "test-project"` (wrong field) and `Provider: "test-provider"` (invalid enum value). These tests encoded the wrong implementation shape. Because no test ever called `POST /credentials` (the spec-correct global path), the divergence from spec went undetected for the entire history of the feature.
+
+**Rule:** Integration tests for a resource must use the route the spec defines, not a route that happens to work in the current implementation. For a global resource (no project scope), the factory and every integration test must call the global path. If the test is written against a nested path for a resource the spec defines as global, the test is wrong — fix the test, not just the implementation.
+
+**Corollary:** Factory test `Provider` values must use valid enum values. A factory that passes `"test-provider"` will compile and run even if the API rejects it — use `"github"` or another value from the spec's provider enum table.
