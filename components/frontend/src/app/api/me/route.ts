@@ -23,6 +23,7 @@ export async function GET(request: Request) {
       email,
       username,
       displayName,
+      ssoEnabled: process.env.SSO_ENABLED === 'true',
     });
   } catch (error) {
     console.error('Error reading user headers:', error);

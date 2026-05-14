@@ -11,6 +11,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetClose } from "@/comp
 import { Button } from "@/components/ui/button";
 import { Plug, LogOut, Menu, Home, MessageSquare } from "lucide-react";
 import { useVersion } from "@/services/queries/use-version";
+import { useCurrentUser } from "@/services/queries";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 type NavigationProps = {
@@ -22,11 +23,12 @@ export function Navigation({ feedbackUrl }: NavigationProps) {
   // const segments = pathname?.split("/").filter(Boolean) || [];
   const router = useRouter();
   const { data: version } = useVersion();
+  const { data: me } = useCurrentUser();
   const isMobile = useIsMobile();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
-    if (process.env.NEXT_PUBLIC_SSO_ENABLED === 'true') {
+    if (me?.ssoEnabled) {
       window.location.href = '/api/auth/sso/logout';
     } else {
       window.location.href = '/oauth/sign_out';
