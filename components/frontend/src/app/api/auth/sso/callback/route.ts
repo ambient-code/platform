@@ -43,7 +43,10 @@ export async function GET(request: NextRequest) {
     cookieStore.delete("oidc_state");
     cookieStore.delete("oidc_return_to");
 
-    return NextResponse.redirect(new URL(returnTo, request.nextUrl.origin));
+    const origin = process.env.SSO_REDIRECT_URI
+      ? new URL(process.env.SSO_REDIRECT_URI).origin
+      : request.nextUrl.origin;
+    return NextResponse.redirect(new URL(returnTo, origin));
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json(

@@ -83,6 +83,11 @@ func InitJWTValidator() {
 		return
 	}
 
+	if altIssuer := os.Getenv("SSO_PUBLIC_ISSUER_URL"); altIssuer != "" {
+		v.AddAltIssuer(altIssuer)
+		log.Printf("SSO: added alt issuer %s", altIssuer)
+	}
+
 	JWTValidator = v
 	log.Printf("SSO: JWT validator initialized (issuer=%s, audience=%s)", issuerURL, audience)
 }

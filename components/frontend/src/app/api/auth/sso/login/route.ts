@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { buildAuthorizationUrl } from "@/lib/oidc";
 
 export async function GET(request: NextRequest) {
@@ -9,28 +8,17 @@ export async function GET(request: NextRequest) {
 
   const { url, codeVerifier, state } = await buildAuthorizationUrl(redirectUri);
 
-  const cookieStore = await cookies();
-  cookieStore.set("oidc_code_verifier", codeVerifier, {
+  const response = NextResponse.redirect(url);
+  const cookieOpts = {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: "lax" as const,
     path: "/",
     maxAge: 600,
-  });
-  cookieStore.set("oidc_state", state, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 600,
-  });
-  cookieStore.set("oidc_return_to", returnTo, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 600,
-  });
+  };
+  response.cookies.set("oidc_code_verifier", codeVerifier, cookieOpts);
+  response.cookies.set("oidc_state", state, cookieOpts);
+  response.cookies.set("oidc_return_to", returnTo, cookieOpts);
 
-  return NextResponse.redirect(url);
+  return response;
 }

@@ -22,10 +22,11 @@ type Claims struct {
 }
 
 type Validator struct {
-	jwksCache *jwk.Cache
-	jwksURL   string
-	issuer    string
-	audience  string
+	jwksCache      *jwk.Cache
+	jwksURL        string
+	issuer         string
+	altIssuers     []string
+	audience       string
 }
 
 func NewValidator(issuerURL, audience string) (*Validator, error) {
@@ -80,16 +81,26 @@ func NewValidatorWithJWKSURL(jwksURL, issuer, audience string) (*Validator, erro
 	}, nil
 }
 
+// AddAltIssuer adds an alternative accepted issuer URL. Tokens signed by the
+// same JWKS keys but with a different iss claim (e.g., the public URL of a
+// Keycloak behind a port-forward) will be accepted.
+func (v *Validator) AddAltIssuer(issuer string) {
+	if issuer != "" && issuer != v.issuer {
+		v.altIssuers = append(v.altIssuers, issuer)
+	}
+}
+
 func (v *Validator) Validate(tokenString string) (*Claims, error) {
 	keySet, err := v.jwksCache.Get(context.Background(), v.jwksURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get JWKS: %w", err)
 	}
 
+	// Verify signature and expiration, but validate issuer manually to support
+	// multiple accepted issuers (internal + public URL in dev environments).
 	opts := []jwt.ParseOption{
 		jwt.WithKeySet(keySet),
 		jwt.WithValidate(true),
-		jwt.WithIssuer(v.issuer),
 	}
 	if v.audience != "" {
 		opts = append(opts, jwt.WithAudience(v.audience))
@@ -98,6 +109,10 @@ func (v *Validator) Validate(tokenString string) (*Claims, error) {
 	token, err := jwt.Parse([]byte(tokenString), opts...)
 	if err != nil {
 		return nil, fmt.Errorf("token validation failed: %w", err)
+	}
+
+	if !v.isAcceptedIssuer(token.Issuer()) {
+		return nil, fmt.Errorf("token validation failed: issuer %q not accepted", token.Issuer())
 	}
 
 	claims := &Claims{
@@ -134,6 +149,18 @@ func (v *Validator) Validate(tokenString string) (*Claims, error) {
 	}
 
 	return claims, nil
+}
+
+func (v *Validator) isAcceptedIssuer(iss string) bool {
+	if iss == v.issuer {
+		return true
+	}
+	for _, alt := range v.altIssuers {
+		if iss == alt {
+			return true
+		}
+	}
+	return false
 }
 
 func discoverJWKSURL(issuerURL string) (string, error) {

@@ -67,10 +67,69 @@ export async function exchangeCode(
   expiresAt: number;
 }> {
   const config = await getOIDCConfig();
-  const tokens = await client.authorizationCodeGrant(config, callbackUrl, {
-    pkceCodeVerifier: codeVerifier,
-    expectedState,
+
+  // In production, the browser and server use the same Keycloak URL, so the
+  // standard library flow works (full ID token validation including iss check).
+  // In dev (Kind), the browser reaches Keycloak via localhost:30090 while the
+  // server uses keycloak-service:8080 — the ID token iss claim won't match the
+  // discovery issuer. Fall back to a manual token exchange in that case.
+  const hasSplitUrls = !!process.env.SSO_PUBLIC_ISSUER_URL
+    && process.env.SSO_PUBLIC_ISSUER_URL !== process.env.SSO_ISSUER_URL;
+
+  if (!hasSplitUrls) {
+    const tokens = await client.authorizationCodeGrant(config, callbackUrl, {
+      pkceCodeVerifier: codeVerifier,
+      expectedState,
+    });
+    return {
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token ?? "",
+      idToken: tokens.id_token ?? "",
+      expiresAt: Math.floor(Date.now() / 1000) + (tokens.expires_in ?? 300),
+    };
+  }
+
+  // Split-URL dev mode: manual token exchange (state + PKCE still validated)
+  const returnedState = callbackUrl.searchParams.get("state");
+  if (returnedState !== expectedState) {
+    throw new Error("OIDC state mismatch");
+  }
+
+  const code = callbackUrl.searchParams.get("code");
+  if (!code) {
+    throw new Error("Missing authorization code in callback");
+  }
+
+  const metadata = config.serverMetadata();
+  const tokenEndpoint = String(metadata.token_endpoint);
+  const redirectUri = process.env.SSO_REDIRECT_URI || callbackUrl.origin + callbackUrl.pathname;
+
+  const body = new URLSearchParams({
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: redirectUri,
+    client_id: process.env.SSO_CLIENT_ID!,
+    client_secret: process.env.SSO_CLIENT_SECRET!,
+    code_verifier: codeVerifier,
   });
+
+  const resp = await fetch(tokenEndpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Token exchange failed (${resp.status}): ${text}`);
+  }
+
+  const tokens = await resp.json() as {
+    access_token: string;
+    refresh_token?: string;
+    id_token?: string;
+    expires_in?: number;
+  };
 
   return {
     accessToken: tokens.access_token,

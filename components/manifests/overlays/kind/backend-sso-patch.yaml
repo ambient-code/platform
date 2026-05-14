@@ -20,3 +20,5 @@ spec:
                   name: sso-credentials
                   key: SSO_AUDIENCE
                   optional: true
+            - name: SSO_PUBLIC_ISSUER_URL
+              value: "http://localhost:30090/realms/ambient-code"
