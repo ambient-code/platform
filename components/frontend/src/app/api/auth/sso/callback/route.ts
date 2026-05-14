@@ -17,7 +17,13 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const tokens = await exchangeCode(request.nextUrl, codeVerifier, expectedState);
+    const incomingUrl = new URL(request.url);
+    const baseRedirectUri = process.env.SSO_REDIRECT_URI || `${incomingUrl.origin}/api/auth/sso/callback`;
+    const callbackUrl = new URL(baseRedirectUri);
+    incomingUrl.searchParams.forEach((value, key) => {
+      callbackUrl.searchParams.set(key, value);
+    });
+    const tokens = await exchangeCode(callbackUrl, codeVerifier, expectedState);
     const session = await getSession();
     session.accessToken = tokens.accessToken;
     session.refreshToken = tokens.refreshToken;
