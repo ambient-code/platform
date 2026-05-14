@@ -125,6 +125,102 @@ Remove: `OC_TOKEN`, `OC_USER`, `OC_EMAIL`, `ENABLE_OC_WHOAMI`
 Add: `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET`, `SSO_ISSUER_URL`
 Keep: `DISABLE_AUTH` (mock mode for local dev)
 
+## Local Keycloak Dev Setup
+
+### Kind overlay additions
+
+Add a Keycloak Deployment to the Kind overlay (`overlays/kind/`):
+
+- Image: `quay.io/keycloak/keycloak` (`start-dev` mode)
+- Single replica, H2 in-memory (no persistence needed for dev)
+- Realm import via `--import-realm` flag with ConfigMap-mounted JSON
+- Service: `keycloak-service` on port 8080
+- NodePort or Ingress for browser access from developer workstation
+
+### Realm export JSON
+
+Store at `components/manifests/overlays/kind/keycloak-realm.json`:
+
+```json
+{
+  "realm": "ambient",
+  "enabled": true,
+  "clients": [
+    {
+      "clientId": "ambient-frontend",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "dev-secret-do-not-use-in-prod",
+      "redirectUris": ["http://localhost:3000/api/auth/callback/keycloak"],
+      "postLogoutRedirectUris": ["http://localhost:3000"],
+      "webOrigins": ["http://localhost:3000"],
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": true
+    },
+    {
+      "clientId": "ambient-cli",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "redirectUris": ["http://localhost:8400/callback"],
+      "standardFlowEnabled": true
+    }
+  ],
+  "users": [
+    {
+      "username": "developer",
+      "email": "developer@local.dev",
+      "enabled": true,
+      "credentials": [{"type": "password", "value": "developer", "temporary": false}],
+      "groups": ["ambient-admin"]
+    }
+  ],
+  "groups": [
+    {"name": "ambient-admin"}
+  ]
+}
+```
+
+### What it replaces in the Kind overlay
+
+| Current file | Replaced by |
+|-------------|-------------|
+| `ambient-api-server-jwks-patch.yaml` (static JWKS ConfigMap) | Keycloak's live JWKS endpoint |
+| `api-server-no-jwt-patch.yaml` (`--enable-jwt=false`) | `--enable-jwt=true --jwk-cert-url=http://keycloak-service:8080/realms/ambient/protocol/openid-connect/certs` |
+| `test-user.yaml` (K8s SA with cluster-admin) | Keycloak dev user + `client_credentials` client for E2E |
+| `DISABLE_AUTH=true` in frontend | Frontend configured with `SSO_ISSUER_URL=http://keycloak-service:8080/realms/ambient` |
+
+### Environment variables for Kind
+
+```
+# Frontend
+SSO_CLIENT_ID=ambient-frontend
+SSO_CLIENT_SECRET=dev-secret-do-not-use-in-prod
+SSO_ISSUER_URL=http://keycloak-service:8080/realms/ambient
+
+# Backend / API server
+JWKS_URL=http://keycloak-service:8080/realms/ambient/protocol/openid-connect/certs
+JWT_AUDIENCE=ambient-frontend
+
+# CLI (developer workstation, outside cluster)
+ISSUER_URL=http://localhost:<keycloak-nodeport>/realms/ambient
+```
+
+### Deployed environments with Identity Brokering
+
+For openshift-dev, mpp, and production, run a Keycloak instance with Identity Brokering:
+
+1. Add an "OpenID Connect v1.0" Identity Provider in your Keycloak pointing to RH SSO
+2. Register your Keycloak as a client in RH SSO (one-time ask to realm admin)
+3. Create frontend/CLI clients in your Keycloak (full admin control)
+4. Backends validate JWTs against your Keycloak's JWKS — same as Kind, different URL
+
+This means the same Keycloak realm config (clients, roles) works across all environments.
+The only difference is whether Keycloak authenticates users directly (Kind — local
+credentials) or delegates to RH SSO (deployed — Identity Brokering).
+
 ## Manifest Changes
 
 ### Remove
@@ -135,11 +231,19 @@ Keep: `DISABLE_AUTH` (mock mode for local dev)
 ### Add
 - K8s Secret for SSO client credentials (mounted into frontend pod)
 - Impersonation ClusterRole + ClusterRoleBinding (above)
+- Kind overlay: Keycloak Deployment, Service, ConfigMap (realm JSON), NodePort/Ingress
+- Kind overlay: frontend/backend env patches pointing to local Keycloak
 
 ### Update
 - Frontend Service: route to port 3000 (Next.js) instead of 8443 (OAuth proxy)
 - Frontend Deployment: remove OAuth proxy sidecar container
-- E2E overlay: test JWT generation instead of SA token
+- Kind overlay: API server patch → `--enable-jwt=true` with Keycloak JWKS URL (replaces `--enable-jwt=false`)
+- E2E overlay: use Keycloak `client_credentials` grant instead of K8s SA token
+
+### Remove (Kind overlay)
+- `ambient-api-server-jwks-patch.yaml` (static JWKS ConfigMap — Keycloak serves live JWKS)
+- `api-server-no-jwt-patch.yaml` (JWT is now enabled with Keycloak as issuer)
+- `test-user.yaml` (K8s SA test user — replaced by Keycloak dev user)
 
 ## Future Phases (from IAM Consolidation Proposal)
 
