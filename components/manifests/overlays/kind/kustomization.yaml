@@ -21,6 +21,7 @@ resources:
 # SSO: Keycloak for local OIDC authentication
 - keycloak-deployment.yaml
 - sso-credentials.yaml
+- e2e-rolebinding.yaml
 
 # Patches for e2e environment
 patches:
