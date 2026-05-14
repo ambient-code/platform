@@ -82,10 +82,19 @@ Creates kind cluster and deploys platform with Quay.io images.
 - Backend: `http://localhost:<port>`
 
 **Authentication:**
-- The frontend redirects to Keycloak for login automatically
-- Dev credentials: `developer` / `developer` (or `admin` / `admin`)
-- Keycloak admin console: port-forward `svc/keycloak-service 30090:8080`
+- By default, the cluster starts in **legacy auth mode** (SA token via `OC_TOKEN`)
+- To enable SSO/Keycloak authentication: `make kind-sso-toggle`
+- Dev credentials (when SSO is on): `developer` / `developer` (or `admin` / `admin`)
 - Sessions last 30 minutes; access tokens refresh silently every 5 minutes
+- Toggle back to legacy: `make kind-sso-toggle` (it flips both frontend and backend)
+
+### `make kind-sso-toggle`
+
+Toggles SSO authentication on/off in the Kind cluster. Affects both the frontend
+(`SSO_ENABLED` env var) and the backend (`sso-authentication` Unleash flag).
+
+- **SSO on**: Frontend redirects to Keycloak login, backend validates JWTs
+- **SSO off** (default): Frontend uses `OC_TOKEN` SA token, backend uses raw bearer tokens
 
 ### `make test-e2e`
 

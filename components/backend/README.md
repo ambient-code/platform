@@ -42,7 +42,7 @@ The backend supports two auth modes, controlled by the `sso-authentication` Unle
 
 **Legacy mode (flag off):** The backend reads `X-Forwarded-Access-Token` or `Authorization: Bearer` headers and uses the raw token as the K8s bearer token (OAuth proxy flow).
 
-In the Kind dev cluster, this flag is created and enabled automatically during bootstrap.
+In the Kind dev cluster, legacy mode is the default. Toggle SSO on/off with `make kind-sso-toggle` (affects both frontend and backend).
 
 #### Local development (Kind)
 
