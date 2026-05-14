@@ -455,12 +455,9 @@ func (m *AppModel) fetchActiveView() tea.Cmd {
 		}
 		return nil
 	case "sessions":
-		if m.currentAgentID != "" && m.currentProject != "" {
-			// Agent-scoped sessions — fetch project sessions and filter client-side
-			// in the handler.
+		if m.currentProject != "" {
 			return m.client.FetchSessions(m.currentProject)
 		}
-		// Global sessions view.
 		return m.client.FetchAllSessions()
 	case "inbox":
 		if m.currentAgentID != "" && m.currentProject != "" {
@@ -2542,6 +2539,21 @@ func (m *AppModel) executeCommand(input string) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(
 				m.client.FetchSessions(m.currentProject),
 				m.setInfo("Viewing sessions for agent "+m.currentAgent),
+			)
+		}
+
+		if m.currentProject != "" {
+			// Project-scoped sessions (no specific agent).
+			m.sessionTable.SetScope(m.currentProject)
+			m.navStack = append(m.navStack[:0],
+				NavEntry{Kind: "projects", Scope: "all"},
+				NavEntry{Kind: "sessions", Scope: m.currentProject},
+			)
+			m.activeView = "sessions"
+			m.pollInFlight = true
+			return m, tea.Batch(
+				m.client.FetchSessions(m.currentProject),
+				m.setInfo("Viewing sessions in project "+m.currentProject),
 			)
 		}
 
