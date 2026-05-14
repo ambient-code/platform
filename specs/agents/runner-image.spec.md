@@ -183,6 +183,8 @@ The ProjectSettings resource SHALL support a `runner_image` field (string). When
 
 The field SHALL contain a fully qualified container image reference: `registry/repository:tag` or `registry/repository@sha256:digest`. When empty or unset, the CP uses the default image.
 
+This capability SHOULD be gated behind a feature flag. When the flag is disabled, the CP SHALL ignore `runner_image` and use default image selection.
+
 #### Scenario: Project with custom runner image
 
 - GIVEN a ProjectSettings with `runner_image` set to a custom image
