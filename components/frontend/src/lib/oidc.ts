@@ -1,9 +1,14 @@
 import * as client from "openid-client";
 
+const DISCOVERY_TTL_MS = 5 * 60 * 1000;
+
 let cachedConfig: client.Configuration | null = null;
+let cachedAt = 0;
 
 async function getOIDCConfig(): Promise<client.Configuration> {
-  if (cachedConfig) return cachedConfig;
+  if (cachedConfig && Date.now() - cachedAt < DISCOVERY_TTL_MS) {
+    return cachedConfig;
+  }
 
   const issuerURL = process.env.SSO_ISSUER_URL;
   const clientId = process.env.SSO_CLIENT_ID;
@@ -23,6 +28,7 @@ async function getOIDCConfig(): Promise<client.Configuration> {
     undefined,
     useInsecure ? { execute: [client.allowInsecureRequests] } : undefined,
   );
+  cachedAt = Date.now();
   return cachedConfig;
 }
 
