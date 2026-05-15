@@ -1078,15 +1078,25 @@ kind-sso-toggle: check-kubectl ## Toggle SSO auth on/off in Kind (affects both f
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) SSO disabled. Frontend will use OC_TOKEN/OAuth proxy headers."; \
 	else \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Enabling SSO auth (switching to Keycloak OIDC)..."; \
-		kubectl set env deployment/frontend -n $(NAMESPACE) SSO_ENABLED=true NEXT_PUBLIC_SSO_ENABLED=true; \
+		SSO_HOST="http://localhost:$(KIND_FWD_FRONTEND_PORT)"; \
+		kubectl set env deployment/frontend -n $(NAMESPACE) \
+			SSO_ENABLED=true NEXT_PUBLIC_SSO_ENABLED=true \
+			SSO_REDIRECT_URI="$$SSO_HOST/api/auth/sso/callback" \
+			SSO_PUBLIC_ISSUER_URL="$$SSO_HOST/sso/realms/ambient-code"; \
+		kubectl set env deployment/backend-api -n $(NAMESPACE) \
+			SSO_PUBLIC_ISSUER_URL="$$SSO_HOST/sso/realms/ambient-code"; \
+		kubectl set env deployment/keycloak -n $(NAMESPACE) \
+			KC_HOSTNAME="$$SSO_HOST/sso"; \
 		kubectl port-forward -n $(NAMESPACE) svc/unleash 4242:4242 >/dev/null 2>&1 & PF=$$!; sleep 2; \
 		curl -sf -X POST "http://localhost:4242/api/admin/projects/default/features/sso-authentication/environments/development/on" \
 			-H "Authorization: $$UNLEASH_ADMIN_TOKEN" >/dev/null 2>&1 || true; \
 		kill $$PF 2>/dev/null; \
-		echo "$(COLOR_GREEN)✓$(COLOR_RESET) SSO enabled. Frontend will redirect to Keycloak login."; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) SSO enabled at $$SSO_HOST"; \
 	fi
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for frontend rollout..."
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for rollouts..."
 	@kubectl rollout status deployment/frontend -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1
+	@kubectl rollout status deployment/keycloak -n $(NAMESPACE) --timeout=120s >/dev/null 2>&1 || true
+	@kubectl rollout status deployment/backend-api -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1 || true
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Done. Restart port-forwards if needed: make kind-port-forward"
 
 kind-status: check-kind ## Show all kind clusters and their port assignments
