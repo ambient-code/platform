@@ -24,7 +24,7 @@ spec:
             - --import-realm
           env:
             - name: KC_HOSTNAME
-              value: "http://localhost:11646/sso"
+              value: "http://localhost/sso"
             - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC
               value: "true"
             - name: KC_PROXY_HEADERS

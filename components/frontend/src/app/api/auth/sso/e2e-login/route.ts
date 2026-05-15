@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 
 export async function POST(request: NextRequest) {
-  if (process.env.NODE_ENV === "production") {
+  // Gate on E2E_TEST_HELPERS rather than NODE_ENV so this route works in
+  // Kind/CI where the Docker image sets NODE_ENV=production but E2E tests
+  // still need programmatic session creation.
+  if (process.env.E2E_TEST_HELPERS !== "true") {
     return NextResponse.json({ error: "Not available" }, { status: 404 });
   }
 

@@ -21,4 +21,4 @@ spec:
                   key: SSO_AUDIENCE
                   optional: true
             - name: SSO_PUBLIC_ISSUER_URL
-              value: "http://localhost:11646/sso/realms/ambient-code"
+              value: "http://localhost/sso/realms/ambient-code"

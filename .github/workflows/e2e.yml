@@ -248,8 +248,13 @@ jobs:
 
     - name: Toggle SSO auth mode
       run: |
+        # Verify Keycloak is healthy before toggling (backend needs it for OIDC discovery)
+        echo "Verifying Keycloak is ready..."
+        kubectl wait --for=condition=available --timeout=60s deployment/keycloak -n ambient-code
+
         # Enable SSO on frontend
         kubectl set env deployment/frontend -n ambient-code SSO_ENABLED=true NEXT_PUBLIC_SSO_ENABLED=true
+
         # Enable SSO feature flag in Unleash
         UNLEASH_ADMIN_TOKEN=$(kubectl get secret unleash-credentials -n ambient-code -o jsonpath='{.data.admin-api-token}' | base64 -d)
         kubectl port-forward -n ambient-code svc/unleash 4242:4242 &
@@ -267,11 +272,27 @@ jobs:
         curl -sf -X POST "http://localhost:4242/api/admin/projects/default/features/sso-authentication/environments/development/on" \
           -H "Authorization: $UNLEASH_ADMIN_TOKEN" 2>/dev/null || true
         kill $PF 2>/dev/null || true
+
         # Wait for frontend rollout
         kubectl rollout status deployment/frontend -n ambient-code --timeout=60s
+
         # Restart backend to pick up flag change faster
         kubectl rollout restart deployment/backend-api -n ambient-code
         kubectl rollout status deployment/backend-api -n ambient-code --timeout=60s
+
+        # Verify backend JWT validator initialized (OIDC discovery reached Keycloak)
+        echo "Verifying backend SSO initialization..."
+        for i in $(seq 1 15); do
+          if kubectl logs -n ambient-code -l app=backend-api --tail=50 2>/dev/null | grep -q "SSO: JWT validator initialized"; then
+            echo "Backend JWT validator initialized"
+            break
+          fi
+          if [ "$i" -eq 15 ]; then
+            echo "WARNING: Backend JWT validator may not have initialized"
+            kubectl logs -n ambient-code -l app=backend-api --tail=20 | grep -i sso || true
+          fi
+          sleep 2
+        done
 
     - name: Run Cypress E2E tests (SSO auth)
       working-directory: e2e
