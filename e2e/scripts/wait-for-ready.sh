@@ -34,6 +34,12 @@ kubectl wait --for=condition=available --timeout=300s \
   deployment/minio \
   -n ambient-code 2>/dev/null || echo "⚠️  MinIO not deployed (S3 persistence disabled)"
 
+# Wait for Keycloak (SSO/OIDC provider - frontend needs it for SSO mode)
+echo "⏳ Waiting for keycloak..."
+kubectl wait --for=condition=available --timeout=300s \
+  deployment/keycloak \
+  -n ambient-code 2>/dev/null || echo "⚠️  Keycloak not deployed (SSO disabled)"
+
 echo ""
 echo "✅ All pods are ready!"
 echo ""

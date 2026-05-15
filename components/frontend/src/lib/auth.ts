@@ -172,7 +172,15 @@ async function buildForwardHeadersSSO(request: Request, extra?: Record<string, s
     'Accept': 'application/json',
   };
 
-  const accessToken = await getAccessToken();
+  // Try session token first (browser users with SSO cookie)
+  let accessToken = await getAccessToken();
+
+  // Fall back to Bearer token from request (E2E tests, API clients, service accounts)
+  // This enables dual-auth: SSO sessions + direct Bearer token authentication
+  if (!accessToken) {
+    accessToken = extractAccessToken(request) || undefined;
+  }
+
   if (accessToken) {
     headers['Authorization'] = `Bearer ${accessToken}`;
 
