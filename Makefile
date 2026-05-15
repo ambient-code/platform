@@ -1094,8 +1094,10 @@ kind-sso-toggle: check-kubectl ## Toggle SSO auth on/off in Kind (affects both f
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) SSO enabled at $$SSO_HOST"; \
 	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for rollouts..."
-	@kubectl rollout status deployment/frontend -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1
 	@kubectl rollout status deployment/keycloak -n $(NAMESPACE) --timeout=120s >/dev/null 2>&1 || true
+	@kubectl rollout status deployment/frontend -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1
+	@# Restart backend after Keycloak is ready (OIDC discovery needs Keycloak)
+	@kubectl rollout restart deployment/backend-api -n $(NAMESPACE) >/dev/null 2>&1 || true
 	@kubectl rollout status deployment/backend-api -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1 || true
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Done. Restart port-forwards if needed: make kind-port-forward"
 
