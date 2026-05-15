@@ -280,6 +280,20 @@ jobs:
       run: |
         # Re-extract token using Keycloak client_credentials
         ./scripts/extract-token.sh
+        # Verify frontend is healthy after SSO toggle before running tests
+        echo "Waiting for frontend to be ready with SSO..."
+        for i in $(seq 1 30); do
+          if curl -sf -o /dev/null http://localhost/api/version 2>/dev/null; then
+            echo "Frontend ready"
+            break
+          fi
+          if [ "$i" -eq 30 ]; then
+            echo "Frontend not ready after 60s"
+            kubectl logs -n ambient-code -l app=frontend --tail=20 || true
+            exit 1
+          fi
+          sleep 2
+        done
         ./scripts/run-tests.sh
 
     - name: Upload test results
