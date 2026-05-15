@@ -639,7 +639,13 @@ func ListSessions(c *gin.Context) {
 	list, err := k8sDyn.Resource(gvr).Namespace(project).List(ctx, listOpts)
 	if err != nil {
 		log.Printf("Failed to list agentic sessions in project %s: %v", project, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list agentic sessions"})
+		if errors.IsUnauthorized(err) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token expired or invalid"})
+		} else if errors.IsForbidden(err) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized to access project"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list agentic sessions"})
+		}
 		return
 	}
 
@@ -650,7 +656,13 @@ func ListSessions(c *gin.Context) {
 		list, err = k8sDyn.Resource(gvr).Namespace(project).List(ctx, listOpts)
 		if err != nil {
 			log.Printf("Failed to list agentic sessions (continue) in project %s: %v", project, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list agentic sessions"})
+			if errors.IsUnauthorized(err) {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Token expired or invalid"})
+			} else if errors.IsForbidden(err) {
+				c.JSON(http.StatusForbidden, gin.H{"error": "Unauthorized to access project"})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list agentic sessions"})
+			}
 			return
 		}
 		allItems = append(allItems, list.Items...)
