@@ -9,9 +9,20 @@ export async function GET(request: NextRequest) {
   const expectedState = cookieStore.get("oidc_state")?.value;
   const returnTo = cookieStore.get("oidc_return_to")?.value || "/";
 
+  const publicOrigin = process.env.SSO_REDIRECT_URI
+    ? new URL(process.env.SSO_REDIRECT_URI).origin
+    : request.nextUrl.origin;
+
   if (!codeVerifier || !expectedState) {
-    const loginUrl = new URL("/api/auth/sso/login", request.url);
+    if (request.nextUrl.searchParams.has("retried")) {
+      return NextResponse.json(
+        { error: "SSO login failed: OIDC session cookies are missing. Your browser may be blocking cookies required for authentication." },
+        { status: 400 },
+      );
+    }
+    const loginUrl = new URL("/api/auth/sso/login", publicOrigin);
     loginUrl.searchParams.set("returnTo", returnTo);
+    loginUrl.searchParams.set("retried", "1");
     return NextResponse.redirect(loginUrl);
   }
 
@@ -27,7 +38,6 @@ export async function GET(request: NextRequest) {
     const session = await getSession();
     session.accessToken = tokens.accessToken;
     session.refreshToken = tokens.refreshToken;
-    session.idToken = tokens.idToken;
     session.expiresAt = tokens.expiresAt;
     await session.save();
 
@@ -44,7 +54,7 @@ export async function GET(request: NextRequest) {
     cookieStore.delete("oidc_code_verifier");
     cookieStore.delete("oidc_state");
     cookieStore.delete("oidc_return_to");
-    const loginUrl = new URL("/api/auth/sso/login", request.url);
+    const loginUrl = new URL("/api/auth/sso/login", publicOrigin);
     loginUrl.searchParams.set("returnTo", returnTo);
     return NextResponse.redirect(loginUrl);
   }

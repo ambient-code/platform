@@ -42,7 +42,6 @@ export async function getAccessToken(): Promise<string | undefined> {
     const tokens = await refreshOIDCTokens(session.refreshToken);
     session.accessToken = tokens.accessToken;
     session.refreshToken = tokens.refreshToken;
-    session.idToken = tokens.idToken;
     session.expiresAt = tokens.expiresAt;
     await session.save();
     console.log("SSO: token refreshed, new expiry", new Date(tokens.expiresAt * 1000).toISOString());

@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { buildAuthorizationUrl } from "@/lib/oidc";
 
 export async function GET(request: NextRequest) {
-  const redirectUri = process.env.SSO_REDIRECT_URI
+  let redirectUri = process.env.SSO_REDIRECT_URI
     || `${request.nextUrl.origin}/api/auth/sso/callback`;
+  if (request.nextUrl.searchParams.has("retried")) {
+    const u = new URL(redirectUri);
+    u.searchParams.set("retried", "1");
+    redirectUri = u.toString();
+  }
   const returnTo = request.nextUrl.searchParams.get("returnTo") || "/";
 
   const { url, codeVerifier, state } = await buildAuthorizationUrl(redirectUri);

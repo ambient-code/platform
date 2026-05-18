@@ -24,7 +24,10 @@ export function middleware(request: NextRequest) {
     );
   }
 
-  const loginUrl = new URL("/api/auth/sso/login", request.url);
+  const baseUrl = process.env.SSO_REDIRECT_URI
+    ? new URL(process.env.SSO_REDIRECT_URI).origin
+    : request.nextUrl.origin;
+  const loginUrl = new URL("/api/auth/sso/login", baseUrl);
   loginUrl.searchParams.set("returnTo", request.nextUrl.pathname);
   return NextResponse.redirect(loginUrl);
 }
