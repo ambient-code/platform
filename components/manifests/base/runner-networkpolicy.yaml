@@ -18,3 +18,8 @@ spec:
           podSelector:
             matchLabels:
               app: ambient-code-runner
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              ambient-code.io/managed: "true"

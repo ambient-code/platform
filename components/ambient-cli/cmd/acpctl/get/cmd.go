@@ -472,7 +472,10 @@ func getCredentials(ctx context.Context, client *sdkclient.Client, printer *outp
 	if name != "" {
 		cred, err := client.Credentials().Get(ctx, name)
 		if err != nil {
-			return fmt.Errorf("get credential %q: %w", name, err)
+			cred, err = client.Credentials().FindByName(ctx, name)
+			if err != nil {
+				return fmt.Errorf("get credential %q: %w", name, err)
+			}
 		}
 		if printer.Format() == output.FormatJSON {
 			return printer.PrintJSON(cred)
