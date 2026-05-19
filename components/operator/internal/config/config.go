@@ -23,6 +23,7 @@ var (
 type Config struct {
 	Namespace              string
 	BackendNamespace       string
+	BackendPublicURL       string
 	AmbientCodeRunnerImage string
 	StateSyncImage         string
 	ImagePullPolicy        corev1.PullPolicy
@@ -121,9 +122,12 @@ func LoadConfig() *Config {
 		}
 	}
 
+	backendPublicURL := os.Getenv("BACKEND_PUBLIC_URL")
+
 	return &Config{
 		Namespace:              namespace,
 		BackendNamespace:       backendNamespace,
+		BackendPublicURL:       backendPublicURL,
 		AmbientCodeRunnerImage: ambientCodeRunnerImage,
 		StateSyncImage:         stateSyncImage,
 		ImagePullPolicy:        imagePullPolicy,

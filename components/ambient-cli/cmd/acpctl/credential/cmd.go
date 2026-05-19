@@ -24,7 +24,8 @@ Subcommands:
   create      Create a credential
   update      Update a credential's fields
   delete      Delete a credential
-  token       Retrieve the token for a credential`,
+  token       Retrieve the token for a credential
+  bind        Bind a credential to a project`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cmd.Help()
 	},
@@ -347,6 +348,69 @@ var tokenCmd = &cobra.Command{
 	},
 }
 
+var bindArgs struct {
+	project string
+}
+
+var bindCmd = &cobra.Command{
+	Use:   "bind <credential-name>",
+	Short: "Bind a credential to a project",
+	Long: `Bind a credential to a project, making it available to all agent sessions
+in that project. Creates a RoleBinding with scope=credential.`,
+	Args: cobra.ExactArgs(1),
+	Example: `  acpctl credential bind github-pat --project my-project
+  acpctl credential bind gitlab-ci --project platform`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if bindArgs.project == "" {
+			return fmt.Errorf("--project is required")
+		}
+
+		client, err := connection.NewClientFromConfig()
+		if err != nil {
+			return err
+		}
+
+		cfg, err := config.Load()
+		if err != nil {
+			return err
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
+		defer cancel()
+
+		// Resolve credential name → ID
+		credName := args[0]
+		opts := sdktypes.NewListOptions().Size(10).Build()
+		opts.Search = fmt.Sprintf("name = '%s'", credName)
+		list, err := client.Credentials().List(ctx, opts)
+		if err != nil {
+			return fmt.Errorf("look up credential %q: %w", credName, err)
+		}
+		if list.Total == 0 {
+			return fmt.Errorf("credential %q not found", credName)
+		}
+
+		credID := list.Items[0].ID
+
+		binding, err := sdktypes.NewRoleBindingBuilder().
+			RoleID("credential:viewer").
+			Scope("credential").
+			CredentialID(credID).
+			ProjectID(bindArgs.project).
+			Build()
+		if err != nil {
+			return fmt.Errorf("build role binding: %w", err)
+		}
+
+		if _, err := client.RoleBindings().Create(ctx, binding); err != nil {
+			return fmt.Errorf("bind credential %q to project %q: %w", credName, bindArgs.project, err)
+		}
+
+		fmt.Fprintf(cmd.OutOrStdout(), "credential/%s bound to project/%s\n", credName, bindArgs.project)
+		return nil
+	},
+}
+
 func init() {
 	Cmd.AddCommand(listCmd)
 	Cmd.AddCommand(getCmd)
@@ -354,6 +418,7 @@ func init() {
 	Cmd.AddCommand(updateCmd)
 	Cmd.AddCommand(deleteCmd)
 	Cmd.AddCommand(tokenCmd)
+	Cmd.AddCommand(bindCmd)
 
 	listCmd.Flags().StringVarP(&listArgs.outputFormat, "output", "o", "", "Output format: json")
 	listCmd.Flags().IntVar(&listArgs.limit, "limit", 100, "Maximum number of items to return")
@@ -382,6 +447,8 @@ func init() {
 	deleteCmd.Flags().BoolVar(&deleteArgs.confirm, "confirm", false, "Confirm deletion")
 
 	tokenCmd.Flags().StringVarP(&tokenArgs.outputFormat, "output", "o", "", "Output format: json")
+
+	bindCmd.Flags().StringVar(&bindArgs.project, "project", "", "Project to bind the credential to (required)")
 }
 
 func printCredentialTable(printer *output.Printer, credentials []sdktypes.Credential) error {

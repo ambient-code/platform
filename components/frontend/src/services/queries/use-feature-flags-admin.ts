@@ -1,13 +1,10 @@
-/**
- * React Query hooks for Feature Flags Admin
- * Workspace-scoped feature flag management with Unleash fallback
- */
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import * as featureFlagsApi from '../api/feature-flags-admin';
+import { featureFlagsAdapter } from '../adapters/feature-flags';
+import type { FeatureFlagsPort } from '../ports/feature-flags';
+import { BACKEND_VERSION } from './query-keys';
 
 export const featureFlagKeys = {
-  all: ['feature-flags'] as const,
+  all: [BACKEND_VERSION, 'feature-flags'] as const,
   list: (projectName: string) => [...featureFlagKeys.all, 'list', projectName] as const,
   detail: (projectName: string, flagName: string) =>
     [...featureFlagKeys.all, 'detail', projectName, flagName] as const,
@@ -15,29 +12,22 @@ export const featureFlagKeys = {
     [...featureFlagKeys.all, 'evaluate', projectName, flagName] as const,
 };
 
-/**
- * Hook to fetch all feature flags for a project with workspace override status
- */
-export function useFeatureFlags(projectName: string) {
+export function useFeatureFlags(projectName: string, port: FeatureFlagsPort = featureFlagsAdapter) {
   return useQuery({
     queryKey: featureFlagKeys.list(projectName),
-    queryFn: () => featureFlagsApi.getFeatureFlags(projectName),
+    queryFn: () => port.getFeatureFlags(projectName),
     enabled: !!projectName,
     refetchInterval: (query) => (query.state.status === 'error' ? false : 30000),
-    staleTime: 10000, // Consider data stale after 10s
+    staleTime: 10000,
   });
 }
 
-/**
- * Hook to evaluate a workspace-scoped feature flag
- * Returns the effective value (ConfigMap override > Unleash default)
- */
-export function useWorkspaceFlag(projectName: string, flagName: string) {
+export function useWorkspaceFlag(projectName: string, flagName: string, port: FeatureFlagsPort = featureFlagsAdapter) {
   const { data, isLoading, error } = useQuery({
     queryKey: featureFlagKeys.evaluate(projectName, flagName),
-    queryFn: () => featureFlagsApi.evaluateFeatureFlag(projectName, flagName),
+    queryFn: () => port.evaluateFeatureFlag(projectName, flagName),
     enabled: !!projectName && !!flagName,
-    staleTime: 15000, // 15s cache
+    staleTime: 15000,
     refetchInterval: (query) => (query.state.status === 'error' ? false : 30000),
   });
 
@@ -49,21 +39,15 @@ export function useWorkspaceFlag(projectName: string, flagName: string) {
   };
 }
 
-/**
- * Hook to fetch a specific feature flag from Unleash
- */
-export function useFeatureFlag(projectName: string, flagName: string) {
+export function useFeatureFlag(projectName: string, flagName: string, port: FeatureFlagsPort = featureFlagsAdapter) {
   return useQuery({
     queryKey: featureFlagKeys.detail(projectName, flagName),
-    queryFn: () => featureFlagsApi.getFeatureFlag(projectName, flagName),
+    queryFn: () => port.getFeatureFlag(projectName, flagName),
     enabled: !!projectName && !!flagName,
   });
 }
 
-/**
- * Hook to toggle a feature flag (enable or disable) for this workspace
- */
-export function useToggleFeatureFlag() {
+export function useToggleFeatureFlag(port: FeatureFlagsPort = featureFlagsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -77,10 +61,9 @@ export function useToggleFeatureFlag() {
       enable: boolean;
     }) =>
       enable
-        ? featureFlagsApi.enableFeatureFlag(projectName, flagName)
-        : featureFlagsApi.disableFeatureFlag(projectName, flagName),
+        ? port.enableFeatureFlag(projectName, flagName)
+        : port.disableFeatureFlag(projectName, flagName),
     onSuccess: (_, { projectName, flagName }) => {
-      // Invalidate both list and evaluate queries
       queryClient.invalidateQueries({ queryKey: featureFlagKeys.list(projectName) });
       queryClient.invalidateQueries({
         queryKey: featureFlagKeys.evaluate(projectName, flagName),
@@ -89,10 +72,7 @@ export function useToggleFeatureFlag() {
   });
 }
 
-/**
- * Hook to set a workspace-scoped override for a feature flag
- */
-export function useSetFeatureFlagOverride() {
+export function useSetFeatureFlagOverride(port: FeatureFlagsPort = featureFlagsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -104,7 +84,7 @@ export function useSetFeatureFlagOverride() {
       projectName: string;
       flagName: string;
       enabled: boolean;
-    }) => featureFlagsApi.setFeatureFlagOverride(projectName, flagName, enabled),
+    }) => port.setFeatureFlagOverride(projectName, flagName, enabled),
     onSuccess: (_, { projectName, flagName }) => {
       queryClient.invalidateQueries({ queryKey: featureFlagKeys.list(projectName) });
       queryClient.invalidateQueries({
@@ -114,10 +94,7 @@ export function useSetFeatureFlagOverride() {
   });
 }
 
-/**
- * Hook to remove a workspace-scoped override (revert to Unleash default)
- */
-export function useRemoveFeatureFlagOverride() {
+export function useRemoveFeatureFlagOverride(port: FeatureFlagsPort = featureFlagsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -127,7 +104,7 @@ export function useRemoveFeatureFlagOverride() {
     }: {
       projectName: string;
       flagName: string;
-    }) => featureFlagsApi.removeFeatureFlagOverride(projectName, flagName),
+    }) => port.removeFeatureFlagOverride(projectName, flagName),
     onSuccess: (_, { projectName, flagName }) => {
       queryClient.invalidateQueries({ queryKey: featureFlagKeys.list(projectName) });
       queryClient.invalidateQueries({
@@ -137,10 +114,7 @@ export function useRemoveFeatureFlagOverride() {
   });
 }
 
-/**
- * Hook to enable a feature flag for this workspace
- */
-export function useEnableFeatureFlag() {
+export function useEnableFeatureFlag(port: FeatureFlagsPort = featureFlagsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -150,7 +124,7 @@ export function useEnableFeatureFlag() {
     }: {
       projectName: string;
       flagName: string;
-    }) => featureFlagsApi.enableFeatureFlag(projectName, flagName),
+    }) => port.enableFeatureFlag(projectName, flagName),
     onSuccess: (_, { projectName, flagName }) => {
       queryClient.invalidateQueries({ queryKey: featureFlagKeys.list(projectName) });
       queryClient.invalidateQueries({
@@ -160,10 +134,7 @@ export function useEnableFeatureFlag() {
   });
 }
 
-/**
- * Hook to disable a feature flag for this workspace
- */
-export function useDisableFeatureFlag() {
+export function useDisableFeatureFlag(port: FeatureFlagsPort = featureFlagsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -173,7 +144,7 @@ export function useDisableFeatureFlag() {
     }: {
       projectName: string;
       flagName: string;
-    }) => featureFlagsApi.disableFeatureFlag(projectName, flagName),
+    }) => port.disableFeatureFlag(projectName, flagName),
     onSuccess: (_, { projectName, flagName }) => {
       queryClient.invalidateQueries({ queryKey: featureFlagKeys.list(projectName) });
       queryClient.invalidateQueries({

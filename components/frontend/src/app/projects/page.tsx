@@ -39,6 +39,8 @@ import { EmptyState } from '@/components/empty-state';
 import { ErrorMessage } from '@/components/error-message';
 import { DestructiveConfirmationDialog } from '@/components/confirmation-dialog';
 import { CreateWorkspaceDialog } from '@/components/create-workspace-dialog';
+import { WelcomeWizard } from '@/components/onboarding/welcome-wizard';
+import { useShouldShowOnboarding } from '@/components/onboarding/use-should-show-onboarding';
 import { toast } from 'sonner';
 import type { Project } from '@/types/api';
 import { DEFAULT_PAGE_SIZE } from '@/types/api';
@@ -48,6 +50,14 @@ export default function ProjectsPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const { shouldShow, dismiss: dismissOnboarding } = useShouldShowOnboarding();
+  const [wizardOpen, setWizardOpen] = useState(false);
+
+  // Open the wizard when the hook says to, but don't close it when projects appear
+  // (creating a workspace in step 2 would otherwise cause the wizard to close mid-flow)
+  useEffect(() => {
+    if (shouldShow) setWizardOpen(true);
+  }, [shouldShow]);
 
   // Pagination and search state
   const [searchInput, setSearchInput] = useState('');
@@ -354,6 +364,12 @@ export default function ProjectsPage() {
         <CreateWorkspaceDialog
           open={showCreateDialog}
           onOpenChange={setShowCreateDialog}
+        />
+
+        {/* Onboarding wizard for first-time users */}
+        <WelcomeWizard
+          open={wizardOpen}
+          onDismiss={() => { setWizardOpen(false); dismissOnboarding(); }}
         />
       </div>
     </div>

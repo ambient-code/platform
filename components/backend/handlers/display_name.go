@@ -80,7 +80,7 @@ func ValidateDisplayName(name string) string {
 // - Gracefully handles session deletion during generation (checks IsNotFound)
 // - No cancellation mechanism exists; goroutine runs to completion or timeout
 // - Safe for backend restarts: orphaned goroutines will timeout naturally
-func GenerateDisplayNameAsync(projectName, sessionName, userMessage string, sessionCtx SessionContext) {
+var GenerateDisplayNameAsync = func(projectName, sessionName, userMessage string, sessionCtx SessionContext) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {

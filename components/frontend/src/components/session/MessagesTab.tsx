@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useMemo, useLayoutEffect, useCallback } from "react";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, ChevronUp, ChevronDown } from "lucide-react";
 import { StreamMessage } from "@/components/ui/stream-message";
 import { LoadingDots } from "@/components/ui/message";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChatInputBox } from "@/components/chat/ChatInputBox";
 import { QueuedMessageBubble } from "@/components/chat/QueuedMessageBubble";
 import { useCurrentUser } from "@/services/queries/use-auth";
@@ -14,6 +15,9 @@ import type { QueuedMessageItem } from "@/hooks/use-session-queue";
 
 /** Maximum number of messages rendered at once. Older messages are loaded on demand. */
 const MAX_VISIBLE_MESSAGES = 100;
+
+/** Scroll distance (px) from the top before the scroll-to-top button appears. */
+const SCROLL_TO_TOP_THRESHOLD = 300;
 
 /** Derive a stable React key for any message variant. */
 function getMessageKey(m: MessageObject | ToolUseMessages | HierarchicalToolMessage, idx: number): string {
@@ -66,6 +70,7 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const [showScrollToTop, setShowScrollToTop] = useState(false);
   // How many messages (counting from the end) are currently rendered.
   const [loadedMessageCount, setLoadedMessageCount] = useState(MAX_VISIBLE_MESSAGES);
   // Refs for scroll-position preservation when loading earlier messages.
@@ -95,14 +100,17 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
   const checkIfAtBottom = () => {
     const container = messagesContainerRef.current;
     if (!container) return true;
+    if (container.scrollHeight <= container.clientHeight) return true;
     const threshold = 50;
     return container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
   };
 
   const handleScroll = () => {
+    const container = messagesContainerRef.current;
     const bottom = checkIfAtBottom();
-    // Avoid a re-render when the value hasn't changed.
     setIsAtBottom((prev) => (prev === bottom ? prev : bottom));
+    const scrolledPastThreshold = !!container && container.scrollTop > SCROLL_TO_TOP_THRESHOLD;
+    setShowScrollToTop((prev) => (prev === scrolledPastThreshold ? prev : scrolledPastThreshold));
   };
 
   const scrollToBottom = () => {
@@ -111,6 +119,13 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
       container.scrollTop = container.scrollHeight;
     }
   };
+
+  const scrollToTop = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, []);
 
   // Load earlier messages and preserve the user's visual scroll position.
   const loadEarlierMessages = useCallback(() => {
@@ -193,10 +208,11 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
 
   return (
     <div className="flex flex-col h-full">
+      <div className="relative flex-1 min-h-0">
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="flex-1 flex flex-col gap-2 overflow-y-auto p-3 scrollbar-thin"
+        className="h-full flex flex-col gap-2 overflow-y-auto p-3 scrollbar-thin"
       >
         {showWelcomeExperience && welcomeExperienceComponent}
 
@@ -271,6 +287,44 @@ const MessagesTab: React.FC<MessagesTabProps> = ({ session, streamMessages, chat
             </p>
           </div>
         )}
+      </div>
+
+      <TooltipProvider>
+        <div className="absolute bottom-3 right-5 z-10 flex flex-col gap-1">
+          <div className={`transition-all duration-200 ${showScrollToTop ? "opacity-100 scale-100" : "opacity-0 scale-75 pointer-events-none"}`}>
+            <Tooltip open={showScrollToTop ? undefined : false}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={scrollToTop}
+                  aria-label="Scroll to top"
+                  className="rounded-full shadow-md cursor-pointer"
+                >
+                  <ChevronUp className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">Scroll to top</TooltipContent>
+            </Tooltip>
+          </div>
+          <div className={`transition-all duration-200 ${!isAtBottom ? "opacity-100 scale-100" : "opacity-0 scale-75 pointer-events-none"}`}>
+            <Tooltip open={isAtBottom ? false : undefined}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={() => messagesContainerRef.current?.scrollTo({ top: messagesContainerRef.current.scrollHeight, behavior: "smooth" })}
+                  aria-label="Scroll to bottom"
+                  className="rounded-full shadow-md cursor-pointer"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">Scroll to bottom</TooltipContent>
+            </Tooltip>
+          </div>
+        </div>
+      </TooltipProvider>
       </div>
 
       <ChatInputBox

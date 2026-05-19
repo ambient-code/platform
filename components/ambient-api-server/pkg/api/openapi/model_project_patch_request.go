@@ -21,6 +21,7 @@ var _ MappedNullable = &ProjectPatchRequest{}
 // ProjectPatchRequest struct for ProjectPatchRequest
 type ProjectPatchRequest struct {
 	Name        *string `json:"name,omitempty"`
+	DisplayName *string `json:"display_name,omitempty"`
 	Description *string `json:"description,omitempty"`
 	Labels      *string `json:"labels,omitempty"`
 	Annotations *string `json:"annotations,omitempty"`
@@ -75,6 +76,38 @@ func (o *ProjectPatchRequest) HasName() bool {
 // SetName gets a reference to the given string and assigns it to the Name field.
 func (o *ProjectPatchRequest) SetName(v string) {
 	o.Name = &v
+}
+
+// GetDisplayName returns the DisplayName field value if set, zero value otherwise.
+func (o *ProjectPatchRequest) GetDisplayName() string {
+	if o == nil || IsNil(o.DisplayName) {
+		var ret string
+		return ret
+	}
+	return *o.DisplayName
+}
+
+// GetDisplayNameOk returns a tuple with the DisplayName field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ProjectPatchRequest) GetDisplayNameOk() (*string, bool) {
+	if o == nil || IsNil(o.DisplayName) {
+		return nil, false
+	}
+	return o.DisplayName, true
+}
+
+// HasDisplayName returns a boolean if a field has been set.
+func (o *ProjectPatchRequest) HasDisplayName() bool {
+	if o != nil && !IsNil(o.DisplayName) {
+		return true
+	}
+
+	return false
+}
+
+// SetDisplayName gets a reference to the given string and assigns it to the DisplayName field.
+func (o *ProjectPatchRequest) SetDisplayName(v string) {
+	o.DisplayName = &v
 }
 
 // GetDescription returns the Description field value if set, zero value otherwise.
@@ -249,6 +282,9 @@ func (o ProjectPatchRequest) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	if !IsNil(o.Name) {
 		toSerialize["name"] = o.Name
+	}
+	if !IsNil(o.DisplayName) {
+		toSerialize["display_name"] = o.DisplayName
 	}
 	if !IsNil(o.Description) {
 		toSerialize["description"] = o.Description

@@ -516,12 +516,27 @@ func printRoleBindingTable(printer *output.Printer, rbs []sdktypes.RoleBinding) 
 		{Name: "USER", Width: 27},
 		{Name: "ROLE", Width: 27},
 		{Name: "SCOPE", Width: 10},
-		{Name: "SCOPE ID", Width: 27},
+		{Name: "TARGET", Width: 27},
 	}
 	table := output.NewTable(printer.Writer(), columns)
 	table.WriteHeaders()
 	for _, rb := range rbs {
-		table.WriteRow(rb.ID, rb.UserID, rb.RoleID, rb.Scope, rb.ScopeID)
+		userID := ""
+		if rb.UserID != nil {
+			userID = *rb.UserID
+		}
+		target := ""
+		switch {
+		case rb.ProjectID != nil:
+			target = *rb.ProjectID
+		case rb.AgentID != nil:
+			target = *rb.AgentID
+		case rb.SessionID != nil:
+			target = *rb.SessionID
+		case rb.CredentialID != nil:
+			target = *rb.CredentialID
+		}
+		table.WriteRow(rb.ID, userID, rb.RoleID, rb.Scope, target)
 	}
 	return nil
 }

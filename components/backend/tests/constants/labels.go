@@ -22,6 +22,7 @@ const (
 	LabelGitHubAuth     = "github-auth"
 	LabelGitLabAuth     = "gitlab-auth"
 	LabelCodeRabbitAuth = "coderabbit-auth"
+	LabelGoogleAuth     = "google-auth"
 	LabelSessions       = "sessions"
 	LabelContent        = "content"
 	LabelFeatureFlags   = "feature-flags"

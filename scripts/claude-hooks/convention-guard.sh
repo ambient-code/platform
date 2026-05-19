@@ -72,7 +72,7 @@ if [[ "$FILE_PATH" == */components/backend/*.go || "$FILE_PATH" == */components/
 fi
 
 # --- Skills: remind about standards ---
-if [[ "$FILE_PATH" == */.claude/skills/* ]]; then
+if [[ "$FILE_PATH" == */.claude/skills/* || "$FILE_PATH" == */skills/* ]]; then
   warn "Follow the Anthropic skill-creator standard. Required: pushy description, under 500 lines, explanation over rigidity, evals in evals/evals.json."
 fi
 

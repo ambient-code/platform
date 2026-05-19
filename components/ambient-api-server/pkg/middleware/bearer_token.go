@@ -24,12 +24,14 @@ var httpBypassPaths = map[string]bool{
 
 func init() {
 	token := os.Getenv(ambientAPITokenEnv)
-	if token == "" {
-		glog.Infof("Service token auth disabled: %s not set", ambientAPITokenEnv)
+	serviceAccount := os.Getenv(grpcServiceAccountEnv)
+	if token == "" && serviceAccount == "" {
+		glog.Infof("Service token auth disabled: neither %s nor %s set", ambientAPITokenEnv, grpcServiceAccountEnv)
 		return
 	}
-	serviceAccount := os.Getenv(grpcServiceAccountEnv)
-	glog.Infof("Service token auth enabled via %s (gRPC only)", ambientAPITokenEnv)
+	if token != "" {
+		glog.Infof("Service token auth enabled via %s (gRPC only)", ambientAPITokenEnv)
+	}
 	if serviceAccount != "" {
 		glog.Infof("OIDC service account username: %s", serviceAccount)
 	}
