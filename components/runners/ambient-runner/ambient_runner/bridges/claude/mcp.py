@@ -62,7 +62,6 @@ def build_mcp_servers(
         load_rubric_content,
     )
     from ambient_runner.bridges.claude.corrections import create_correction_mcp_tool
-    from ambient_runner.bridges.claude.backend_tools import create_backend_mcp_tools
 
     mcp_servers = load_mcp_config(context, cwd_path) or {}
 
@@ -118,18 +117,12 @@ def build_mcp_servers(
         mcp_servers["corrections"] = correction_server
         logger.info("Added corrections feedback MCP tool (log_correction)")
 
-    # Backend API tools (session management)
-    backend_tools = create_backend_mcp_tools(sdk_tool_decorator=sdk_tool)
-    if backend_tools:
-        backend_server = create_sdk_mcp_server(
-            name="acp", version="1.0.0", tools=backend_tools
-        )
-        mcp_servers["acp"] = backend_server
+    # Credential-aware MCP servers (dynamically configured per bound credentials)
+    credential_mcp_servers = build_credential_mcp_servers()
+    mcp_servers.update(credential_mcp_servers)
+    if credential_mcp_servers:
         logger.info(
-            f"Added backend API MCP tools ({len(backend_tools)}): "
-            "acp_list_sessions, acp_get_session, acp_create_session, "
-            "acp_stop_session, acp_send_message, acp_get_session_status, "
-            "acp_restart_session, acp_list_workflows, acp_get_api_reference"
+            "Added credential MCP servers: %s", list(credential_mcp_servers.keys())
         )
 
     # Gerrit MCP server (only if credentials are configured)
@@ -146,6 +139,97 @@ def build_mcp_servers(
         logger.info("Added Gerrit MCP server (credentials configured)")
 
     return mcp_servers
+
+
+_CREDENTIAL_MCP_REGISTRY: dict[str, dict] = {
+    "jira": {
+        "command": "uvx",
+        "args": ["mcp-atlassian"],
+        "env": {
+            "JIRA_URL": "${JIRA_URL}",
+            "JIRA_USERNAME": "${JIRA_EMAIL}",
+            "JIRA_API_TOKEN": "${JIRA_API_TOKEN}",
+            "JIRA_SSL_VERIFY": "true",
+            "READ_ONLY_MODE": "${JIRA_READ_ONLY_MODE:-true}",
+        },
+        "server_name": "mcp-atlassian",
+    },
+    "kubeconfig": {
+        "command": "uvx",
+        "args": [
+            "kubernetes-mcp-server@latest",
+            "--kubeconfig",
+            "/tmp/.ambient_kubeconfig",
+            "--disable-multi-cluster",
+        ],
+        "server_name": "openshift",
+    },
+    "google": {
+        "command": "uvx",
+        "args": ["workspace-mcp@1.17.1", "--permissions", "gmail:send", "drive:full"],
+        "env": {
+            "GOOGLE_MCP_CREDENTIALS_DIR": "${GOOGLE_MCP_CREDENTIALS_DIR}",
+            "MCP_SINGLE_USER_MODE": "1",
+            "GOOGLE_OAUTH_CLIENT_ID": "${GOOGLE_OAUTH_CLIENT_ID}",
+            "GOOGLE_OAUTH_CLIENT_SECRET": "${GOOGLE_OAUTH_CLIENT_SECRET}",
+            "GOOGLE_OAUTH_REDIRECT_URI": "${GOOGLE_OAUTH_REDIRECT_URI}",
+            "USER_GOOGLE_EMAIL": "${USER_GOOGLE_EMAIL:-user@example.com}",
+        },
+        "server_name": "google-workspace",
+    },
+}
+
+
+def _expand_env_vars(value: str) -> str:
+    import re as _re
+
+    def _replace(match: _re.Match) -> str:
+        expr = match.group(1)
+        if ":-" in expr:
+            var, default = expr.split(":-", 1)
+            return os.environ.get(var, default)
+        return os.environ.get(expr, match.group(0))
+
+    return _re.sub(r"\$\{([^}]+)}", _replace, value)
+
+
+def build_credential_mcp_servers() -> dict:
+    credential_ids_raw = os.getenv("CREDENTIAL_IDS", "").strip()
+    if not credential_ids_raw:
+        return {}
+
+    try:
+        credential_ids = json.loads(credential_ids_raw)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("Failed to parse CREDENTIAL_IDS — skipping credential MCP servers")
+        return {}
+
+    servers: dict = {}
+    for provider, _cred_id in credential_ids.items():
+        registry_entry = _CREDENTIAL_MCP_REGISTRY.get(provider)
+        if not registry_entry:
+            continue
+
+        server_name = registry_entry["server_name"]
+        server_config: dict = {
+            "command": registry_entry["command"],
+            "args": list(registry_entry["args"]),
+        }
+
+        if "env" in registry_entry:
+            server_config["env"] = {
+                k: _expand_env_vars(v) for k, v in registry_entry["env"].items()
+            }
+
+        servers[server_name] = server_config
+        logger.info(
+            "Configured %s MCP server for bound credential %s (provider: %s)",
+            server_name,
+            _cred_id,
+            provider,
+        )
+
+    return servers
 
 
 def build_allowed_tools(mcp_servers: dict) -> list[str]:
