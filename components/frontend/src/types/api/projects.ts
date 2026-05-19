@@ -58,6 +58,7 @@ export type ListProjectsPaginatedResponse = {
   offset: number;
   hasMore: boolean;
   nextOffset?: number;
+  continue?: string;
 };
 
 export type GetProjectResponse = {

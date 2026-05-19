@@ -1,26 +1,18 @@
-/**
- * React Query hooks for version
- */
-
 import { useQuery } from '@tanstack/react-query';
-import * as versionApi from '../api/version';
+import { versionAdapter } from '../adapters/version';
+import type { VersionPort } from '../ports/version';
+import { BACKEND_VERSION } from './query-keys';
 
-/**
- * Query keys for version
- */
 export const versionKeys = {
-  all: ['version'] as const,
+  all: [BACKEND_VERSION, 'version'] as const,
   current: () => [...versionKeys.all, 'current'] as const,
 };
 
-/**
- * Hook to fetch application version
- */
-export function useVersion() {
+export function useVersion(port: VersionPort = versionAdapter) {
   return useQuery({
     queryKey: versionKeys.current(),
-    queryFn: versionApi.getVersion,
-    staleTime: 5 * 60 * 1000, // Cache version for 5 minutes
-    retry: false, // Don't retry on failure
+    queryFn: port.getVersion,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 }

@@ -48,7 +48,7 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	resp, err := client.Agents().Start(ctx, startArgs.projectID, paID, startArgs.prompt)
+	resp, err := client.Agents().StartInProject(ctx, startArgs.projectID, paID, startArgs.prompt)
 	if err != nil {
 		return fmt.Errorf("start agent %q: %w", paID, err)
 	}

@@ -15,6 +15,7 @@ import { SessionStartingEvents } from "@/components/session/SessionStartingEvent
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { SessionHeader } from "./session-header";
 
 // Extracted components
@@ -40,6 +41,7 @@ import { useWorkflowManagement } from "./hooks/use-workflow-management";
 import { useFileOperations } from "./hooks/use-file-operations";
 import { useSessionQueue } from "@/hooks/use-session-queue";
 import { useDraftInput } from "@/hooks/use-draft-input";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useResizePanel } from "@/hooks/use-resize-panel";
 import type { DirectoryOption, DirectoryRemote } from "./lib/types";
 
@@ -127,6 +129,7 @@ export default function ProjectSessionDetailPage({
   // Explorer panel state
   const explorer = useExplorerState();
   const explorerResize = useResizePanel("session-explorer-width", 340, 250, 500, "right");
+  const isMobile = useIsMobile();
 
   // File tabs state
   const fileTabs = useFileTabs();
@@ -1809,61 +1812,107 @@ export default function ProjectSessionDetailPage({
           </div>
         </div>
 
-        {/* Right: Explorer panel */}
-        <div
-          className={cn(
-            "h-full overflow-hidden flex-shrink-0 relative",
-            !explorerResize.isDragging && "transition-[width] duration-200 ease-in-out",
-            explorer.visible ? "" : "!w-0"
-          )}
-          style={{ width: explorer.visible ? explorerResize.width : 0 }}
-        >
-          {/* Resize handle */}
+        {/* Right: Explorer panel — Sheet on mobile, inline on desktop */}
+        {isMobile ? (
+          <Sheet open={explorer.visible} onOpenChange={(open) => open ? explorer.open() : explorer.close()}>
+            <SheetContent side="right" className="w-[85vw] max-w-[360px] p-0" showCloseButton={false}>
+              <SheetTitle className="sr-only">Explorer</SheetTitle>
+              <ExplorerPanel
+                visible={true}
+                activeTab={explorer.activeTab}
+                onTabChange={explorer.setActiveTab}
+                onClose={explorer.close}
+                projectName={projectName}
+                sessionName={sessionName}
+                directoryOptions={directoryOptions}
+                selectedDirectory={selectedDirectory}
+                onDirectoryChange={setSelectedDirectory}
+                files={directoryFiles}
+                currentSubPath={fileOps.currentSubPath}
+                viewingFile={fileOps.viewingFile}
+                isLoadingFile={fileOps.loadingFile}
+                onFileOrFolderSelect={fileOps.handleFileOrFolderSelect}
+                onNavigateBack={fileOps.navigateBack}
+                onRefresh={handleRefresh}
+                onDownloadFile={fileOps.handleDownloadFile}
+                onFileOpen={handleFileOpenInTab}
+                gitStatus={explorerGitStatus}
+                repoBranches={repoBranches}
+                repositories={explorerRepositories}
+                uploadedFiles={explorerUploadedFiles}
+                onAddRepository={handleOpenContextModal}
+                onUploadFile={handleOpenUploadModal}
+                onRemoveRepository={handleRemoveRepository}
+                onRemoveFile={handleRemoveFile}
+                backgroundTasks={aguiState.backgroundTasks}
+                onOpenTranscript={(task) => {
+                  fileTabs.openTask({
+                    taskId: task.task_id,
+                    name: task.description.length > 30
+                      ? task.description.slice(0, 30) + "..."
+                      : task.description,
+                    status: task.status,
+                  });
+                }}
+              />
+            </SheetContent>
+          </Sheet>
+        ) : (
           <div
-            onMouseDown={explorerResize.onMouseDown}
-            className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-primary/50 transition-colors z-10"
-          />
-          <div className="h-full" style={{ width: explorerResize.width }}>
-            <ExplorerPanel
-              visible={explorer.visible}
-              activeTab={explorer.activeTab}
-              onTabChange={explorer.setActiveTab}
-              onClose={explorer.close}
-              projectName={projectName}
-              sessionName={sessionName}
-              directoryOptions={directoryOptions}
-              selectedDirectory={selectedDirectory}
-              onDirectoryChange={setSelectedDirectory}
-              files={directoryFiles}
-              currentSubPath={fileOps.currentSubPath}
-              viewingFile={fileOps.viewingFile}
-              isLoadingFile={fileOps.loadingFile}
-              onFileOrFolderSelect={fileOps.handleFileOrFolderSelect}
-              onNavigateBack={fileOps.navigateBack}
-              onRefresh={handleRefresh}
-              onDownloadFile={fileOps.handleDownloadFile}
-              onFileOpen={handleFileOpenInTab}
-              gitStatus={explorerGitStatus}
-              repoBranches={repoBranches}
-              repositories={explorerRepositories}
-              uploadedFiles={explorerUploadedFiles}
-              onAddRepository={handleOpenContextModal}
-              onUploadFile={handleOpenUploadModal}
-              onRemoveRepository={handleRemoveRepository}
-              onRemoveFile={handleRemoveFile}
-              backgroundTasks={aguiState.backgroundTasks}
-              onOpenTranscript={(task) => {
-                fileTabs.openTask({
-                  taskId: task.task_id,
-                  name: task.description.length > 30
-                    ? task.description.slice(0, 30) + "..."
-                    : task.description,
-                  status: task.status,
-                });
-              }}
+            className={cn(
+              "h-full overflow-hidden flex-shrink-0 relative",
+              !explorerResize.isDragging && "transition-[width] duration-200 ease-in-out",
+              explorer.visible ? "" : "!w-0"
+            )}
+            style={{ width: explorer.visible ? explorerResize.width : 0 }}
+          >
+            {/* Resize handle */}
+            <div
+              onMouseDown={explorerResize.onMouseDown}
+              className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-primary/50 transition-colors z-10"
             />
+            <div className="h-full" style={{ width: explorerResize.width }}>
+              <ExplorerPanel
+                visible={explorer.visible}
+                activeTab={explorer.activeTab}
+                onTabChange={explorer.setActiveTab}
+                onClose={explorer.close}
+                projectName={projectName}
+                sessionName={sessionName}
+                directoryOptions={directoryOptions}
+                selectedDirectory={selectedDirectory}
+                onDirectoryChange={setSelectedDirectory}
+                files={directoryFiles}
+                currentSubPath={fileOps.currentSubPath}
+                viewingFile={fileOps.viewingFile}
+                isLoadingFile={fileOps.loadingFile}
+                onFileOrFolderSelect={fileOps.handleFileOrFolderSelect}
+                onNavigateBack={fileOps.navigateBack}
+                onRefresh={handleRefresh}
+                onDownloadFile={fileOps.handleDownloadFile}
+                onFileOpen={handleFileOpenInTab}
+                gitStatus={explorerGitStatus}
+                repoBranches={repoBranches}
+                repositories={explorerRepositories}
+                uploadedFiles={explorerUploadedFiles}
+                onAddRepository={handleOpenContextModal}
+                onUploadFile={handleOpenUploadModal}
+                onRemoveRepository={handleRemoveRepository}
+                onRemoveFile={handleRemoveFile}
+                backgroundTasks={aguiState.backgroundTasks}
+                onOpenTranscript={(task) => {
+                  fileTabs.openTask({
+                    taskId: task.task_id,
+                    name: task.description.length > 30
+                      ? task.description.slice(0, 30) + "..."
+                      : task.description,
+                    status: task.status,
+                  });
+                }}
+              />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Modals */}

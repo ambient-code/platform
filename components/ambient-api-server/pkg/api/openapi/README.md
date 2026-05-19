@@ -106,12 +106,23 @@ Class | Method | HTTP request | Description
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdGet**](docs/DefaultAPI.md#apiambientv1projectsidget) | **Get** /api/ambient/v1/projects/{id} | Get a project by id
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdHomeGet**](docs/DefaultAPI.md#apiambientv1projectsidhomeget) | **Get** /api/ambient/v1/projects/{id}/home | Project home — latest status for every Agent in this project
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdPatch**](docs/DefaultAPI.md#apiambientv1projectsidpatch) | **Patch** /api/ambient/v1/projects/{id} | Update a project
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdScheduledSessionsGet**](docs/DefaultAPI.md#apiambientv1projectsidscheduledsessionsget) | **Get** /api/ambient/v1/projects/{id}/scheduled-sessions | Returns a list of scheduled sessions in a project
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdScheduledSessionsPost**](docs/DefaultAPI.md#apiambientv1projectsidscheduledsessionspost) | **Post** /api/ambient/v1/projects/{id}/scheduled-sessions | Create a scheduled session in a project
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdScheduledSessionsSsIdDelete**](docs/DefaultAPI.md#apiambientv1projectsidscheduledsessionsssiddelete) | **Delete** /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id} | Delete a scheduled session
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdScheduledSessionsSsIdGet**](docs/DefaultAPI.md#apiambientv1projectsidscheduledsessionsssidget) | **Get** /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id} | Get a scheduled session by id
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdScheduledSessionsSsIdPatch**](docs/DefaultAPI.md#apiambientv1projectsidscheduledsessionsssidpatch) | **Patch** /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id} | Update a scheduled session
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdScheduledSessionsSsIdResumePost**](docs/DefaultAPI.md#apiambientv1projectsidscheduledsessionsssidresumepost) | **Post** /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/resume | Resume a suspended scheduled session (sets enabled&#x3D;true)
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdScheduledSessionsSsIdRunsGet**](docs/DefaultAPI.md#apiambientv1projectsidscheduledsessionsssidrunsget) | **Get** /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/runs | List sessions triggered by this scheduled session
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdScheduledSessionsSsIdSuspendPost**](docs/DefaultAPI.md#apiambientv1projectsidscheduledsessionsssidsuspendpost) | **Post** /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/suspend | Suspend a scheduled session (sets enabled&#x3D;false)
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost**](docs/DefaultAPI.md#apiambientv1projectsidscheduledsessionsssidtriggerpost) | **Post** /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/trigger | Manually trigger a scheduled session to run immediately
 *DefaultAPI* | [**ApiAmbientV1ProjectsPost**](docs/DefaultAPI.md#apiambientv1projectspost) | **Post** /api/ambient/v1/projects | Create a new project
 *DefaultAPI* | [**ApiAmbientV1RoleBindingsGet**](docs/DefaultAPI.md#apiambientv1rolebindingsget) | **Get** /api/ambient/v1/role_bindings | Returns a list of roleBindings
+*DefaultAPI* | [**ApiAmbientV1RoleBindingsIdDelete**](docs/DefaultAPI.md#apiambientv1rolebindingsiddelete) | **Delete** /api/ambient/v1/role_bindings/{id} | Delete a role binding by id
 *DefaultAPI* | [**ApiAmbientV1RoleBindingsIdGet**](docs/DefaultAPI.md#apiambientv1rolebindingsidget) | **Get** /api/ambient/v1/role_bindings/{id} | Get an roleBinding by id
 *DefaultAPI* | [**ApiAmbientV1RoleBindingsIdPatch**](docs/DefaultAPI.md#apiambientv1rolebindingsidpatch) | **Patch** /api/ambient/v1/role_bindings/{id} | Update an roleBinding
 *DefaultAPI* | [**ApiAmbientV1RoleBindingsPost**](docs/DefaultAPI.md#apiambientv1rolebindingspost) | **Post** /api/ambient/v1/role_bindings | Create a new roleBinding
 *DefaultAPI* | [**ApiAmbientV1RolesGet**](docs/DefaultAPI.md#apiambientv1rolesget) | **Get** /api/ambient/v1/roles | Returns a list of roles
+*DefaultAPI* | [**ApiAmbientV1RolesIdDelete**](docs/DefaultAPI.md#apiambientv1rolesiddelete) | **Delete** /api/ambient/v1/roles/{id} | Delete a role by id
 *DefaultAPI* | [**ApiAmbientV1RolesIdGet**](docs/DefaultAPI.md#apiambientv1rolesidget) | **Get** /api/ambient/v1/roles/{id} | Get an role by id
 *DefaultAPI* | [**ApiAmbientV1RolesIdPatch**](docs/DefaultAPI.md#apiambientv1rolesidpatch) | **Patch** /api/ambient/v1/roles/{id} | Update an role
 *DefaultAPI* | [**ApiAmbientV1RolesPost**](docs/DefaultAPI.md#apiambientv1rolespost) | **Post** /api/ambient/v1/roles | Create a new role
@@ -137,6 +148,7 @@ Class | Method | HTTP request | Description
  - [AgentList](docs/AgentList.md)
  - [AgentPatchRequest](docs/AgentPatchRequest.md)
  - [AgentSessionList](docs/AgentSessionList.md)
+ - [ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response](docs/ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response.md)
  - [Credential](docs/Credential.md)
  - [CredentialList](docs/CredentialList.md)
  - [CredentialPatchRequest](docs/CredentialPatchRequest.md)
@@ -161,6 +173,9 @@ Class | Method | HTTP request | Description
  - [RoleBindingPatchRequest](docs/RoleBindingPatchRequest.md)
  - [RoleList](docs/RoleList.md)
  - [RolePatchRequest](docs/RolePatchRequest.md)
+ - [ScheduledSession](docs/ScheduledSession.md)
+ - [ScheduledSessionList](docs/ScheduledSessionList.md)
+ - [ScheduledSessionPatchRequest](docs/ScheduledSessionPatchRequest.md)
  - [Session](docs/Session.md)
  - [SessionList](docs/SessionList.md)
  - [SessionMessage](docs/SessionMessage.md)
@@ -209,3 +224,4 @@ Each of these functions takes a value of the given basic type and returns a poin
 ## Author
 
 ambient-code@redhat.com
+

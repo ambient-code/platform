@@ -15,6 +15,8 @@ import (
 	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/ambient/tui/views"
 )
 
 type sdkClientIface interface {
@@ -259,7 +261,7 @@ func buildProjectLines(d DashData) []string {
 	for _, p := range d.Projects {
 		age := ""
 		if p.CreatedAt != nil {
-			age = fmtAge(time.Since(*p.CreatedAt))
+			age = views.FormatAge(time.Since(*p.CreatedAt))
 		}
 		display := p.Name
 		statusStyle := styleGreen
@@ -372,7 +374,7 @@ func (m *Model) renderSessionTile(sess sdktypes.Session, w, msgLines int) []stri
 
 	age := ""
 	if sess.CreatedAt != nil {
-		age = fmtAge(time.Since(*sess.CreatedAt))
+		age = views.FormatAge(time.Since(*sess.CreatedAt))
 	}
 
 	idShort := sess.ID
@@ -563,7 +565,7 @@ func buildStatsLines(d DashData) []string {
 
 	age := "never"
 	if !d.FetchedAt.IsZero() {
-		age = fmtAge(time.Since(d.FetchedAt)) + " ago"
+		age = views.FormatAge(time.Since(d.FetchedAt)) + " ago"
 	}
 
 	lines := []string{
@@ -717,7 +719,7 @@ func fetchSessionSplitDetail(sess sdktypes.Session, msgs []sdktypes.SessionMessa
 	}
 	age := "—"
 	if sess.CreatedAt != nil {
-		age = fmtAge(time.Since(*sess.CreatedAt))
+		age = views.FormatAge(time.Since(*sess.CreatedAt))
 	}
 
 	topLines := []string{
@@ -806,7 +808,7 @@ func fetchProjectSessionsDetail(ctx context.Context, client sdkClientIface, proj
 		}
 		age := "—"
 		if sess.CreatedAt != nil {
-			age = fmtAge(time.Since(*sess.CreatedAt))
+			age = views.FormatAge(time.Since(*sess.CreatedAt))
 		}
 		line := styleBlue.Render(col(sess.Name, 30)) +
 			phaseStyle.Render(col(phase, 14)) +

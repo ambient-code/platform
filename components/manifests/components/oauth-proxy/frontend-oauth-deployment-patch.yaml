@@ -30,6 +30,7 @@ spec:
         - --client-secret-file=/etc/oauth/config/client-secret
         - --cookie-secret-file=/etc/oauth/config/cookie_secret
         - --cookie-expire=23h0m0s
+        - --cookie-refresh=1h
         - --pass-access-token
         - --scope=user:full
         - --openshift-delegate-urls={"/":{"resource":"projects","verb":"list"}}
