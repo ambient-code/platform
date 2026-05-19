@@ -659,10 +659,22 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 func (r *SimpleKubeReconciler) resolveCredentialIDs(ctx context.Context, sdk *sdkclient.Client, projectID string) (map[string]string, error) {
 	result := map[string]string{}
 
-	it := sdk.Credentials().ListAll(ctx, &types.ListOptions{Size: 100})
+	bindingOpts := &types.ListOptions{
+		Size:   100,
+		Search: fmt.Sprintf("scope = 'credential' and project_id = '%s'", projectID),
+	}
+	it := sdk.RoleBindings().ListAll(ctx, bindingOpts)
 	for it.Next() {
-		cred := it.Item()
-		if cred.Provider == "" || cred.ID == "" {
+		rb := it.Item()
+		if rb.CredentialID == nil || *rb.CredentialID == "" {
+			continue
+		}
+		cred, err := sdk.Credentials().Get(ctx, *rb.CredentialID)
+		if err != nil {
+			r.logger.Warn().Err(err).Str("credential_id", *rb.CredentialID).Msg("skipping unresolvable bound credential")
+			continue
+		}
+		if cred.Provider == "" {
 			continue
 		}
 		if _, already := result[cred.Provider]; !already {
@@ -670,10 +682,10 @@ func (r *SimpleKubeReconciler) resolveCredentialIDs(ctx context.Context, sdk *sd
 		}
 	}
 	if err := it.Err(); err != nil {
-		return nil, fmt.Errorf("listing credentials: %w", err)
+		return nil, fmt.Errorf("listing credential bindings for project %s: %w", projectID, err)
 	}
 
-	r.logger.Info().Int("count", len(result)).Msg("resolved credential IDs for session")
+	r.logger.Info().Int("count", len(result)).Str("project", projectID).Msg("resolved project-bound credential IDs")
 	return result, nil
 }
 
