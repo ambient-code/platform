@@ -108,7 +108,7 @@ export async function refreshOIDCTokens(refreshToken: string): Promise<{
   };
 }
 
-export async function getEndSessionUrl(idTokenHint: string, postLogoutRedirectUri: string): Promise<string> {
+export async function getEndSessionUrl(postLogoutRedirectUri: string, idTokenHint?: string): Promise<string> {
   const config = await getOIDCConfig();
   const metadata = config.serverMetadata();
   const endSessionEndpoint = metadata.end_session_endpoint;
@@ -116,7 +116,11 @@ export async function getEndSessionUrl(idTokenHint: string, postLogoutRedirectUr
     return postLogoutRedirectUri;
   }
   const url = new URL(String(endSessionEndpoint));
-  url.searchParams.set("id_token_hint", idTokenHint);
+  if (idTokenHint) {
+    url.searchParams.set("id_token_hint", idTokenHint);
+  } else {
+    url.searchParams.set("client_id", process.env.SSO_CLIENT_ID || "");
+  }
   url.searchParams.set("post_logout_redirect_uri", postLogoutRedirectUri);
   return url.href;
 }
