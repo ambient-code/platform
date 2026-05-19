@@ -1,56 +1,43 @@
-/**
- * React Query hooks for project access keys
- */
-
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import * as keysApi from '../api/keys';
+import { keysAdapter } from '../adapters/keys';
+import type { KeysPort } from '../ports/keys';
+import type { CreateKeyRequest } from '../ports/types';
+import { BACKEND_VERSION } from './query-keys';
 
-// Query key factory
 export const keysKeys = {
-  all: ['keys'] as const,
+  all: [BACKEND_VERSION, 'keys'] as const,
   lists: () => [...keysKeys.all, 'list'] as const,
   list: (projectName: string) => [...keysKeys.lists(), projectName] as const,
 };
 
-/**
- * Hook to list all access keys for a project
- */
-export function useKeys(projectName: string) {
+export function useKeys(projectName: string, port: KeysPort = keysAdapter) {
   return useQuery({
     queryKey: keysKeys.list(projectName),
-    queryFn: () => keysApi.listKeys(projectName),
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    queryFn: () => port.listKeys(projectName),
+    staleTime: 5 * 60 * 1000,
     enabled: !!projectName,
   });
 }
 
-/**
- * Hook to create a new access key
- */
-export function useCreateKey() {
+export function useCreateKey(port: KeysPort = keysAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ projectName, data }: { projectName: string; data: keysApi.CreateKeyRequest }) =>
-      keysApi.createKey(projectName, data),
+    mutationFn: ({ projectName, data }: { projectName: string; data: CreateKeyRequest }) =>
+      port.createKey(projectName, data),
     onSuccess: (_data, variables) => {
-      // Invalidate keys list to refetch
       queryClient.invalidateQueries({ queryKey: keysKeys.list(variables.projectName) });
     },
   });
 }
 
-/**
- * Hook to delete an access key
- */
-export function useDeleteKey() {
+export function useDeleteKey(port: KeysPort = keysAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ projectName, keyId }: { projectName: string; keyId: string }) =>
-      keysApi.deleteKey(projectName, keyId),
+      port.deleteKey(projectName, keyId),
     onSuccess: (_data, variables) => {
-      // Invalidate keys list to refetch
       queryClient.invalidateQueries({ queryKey: keysKeys.list(variables.projectName) });
     },
   });

@@ -40,8 +40,8 @@ func New{{.Resource.Name}}Builder() *{{.Resource.Name}}Builder {
 }
 
 {{range .Resource.Fields}}{{if isWritable .}}
-func (b *{{$.Resource.Name}}Builder) {{.GoName}}(v {{.GoType}}) *{{$.Resource.Name}}Builder {
-	b.resource.{{.GoName}} = v
+func (b *{{$.Resource.Name}}Builder) {{.GoName}}(v {{goBuilderParam .GoType}}) *{{$.Resource.Name}}Builder {
+	b.resource.{{.GoName}} = {{goBuilderAssign .GoType .GoName}}
 	return b
 }
 {{end}}{{- end}}
@@ -50,6 +50,10 @@ func (b *{{.Resource.Name}}Builder) Build() (*{{.Resource.Name}}, error) {
 	{{- if .Required}}
 	{{- if eq .GoType "string"}}
 	if b.resource.{{.GoName}} == "" {
+		b.errors = append(b.errors, fmt.Errorf("{{.Name}} is required"))
+	}
+	{{- else if eq .GoType "*string"}}
+	if b.resource.{{.GoName}} == nil || *b.resource.{{.GoName}} == "" {
 		b.errors = append(b.errors, fmt.Errorf("{{.Name}} is required"))
 	}
 	{{- else if eq .GoType "int32"}}

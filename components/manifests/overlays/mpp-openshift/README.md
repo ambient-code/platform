@@ -78,7 +78,7 @@ The api-server must know the static token so it can recognise the runner as a se
 # The token value must match what was set in Step B
 ```
 
-> **Note:** Step C is currently pending implementation — see the open gap `WatchSessionMessages PERMISSION_DENIED` in `docs/internal/design/control-plane.guide.md`.
+> **Note:** Step C is currently pending implementation — see the open gap `WatchSessionMessages PERMISSION_DENIED` in `workflows/control-plane/control-plane.workflow.md`.
 
 ## Files in This Overlay
 

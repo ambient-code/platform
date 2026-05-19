@@ -1357,6 +1357,46 @@ paths:
       - Bearer: []
       summary: Create a new role
   /api/ambient/v1/roles/{id}:
+    delete:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: Role deleted successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No role with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Delete a role by id
     get:
       parameters:
       - description: The id of record
@@ -1589,6 +1629,46 @@ paths:
       - Bearer: []
       summary: Create a new roleBinding
   /api/ambient/v1/role_bindings/{id}:
+    delete:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: Role binding deleted successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No role binding with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Delete a role binding by id
     get:
       parameters:
       - description: The id of record
@@ -2693,6 +2773,7 @@ paths:
           - gitlab
           - jira
           - google
+          - kubeconfig
           type: string
       responses:
         "200":
@@ -2998,6 +3079,538 @@ paths:
       security:
       - Bearer: []
       summary: Get a decrypted token for a credential
+  /api/ambient/v1/projects/{id}/scheduled-sessions:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledSessionList"
+          description: A JSON array of scheduled session objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of scheduled sessions in a project
+    post:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduledSession"
+        description: Scheduled session data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledSession"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the scheduled session
+      security:
+      - Bearer: []
+      summary: Create a scheduled session in a project
+  /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}:
+    delete:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the scheduled session
+        in: path
+        name: ss_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Scheduled session deleted successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No scheduled session with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Delete a scheduled session
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the scheduled session
+        in: path
+        name: ss_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledSession"
+          description: Scheduled session found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No scheduled session with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get a scheduled session by id
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the scheduled session
+        in: path
+        name: ss_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduledSessionPatchRequest"
+        description: Updated scheduled session data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledSession"
+          description: Scheduled session updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No scheduled session with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating scheduled session
+      security:
+      - Bearer: []
+      summary: Update a scheduled session
+  /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/suspend:
+    post:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the scheduled session
+        in: path
+        name: ss_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledSession"
+          description: Scheduled session suspended
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No scheduled session with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Suspend a scheduled session (sets enabled=false)
+  /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/resume:
+    post:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the scheduled session
+        in: path
+        name: ss_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledSession"
+          description: Scheduled session resumed
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No scheduled session with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Resume a suspended scheduled session (sets enabled=true)
+  /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/trigger:
+    post:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the scheduled session
+        in: path
+        name: ss_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_api_ambient_v1_projects__id__scheduled_sessions__ss_id__trigger_post_200_response"
+          description: Scheduled session triggered
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No scheduled session with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Manually trigger a scheduled session to run immediately
+  /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/runs:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the scheduled session
+        in: path
+        name: ss_id
+        required: true
+        schema:
+          type: string
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionList"
+          description: List of session runs
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No scheduled session with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: List sessions triggered by this scheduled session
 components:
   parameters:
     id:
@@ -3428,6 +4041,8 @@ components:
       - properties:
           name:
             type: string
+          display_name:
+            type: string
           description:
             type: string
           labels:
@@ -3458,6 +4073,7 @@ components:
         annotations: annotations
         id: id
         href: href
+        display_name: display_name
         prompt: prompt
         labels: labels
         status: status
@@ -3484,6 +4100,7 @@ components:
           annotations: annotations
           id: id
           href: href
+          display_name: display_name
           prompt: prompt
           labels: labels
           status: status
@@ -3495,6 +4112,7 @@ components:
           annotations: annotations
           id: id
           href: href
+          display_name: display_name
           prompt: prompt
           labels: labels
           status: status
@@ -3503,11 +4121,14 @@ components:
         name: name
         description: description
         annotations: annotations
+        display_name: display_name
         prompt: prompt
         labels: labels
         status: status
       properties:
         name:
+          type: string
+        display_name:
           type: string
         description:
           type: string
@@ -3875,12 +4496,38 @@ components:
           project_id:
             description: The project this agent belongs to
             type: string
+          parent_agent_id:
+            type: string
+          owner_user_id:
+            type: string
           name:
             description: Human-readable identifier; unique within the project
+            type: string
+          display_name:
+            type: string
+          description:
             type: string
           prompt:
             description: Defines who this agent is. Mutable via PATCH. Access controlled
               by RBAC.
+            type: string
+          repo_url:
+            type: string
+          workflow_id:
+            type: string
+          llm_model:
+            type: string
+          llm_temperature:
+            format: double
+            type: number
+          llm_max_tokens:
+            format: int32
+            type: integer
+          bot_account_name:
+            type: string
+          resource_overrides:
+            type: string
+          environment_variables:
             type: string
           current_session_id:
             description: "Denormalized for fast reads — the active session, if any"
@@ -3901,17 +4548,29 @@ components:
         - project_id
         type: object
       example:
-        updated_at: 2000-01-23T04:56:07.000+00:00
-        project_id: project_id
+        repo_url: repo_url
+        workflow_id: workflow_id
+        llm_model: llm_model
+        resource_overrides: resource_overrides
+        owner_user_id: owner_user_id
         current_session_id: current_session_id
         kind: kind
-        name: name
+        llm_temperature: 5.962133916683182
         created_at: 2000-01-23T04:56:07.000+00:00
+        description: description
         annotations: annotations
+        display_name: display_name
+        llm_max_tokens: 5
+        labels: labels
+        environment_variables: environment_variables
+        parent_agent_id: parent_agent_id
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        project_id: project_id
+        bot_account_name: bot_account_name
+        name: name
         id: id
         href: href
         prompt: prompt
-        labels: labels
     AgentList:
       allOf:
       - $ref: "#/components/schemas/List"
@@ -3927,40 +4586,84 @@ components:
         kind: kind
         page: 0
         items:
-        - updated_at: 2000-01-23T04:56:07.000+00:00
-          project_id: project_id
+        - repo_url: repo_url
+          workflow_id: workflow_id
+          llm_model: llm_model
+          resource_overrides: resource_overrides
+          owner_user_id: owner_user_id
           current_session_id: current_session_id
           kind: kind
-          name: name
+          llm_temperature: 5.962133916683182
           created_at: 2000-01-23T04:56:07.000+00:00
+          description: description
           annotations: annotations
+          display_name: display_name
+          llm_max_tokens: 5
+          labels: labels
+          environment_variables: environment_variables
+          parent_agent_id: parent_agent_id
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          bot_account_name: bot_account_name
+          name: name
           id: id
           href: href
           prompt: prompt
-          labels: labels
-        - updated_at: 2000-01-23T04:56:07.000+00:00
-          project_id: project_id
+        - repo_url: repo_url
+          workflow_id: workflow_id
+          llm_model: llm_model
+          resource_overrides: resource_overrides
+          owner_user_id: owner_user_id
           current_session_id: current_session_id
           kind: kind
-          name: name
+          llm_temperature: 5.962133916683182
           created_at: 2000-01-23T04:56:07.000+00:00
+          description: description
           annotations: annotations
+          display_name: display_name
+          llm_max_tokens: 5
+          labels: labels
+          environment_variables: environment_variables
+          parent_agent_id: parent_agent_id
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          bot_account_name: bot_account_name
+          name: name
           id: id
           href: href
           prompt: prompt
-          labels: labels
     AgentPatchRequest:
       example:
+        repo_url: repo_url
+        llm_model: llm_model
+        llm_temperature: 0.8008281904610115
         name: name
+        description: description
         annotations: annotations
+        display_name: display_name
         prompt: prompt
+        llm_max_tokens: 6
         labels: labels
       properties:
         name:
           type: string
+        display_name:
+          type: string
+        description:
+          type: string
         prompt:
           description: Update agent prompt (access controlled by RBAC)
           type: string
+        repo_url:
+          type: string
+        llm_model:
+          type: string
+        llm_temperature:
+          format: double
+          type: number
+        llm_max_tokens:
+          format: int32
+          type: integer
         labels:
           type: string
         annotations:
@@ -4243,6 +4946,7 @@ components:
             - gitlab
             - jira
             - google
+            - kubeconfig
             type: string
           token:
             description: "Credential token value; write-only, never returned in GET/LIST\
@@ -4341,6 +5045,7 @@ components:
           - gitlab
           - jira
           - google
+          - kubeconfig
           type: string
         token:
           description: "Credential token value; write-only, never returned in GET/LIST\
@@ -4372,6 +5077,7 @@ components:
           - gitlab
           - jira
           - google
+          - kubeconfig
           type: string
         token:
           description: Decrypted token value
@@ -4380,6 +5086,177 @@ components:
       - credential_id
       - provider
       - token
+      type: object
+    ScheduledSession:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          name:
+            description: Human-readable name for the scheduled session
+            type: string
+          description:
+            type: string
+          project_id:
+            description: The project this scheduled session belongs to
+            type: string
+          agent_id:
+            description: Optional agent to run when triggered
+            type: string
+          schedule:
+            description: Cron expression defining the schedule
+            type: string
+          timezone:
+            description: IANA timezone for the schedule (default UTC)
+            type: string
+          enabled:
+            description: Whether the schedule is active
+            type: boolean
+          session_prompt:
+            description: Prompt passed to each triggered session
+            type: string
+          last_run_at:
+            format: date-time
+            type: string
+          next_run_at:
+            format: date-time
+            type: string
+          timeout:
+            description: Session timeout in seconds
+            format: int32
+            type: integer
+          inactivity_timeout:
+            description: Session inactivity timeout in seconds
+            format: int32
+            type: integer
+          stop_on_run_finished:
+            description: Whether to stop the session when the run finishes
+            type: boolean
+          runner_type:
+            description: Runner type override for triggered sessions
+            type: string
+        required:
+        - name
+        - project_id
+        - schedule
+        type: object
+      example:
+        last_run_at: 2000-01-23T04:56:07.000+00:00
+        agent_id: agent_id
+        next_run_at: 2000-01-23T04:56:07.000+00:00
+        kind: kind
+        timezone: timezone
+        created_at: 2000-01-23T04:56:07.000+00:00
+        description: description
+        runner_type: runner_type
+        inactivity_timeout: 5
+        enabled: true
+        timeout: 5
+        schedule: schedule
+        stop_on_run_finished: true
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        project_id: project_id
+        name: name
+        id: id
+        href: href
+        session_prompt: session_prompt
+    ScheduledSessionList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/ScheduledSession"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - last_run_at: 2000-01-23T04:56:07.000+00:00
+          agent_id: agent_id
+          next_run_at: 2000-01-23T04:56:07.000+00:00
+          kind: kind
+          timezone: timezone
+          created_at: 2000-01-23T04:56:07.000+00:00
+          description: description
+          runner_type: runner_type
+          inactivity_timeout: 5
+          enabled: true
+          timeout: 5
+          schedule: schedule
+          stop_on_run_finished: true
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          name: name
+          id: id
+          href: href
+          session_prompt: session_prompt
+        - last_run_at: 2000-01-23T04:56:07.000+00:00
+          agent_id: agent_id
+          next_run_at: 2000-01-23T04:56:07.000+00:00
+          kind: kind
+          timezone: timezone
+          created_at: 2000-01-23T04:56:07.000+00:00
+          description: description
+          runner_type: runner_type
+          inactivity_timeout: 5
+          enabled: true
+          timeout: 5
+          schedule: schedule
+          stop_on_run_finished: true
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          name: name
+          id: id
+          href: href
+          session_prompt: session_prompt
+    ScheduledSessionPatchRequest:
+      example:
+        schedule: schedule
+        stop_on_run_finished: true
+        agent_id: agent_id
+        timezone: timezone
+        name: name
+        description: description
+        runner_type: runner_type
+        inactivity_timeout: 6
+        enabled: true
+        timeout: 0
+        session_prompt: session_prompt
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        agent_id:
+          type: string
+        schedule:
+          type: string
+        timezone:
+          type: string
+        enabled:
+          type: boolean
+        session_prompt:
+          type: string
+        timeout:
+          format: int32
+          type: integer
+        inactivity_timeout:
+          format: int32
+          type: integer
+        stop_on_run_finished:
+          type: boolean
+        runner_type:
+          type: string
+      type: object
+    _api_ambient_v1_projects__id__scheduled_sessions__ss_id__trigger_post_200_response:
+      example:
+        status: status
+      properties:
+        status:
+          type: string
       type: object
   securitySchemes:
     Bearer:

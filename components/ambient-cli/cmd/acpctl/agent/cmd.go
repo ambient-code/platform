@@ -435,7 +435,7 @@ This operation is idempotent — calling it multiple times is safe.`,
 }
 
 func startSingleAgent(ctx context.Context, cmd *cobra.Command, client *sdkclient.Client, projectID, agentID, displayName string) error {
-	resp, err := client.Agents().Start(ctx, projectID, agentID, agentStartArgs.prompt)
+	resp, err := client.Agents().StartInProject(ctx, projectID, agentID, agentStartArgs.prompt)
 	if err != nil {
 		return fmt.Errorf("start agent: %w", err)
 	}

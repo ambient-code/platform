@@ -10,6 +10,7 @@ import type { AgenticSession } from '@/types/agentic-session';
 import { getPhaseColor } from '@/utils/session-helpers';
 import { toast } from 'sonner';
 import { useSessionExport } from '@/services/queries/use-sessions';
+import { useProject } from '@/services/queries';
 import { triggerDownload } from '@/utils/export-chat';
 
 type SessionDetailsModalProps = {
@@ -28,6 +29,8 @@ export function SessionDetailsModal({
   const [exportingAgui, setExportingAgui] = useState(false);
   const [exportingLegacy, setExportingLegacy] = useState(false);
   const sessionName = session.metadata?.name || '';
+  const { data: project } = useProject(projectName);
+  const workspaceName = project?.displayName || projectName;
 
   // Use React Query hook - only fetches when modal is open
   const { data: exportData, isLoading: loadingExport } = useSessionExport(
@@ -67,6 +70,11 @@ export function SessionDetailsModal({
 
         <div className="space-y-4">
           <div className="space-y-3">
+            <div className="flex items-start gap-3">
+              <span className="font-semibold text-foreground/80 min-w-[100px]">Workspace:</span>
+              <span className="text-foreground truncate">{workspaceName}</span>
+            </div>
+
             <div className="flex items-start gap-3">
               <span className="font-semibold text-foreground/80 min-w-[100px]">Status:</span>
               <Badge className={getPhaseColor(session.status?.phase || "Pending")}>

@@ -19,8 +19,8 @@ Review frontend code against documented conventions.
 
 Load these files before running checks:
 
-1. `components/frontend/DEVELOPMENT.md`
-2. `components/frontend/REACT_QUERY_PATTERNS.md`
+1. `specs/standards/frontend/conventions.spec.md`
+2. `specs/standards/frontend/react-query.spec.md`
 3. `components/frontend/DESIGN_GUIDELINES.md` (if it exists)
 
 ## Checks

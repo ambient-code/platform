@@ -217,6 +217,31 @@ func clearAnnotation(sessionNamespace, name, annotationKey string) error {
 	return nil
 }
 
+// NeedsWorkflowReconciliation returns true if the session has an active workflow
+// in its spec but the WorkflowReconciled condition is not True.
+func NeedsWorkflowReconciliation(session *unstructured.Unstructured) bool {
+	spec, _, _ := unstructured.NestedMap(session.Object, "spec")
+	workflow, found, _ := unstructured.NestedMap(spec, "activeWorkflow")
+	if !found || len(workflow) == 0 {
+		return false
+	}
+	gitURL, _ := workflow["gitUrl"].(string)
+	if strings.TrimSpace(gitURL) == "" {
+		return false
+	}
+
+	status, _, _ := unstructured.NestedMap(session.Object, "status")
+	conditions, _ := status["conditions"].([]interface{})
+	for _, c := range conditions {
+		if cond, ok := c.(map[string]interface{}); ok {
+			if condType, _ := cond["type"].(string); strings.EqualFold(condType, conditionWorkflowReconciled) {
+				return cond["status"] != "True"
+			}
+		}
+	}
+	return true
+}
+
 // setCondition upserts a condition entry on the provided status map.
 func setCondition(status map[string]interface{}, update conditionUpdate) {
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -323,6 +348,21 @@ func ensureFreshRunnerToken(ctx context.Context, session *unstructured.Unstructu
 
 	log.Printf("Refreshed runner token for session %s/%s", namespace, session.GetName())
 	return nil
+}
+
+// runnerSessionToken reads the agui-token from the runner token secret.
+// This token must be sent as X-Ambient-Session-Token on all operator→runner
+// HTTP calls; the runner middleware rejects unauthenticated requests with 401.
+func runnerSessionToken(namespace, sessionName string) string {
+	secretName := fmt.Sprintf("%s%s", defaultRunnerTokenSecretPrefix, sessionName)
+	secret, err := config.K8sClient.CoreV1().Secrets(namespace).Get(
+		context.TODO(), secretName, v1.GetOptions{},
+	)
+	if err != nil {
+		log.Printf("[Runner] Warning: could not read agui-token for session %s/%s: %v", namespace, sessionName, err)
+		return ""
+	}
+	return strings.TrimSpace(string(secret.Data["agui-token"]))
 }
 
 var vertexDeprecationOnce sync.Once

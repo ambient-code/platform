@@ -1,35 +1,44 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import * as mcpCredentialsApi from '../api/mcp-credentials'
+import { mcpCredentialsAdapter } from '../adapters/mcp-credentials'
+import type { McpCredentialsPort } from '../ports/mcp-credentials'
+import type { MCPConnectRequest } from '../ports/types'
+import { BACKEND_VERSION } from './query-keys'
+import { integrationsKeys } from './use-integrations'
 
-export function useMCPServerStatus(serverName: string) {
+export const mcpCredentialsKeys = {
+  all: [BACKEND_VERSION, 'mcp-credentials'] as const,
+  status: (serverName: string) => [...mcpCredentialsKeys.all, serverName, 'status'] as const,
+};
+
+export function useMCPServerStatus(serverName: string, port: McpCredentialsPort = mcpCredentialsAdapter) {
   return useQuery({
-    queryKey: ['mcp-credentials', serverName, 'status'],
-    queryFn: () => mcpCredentialsApi.getMCPServerStatus(serverName),
+    queryKey: mcpCredentialsKeys.status(serverName),
+    queryFn: () => port.getMCPServerStatus(serverName),
     enabled: !!serverName,
   })
 }
 
-export function useConnectMCPServer(serverName: string) {
+export function useConnectMCPServer(serverName: string, port: McpCredentialsPort = mcpCredentialsAdapter) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: mcpCredentialsApi.MCPConnectRequest) =>
-      mcpCredentialsApi.connectMCPServer(serverName, data),
+    mutationFn: (data: MCPConnectRequest) =>
+      port.connectMCPServer(serverName, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['mcp-credentials', serverName, 'status'] })
-      queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] })
+      queryClient.invalidateQueries({ queryKey: mcpCredentialsKeys.status(serverName) })
+      queryClient.invalidateQueries({ queryKey: integrationsKeys.status() })
     },
   })
 }
 
-export function useDisconnectMCPServer(serverName: string) {
+export function useDisconnectMCPServer(serverName: string, port: McpCredentialsPort = mcpCredentialsAdapter) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: () => mcpCredentialsApi.disconnectMCPServer(serverName),
+    mutationFn: () => port.disconnectMCPServer(serverName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['mcp-credentials', serverName, 'status'] })
-      queryClient.invalidateQueries({ queryKey: ['integrations', 'status'] })
+      queryClient.invalidateQueries({ queryKey: mcpCredentialsKeys.status(serverName) })
+      queryClient.invalidateQueries({ queryKey: integrationsKeys.status() })
     },
   })
 }
