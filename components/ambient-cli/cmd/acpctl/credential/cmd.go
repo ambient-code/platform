@@ -9,6 +9,7 @@ import (
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/output"
+	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
 	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	"github.com/spf13/cobra"
 )
@@ -103,7 +104,11 @@ var getCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 		defer cancel()
 
-		credential, err := client.Credentials().Get(ctx, args[0])
+		credID, err := resolveCredentialID(ctx, client, args[0])
+		if err != nil {
+			return err
+		}
+		credential, err := client.Credentials().Get(ctx, credID)
 		if err != nil {
 			return fmt.Errorf("get credential %q: %w", args[0], err)
 		}
@@ -187,7 +192,7 @@ var createCmd = &cobra.Command{
 			return fmt.Errorf("build credential: %w", err)
 		}
 
-		created, err := client.Credentials().Create(ctx, cred)
+		created, err := client.Credentials().CreateCompat(ctx, cred)
 		if err != nil {
 			return fmt.Errorf("create credential: %w", err)
 		}
@@ -259,7 +264,11 @@ var updateCmd = &cobra.Command{
 			patch = patch.Annotations(updateArgs.annotations)
 		}
 
-		updated, err := client.Credentials().Update(ctx, args[0], patch.Build())
+		credID, err := resolveCredentialID(ctx, client, args[0])
+		if err != nil {
+			return err
+		}
+		updated, err := client.Credentials().Update(ctx, credID, patch.Build())
 		if err != nil {
 			return fmt.Errorf("update credential: %w", err)
 		}
@@ -296,7 +305,11 @@ var deleteCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 		defer cancel()
 
-		if err := client.Credentials().Delete(ctx, args[0]); err != nil {
+		credID, err := resolveCredentialID(ctx, client, args[0])
+		if err != nil {
+			return err
+		}
+		if err := client.Credentials().Delete(ctx, credID); err != nil {
 			return fmt.Errorf("delete credential: %w", err)
 		}
 
@@ -329,7 +342,11 @@ var tokenCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 		defer cancel()
 
-		resp, err := client.Credentials().GetToken(ctx, args[0])
+		credID, err := resolveCredentialID(ctx, client, args[0])
+		if err != nil {
+			return err
+		}
+		resp, err := client.Credentials().GetToken(ctx, credID)
 		if err != nil {
 			return fmt.Errorf("get token for credential %q: %w", args[0], err)
 		}
@@ -449,6 +466,18 @@ func init() {
 	tokenCmd.Flags().StringVarP(&tokenArgs.outputFormat, "output", "o", "", "Output format: json")
 
 	bindCmd.Flags().StringVar(&bindArgs.project, "project", "", "Project to bind the credential to (required)")
+}
+
+func resolveCredentialID(ctx context.Context, client *sdkclient.Client, nameOrID string) (string, error) {
+	cred, err := client.Credentials().Get(ctx, nameOrID)
+	if err == nil {
+		return cred.ID, nil
+	}
+	cred, err = client.Credentials().FindByName(ctx, nameOrID)
+	if err != nil {
+		return "", fmt.Errorf("credential %q not found by ID or name", nameOrID)
+	}
+	return cred.ID, nil
 }
 
 func printCredentialTable(printer *output.Printer, credentials []sdktypes.Credential) error {

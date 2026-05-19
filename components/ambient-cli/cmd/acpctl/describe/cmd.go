@@ -102,7 +102,10 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 	case "credential", "credentials", "cred", "creds":
 		cred, err := client.Credentials().Get(ctx, name)
 		if err != nil {
-			return fmt.Errorf("describe credential %q: %w", name, err)
+			cred, err = client.Credentials().FindByName(ctx, name)
+			if err != nil {
+				return fmt.Errorf("describe credential %q: %w", name, err)
+			}
 		}
 		return printer.PrintJSON(cred)
 

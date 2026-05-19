@@ -132,7 +132,11 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		return nil
 
 	case "credential", "credentials", "cred", "creds":
-		if err := client.Credentials().Delete(ctx, name); err != nil {
+		deleteID := name
+		if cred, findErr := client.Credentials().FindByName(ctx, name); findErr == nil {
+			deleteID = cred.ID
+		}
+		if err := client.Credentials().Delete(ctx, deleteID); err != nil {
 			return fmt.Errorf("delete credential %q: %w", name, err)
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "credential/%s deleted\n", name)

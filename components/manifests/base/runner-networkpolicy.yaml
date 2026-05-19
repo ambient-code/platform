@@ -1,15 +1,25 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-from-runner-namespaces
+  name: allow-platform-ingress
 spec:
   podSelector: {}
   policyTypes:
-  - Ingress
+    - Ingress
   ingress:
-  - {}
-  - from:
-    - namespaceSelector: {}
-      podSelector:
-        matchLabels:
-          app: ambient-code-runner
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              policy-group.network.openshift.io/ingress: ""
+    - from:
+        - podSelector: {}
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app: ambient-code-runner
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              ambient-code.io/managed: "true"

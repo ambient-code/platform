@@ -43,8 +43,15 @@ RUN pip3 install --break-system-packages --no-cache-dir '/app/ambient-runner[all
 RUN npm install -g @google/gemini-cli@${GEMINI_CLI_VERSION} && \
     npm cache clean --force
 
-# Install CodeRabbit CLI (official install script, binary for current arch)
-RUN curl -fsSL https://cli.coderabbit.ai/install.sh | CODERABBIT_INSTALL_DIR=/usr/local/bin sh
+# Install CodeRabbit CLI (direct binary download, pinned version)
+ARG CODERABBIT_VERSION=0.5.0
+RUN ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/') && \
+    curl -fsSL "https://cli.coderabbit.ai/releases/${CODERABBIT_VERSION}/coderabbit-linux-${ARCH}.zip" \
+         -o /tmp/coderabbit.zip && \
+    unzip -q /tmp/coderabbit.zip -d /usr/local/bin && \
+    chmod +x /usr/local/bin/coderabbit && \
+    ln -sf /usr/local/bin/coderabbit /usr/local/bin/cr && \
+    rm -f /tmp/coderabbit.zip
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1

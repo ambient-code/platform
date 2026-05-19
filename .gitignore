@@ -138,6 +138,7 @@ scripts/feedback-loop/.last-run
 **/minio-credentials-secret.yaml
 **/postgresql-credentials-secret.yaml
 **/unleash-credentials-secret.yaml
+.secrets/
 
 # One-off analysis and experiments
 repomix-analysis/

@@ -118,11 +118,8 @@ async def _fetch_credential(context: RunnerContext, credential_type: str) -> dic
     project = os.getenv("PROJECT_NAME") or os.getenv("AGENTIC_SESSION_NAMESPACE", "")
     project = project.strip()
 
-    if credential_id and project:
-        url = (
-            f"{base}/api/ambient/v1/projects/{project}"
-            f"/credentials/{credential_id}/token"
-        )
+    if credential_id:
+        url = f"{base}/api/ambient/v1/credentials/{credential_id}/token"
     elif project and context.session_id:
         url = (
             f"{base}/projects/{project}"

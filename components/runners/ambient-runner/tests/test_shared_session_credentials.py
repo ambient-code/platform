@@ -511,7 +511,7 @@ class TestFetchCredentialOperatorPath:
 
             assert result.get("token") == "gh-tok-cp"
             assert captured["path"] == (
-                "/api/ambient/v1/projects/my-project/credentials/cred-abc/token"
+                "/api/ambient/v1/credentials/cred-abc/token"
             )
         finally:
             server.server_close()
