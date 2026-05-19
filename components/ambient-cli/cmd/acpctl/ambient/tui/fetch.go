@@ -152,13 +152,17 @@ func appendErr(d *DashData, msg string) {
 }
 
 func kubectlGetPods() []PodRow {
-	out, err := runCmd("kubectl", "get", "pods",
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	out, err := runCmd(ctx, "kubectl", "get", "pods",
 		"-n", "ambient-code",
 		"--no-headers",
 		"-o", "wide",
 	)
 	if err != nil {
-		out2, err2 := runCmd("oc", "get", "pods",
+		ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel2()
+		out2, err2 := runCmd(ctx2, "oc", "get", "pods",
 			"-n", "ambient-code",
 			"--no-headers",
 			"-o", "wide",
@@ -172,9 +176,13 @@ func kubectlGetPods() []PodRow {
 }
 
 func kubectlGetNamespaces() []NamespaceRow {
-	out, err := runCmd("kubectl", "get", "namespaces", "--no-headers")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	out, err := runCmd(ctx, "kubectl", "get", "namespaces", "--no-headers")
 	if err != nil {
-		out2, err2 := runCmd("oc", "get", "namespaces", "--no-headers")
+		ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel2()
+		out2, err2 := runCmd(ctx2, "oc", "get", "namespaces", "--no-headers")
 		if err2 != nil {
 			return nil
 		}
@@ -183,8 +191,8 @@ func kubectlGetNamespaces() []NamespaceRow {
 	return parseNamespaceLines(out)
 }
 
-func runCmd(name string, args ...string) (string, error) {
-	cmd := exec.Command(name, args...)
+func runCmd(ctx context.Context, name string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {

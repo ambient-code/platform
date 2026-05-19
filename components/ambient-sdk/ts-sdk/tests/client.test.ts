@@ -22,20 +22,31 @@ describe('AmbientClient construction', () => {
     })).toThrow('baseUrl is required');
   });
 
-  it('throws when token is missing', () => {
-    expect(() => new AmbientClient({
+  it('creates client without token (browser mode)', () => {
+    const client = new AmbientClient({
       baseUrl: 'https://api.ambient-platform.com',
-      token: '',
-      project: 'test-project',
-    })).toThrow('token is required');
+    });
+    expect(client).toBeDefined();
+    expect(client.sessions).toBeDefined();
   });
 
-  it('throws when project is missing', () => {
-    expect(() => new AmbientClient({
+  it('creates client without project', () => {
+    const client = new AmbientClient({
       baseUrl: 'https://api.ambient-platform.com',
       token: 'sha256~abcdefghijklmnopqrstuvwxyz1234567890',
-      project: '',
-    })).toThrow('project is required');
+    });
+    expect(client).toBeDefined();
+    expect(client.sessions).toBeDefined();
+  });
+
+  it('creates client with relative baseUrl', () => {
+    const client = new AmbientClient({
+      baseUrl: '/api/proxy',
+      token: 'sha256~abcdefghijklmnopqrstuvwxyz1234567890',
+      project: 'test-project',
+    });
+    expect(client).toBeDefined();
+    expect(client.sessions).toBeDefined();
   });
 
   it('strips trailing slashes from baseUrl', () => {
@@ -45,6 +56,14 @@ describe('AmbientClient construction', () => {
       project: 'test-project',
     });
     expect(client).toBeDefined();
+  });
+
+  it('rejects protocol-relative URLs', () => {
+    expect(() => new AmbientClient({
+      baseUrl: '//evil.com/path',
+      token: 'sha256~abcdefghijklmnopqrstuvwxyz1234567890',
+      project: 'test-project',
+    })).toThrow('Protocol-relative URLs are not allowed for baseUrl');
   });
 });
 
@@ -61,7 +80,7 @@ describe('AmbientClient.fromEnv', () => {
 
   it('creates client from environment variables', () => {
     process.env.AMBIENT_API_URL = 'https://api.test.com';
-    process.env.AMBIENT_TOKEN = 'sha256~testtoken123';
+    process.env.AMBIENT_TOKEN = 'sha256~abcdefghijklmnopqrstuvwxyz1234567890';
     process.env.AMBIENT_PROJECT = 'my-project';
     const client = AmbientClient.fromEnv();
     expect(client).toBeDefined();
@@ -74,10 +93,12 @@ describe('AmbientClient.fromEnv', () => {
     expect(() => AmbientClient.fromEnv()).toThrow('AMBIENT_TOKEN environment variable is required');
   });
 
-  it('throws when AMBIENT_PROJECT is missing', () => {
+  it('creates client when AMBIENT_PROJECT is missing', () => {
     process.env.AMBIENT_TOKEN = 'sha256~abcdefghijklmnopqrstuvwxyz1234567890';
     delete process.env.AMBIENT_PROJECT;
-    expect(() => AmbientClient.fromEnv()).toThrow('AMBIENT_PROJECT environment variable is required');
+    const client = AmbientClient.fromEnv();
+    expect(client).toBeDefined();
+    expect(client.sessions).toBeDefined();
   });
 });
 

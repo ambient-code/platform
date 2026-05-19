@@ -32,14 +32,14 @@ export function ContentTabs({
   const isChatActive = activeTab.type === "chat";
 
   return (
-    <div className="flex items-center border-b bg-muted/30 px-3 h-10">
-      <div className="flex items-center gap-0.5 flex-1 overflow-x-auto">
+    <div className="flex items-center border-b bg-muted/30 px-2 md:px-3 h-11 md:h-10">
+      <div className="flex items-center gap-0.5 flex-1 overflow-x-auto scrollbar-hide">
         {/* Chat tab — always present, not closable */}
         <button
           type="button"
           onClick={onSwitchToChat}
           className={cn(
-            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-sm font-medium transition-colors whitespace-nowrap",
+            "inline-flex items-center gap-1.5 px-3 py-2 md:py-1.5 rounded-sm text-sm font-medium transition-colors whitespace-nowrap min-h-[36px] md:min-h-0",
             isChatActive
               ? "bg-background text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -66,14 +66,14 @@ export function ContentTabs({
               <button
                 type="button"
                 onClick={() => onSwitchToFile(tab.path)}
-                className="pl-3 py-1.5 font-medium"
+                className="pl-3 py-2 md:py-1.5 font-medium min-h-[36px] md:min-h-0"
               >
                 {tab.name}
               </button>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-5 w-5 mr-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="h-6 w-6 md:h-5 md:w-5 mr-1 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity"
                 onClick={(e) => {
                   e.stopPropagation();
                   onCloseFile(tab.path);
@@ -103,7 +103,7 @@ export function ContentTabs({
               <button
                 type="button"
                 onClick={() => onSwitchToTask?.(tab.taskId)}
-                className="pl-3 py-1.5 font-medium inline-flex items-center gap-1.5"
+                className="pl-3 py-2 md:py-1.5 font-medium inline-flex items-center gap-1.5 min-h-[36px] md:min-h-0"
               >
                 <StatusIcon status={tab.status} className="h-3.5 w-3.5 flex-shrink-0" />
                 <span className="truncate max-w-[120px]">{tab.name}</span>
@@ -111,7 +111,7 @@ export function ContentTabs({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-5 w-5 mr-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="h-6 w-6 md:h-5 md:w-5 mr-1 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity"
                 onClick={(e) => {
                   e.stopPropagation();
                   onCloseTask?.(tab.taskId);

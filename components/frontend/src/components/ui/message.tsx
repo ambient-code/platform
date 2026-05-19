@@ -4,10 +4,12 @@ import React from "react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
 import type { Components } from "react-markdown";
 import { formatTimestamp } from "@/lib/format-timestamp";
 import { useLoadingTips } from "@/services/queries/use-loading-tips";
 import { DEFAULT_LOADING_TIPS } from "@/lib/loading-tips";
+import { sharedMarkdownComponents } from "@/lib/markdown-components";
 
 export type MessageRole = "bot" | "user";
 
@@ -35,77 +37,7 @@ export type MessageProps = {
   currentUserId?: string;
 };
 
-const defaultComponents: Components = {
-  code: ({
-    inline,
-    className,
-    children,
-    ...props
-  }: {
-    inline?: boolean;
-    className?: string;
-    children?: React.ReactNode;
-  } & React.HTMLAttributes<HTMLElement>) => {
-    // Convert children to string to check length
-    const codeContent = String(children || '');
-    const isShortCode = codeContent.length <= 50 && !codeContent.includes('\n');
-
-    // Treat short code blocks as inline
-    if (inline || isShortCode) {
-      return (
-        <code
-          className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono"
-          {...(props as React.HTMLAttributes<HTMLElement>)}
-        >
-          {children}
-        </code>
-      );
-    }
-
-    // Full code blocks for longer content
-    return (
-      <pre className="bg-muted text-foreground py-3 rounded text-xs overflow-x-auto border my-2">
-        <code
-          className={className}
-          {...(props as React.HTMLAttributes<HTMLElement>)}
-        >
-          {children}
-        </code>
-      </pre>
-    );
-  },
-  p: ({ children }) => (
-    <div className="text-muted-foreground leading-relaxed mb-[0.2rem] text-sm">{children}</div>
-  ),
-  h1: ({ children }) => (
-    <h1 className="text-lg font-bold text-foreground mb-2">{children}</h1>
-  ),
-  h2: ({ children }) => (
-    <h2 className="text-md font-semibold text-foreground mb-2">{children}</h2>
-  ),
-  h3: ({ children }) => (
-    <h3 className="text-sm font-medium text-foreground mb-1">{children}</h3>
-  ),
-  ul: ({ children }) => (
-    <ul className="list-disc list-outside ml-4 mb-2 space-y-1 text-muted-foreground text-sm">{children}</ul>
-  ),
-  ol: ({ children }) => (
-    <ol className="list-decimal list-outside ml-4 mb-2 space-y-1 text-muted-foreground text-sm">{children}</ol>
-  ),
-  li: ({ children }) => (
-    <li className="leading-relaxed">{children}</li>
-  ),
-  a: ({ href, children }) => (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-primary hover:underline cursor-pointer"
-    >
-      {children}
-    </a>
-  ),
-};
+const defaultComponents: Components = sharedMarkdownComponents;
 
 /**
  * Extract initials from a display name (e.g., "John Doe" → "JD", "alice" → "A")
@@ -311,16 +243,17 @@ export const Message = React.forwardRef<HTMLDivElement, MessageProps>(
               !borderless && (isBot ? "bg-card" : "bg-primary/10 dark:bg-primary/15")
             )}>
               {/* Content */}
-              <div className={cn("text-sm text-foreground font-mono", !isBot && "py-2 px-4")}>
+              <div className={cn("text-sm text-foreground", !isBot && "py-2 px-4")}>
                 {isLoading ? (
                   <div>
                     <div className="text-sm text-muted-foreground mb-2">{content}</div>
                     <LoadingDots />
                   </div>
                 ) : (
-                  <div className="inline">
+                  <div className="w-full">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[rehypeHighlight]}
                       components={components || defaultComponents}
                     >
                       {content}

@@ -18,6 +18,9 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 - `components/manifests/` - Kustomize-based deployment manifests and overlays
 - `e2e/` - Cypress end-to-end tests
 - `docs/` - Astro Starlight documentation site
+- `specs/` - Desired state of the system ([sessions](specs/sessions/), [agents](specs/agents/), [control-plane](specs/control-plane/), [integrations](specs/integrations/), [standards](specs/standards/))
+- `workflows/` - Agent-consumable procedures ([sessions](workflows/sessions/), [control-plane](workflows/control-plane/), [integrations](workflows/integrations/))
+- `skills/` - [Agent Skills](https://agentskills.io) (`.claude/skills` symlinks here; domain symlinks in `specs/{domain}/.agents/skills`)
 
 ## Key Files
 
@@ -91,7 +94,7 @@ Benchmark notes:
 ## Critical Conventions
 
 Cross-cutting rules that apply across ALL components. Component-specific conventions live in
-component DEVELOPMENT.md files (see [BOOKMARKS.md](BOOKMARKS.md) > Component Development Guides).
+[specs/standards/](specs/standards/) (see [BOOKMARKS.md](BOOKMARKS.md) > Component Standards).
 
 - **User token auth required**: All user-facing API ops use `GetK8sClientsForRequest(c)`, never the backend service account
 - **No tokens in logs/errors/responses**: Use `len(token)` for logging, generic messages to users
@@ -123,10 +126,10 @@ component DEVELOPMENT.md files (see [BOOKMARKS.md](BOOKMARKS.md) > Component Dev
 - **Restricted SecurityContext on all containers**: `runAsNonRoot`, drop `ALL` capabilities, `readOnlyRootFilesystem`
 
 Component-specific conventions:
-- Backend: [DEVELOPMENT.md](components/backend/DEVELOPMENT.md), [ERROR_PATTERNS.md](components/backend/ERROR_PATTERNS.md), [K8S_CLIENT_PATTERNS.md](components/backend/K8S_CLIENT_PATTERNS.md)
-- Frontend: [DEVELOPMENT.md](components/frontend/DEVELOPMENT.md), [REACT_QUERY_PATTERNS.md](components/frontend/REACT_QUERY_PATTERNS.md)
-- Operator: [DEVELOPMENT.md](components/operator/DEVELOPMENT.md)
-- Security: [security-standards.md](docs/security-standards.md)
+- Backend: [conventions](specs/standards/backend/conventions.spec.md), [error handling](specs/standards/backend/error-handling.spec.md), [K8s client](specs/standards/backend/k8s-client.spec.md)
+- Frontend: [conventions](specs/standards/frontend/conventions.spec.md), [React Query](specs/standards/frontend/react-query.spec.md)
+- Operator: [conventions](specs/standards/control-plane/conventions.spec.md)
+- Security: [security standards](specs/standards/security/security.spec.md)
 
 ## Pre-commit Hooks
 
@@ -141,7 +144,7 @@ Configured in `.pre-commit-config.yaml`. Install: `make setup-hooks`. Run all: `
 Before running `gh pr create`, agents MUST self-review their changes:
 
 1. Review the diff against conventions in this file and [BOOKMARKS.md](BOOKMARKS.md)
-2. Verify the changes follow patterns documented in `.claude/patterns/` and `.claude/context/`
+2. Verify the changes follow patterns documented in `specs/standards/`
 3. Check that no `panic()` calls exist in production Go code (use `fmt.Errorf`)
 4. Check that no `any` types exist in frontend TypeScript (use proper types, `unknown`, or generics)
 5. Ensure all new API endpoints have corresponding frontend proxy routes

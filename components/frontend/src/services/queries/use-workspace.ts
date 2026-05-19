@@ -1,15 +1,11 @@
-/**
- * React Query hooks for workspace operations
- */
-
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import * as workspaceApi from '../api/workspace';
+import { sessionWorkspaceAdapter } from '../adapters/session-workspace';
+import type { SessionWorkspacePort } from '../ports/session-workspace';
+import { BACKEND_VERSION } from './query-keys';
+import { sessionKeys } from './use-sessions';
 
-/**
- * Query keys for workspace
- */
 export const workspaceKeys = {
-  all: ['workspace'] as const,
+  all: [BACKEND_VERSION, 'workspace'] as const,
   lists: () => [...workspaceKeys.all, 'list'] as const,
   list: (projectName: string, sessionName: string, path?: string) =>
     [...workspaceKeys.lists(), projectName, sessionName, path] as const,
@@ -21,46 +17,39 @@ export const workspaceKeys = {
     [...workspaceKeys.diffs(), projectName, sessionName, repoIndex] as const,
 };
 
-/**
- * Hook to list workspace directory
- */
 export function useWorkspaceList(
   projectName: string,
   sessionName: string,
   path?: string,
-  options?: { enabled?: boolean }
+  options?: { enabled?: boolean },
+  port: SessionWorkspacePort = sessionWorkspaceAdapter,
 ) {
   return useQuery({
     queryKey: workspaceKeys.list(projectName, sessionName, path),
-    queryFn: () => workspaceApi.listWorkspace(projectName, sessionName, path),
+    queryFn: () => port.listWorkspace(projectName, sessionName, path),
     enabled: !!projectName && !!sessionName && (options?.enabled ?? true),
-    staleTime: 5 * 1000, // 5 seconds
+    staleTime: 5 * 1000,
   });
 }
 
-/**
- * Hook to read workspace file
- */
 export function useWorkspaceFile(
   projectName: string,
   sessionName: string,
   path: string,
-  options?: { enabled?: boolean; refetchInterval?: number | false; refetchOnMount?: boolean }
+  options?: { enabled?: boolean; refetchInterval?: number | false; refetchOnMount?: boolean },
+  port: SessionWorkspacePort = sessionWorkspaceAdapter,
 ) {
   return useQuery({
     queryKey: workspaceKeys.file(projectName, sessionName, path),
-    queryFn: () => workspaceApi.readWorkspaceFile(projectName, sessionName, path),
+    queryFn: () => port.readFile(projectName, sessionName, path),
     enabled: !!projectName && !!sessionName && !!path && (options?.enabled ?? true),
-    staleTime: 10 * 1000, // 10 seconds
+    staleTime: 10 * 1000,
     refetchInterval: options?.refetchInterval,
     refetchOnMount: options?.refetchOnMount,
   });
 }
 
-/**
- * Hook to write workspace file
- */
-export function useWriteWorkspaceFile() {
+export function useWriteWorkspaceFile(port: SessionWorkspacePort = sessionWorkspaceAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -74,13 +63,11 @@ export function useWriteWorkspaceFile() {
       sessionName: string;
       path: string;
       content: string;
-    }) => workspaceApi.writeWorkspaceFile(projectName, sessionName, path, content),
+    }) => port.writeFile(projectName, sessionName, path, content),
     onSuccess: (_data, { projectName, sessionName, path }) => {
-      // Invalidate the specific file
       queryClient.invalidateQueries({
         queryKey: workspaceKeys.file(projectName, sessionName, path),
       });
-      // Invalidate parent directory listing
       const parentPath = path.split('/').slice(0, -1).join('/');
       queryClient.invalidateQueries({
         queryKey: workspaceKeys.list(projectName, sessionName, parentPath || undefined),
@@ -89,34 +76,29 @@ export function useWriteWorkspaceFile() {
   });
 }
 
-/**
- * Hook to get GitHub diff for a session repo
- */
 export function useSessionGitHubDiff(
   projectName: string,
   sessionName: string,
   repoIndex: number,
   repoPath: string,
-  options?: { enabled?: boolean }
+  options?: { enabled?: boolean },
+  port: SessionWorkspacePort = sessionWorkspaceAdapter,
 ) {
   return useQuery({
     queryKey: workspaceKeys.diff(projectName, sessionName, repoIndex),
-    queryFn: () =>
-      workspaceApi.getSessionGitHubDiff(projectName, sessionName, repoIndex, repoPath),
+    queryFn: () => port.getGitHubDiff(projectName, sessionName, repoIndex, repoPath),
     enabled: !!projectName && !!sessionName && (options?.enabled ?? true),
-    staleTime: 10 * 1000, // 10 seconds
+    staleTime: 10 * 1000,
   });
 }
 
-/**
- * Hook to fetch all GitHub diffs for session repos
- */
 export function useAllSessionGitHubDiffs(
   projectName: string,
   sessionName: string,
   repos: Array<{ input: { url: string; branch: string }; output?: { url: string; branch: string } }> | undefined,
   deriveRepoFolder: (url: string) => string,
-  options?: { enabled?: boolean; sessionPhase?: string }
+  options?: { enabled?: boolean; sessionPhase?: string },
+  port: SessionWorkspacePort = sessionWorkspaceAdapter,
 ) {
   const queryClient = useQueryClient();
 
@@ -127,7 +109,7 @@ export function useAllSessionGitHubDiffs(
 
       const diffs = await Promise.all(
         repos.map(async (repo, idx) => {
-          const url = repo?.input?.url || "";
+          const url = repo?.input?.url || '';
           if (!url) return { idx, diff: { files: { added: 0, removed: 0 }, total_added: 0, total_removed: 0 } };
 
           const folder = deriveRepoFolder(url);
@@ -136,7 +118,7 @@ export function useAllSessionGitHubDiffs(
           try {
             const diff = await queryClient.fetchQuery({
               queryKey: workspaceKeys.diff(projectName, sessionName, idx),
-              queryFn: () => workspaceApi.getSessionGitHubDiff(projectName, sessionName, idx, repoPath),
+              queryFn: () => port.getGitHubDiff(projectName, sessionName, idx, repoPath),
             });
             return { idx, diff };
           } catch {
@@ -152,30 +134,23 @@ export function useAllSessionGitHubDiffs(
       return totals;
     },
     enabled: !!projectName && !!sessionName && !!repos && (options?.enabled ?? true),
-    staleTime: 10 * 1000, // 10 seconds
-    // Poll for diff updates based on session phase
+    staleTime: 10 * 1000,
     refetchInterval: () => {
       const phase = options?.sessionPhase;
-      // Transitional states - poll more frequently
       const isTransitioning =
         phase === 'Stopping' ||
         phase === 'Pending' ||
         phase === 'Creating';
       if (isTransitioning) return 5000;
 
-      // Running state - poll normally
       if (phase === 'Running') return 10000;
 
-      // Terminal states - no polling
       return false;
     },
   });
 }
 
-/**
- * Hook to push session changes to GitHub
- */
-export function usePushSessionToGitHub() {
+export function usePushSessionToGitHub(port: SessionWorkspacePort = sessionWorkspaceAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -189,24 +164,19 @@ export function usePushSessionToGitHub() {
       sessionName: string;
       repoIndex: number;
       repoPath: string;
-    }) => workspaceApi.pushSessionToGitHub(projectName, sessionName, repoIndex, repoPath),
+    }) => port.pushToGitHub(projectName, sessionName, repoIndex, repoPath),
     onSuccess: (_data, { projectName, sessionName, repoIndex }) => {
-      // Invalidate diff to show changes were pushed
       queryClient.invalidateQueries({
         queryKey: workspaceKeys.diff(projectName, sessionName, repoIndex),
       });
-      // Invalidate session to update status
       queryClient.invalidateQueries({
-        queryKey: ['sessions', 'detail', projectName, sessionName],
+        queryKey: sessionKeys.detail(projectName, sessionName),
       });
     },
   });
 }
 
-/**
- * Hook to abandon session changes
- */
-export function useAbandonSessionChanges() {
+export function useAbandonSessionChanges(port: SessionWorkspacePort = sessionWorkspaceAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -220,13 +190,11 @@ export function useAbandonSessionChanges() {
       sessionName: string;
       repoIndex: number;
       repoPath: string;
-    }) => workspaceApi.abandonSessionChanges(projectName, sessionName, repoIndex, repoPath),
+    }) => port.abandonChanges(projectName, sessionName, repoIndex, repoPath),
     onSuccess: (_data, { projectName, sessionName, repoIndex }) => {
-      // Invalidate diff to show changes were abandoned
       queryClient.invalidateQueries({
         queryKey: workspaceKeys.diff(projectName, sessionName, repoIndex),
       });
-      // Invalidate workspace to refresh file listing
       queryClient.invalidateQueries({
         queryKey: workspaceKeys.lists(),
       });
@@ -234,30 +202,23 @@ export function useAbandonSessionChanges() {
   });
 }
 
-/**
- * Hook to get git merge status
- */
 export function useGitMergeStatus(
   projectName: string,
   sessionName: string,
   path: string = 'artifacts',
   branch: string = 'main',
-  enabled: boolean = true
+  enabled: boolean = true,
+  port: SessionWorkspacePort = sessionWorkspaceAdapter,
 ) {
   return useQuery({
     queryKey: [...workspaceKeys.all, 'git-merge-status', projectName, sessionName, path, branch],
-    queryFn: () => workspaceApi.getGitMergeStatus(projectName, sessionName, path, branch),
+    queryFn: () => port.getGitMergeStatus(projectName, sessionName, path, branch),
     enabled: enabled && !!projectName && !!sessionName,
-    staleTime: 5000, // 5 seconds - merge status can change frequently
+    staleTime: 5000,
   });
 }
 
-// Removed: useGitPull, useGitPush - agent handles all git operations
-
-/**
- * Hook to create git branch
- */
-export function useGitCreateBranch() {
+export function useGitCreateBranch(port: SessionWorkspacePort = sessionWorkspaceAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -271,9 +232,8 @@ export function useGitCreateBranch() {
       sessionName: string;
       branchName: string;
       path?: string;
-    }) => workspaceApi.gitCreateBranch(projectName, sessionName, branchName, path),
+    }) => port.gitCreateBranch(projectName, sessionName, branchName, path),
     onSuccess: (_data, { projectName, sessionName }) => {
-      // Invalidate branches list and merge status
       queryClient.invalidateQueries({
         queryKey: [...workspaceKeys.all, 'git-branches', projectName, sessionName],
       });
@@ -284,44 +244,37 @@ export function useGitCreateBranch() {
   });
 }
 
-/**
- * Hook to list remote branches
- */
 export function useGitListBranches(
   projectName: string,
   sessionName: string,
   path: string = 'artifacts',
-  enabled: boolean = true
+  enabled: boolean = true,
+  port: SessionWorkspacePort = sessionWorkspaceAdapter,
 ) {
   return useQuery({
     queryKey: [...workspaceKeys.all, 'git-branches', projectName, sessionName, path],
-    queryFn: () => workspaceApi.gitListBranches(projectName, sessionName, path),
+    queryFn: () => port.gitListBranches(projectName, sessionName, path),
     enabled: enabled && !!projectName && !!sessionName,
-    staleTime: 30000, // 30 seconds - branches don't change often
+    staleTime: 30000,
   });
 }
 
-/**
- * Hook to get git status
- */
 export function useGitStatus(
   projectName: string,
   sessionName: string,
   path: string,
-  options?: { enabled?: boolean }
+  options?: { enabled?: boolean },
+  port: SessionWorkspacePort = sessionWorkspaceAdapter,
 ) {
   return useQuery({
     queryKey: [...workspaceKeys.all, 'git-status', projectName, sessionName, path],
-    queryFn: () => workspaceApi.gitStatus(projectName, sessionName, path),
+    queryFn: () => port.gitStatus(projectName, sessionName, path),
     enabled: !!projectName && !!sessionName && !!path && (options?.enabled ?? true),
-    staleTime: 5000, // 5 seconds - status can change frequently
+    staleTime: 5000,
   });
 }
 
-/**
- * Hook to configure git remote
- */
-export function useConfigureGitRemote() {
+export function useConfigureGitRemote(port: SessionWorkspacePort = sessionWorkspaceAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -337,18 +290,14 @@ export function useConfigureGitRemote() {
       path: string;
       remoteUrl: string;
       branch?: string;
-    }) => workspaceApi.configureGitRemote(projectName, sessionName, path, remoteUrl, branch),
+    }) => port.configureGitRemote(projectName, sessionName, path, remoteUrl, branch),
     onSuccess: (_data, { projectName, sessionName, path }) => {
-      // Invalidate git status to reflect new remote
       queryClient.invalidateQueries({
         queryKey: [...workspaceKeys.all, 'git-status', projectName, sessionName, path],
       });
-      // Invalidate branches list
       queryClient.invalidateQueries({
         queryKey: [...workspaceKeys.all, 'git-branches', projectName, sessionName, path],
       });
     },
   });
 }
-
-// Removed: useSynchronizeGit - agent handles all git operations
