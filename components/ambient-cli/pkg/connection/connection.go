@@ -18,21 +18,29 @@ func SetInsecureSkipTLSVerify(v bool) {
 }
 
 // ClientFactory holds credentials for creating per-project SDK clients.
+// TokenFunc is called on every ForProject to get a fresh token, enabling
+// automatic refresh of short-lived OIDC tokens.
 type ClientFactory struct {
-	APIURL   string
-	Token    string
-	Insecure bool
+	APIURL    string
+	TokenFunc func() (string, error)
+	Insecure  bool
 }
 
 // ForProject creates an SDK client scoped to the given project name.
+// The token is fetched fresh via TokenFunc on each call, so expired
+// tokens are automatically refreshed.
 func (f *ClientFactory) ForProject(project string) (*sdkclient.Client, error) {
+	token, err := f.TokenFunc()
+	if err != nil {
+		return nil, fmt.Errorf("get token: %w", err)
+	}
 	opts := []sdkclient.ClientOption{
 		sdkclient.WithUserAgent("acpctl/" + info.Version),
 	}
 	if f.Insecure {
 		opts = append(opts, sdkclient.WithInsecureSkipVerify())
 	}
-	return sdkclient.NewClient(f.APIURL, f.Token, project, opts...)
+	return sdkclient.NewClient(f.APIURL, token, project, opts...)
 }
 
 // NewClientFromConfig creates an SDK client from the saved configuration.
@@ -62,6 +70,7 @@ func NewClientFactory() (*ClientFactory, error) {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
 
+	// Verify we have a token at startup.
 	token, err := cfg.GetTokenWithRefresh()
 	if err != nil {
 		return nil, fmt.Errorf("token refresh: %w", err)
@@ -77,8 +86,10 @@ func NewClientFactory() (*ClientFactory, error) {
 	}
 
 	return &ClientFactory{
-		APIURL:   apiURL,
-		Token:    token,
+		APIURL: apiURL,
+		TokenFunc: func() (string, error) {
+			return cfg.GetTokenWithRefresh()
+		},
 		Insecure: cfg.InsecureTLSVerify || insecureSkipTLSVerify,
 	}, nil
 }

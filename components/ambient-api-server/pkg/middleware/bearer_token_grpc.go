@@ -29,7 +29,7 @@ func bearerTokenGRPCUnaryInterceptor(expectedToken, serviceAccountUsername strin
 						return handler(withCallerType(ctx, CallerTypeService), req)
 					}
 					if username := usernameFromJWT(token); username != "" {
-						if serviceAccountUsername != "" && username == serviceAccountUsername {
+						if isServiceAccount(username, serviceAccountUsername) {
 							ctx = withCallerType(ctx, CallerTypeService)
 						}
 						return handler(auth.SetUsernameContext(ctx, username), req)
@@ -56,7 +56,7 @@ func bearerTokenGRPCStreamInterceptor(expectedToken, serviceAccountUsername stri
 					}
 					if username := usernameFromJWT(token); username != "" {
 						ctx := auth.SetUsernameContext(ss.Context(), username)
-						if serviceAccountUsername != "" && username == serviceAccountUsername {
+						if isServiceAccount(username, serviceAccountUsername) {
 							ctx = withCallerType(ctx, CallerTypeService)
 						}
 						return handler(srv, &serviceCallerStream{ServerStream: ss, ctx: ctx})
@@ -91,6 +91,16 @@ func usernameFromJWT(tokenString string) string {
 		}
 	}
 	return ""
+}
+
+const keycloakServiceAccountPrefix = "service-account-"
+
+func isServiceAccount(jwtUsername, configuredAccount string) bool {
+	if configuredAccount == "" {
+		return false
+	}
+	return jwtUsername == configuredAccount ||
+		jwtUsername == keycloakServiceAccountPrefix+configuredAccount
 }
 
 type serviceCallerStream struct {

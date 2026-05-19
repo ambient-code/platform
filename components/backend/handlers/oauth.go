@@ -3,13 +3,16 @@ package handlers
 import (
 	"context"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -193,12 +196,26 @@ func GetOAuthURL(c *gin.Context) {
 	var authURL string
 	switch providerName {
 	case "google":
+		// Generate PKCE verifier and challenge
+		codeVerifier, pkceErr := generateCodeVerifier()
+		if pkceErr != nil {
+			log.Printf("Failed to generate PKCE code verifier: %v", pkceErr)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate OAuth parameters"})
+			return
+		}
+		codeChallenge := generateCodeChallenge(codeVerifier)
+		if serr := storePKCEVerifier(c.Request.Context(), stateToken, codeVerifier); serr != nil {
+			log.Printf("Failed to store PKCE verifier: %v", serr)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store OAuth parameters"})
+			return
+		}
 		authURL = fmt.Sprintf(
-			"https://accounts.google.com/o/oauth2/v2/auth?client_id=%s&redirect_uri=%s&response_type=code&scope=%s&access_type=offline&state=%s&prompt=consent",
+			"https://accounts.google.com/o/oauth2/v2/auth?client_id=%s&redirect_uri=%s&response_type=code&scope=%s&access_type=offline&state=%s&prompt=consent&code_challenge=%s&code_challenge_method=S256",
 			provider.ClientID,
 			redirectURI,
 			strings.Join(provider.Scopes, " "),
 			stateToken,
+			codeChallenge,
 		)
 	case "github":
 		authURL = fmt.Sprintf(
@@ -264,6 +281,13 @@ func HandleOAuth2Callback(c *gin.Context) {
 		return
 	}
 
+	// Retrieve PKCE verifier for this state (empty string if none stored — non-PKCE flow).
+	codeVerifier, verifierErr := retrievePKCEVerifier(c.Request.Context(), state)
+	if verifierErr != nil {
+		log.Printf("Warning: could not retrieve PKCE verifier for state: %v", verifierErr)
+		codeVerifier = ""
+	}
+
 	// IMPORTANT: Check for cluster-level OAuth BEFORE exchanging the code
 	// Authorization codes are single-use, so we must route to the correct handler first
 	var stateMap map[string]interface{}
@@ -275,7 +299,7 @@ func HandleOAuth2Callback(c *gin.Context) {
 				log.Printf("Detected cluster-level OAuth flow")
 
 				// Handle cluster-level Google OAuth (this will exchange the code)
-				if err := HandleGoogleOAuthCallback(c.Request.Context(), code, stateMap); err != nil {
+				if err := HandleGoogleOAuthCallback(c.Request.Context(), code, stateMap, codeVerifier); err != nil {
 					log.Printf("Cluster-level OAuth failed: %v", err)
 					// Return generic error to client, details logged server-side only
 					c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(
@@ -326,7 +350,7 @@ func HandleOAuth2Callback(c *gin.Context) {
 	redirectURI := fmt.Sprintf("%s/oauth2callback", backendURL)
 
 	// Exchange code for token (for legacy session-specific flow)
-	tokenData, err := exchangeOAuthCode(c.Request.Context(), providerConfig, code, redirectURI)
+	tokenData, err := exchangeOAuthCode(c.Request.Context(), providerConfig, code, redirectURI, codeVerifier)
 	if err != nil {
 		log.Printf("Failed to exchange OAuth code: %v", err)
 		callbackData.Error = "token_exchange_failed"
@@ -402,15 +426,20 @@ type OAuthTokenResponse struct {
 	Scope        string `json:"scope"`
 }
 
-// exchangeOAuthCode exchanges an authorization code for an access token
-func exchangeOAuthCode(ctx context.Context, provider *OAuthProvider, code string, redirectURI string) (*OAuthTokenResponse, error) {
-	// Prepare token exchange request
-	formData := fmt.Sprintf("code=%s&client_id=%s&client_secret=%s&redirect_uri=%s&grant_type=authorization_code",
-		code,
-		provider.ClientID,
-		provider.ClientSecret,
-		redirectURI,
-	)
+// exchangeOAuthCode exchanges an authorization code for an access token.
+// codeVerifier must be provided when the auth URL was generated with PKCE (code_challenge).
+func exchangeOAuthCode(ctx context.Context, provider *OAuthProvider, code, redirectURI, codeVerifier string) (*OAuthTokenResponse, error) {
+	params := url.Values{
+		"code":          {code},
+		"client_id":     {provider.ClientID},
+		"client_secret": {provider.ClientSecret},
+		"redirect_uri":  {redirectURI},
+		"grant_type":    {"authorization_code"},
+	}
+	if codeVerifier != "" {
+		params.Set("code_verifier", codeVerifier)
+	}
+	formData := params.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, provider.TokenURL, strings.NewReader(formData))
 	if err != nil {
@@ -837,6 +866,99 @@ func isValidUserID(userID string) bool {
 	return true
 }
 
+// generateCodeVerifier creates a cryptographically random PKCE code verifier.
+func generateCodeVerifier() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("failed to generate code verifier: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// generateCodeChallenge derives the S256 PKCE code challenge from a verifier.
+func generateCodeChallenge(verifier string) string {
+	h := sha256.Sum256([]byte(verifier))
+	return base64.RawURLEncoding.EncodeToString(h[:])
+}
+
+// pkceSecretKey returns a valid K8s secret data key for a given OAuth state token.
+// State tokens may contain characters invalid in K8s keys, so we hash them.
+func pkceSecretKey(stateToken string) string {
+	h := sha256.Sum256([]byte(stateToken))
+	return hex.EncodeToString(h[:])
+}
+
+// storePKCEVerifier persists a PKCE code_verifier in a K8s Secret keyed by state.
+func storePKCEVerifier(ctx context.Context, stateToken, verifier string) error {
+	const secretName = "oauth-pkce-verifiers"
+	key := pkceSecretKey(stateToken)
+
+	for i := 0; i < 3; i++ {
+		secret, err := K8sClient.CoreV1().Secrets(Namespace).Get(ctx, secretName, v1.GetOptions{})
+		if err != nil {
+			if errors.IsNotFound(err) {
+				secret = &corev1.Secret{
+					ObjectMeta: v1.ObjectMeta{Name: secretName, Namespace: Namespace},
+					Type:       corev1.SecretTypeOpaque,
+					Data:       map[string][]byte{},
+				}
+				if _, cerr := K8sClient.CoreV1().Secrets(Namespace).Create(ctx, secret, v1.CreateOptions{}); cerr != nil && !errors.IsAlreadyExists(cerr) {
+					return fmt.Errorf("failed to create PKCE secret: %w", cerr)
+				}
+				secret, err = K8sClient.CoreV1().Secrets(Namespace).Get(ctx, secretName, v1.GetOptions{})
+				if err != nil {
+					return fmt.Errorf("failed to fetch PKCE secret after create: %w", err)
+				}
+			} else {
+				return fmt.Errorf("failed to get PKCE secret: %w", err)
+			}
+		}
+		if secret.Data == nil {
+			secret.Data = map[string][]byte{}
+		}
+		secret.Data[key] = []byte(verifier)
+		if _, uerr := K8sClient.CoreV1().Secrets(Namespace).Update(ctx, secret, v1.UpdateOptions{}); uerr != nil {
+			if errors.IsConflict(uerr) {
+				continue
+			}
+			return fmt.Errorf("failed to update PKCE secret: %w", uerr)
+		}
+		return nil
+	}
+	return fmt.Errorf("failed to store PKCE verifier after retries")
+}
+
+// retrievePKCEVerifier fetches and removes the stored PKCE code_verifier for a state.
+// Returns ("", nil) when no verifier exists (non-PKCE flow).
+func retrievePKCEVerifier(ctx context.Context, stateToken string) (string, error) {
+	const secretName = "oauth-pkce-verifiers"
+	key := pkceSecretKey(stateToken)
+
+	for i := 0; i < 3; i++ {
+		secret, err := K8sClient.CoreV1().Secrets(Namespace).Get(ctx, secretName, v1.GetOptions{})
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return "", nil
+			}
+			return "", fmt.Errorf("failed to get PKCE secret: %w", err)
+		}
+		if secret.Data == nil || len(secret.Data[key]) == 0 {
+			return "", nil
+		}
+		verifier := string(secret.Data[key])
+		// Delete used verifier
+		delete(secret.Data, key)
+		if _, uerr := K8sClient.CoreV1().Secrets(Namespace).Update(ctx, secret, v1.UpdateOptions{}); uerr != nil {
+			if errors.IsConflict(uerr) {
+				continue
+			}
+			log.Printf("Warning: failed to delete used PKCE verifier: %v", uerr)
+		}
+		return verifier, nil
+	}
+	return "", fmt.Errorf("failed to retrieve PKCE verifier after retries")
+}
+
 // GetGoogleOAuthURLGlobal handles POST /api/auth/google/connect
 // Returns OAuth URL for cluster-level Google authentication
 func GetGoogleOAuthURLGlobal(c *gin.Context) {
@@ -905,13 +1027,30 @@ func GetGoogleOAuthURLGlobal(c *gin.Context) {
 	}
 	redirectURI := fmt.Sprintf("%s/oauth2callback", backendURL)
 
-	// Build OAuth URL
+	// Generate PKCE verifier and challenge
+	codeVerifier, err := generateCodeVerifier()
+	if err != nil {
+		log.Printf("Failed to generate PKCE code verifier: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate OAuth parameters"})
+		return
+	}
+	codeChallenge := generateCodeChallenge(codeVerifier)
+
+	// Store verifier for retrieval during callback
+	if serr := storePKCEVerifier(c.Request.Context(), stateToken, codeVerifier); serr != nil {
+		log.Printf("Failed to store PKCE verifier: %v", serr)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store OAuth parameters"})
+		return
+	}
+
+	// Build OAuth URL with PKCE
 	authURL := fmt.Sprintf(
-		"https://accounts.google.com/o/oauth2/v2/auth?client_id=%s&redirect_uri=%s&response_type=code&scope=%s&access_type=offline&state=%s&prompt=consent",
+		"https://accounts.google.com/o/oauth2/v2/auth?client_id=%s&redirect_uri=%s&response_type=code&scope=%s&access_type=offline&state=%s&prompt=consent&code_challenge=%s&code_challenge_method=S256",
 		provider.ClientID,
 		redirectURI,
 		strings.Join(provider.Scopes, " "),
 		stateToken,
+		codeChallenge,
 	)
 
 	log.Printf("Generated cluster-level Google OAuth URL for user %s", userID)
@@ -924,7 +1063,7 @@ func GetGoogleOAuthURLGlobal(c *gin.Context) {
 
 // HandleGoogleOAuthCallback handles the OAuth callback for cluster-level Google auth
 // This is called via the generic /oauth2callback endpoint when state contains "cluster":true
-func HandleGoogleOAuthCallback(ctx context.Context, code string, stateData map[string]interface{}) error {
+func HandleGoogleOAuthCallback(ctx context.Context, code string, stateData map[string]interface{}, codeVerifier string) error {
 	userID, _ := stateData["userID"].(string)
 	if userID == "" {
 		return fmt.Errorf("missing userID in state")
@@ -943,8 +1082,8 @@ func HandleGoogleOAuthCallback(ctx context.Context, code string, stateData map[s
 	}
 	redirectURI := fmt.Sprintf("%s/oauth2callback", backendURL)
 
-	// Exchange code for tokens
-	tokenData, err := exchangeOAuthCode(ctx, provider, code, redirectURI)
+	// Exchange code for tokens (pass PKCE verifier if present)
+	tokenData, err := exchangeOAuthCode(ctx, provider, code, redirectURI, codeVerifier)
 	if err != nil {
 		return fmt.Errorf("failed to exchange code: %w", err)
 	}

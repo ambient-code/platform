@@ -19,7 +19,6 @@ func projectToProto(p *Project) *pb.Project {
 			Href:      "/api/ambient/v1/projects/" + p.ID,
 		},
 		Name:        p.Name,
-		DisplayName: p.DisplayName,
 		Description: p.Description,
 		Labels:      p.Labels,
 		Annotations: p.Annotations,

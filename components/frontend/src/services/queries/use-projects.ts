@@ -1,9 +1,8 @@
-/**
- * React Query hooks for projects
- */
-
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import * as projectsApi from '../api/projects';
+import { projectsAdapter } from '../adapters/projects';
+import { projectAccessAdapter } from '../adapters/project-access';
+import type { ProjectsPort } from '../ports/projects';
+import type { ProjectAccessPort } from '../ports/project-access';
 import type {
   Project,
   CreateProjectRequest,
@@ -11,12 +10,11 @@ import type {
   PermissionAssignment,
   PaginationParams,
 } from '@/types/api';
+import type { MCPServersConfig } from '@/types/agentic-session';
+import { BACKEND_VERSION } from './query-keys';
 
-/**
- * Query keys for projects
- */
 export const projectKeys = {
-  all: ['projects'] as const,
+  all: [BACKEND_VERSION, 'projects'] as const,
   lists: () => [...projectKeys.all, 'list'] as const,
   list: (params?: PaginationParams) => [...projectKeys.lists(), params ?? {}] as const,
   details: () => [...projectKeys.all, 'detail'] as const,
@@ -26,58 +24,45 @@ export const projectKeys = {
   mcpServers: (name: string) => [...projectKeys.detail(name), 'mcp-servers'] as const,
 };
 
-/**
- * Hook to fetch projects with pagination support
- */
-export function useProjectsPaginated(params: PaginationParams = {}) {
+export function useProjectsPaginated(params: PaginationParams = {}, port: ProjectsPort = projectsAdapter) {
   return useQuery({
     queryKey: projectKeys.list(params),
-    queryFn: () => projectsApi.listProjectsPaginated(params),
-    placeholderData: keepPreviousData, // Keep previous data while fetching new page
+    queryFn: () => port.listProjects(params),
+    placeholderData: keepPreviousData,
   });
 }
 
-/**
- * Hook to fetch all projects (legacy - no pagination)
- * @deprecated Use useProjectsPaginated for better performance
- */
-export function useProjects() {
+/** @deprecated Use useProjectsPaginated for better performance */
+export function useProjects(port: ProjectsPort = projectsAdapter) {
   return useQuery({
     queryKey: projectKeys.list(),
-    queryFn: projectsApi.listProjects,
+    queryFn: async () => {
+      const result = await port.listProjects();
+      return result.items;
+    },
   });
 }
 
-/**
- * Hook to fetch a single project
- */
-export function useProject(name: string) {
+export function useProject(name: string, port: ProjectsPort = projectsAdapter) {
   return useQuery({
     queryKey: projectKeys.detail(name),
-    queryFn: () => projectsApi.getProject(name),
+    queryFn: () => port.getProject(name),
     enabled: !!name,
   });
 }
 
-/**
- * Hook to create a project
- */
-export function useCreateProject() {
+export function useCreateProject(port: ProjectsPort = projectsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data: CreateProjectRequest) => projectsApi.createProject(data),
+    mutationFn: (data: CreateProjectRequest) => port.createProject(data),
     onSuccess: () => {
-      // Invalidate projects list to refetch
       queryClient.invalidateQueries({ queryKey: projectKeys.lists() });
     },
   });
 }
 
-/**
- * Hook to update a project
- */
-export function useUpdateProject() {
+export function useUpdateProject(port: ProjectsPort = projectsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -87,43 +72,31 @@ export function useUpdateProject() {
     }: {
       name: string;
       data: UpdateProjectRequest;
-    }) => projectsApi.updateProject(name, data),
+    }) => port.updateProject(name, data),
     onSuccess: (project: Project) => {
-      // Update cached project details
       queryClient.setQueryData(projectKeys.detail(project.name), project);
-      // Invalidate lists to reflect changes
       queryClient.invalidateQueries({ queryKey: projectKeys.lists() });
     },
   });
 }
 
-/**
- * Hook to delete a project
- *
- * Implements optimistic updates to prevent race conditions when deleting
- * multiple projects in quick succession.
- */
-export function useDeleteProject() {
+export function useDeleteProject(port: ProjectsPort = projectsAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (name: string) => projectsApi.deleteProject(name),
+    mutationFn: (name: string) => port.deleteProject(name),
     onMutate: async (name) => {
-      // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
       await queryClient.cancelQueries({ queryKey: projectKeys.lists() });
 
-      // Snapshot all list queries for rollback on error
       const previousQueries = new Map<string, unknown>();
       const queries = queryClient.getQueriesData({ queryKey: projectKeys.lists() });
       queries.forEach(([queryKey, data]) => {
         previousQueries.set(JSON.stringify(queryKey), data);
       });
 
-      // Optimistically remove the project from all list queries
       queryClient.setQueriesData(
         { queryKey: projectKeys.lists() },
         (old: unknown) => {
-          // Handle paginated response
           if (old && typeof old === 'object' && 'items' in old) {
             const paginatedData = old as { items: Project[]; totalCount?: number };
             return {
@@ -132,7 +105,6 @@ export function useDeleteProject() {
               totalCount: paginatedData.totalCount ? paginatedData.totalCount - 1 : undefined,
             };
           }
-          // Handle legacy array response
           if (Array.isArray(old)) {
             return old.filter((p: Project) => p.name !== name);
           }
@@ -140,49 +112,36 @@ export function useDeleteProject() {
         }
       );
 
-      // Return context with the snapshots
       return { previousQueries };
     },
-    onError: (err, name, context) => {
-      // Check if this is a "not found" error (which is fine during deletion)
+    onError: (err, _name, context) => {
       const errorMessage = err instanceof Error ? err.message : String(err);
       const isNotFoundError =
         errorMessage.toLowerCase().includes('not found') ||
         errorMessage.includes('404');
 
-      // Only rollback if it's NOT a "not found" error
       if (!isNotFoundError && context?.previousQueries) {
-        // Restore all previous query states
         context.previousQueries.forEach((data, keyString) => {
           const queryKey = JSON.parse(keyString);
           queryClient.setQueryData(queryKey, data);
         });
       }
-      // Silently ignore "not found" errors during deletion - the project is already gone
     },
     onSuccess: (_data, name) => {
-      // Remove the detailed project query from cache
       queryClient.removeQueries({ queryKey: projectKeys.detail(name) });
-      // No need to invalidate lists - already optimistically updated
     },
   });
 }
 
-/**
- * Hook to fetch project permissions
- */
-export function useProjectPermissions(projectName: string) {
+export function useProjectPermissions(projectName: string, port: ProjectAccessPort = projectAccessAdapter) {
   return useQuery({
     queryKey: projectKeys.permissions(projectName),
-    queryFn: () => projectsApi.getProjectPermissions(projectName),
+    queryFn: () => port.getPermissions(projectName),
     enabled: !!projectName,
   });
 }
 
-/**
- * Hook to add project permission
- */
-export function useAddProjectPermission() {
+export function useAddProjectPermission(port: ProjectAccessPort = projectAccessAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -192,9 +151,8 @@ export function useAddProjectPermission() {
     }: {
       projectName: string;
       permission: PermissionAssignment;
-    }) => projectsApi.addProjectPermission(projectName, permission),
+    }) => port.addPermission(projectName, permission),
     onSuccess: (_data, { projectName }) => {
-      // Invalidate permissions to refetch
       queryClient.invalidateQueries({
         queryKey: projectKeys.permissions(projectName),
       });
@@ -202,10 +160,7 @@ export function useAddProjectPermission() {
   });
 }
 
-/**
- * Hook to remove project permission
- */
-export function useRemoveProjectPermission() {
+export function useRemoveProjectPermission(port: ProjectAccessPort = projectAccessAdapter) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -217,10 +172,8 @@ export function useRemoveProjectPermission() {
       projectName: string;
       subjectType: string;
       subjectName: string;
-    }) =>
-      projectsApi.removeProjectPermission(projectName, subjectType, subjectName),
+    }) => port.removePermission(projectName, subjectType, subjectName),
     onSuccess: (_data, { projectName }) => {
-      // Invalidate permissions to refetch
       queryClient.invalidateQueries({
         queryKey: projectKeys.permissions(projectName),
       });
@@ -228,39 +181,30 @@ export function useRemoveProjectPermission() {
   });
 }
 
-/**
- * Hook to fetch project integration status (GitHub, etc.)
- */
-export function useProjectIntegrationStatus(projectName: string) {
+export function useProjectIntegrationStatus(projectName: string, port: ProjectsPort = projectsAdapter) {
   return useQuery({
     queryKey: projectKeys.integrationStatus(projectName),
-    queryFn: () => projectsApi.getProjectIntegrationStatus(projectName),
+    queryFn: () => port.getProjectIntegrationStatus(projectName),
     enabled: !!projectName,
-    staleTime: 60000, // Cache for 1 minute
-    refetchOnMount: 'always', // Ensure fresh status when viewing session/accordion
+    staleTime: 60000,
+    refetchOnMount: 'always',
   });
 }
 
-/**
- * Hook to fetch project-level MCP server configuration
- */
-export function useProjectMcpServers(projectName: string) {
+export function useProjectMcpServers(projectName: string, port: ProjectsPort = projectsAdapter) {
   return useQuery({
     queryKey: projectKeys.mcpServers(projectName),
-    queryFn: () => projectsApi.getProjectMcpServers(projectName),
+    queryFn: () => port.getProjectMcpServers(projectName),
     enabled: !!projectName,
     staleTime: 30000,
   });
 }
 
-/**
- * Hook to update project-level MCP server configuration
- */
-export function useUpdateProjectMcpServers(projectName: string) {
+export function useUpdateProjectMcpServers(projectName: string, port: ProjectsPort = projectsAdapter) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (config: import("@/types/agentic-session").MCPServersConfig) =>
-      projectsApi.updateProjectMcpServers(projectName, config),
+    mutationFn: (config: MCPServersConfig) =>
+      port.updateProjectMcpServers(projectName, config),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: projectKeys.mcpServers(projectName),

@@ -70,6 +70,18 @@ paths:
     $ref: 'openapi.credentials.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1credentials~1{cred_id}'
   /api/ambient/v1/projects/{id}/credentials/{cred_id}/token:
     $ref: 'openapi.credentials.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1credentials~1{cred_id}~1token'
+  /api/ambient/v1/projects/{id}/scheduled-sessions:
+    $ref: 'openapi.scheduledSessions.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1scheduled-sessions'
+  /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}:
+    $ref: 'openapi.scheduledSessions.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1scheduled-sessions~1{ss_id}'
+  /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/suspend:
+    $ref: 'openapi.scheduledSessions.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1scheduled-sessions~1{ss_id}~1suspend'
+  /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/resume:
+    $ref: 'openapi.scheduledSessions.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1scheduled-sessions~1{ss_id}~1resume'
+  /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/trigger:
+    $ref: 'openapi.scheduledSessions.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1scheduled-sessions~1{ss_id}~1trigger'
+  /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/runs:
+    $ref: 'openapi.scheduledSessions.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1scheduled-sessions~1{ss_id}~1runs'
   # AUTO-ADD NEW PATHS
 components:
   securitySchemes:
@@ -223,6 +235,12 @@ components:
       $ref: 'openapi.credentials.yaml#/components/schemas/CredentialPatchRequest'
     CredentialTokenResponse:
       $ref: 'openapi.credentials.yaml#/components/schemas/CredentialTokenResponse'
+    ScheduledSession:
+      $ref: 'openapi.scheduledSessions.yaml#/components/schemas/ScheduledSession'
+    ScheduledSessionList:
+      $ref: 'openapi.scheduledSessions.yaml#/components/schemas/ScheduledSessionList'
+    ScheduledSessionPatchRequest:
+      $ref: 'openapi.scheduledSessions.yaml#/components/schemas/ScheduledSessionPatchRequest'
     # AUTO-ADD NEW SCHEMAS
   parameters:
     id:

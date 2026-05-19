@@ -19,9 +19,9 @@ Review operator Go code against documented conventions.
 
 Load these files before running checks:
 
-1. `components/operator/DEVELOPMENT.md`
-2. `components/backend/K8S_CLIENT_PATTERNS.md`
-3. `components/backend/ERROR_PATTERNS.md`
+1. `specs/standards/control-plane/conventions.spec.md`
+2. `specs/standards/backend/k8s-client.spec.md`
+3. `specs/standards/backend/error-handling.spec.md`
 
 ## Checks
 
