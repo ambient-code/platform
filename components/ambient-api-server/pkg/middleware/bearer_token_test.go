@@ -38,6 +38,29 @@ func TestExtractBearerToken(t *testing.T) {
 	}
 }
 
+func TestIsServiceAccount(t *testing.T) {
+	tests := []struct {
+		name              string
+		jwtUsername       string
+		configuredAccount string
+		want              bool
+	}{
+		{"exact match", "ocm-ams-service", "ocm-ams-service", true},
+		{"keycloak prefixed match", "service-account-ocm-ams-service", "ocm-ams-service", true},
+		{"no match", "other-user", "ocm-ams-service", false},
+		{"empty configured", "service-account-ocm-ams-service", "", false},
+		{"empty jwt username", "", "ocm-ams-service", false},
+		{"partial prefix no match", "service-account-other", "ocm-ams-service", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isServiceAccount(tt.jwtUsername, tt.configuredAccount); got != tt.want {
+				t.Errorf("isServiceAccount(%q, %q) = %v, want %v", tt.jwtUsername, tt.configuredAccount, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestBearerTokenAuth(t *testing.T) {
 	const validToken = "test-secret-token"
 	handler := BearerTokenAuth(validToken)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

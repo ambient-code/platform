@@ -12,10 +12,9 @@ func newRoleBinding(id string) (*roleBindings.RoleBinding, error) {
 	roleBindingService := roleBindings.Service(&environments.Environment().Services)
 
 	roleBinding := &roleBindings.RoleBinding{
-		UserId:  id,
-		RoleId:  "test-role_id",
-		Scope:   "test-scope",
-		ScopeId: stringPtr("test-scope_id"),
+		UserId: stringPtr(id),
+		RoleId: "test-role_id",
+		Scope:  "project",
 	}
 
 	sub, err := roleBindingService.Create(context.Background(), roleBinding)

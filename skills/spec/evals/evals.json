@@ -1,0 +1,26 @@
+[
+  {
+    "input": "/spec",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "spec" },
+    "description": "Direct slash command to create a spec"
+  },
+  {
+    "input": "write a spec for session timeout behavior",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "spec" },
+    "description": "Natural language request to create a spec"
+  },
+  {
+    "input": "spec this out: MCP server should retry on transient errors",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "spec" },
+    "description": "Shorthand spec request with behavior description"
+  },
+  {
+    "input": "add a requirement to the runner spec for graceful shutdown",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "spec" },
+    "description": "Modify an existing spec with a new requirement"
+  }
+]

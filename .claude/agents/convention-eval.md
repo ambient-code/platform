@@ -18,13 +18,13 @@ Evaluate codebase adherence to documented conventions. Produce a scored report.
 
 Load these before running checks:
 
-1. `components/backend/DEVELOPMENT.md`
-2. `components/backend/ERROR_PATTERNS.md`
-3. `components/backend/K8S_CLIENT_PATTERNS.md`
-4. `components/frontend/DEVELOPMENT.md`
-5. `components/frontend/REACT_QUERY_PATTERNS.md`
-6. `components/operator/DEVELOPMENT.md`
-7. `docs/security-standards.md`
+1. `specs/standards/backend/conventions.spec.md`
+2. `specs/standards/backend/error-handling.spec.md`
+3. `specs/standards/backend/k8s-client.spec.md`
+4. `specs/standards/frontend/conventions.spec.md`
+5. `specs/standards/frontend/react-query.spec.md`
+6. `specs/standards/control-plane/conventions.spec.md`
+7. `specs/standards/security/security.spec.md`
 
 ## Checks by Category
 

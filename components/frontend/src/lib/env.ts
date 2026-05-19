@@ -12,6 +12,9 @@ type EnvConfig = {
   // Backend API URL (server-side only)
   BACKEND_URL: string;
 
+  // Ambient API Server URL (server-side only)
+  API_SERVER_URL: string;
+
   // GitHub configuration (public)
   GITHUB_APP_SLUG: string;
 
@@ -64,6 +67,7 @@ function getBooleanEnv(key: string, defaultValue = false): boolean {
 export const env: EnvConfig = {
   NODE_ENV: (process.env.NODE_ENV || 'development') as Environment,
   BACKEND_URL: getEnv('BACKEND_URL', 'http://localhost:8080/api'),
+  API_SERVER_URL: getEnv('API_SERVER_URL', 'http://localhost:8000'),
   GITHUB_APP_SLUG: getEnv('GITHUB_APP_SLUG', 'ambient-code-vteam'),
   FEEDBACK_URL: getOptionalEnv('FEEDBACK_URL'),
   OC_TOKEN: getOptionalEnv('OC_TOKEN'),
