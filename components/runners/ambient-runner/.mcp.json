@@ -13,45 +13,6 @@
       "args": [
         "mcp-server-fetch"
       ]
-    },
-    "mcp-atlassian": {
-      "command": "uvx",
-      "args": [
-        "mcp-atlassian"
-      ],
-      "env": {
-        "JIRA_URL": "${JIRA_URL}",
-        "JIRA_USERNAME": "${JIRA_EMAIL}",
-        "JIRA_API_TOKEN": "${JIRA_API_TOKEN}",
-        "JIRA_SSL_VERIFY": "true",
-        "READ_ONLY_MODE": "${JIRA_READ_ONLY_MODE:-true}"
-      }
-    },
-    "openshift": {
-      "command": "uvx",
-      "args": [
-        "kubernetes-mcp-server@latest",
-        "--kubeconfig",
-        "/tmp/.ambient_kubeconfig",
-        "--disable-multi-cluster"
-      ]
-    },
-    "google-workspace": {
-      "command": "uvx",
-      "args": [
-        "workspace-mcp@1.17.1",
-        "--permissions",
-        "gmail:send",
-        "drive:full"
-      ],
-      "env": {
-        "GOOGLE_MCP_CREDENTIALS_DIR": "${GOOGLE_MCP_CREDENTIALS_DIR}",
-        "MCP_SINGLE_USER_MODE": "1",
-        "GOOGLE_OAUTH_CLIENT_ID": "${GOOGLE_OAUTH_CLIENT_ID}",
-        "GOOGLE_OAUTH_CLIENT_SECRET": "${GOOGLE_OAUTH_CLIENT_SECRET}",
-        "GOOGLE_OAUTH_REDIRECT_URI": "${GOOGLE_OAUTH_REDIRECT_URI}",
-        "USER_GOOGLE_EMAIL": "${USER_GOOGLE_EMAIL:-user@example.com}"
-      }
     }
   }
 }
