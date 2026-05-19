@@ -114,6 +114,10 @@ patches:
     version: v1
     kind: Deployment
     name: postgresql
+- path: networkpolicy-permissive-patch.yaml
+  target:
+    kind: NetworkPolicy
+    name: allow-platform-ingress
 
 # Kind overlay: Use Quay.io production images by default
 # For local development with local images, use overlays/kind-local/ instead
