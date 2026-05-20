@@ -1,0 +1,47 @@
+- op: replace
+  path: /spec/template/spec/containers/0/imagePullPolicy
+  value: IfNotPresent
+- op: replace
+  path: /spec/template/spec/containers/0/env
+  value:
+  - name: AMBIENT_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: ambient-control-plane-token
+        key: token
+  - name: AMBIENT_API_SERVER_URL
+    value: "http://ambient-api-server.ambient-code.svc:8000"
+  - name: AMBIENT_GRPC_SERVER_ADDR
+    value: "ambient-api-server.ambient-code.svc:9000"
+  - name: AMBIENT_GRPC_USE_TLS
+    value: "false"
+  - name: MODE
+    value: "kube"
+  - name: LOG_LEVEL
+    value: "debug"
+  - name: RUNNER_IMAGE
+    valueFrom:
+      configMapKeyRef:
+        name: operator-config
+        key: AMBIENT_CODE_RUNNER_IMAGE
+        optional: true
+  - name: CP_TOKEN_URL
+    value: "http://ambient-control-plane.ambient-code.svc:8080/token"
+  - name: CP_RUNTIME_NAMESPACE
+    valueFrom:
+      fieldRef:
+        fieldPath: metadata.namespace
+  - name: USE_VERTEX
+    valueFrom:
+      configMapKeyRef:
+        name: operator-config
+        key: USE_VERTEX
+        optional: true
+- op: replace
+  path: /spec/template/spec/containers/0/securityContext
+  value:
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop: ["ALL"]

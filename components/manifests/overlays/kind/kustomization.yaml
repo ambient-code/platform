@@ -118,6 +118,24 @@ patches:
   target:
     kind: NetworkPolicy
     name: allow-platform-ingress
+- path: api-server-security-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-api-server
+- path: control-plane-env-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-control-plane
+- path: observability-dashboard-scale-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: observability-dashboard
 
 # Kind overlay: Use Quay.io production images by default
 # For local development with local images, use overlays/kind-local/ instead

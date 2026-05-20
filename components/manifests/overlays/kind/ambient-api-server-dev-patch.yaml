@@ -6,6 +6,47 @@ spec:
   template:
     spec:
       initContainers:
+        - name: pre-migration
+          image: postgres:16
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER"; do
+                echo "waiting for database..."; sleep 2
+              done
+              psql -v ON_ERROR_STOP=0 <<'SQL'
+              CREATE TABLE IF NOT EXISTS role_bindings (
+                id TEXT PRIMARY KEY,
+                created_at TIMESTAMPTZ NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL,
+                deleted_at TIMESTAMPTZ,
+                user_id TEXT NOT NULL,
+                role_id TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                scope_id TEXT
+              );
+              CREATE INDEX IF NOT EXISTS idx_role_bindings_deleted_at ON role_bindings(deleted_at);
+              SQL
+              echo "pre-migration complete"
+          env:
+            - name: PGHOST
+              value: ambient-api-server-db
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              value: ambient
+            - name: PGPASSWORD
+              value: TheBlurstOfTimes
+            - name: PGDATABASE
+              value: ambient_api_server
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 999
+            capabilities:
+              drop: ["ALL"]
         - name: migration
           imagePullPolicy: IfNotPresent
           command:
