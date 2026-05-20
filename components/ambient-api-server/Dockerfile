@@ -30,6 +30,8 @@ COPY --from=builder /workspace/ambient-api-server /usr/local/bin/
 
 EXPOSE 8000
 
+USER 1001
+
 ENTRYPOINT ["/usr/local/bin/ambient-api-server", "serve"]
 
 LABEL name="ambient-api-server" \
