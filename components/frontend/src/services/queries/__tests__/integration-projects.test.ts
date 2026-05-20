@@ -45,6 +45,8 @@ describe('integration: hook → projectsAdapter → fakeApi', () => {
       getProjectPermissions: vi.fn(),
       addProjectPermission: vi.fn(),
       removeProjectPermission: vi.fn(),
+      getProjectSettings: vi.fn(),
+      updateProjectSettings: vi.fn(),
     };
   }
 

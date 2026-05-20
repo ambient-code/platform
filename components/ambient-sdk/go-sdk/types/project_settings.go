@@ -13,9 +13,11 @@ import (
 type ProjectSettings struct {
 	ObjectReference
 
-	GroupAccess  string `json:"group_access,omitempty"`
-	ProjectID    string `json:"project_id"`
-	Repositories string `json:"repositories,omitempty"`
+	GroupAccess           string `json:"group_access,omitempty"`
+	ProjectID             string `json:"project_id"`
+	Repositories          string `json:"repositories,omitempty"`
+	RunnerImage           string `json:"runner_image,omitempty"`
+	RunnerImagePullSecret string `json:"runner_image_pull_secret,omitempty"`
 }
 
 type ProjectSettingsList struct {
@@ -52,6 +54,16 @@ func (b *ProjectSettingsBuilder) Repositories(v string) *ProjectSettingsBuilder 
 	return b
 }
 
+func (b *ProjectSettingsBuilder) RunnerImage(v string) *ProjectSettingsBuilder {
+	b.resource.RunnerImage = v
+	return b
+}
+
+func (b *ProjectSettingsBuilder) RunnerImagePullSecret(v string) *ProjectSettingsBuilder {
+	b.resource.RunnerImagePullSecret = v
+	return b
+}
+
 func (b *ProjectSettingsBuilder) Build() (*ProjectSettings, error) {
 	if b.resource.ProjectID == "" {
 		b.errors = append(b.errors, fmt.Errorf("project_id is required"))
@@ -82,6 +94,16 @@ func (b *ProjectSettingsPatchBuilder) ProjectID(v string) *ProjectSettingsPatchB
 
 func (b *ProjectSettingsPatchBuilder) Repositories(v string) *ProjectSettingsPatchBuilder {
 	b.patch["repositories"] = v
+	return b
+}
+
+func (b *ProjectSettingsPatchBuilder) RunnerImage(v string) *ProjectSettingsPatchBuilder {
+	b.patch["runner_image"] = v
+	return b
+}
+
+func (b *ProjectSettingsPatchBuilder) RunnerImagePullSecret(v string) *ProjectSettingsPatchBuilder {
+	b.patch["runner_image_pull_secret"] = v
 	return b
 }
 

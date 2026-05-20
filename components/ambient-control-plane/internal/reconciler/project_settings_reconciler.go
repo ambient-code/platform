@@ -70,9 +70,51 @@ func (r *ProjectSettingsReconciler) ensureProjectSettings(ctx context.Context, p
 		return fmt.Errorf("project_settings %s has no project_id; skipping", ps.ID)
 	}
 
-	_, err := r.kube.GetResource(ctx, projectSettingsGVR, namespace, "projectsettings")
+	spec := map[string]interface{}{
+		"groupAccess": []interface{}{},
+	}
+	if ps.RunnerImage != "" {
+		spec["runnerImage"] = ps.RunnerImage
+	}
+	if ps.RunnerImagePullSecret != "" {
+		spec["runnerImagePullSecret"] = ps.RunnerImagePullSecret
+	}
+
+	existing, err := r.kube.GetResource(ctx, projectSettingsGVR, namespace, "projectsettings")
 	if err == nil {
-		r.logger.Debug().Str("namespace", namespace).Msg("projectsettings CRD already exists")
+		existingSpec, _, _ := unstructured.NestedMap(existing.Object, "spec")
+		needsUpdate := false
+		if existingSpec != nil {
+			oldImage, _, _ := unstructured.NestedString(existingSpec, "runnerImage")
+			oldSecret, _, _ := unstructured.NestedString(existingSpec, "runnerImagePullSecret")
+			if oldImage != ps.RunnerImage || oldSecret != ps.RunnerImagePullSecret {
+				needsUpdate = true
+			}
+		}
+		if !needsUpdate {
+			r.logger.Debug().Str("namespace", namespace).Msg("projectsettings CRD already exists and is up-to-date")
+			return nil
+		}
+		if existingSpec == nil {
+			existingSpec = map[string]interface{}{}
+		}
+		if ps.RunnerImage != "" {
+			existingSpec["runnerImage"] = ps.RunnerImage
+		} else {
+			delete(existingSpec, "runnerImage")
+		}
+		if ps.RunnerImagePullSecret != "" {
+			existingSpec["runnerImagePullSecret"] = ps.RunnerImagePullSecret
+		} else {
+			delete(existingSpec, "runnerImagePullSecret")
+		}
+		if err := unstructured.SetNestedMap(existing.Object, existingSpec, "spec"); err != nil {
+			return fmt.Errorf("setting spec on projectsettings in namespace %s: %w", namespace, err)
+		}
+		if _, err := r.kube.UpdateResource(ctx, projectSettingsGVR, namespace, existing); err != nil {
+			return fmt.Errorf("updating projectsettings in namespace %s: %w", namespace, err)
+		}
+		r.logger.Info().Str("namespace", namespace).Str("project_id", ps.ProjectID).Msg("projectsettings CRD updated with runner image config")
 		return nil
 	}
 	if !k8serrors.IsNotFound(err) {
@@ -92,9 +134,7 @@ func (r *ProjectSettingsReconciler) ensureProjectSettings(ctx context.Context, p
 					LabelManagedBy: "ambient-control-plane",
 				},
 			},
-			"spec": map[string]interface{}{
-				"groupAccess": []interface{}{},
-			},
+			"spec": spec,
 		},
 	}
 

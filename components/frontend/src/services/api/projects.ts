@@ -154,6 +154,37 @@ export async function getProjectMcpServers(
 /**
  * Update project-level MCP server configuration
  */
+export type ProjectSettingsResponse = {
+  id: string;
+  project_id: string;
+  runner_image?: string;
+  runner_image_pull_secret?: string;
+};
+
+export type ProjectSettingsPatchRequest = {
+  runner_image?: string;
+  runner_image_pull_secret?: string;
+};
+
+export async function getProjectSettings(
+  projectName: string
+): Promise<ProjectSettingsResponse | null> {
+  const response = await apiClient.get<{ items: ProjectSettingsResponse[] }>(
+    `/ambient/v1/project_settings?search=${encodeURIComponent(`project_id = '${projectName}'`)}`
+  );
+  return response.items?.[0] ?? null;
+}
+
+export async function updateProjectSettings(
+  settingsId: string,
+  patch: ProjectSettingsPatchRequest
+): Promise<ProjectSettingsResponse> {
+  return apiClient.patch<ProjectSettingsResponse, ProjectSettingsPatchRequest>(
+    `/ambient/v1/project_settings/${settingsId}`,
+    patch
+  );
+}
+
 export async function updateProjectMcpServers(
   projectName: string,
   config: import("@/types/agentic-session").MCPServersConfig

@@ -2,6 +2,8 @@ package projectSettings
 
 import (
 	"net/http"
+	"regexp"
+	"strings"
 
 	"github.com/gorilla/mux"
 
@@ -71,6 +73,18 @@ func (h projectSettingsHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			}
 			if patch.Repositories != nil {
 				found.Repositories = patch.Repositories
+			}
+			if patch.RunnerImage != nil {
+				if err := validateRunnerImage(*patch.RunnerImage); err != nil {
+					return nil, err
+				}
+				found.RunnerImage = patch.RunnerImage
+			}
+			if patch.RunnerImagePullSecret != nil {
+				if err := validateRunnerImagePullSecret(*patch.RunnerImagePullSecret); err != nil {
+					return nil, err
+				}
+				found.RunnerImagePullSecret = patch.RunnerImagePullSecret
 			}
 
 			psModel, err := h.projectSettings.Replace(ctx, found)
@@ -155,4 +169,37 @@ func (h projectSettingsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	handlers.HandleDelete(w, r, cfg, http.StatusNoContent)
+}
+
+var imageRefPattern = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9._\-/:@]*[a-zA-Z0-9])?$`)
+
+const maxImageRefLength = 512
+
+func validateRunnerImage(image string) *errors.ServiceError {
+	if image == "" {
+		return nil
+	}
+	if len(image) > maxImageRefLength {
+		return errors.Validation("runner_image exceeds maximum length of %d characters", maxImageRefLength)
+	}
+	if strings.ContainsAny(image, " \t\n\r") {
+		return errors.Validation("runner_image must not contain whitespace")
+	}
+	if !imageRefPattern.MatchString(image) {
+		return errors.Validation("runner_image contains invalid characters")
+	}
+	return nil
+}
+
+func validateRunnerImagePullSecret(secret string) *errors.ServiceError {
+	if secret == "" {
+		return nil
+	}
+	if len(secret) > 253 {
+		return errors.Validation("runner_image_pull_secret exceeds maximum length of 253 characters")
+	}
+	if strings.ContainsAny(secret, " \t\n\r") {
+		return errors.Validation("runner_image_pull_secret must not contain whitespace")
+	}
+	return nil
 }

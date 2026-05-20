@@ -59,6 +59,16 @@
           "value": "workspace"
         }
       ]
+    },
+    {
+      "name": "feature.custom-runner-image.enabled",
+      "description": "Allow workspace admins to configure a custom runner container image",
+      "tags": [
+        {
+          "type": "scope",
+          "value": "workspace"
+        }
+      ]
     }
   ]
 }

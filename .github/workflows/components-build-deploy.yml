@@ -121,6 +121,15 @@ jobs:
           username: ${{ secrets.REDHAT_USERNAME }}
           password: ${{ secrets.REDHAT_PASSWORD }}
 
+      - name: Read runner contract version
+        id: runner-version
+        run: |
+          if [ -f components/runners/ambient-runner/VERSION ]; then
+            echo "version=$(cat components/runners/ambient-runner/VERSION | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.0" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build and push ${{ matrix.component.name }} (${{ matrix.arch.suffix }})
         if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v7
@@ -133,6 +142,7 @@ jobs:
           build-args: |
             AMBIENT_VERSION=${{ github.sha }}
             GIT_COMMIT=${{ github.sha }}
+            RUNNER_CONTRACT_VERSION=${{ steps.runner-version.outputs.version }}
           cache-from: type=gha,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
 
@@ -148,6 +158,7 @@ jobs:
           build-args: |
             AMBIENT_VERSION=${{ github.sha }}
             GIT_COMMIT=${{ github.sha }}
+            RUNNER_CONTRACT_VERSION=${{ steps.runner-version.outputs.version }}
           cache-from: type=gha,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
 

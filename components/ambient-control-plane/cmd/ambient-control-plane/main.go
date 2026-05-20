@@ -130,27 +130,29 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 
 	factory := reconciler.NewSDKClientFactory(cfg.APIServerURL, tokenProvider, log.Logger)
 	kubeReconcilerCfg := reconciler.KubeReconcilerConfig{
-		RunnerImage:           cfg.RunnerImage,
-		BackendURL:            cfg.BackendURL,
-		RunnerGRPCURL:         cfg.GRPCServerAddr,
-		RunnerGRPCUseTLS:      cfg.RunnerGRPCUseTLS,
-		AnthropicAPIKey:       cfg.AnthropicAPIKey,
-		VertexEnabled:         cfg.VertexEnabled,
-		VertexProjectID:       cfg.VertexProjectID,
-		VertexRegion:          cfg.VertexRegion,
-		VertexCredentialsPath: cfg.VertexCredentialsPath,
-		VertexSecretName:      cfg.VertexSecretName,
-		VertexSecretNamespace: cfg.VertexSecretNamespace,
-		RunnerImageNamespace:  cfg.RunnerImageNamespace,
-		MCPImage:              cfg.MCPImage,
-		MCPAPIServerURL:       cfg.MCPAPIServerURL,
-		RunnerLogLevel:        cfg.RunnerLogLevel,
-		CPRuntimeNamespace:    cfg.CPRuntimeNamespace,
-		CPTokenURL:            cfg.CPTokenURL,
-		CPTokenPublicKey:      string(kp.PublicKeyPEM),
-		HTTPProxy:             cfg.HTTPProxy,
-		HTTPSProxy:            cfg.HTTPSProxy,
-		NoProxy:               cfg.NoProxy,
+		RunnerImage:                  cfg.RunnerImage,
+		BackendURL:                   cfg.BackendURL,
+		RunnerGRPCURL:                cfg.GRPCServerAddr,
+		RunnerGRPCUseTLS:             cfg.RunnerGRPCUseTLS,
+		AnthropicAPIKey:              cfg.AnthropicAPIKey,
+		VertexEnabled:                cfg.VertexEnabled,
+		VertexProjectID:              cfg.VertexProjectID,
+		VertexRegion:                 cfg.VertexRegion,
+		VertexCredentialsPath:        cfg.VertexCredentialsPath,
+		VertexSecretName:             cfg.VertexSecretName,
+		VertexSecretNamespace:        cfg.VertexSecretNamespace,
+		RunnerImageNamespace:         cfg.RunnerImageNamespace,
+		MCPImage:                     cfg.MCPImage,
+		MCPAPIServerURL:              cfg.MCPAPIServerURL,
+		RunnerLogLevel:               cfg.RunnerLogLevel,
+		CPRuntimeNamespace:           cfg.CPRuntimeNamespace,
+		CPTokenURL:                   cfg.CPTokenURL,
+		CPTokenPublicKey:             string(kp.PublicKeyPEM),
+		HTTPProxy:                    cfg.HTTPProxy,
+		HTTPSProxy:                   cfg.HTTPSProxy,
+		NoProxy:                      cfg.NoProxy,
+		RunnerImageAllowedRegistries: cfg.RunnerImageAllowedRegistries,
+		CustomRunnerImageEnabled:     cfg.CustomRunnerImageEnabled,
 	}
 
 	conn, err := grpc.NewClient(cfg.GRPCServerAddr, grpc.WithTransportCredentials(grpcCredentials(cfg.GRPCUseTLS)))
@@ -186,7 +188,7 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	inf.RegisterHandler("projects", projectReconciler.Reconcile)
 	inf.RegisterHandler("project_settings", projectSettingsReconciler.Reconcile)
 
-	sessionReconcilers := createSessionReconcilers(cfg.Reconcilers, factory, kube, projectKube, provisioner, kubeReconcilerCfg, log.Logger)
+	sessionReconcilers := createSessionReconcilers(cfg.Reconcilers, factory, kube, projectKube, provisioner, kubeReconcilerCfg, inf, log.Logger)
 	for _, sessionRec := range sessionReconcilers {
 		inf.RegisterHandler("sessions", sessionRec.Reconcile)
 	}
@@ -224,13 +226,13 @@ func startTokenServer(ctx context.Context, cfg *config.ControlPlaneConfig, token
 	return ts.Start(ctx)
 }
 
-func createSessionReconcilers(reconcilerTypes []string, factory *reconciler.SDKClientFactory, kube *kubeclient.KubeClient, projectKube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, cfg reconciler.KubeReconcilerConfig, logger zerolog.Logger) []reconciler.Reconciler {
+func createSessionReconcilers(reconcilerTypes []string, factory *reconciler.SDKClientFactory, kube *kubeclient.KubeClient, projectKube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, cfg reconciler.KubeReconcilerConfig, inf *informer.Informer, logger zerolog.Logger) []reconciler.Reconciler {
 	var reconcilers []reconciler.Reconciler
 
 	for _, reconcilerType := range reconcilerTypes {
 		switch reconcilerType {
 		case "kube":
-			kubeReconciler := reconciler.NewKubeReconciler(factory, kube, projectKube, provisioner, cfg, logger)
+			kubeReconciler := reconciler.NewKubeReconciler(factory, kube, projectKube, provisioner, cfg, inf, logger)
 			reconcilers = append(reconcilers, kubeReconciler)
 			log.Info().Str("type", "kube").Msg("enabled direct Kubernetes session reconciler")
 		case "tally":

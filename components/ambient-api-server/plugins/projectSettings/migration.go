@@ -27,6 +27,27 @@ func migration() *gormigrate.Migration {
 	}
 }
 
+func runnerImageMigration() *gormigrate.Migration {
+	type ProjectSettings struct {
+		db.Model
+		RunnerImage           *string
+		RunnerImagePullSecret *string
+	}
+
+	return &gormigrate.Migration{
+		ID: "202605140001",
+		Migrate: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&ProjectSettings{})
+		},
+		Rollback: func(tx *gorm.DB) error {
+			if err := tx.Migrator().DropColumn(&ProjectSettings{}, "runner_image"); err != nil {
+				return err
+			}
+			return tx.Migrator().DropColumn(&ProjectSettings{}, "runner_image_pull_secret")
+		},
+	}
+}
+
 func constraintMigration() *gormigrate.Migration {
 	migrateStatements := []string{
 		`DELETE FROM project_settings WHERE project_id NOT IN (SELECT id FROM projects WHERE deleted_at IS NULL)`,
