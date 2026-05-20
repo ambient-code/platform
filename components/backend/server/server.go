@@ -7,6 +7,9 @@ import (
 	"os"
 	"strings"
 
+	"ambient-code-backend/featureflags"
+	"ambient-code-backend/jwtauth"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	authnv1 "k8s.io/api/authentication/v1"
@@ -76,7 +79,7 @@ func Run(registerRoutes RouterFunc) error {
 	return nil
 }
 
-// sanitizeUserID converts userID to a valid Kubernetes Secret data key
+// SanitizeUserID converts userID to a valid Kubernetes Secret data key
 // K8s Secret keys must match regex: [-._a-zA-Z0-9]+
 // Follows cert-manager's sanitization pattern for consistent, secure key generation
 //
@@ -88,7 +91,7 @@ func Run(registerRoutes RouterFunc) error {
 // - Spaces: "First Last" → "First-Last"
 //
 // Security: Only replaces characters, never interprets them (no injection risk)
-func sanitizeUserID(userID string) string {
+func SanitizeUserID(userID string) string {
 	if userID == "" {
 		return ""
 	}
@@ -128,17 +131,29 @@ func sanitizeUserID(userID string) string {
 	return sanitized
 }
 
-// forwardedIdentityMiddleware populates Gin context from common OAuth proxy headers
+// forwardedIdentityMiddleware populates Gin context from common OAuth proxy headers.
+// Under SSO, it validates the JWT and extracts identity from claims instead.
 func forwardedIdentityMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// SSO path: extract identity from JWT Bearer token
+		if featureflags.IsEnabled("sso-authentication") && JWTValidator != nil {
+			if token := extractBearerToken(c); token != "" {
+				if claims, err := JWTValidator.Validate(token); err == nil {
+					setIdentityFromClaims(c, claims)
+					c.Set("ssoValidatedClaims", claims)
+					c.Next()
+					return
+				}
+				// JWT validation failed — fall through to header-based extraction
+				// (API keys will be handled by getK8sClientsDefault via TokenReview)
+			}
+		}
+
+		// Legacy path: extract identity from OAuth proxy headers
 		if v := c.GetHeader("X-Forwarded-User"); v != "" {
-			// Sanitize userID to make it valid for K8s Secret keys
-			// Example: "kube:admin" becomes "kube-admin"
-			c.Set("userID", sanitizeUserID(v))
-			// Keep original for display purposes
+			c.Set("userID", SanitizeUserID(v))
 			c.Set("userIDOriginal", v)
 		}
-		// Prefer preferred username; fallback to user id
 		name := c.GetHeader("X-Forwarded-Preferred-Username")
 		if name == "" {
 			name = c.GetHeader("X-Forwarded-User")
@@ -152,7 +167,6 @@ func forwardedIdentityMiddleware() gin.HandlerFunc {
 		if v := c.GetHeader("X-Forwarded-Groups"); v != "" {
 			c.Set("userGroups", strings.Split(v, ","))
 		}
-		// Also expose access token if present
 		auth := c.GetHeader("Authorization")
 		if auth != "" {
 			c.Set("authorizationHeader", auth)
@@ -179,6 +193,42 @@ func forwardedIdentityMiddleware() gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+func extractBearerToken(c *gin.Context) string {
+	auth := c.GetHeader("Authorization")
+	if auth == "" {
+		return ""
+	}
+	parts := strings.SplitN(auth, " ", 2)
+	if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+		return strings.TrimSpace(parts[1])
+	}
+	return ""
+}
+
+func setIdentityFromClaims(c *gin.Context, claims *jwtauth.Claims) {
+	if claims.Email != "" {
+		c.Set("userID", SanitizeUserID(claims.Email))
+		c.Set("userIDOriginal", claims.Email)
+		c.Set("userEmail", claims.Email)
+	} else if claims.Sub != "" {
+		c.Set("userID", SanitizeUserID(claims.Sub))
+		c.Set("userIDOriginal", claims.Sub)
+	}
+
+	if claims.PreferredUsername != "" {
+		c.Set("userName", claims.PreferredUsername)
+	} else if claims.Email != "" {
+		c.Set("userName", claims.Email)
+	}
+
+	if len(claims.Groups) > 0 {
+		c.Set("userGroups", claims.Groups)
+	}
+
+	c.Set("authIdentity", claims.Sub)
+	c.Set("authorizationHeader", c.GetHeader("Authorization"))
 }
 
 // resolveServiceAccountFromToken verifies the Bearer token via K8s TokenReview

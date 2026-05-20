@@ -75,42 +75,28 @@ npm run lint
 - Run `npm run build` - must pass with 0 errors, 0 warnings
 - See `DESIGN_GUIDELINES.md` for comprehensive frontend development standards
 
-### Header forwarding model (dev and prod)
-Next.js API routes forward incoming headers to the backend. They do not auto-inject user identity. In development, you can optionally provide values via environment or `oc`:
+### Authentication model
 
-- Forwarded when present on the request:
-  - `X-Forwarded-User`, `X-Forwarded-Email`, `X-Forwarded-Preferred-Username`
-  - `X-Forwarded-Groups`
-  - `X-OpenShift-Project`
-  - `Authorization: Bearer <token>` (forwarded as `X-Forwarded-Access-Token`)
-- Optional dev helpers:
-  - `OC_USER`, `OC_EMAIL`, `OC_TOKEN`
-  - `ENABLE_OC_WHOAMI=1` to let the server call `oc whoami` / `oc whoami -t`
+The frontend acts as a BFF (Backend-for-Frontend) OIDC confidential client. Users authenticate via Keycloak, and the frontend stores the OIDC session in an encrypted httpOnly cookie. On each API request, the frontend extracts the JWT from the session and forwards it as `Authorization: Bearer <jwt>` to the backend.
 
-In production, put an OAuth/ingress proxy in front of the app to set these headers.
+In the Kind dev cluster, Keycloak is deployed automatically with `make kind-up`. Log in with `developer` / `developer`.
+
+Legacy mode (when `SSO_ENABLED` is not set): the frontend falls back to forwarding `X-Forwarded-*` headers from an OAuth proxy sidecar.
 
 ### Environment variables
-- `BACKEND_URL` (default: `http://localhost:8080/api`)
-  - Used by server-side API routes to reach the backend.
-- `FEEDBACK_URL` (optional)
-  - URL for the feedback link in the masthead. If not set, the link will not appear.
-- `GITHUB_APP_SLUG` (required for GitHub integration)
-  - The slug of the GitHub App (e.g. `ambient-code`). Without this, the Connect button on the Integrations page is disabled.
-- `GITHUB_CALLBACK_URL` (optional)
-  - Explicit callback URL for GitHub App OAuth. Used when multiple clusters share one GitHub App. Falls back to `<current origin>/api/auth/github/user/callback`. Must be registered as a callback URL in the GitHub App settings. Set per-cluster via CI workflow (`oc set env`).
-- Optional dev helpers: `OC_USER`, `OC_EMAIL`, `OC_TOKEN`, `ENABLE_OC_WHOAMI=1`
+- `BACKEND_URL` (default: `http://localhost:8080/api`) — backend API for server-side routes
+- `FEEDBACK_URL` (optional) — feedback link in the masthead
+- `GITHUB_APP_SLUG` (required for GitHub integration) — GitHub App slug
+- `GITHUB_CALLBACK_URL` (optional) — explicit GitHub OAuth callback URL
+- `SSO_ISSUER_URL` — Keycloak OIDC issuer URL (e.g. `http://keycloak-service:8080/realms/ambient-code`)
+- `SSO_CLIENT_ID` — OIDC confidential client ID (e.g. `ambient-frontend`)
+- `SSO_CLIENT_SECRET` — OIDC client secret
+- `SSO_ENABLED` — set to `true` to enable SSO auth (disables OAuth proxy header forwarding)
+- `SSO_REDIRECT_URI` — OIDC callback URL (e.g. `http://localhost:11646/api/auth/sso/callback`)
+- `SESSION_SECRET` — encryption key for the session cookie (min 32 chars)
+- `SSO_PUBLIC_ISSUER_URL` (Kind only) — public Keycloak URL when it differs from `SSO_ISSUER_URL`
 
-You can also put these in a `.env.local` file in this folder:
-```
-BACKEND_URL=http://localhost:8080/api
-# Optional: URL for feedback link in masthead
-# FEEDBACK_URL=https://forms.example.com/feedback
-# Optional dev helpers
-# OC_USER=your.name
-# OC_EMAIL=your.name@example.com
-# OC_TOKEN=...
-# ENABLE_OC_WHOAMI=1
-```
+Legacy dev helpers (when SSO is off): `OC_USER`, `OC_EMAIL`, `OC_TOKEN`, `ENABLE_OC_WHOAMI=1`
 
 ### Verifying requests
 Backend directly (requires headers):

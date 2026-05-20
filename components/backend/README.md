@@ -34,86 +34,50 @@ make run
 make dev
 ```
 
-### Migration from `DISABLE_AUTH` (removed)
+### Authentication
 
-Older dev flows sometimes relied on `DISABLE_AUTH=true` to bypass auth. That pattern is **removed**.
-The backend **never** bypasses authentication based on environment variables, and it **never** falls back to the backend’s in-cluster ServiceAccount for user-initiated operations.
+The backend supports two auth modes, controlled by the `sso-authentication` Unleash feature flag. This is an **infrastructure flag** — it is not visible in the workspace settings UI and is not user-configurable. It is enabled per-environment by the ops team during SSO migration.
 
-#### What changed
+**SSO mode (flag on):** The backend validates JWTs from Keycloak against the JWKS endpoint, extracts identity from OIDC claims (`email`, `preferred_username`, `groups`), and uses K8s impersonation for all API calls. API keys (K8s ServiceAccount tokens) are accepted via TokenReview fallback.
 
-- **Removed**: `DISABLE_AUTH`-based bypass (and similar env-var bypasses)
-- **Required**: All authenticated endpoints must receive a real Kubernetes/OpenShift token
+**Legacy mode (flag off):** The backend reads `X-Forwarded-Access-Token` or `Authorization: Bearer` headers and uses the raw token as the K8s bearer token (OAuth proxy flow).
 
-#### What to do in your local dev workflow
+In the Kind dev cluster, legacy mode is the default. Toggle SSO on/off with `make kind-sso-toggle` (affects both frontend and backend).
 
-1. **Stop setting** `DISABLE_AUTH=true` anywhere (shell profile, `.env`, compose, manifests).
-2. **Send a token** on requests:
-   - `Authorization: Bearer <token>` (preferred)
-   - `X-Forwarded-Access-Token: <token>` (when behind an auth proxy)
-3. If you get:
-   - **401**: token missing/invalid/malformed
-   - **403**: token valid but RBAC forbids the operation in that namespace
+#### Local development (Kind)
 
-#### Option A: OpenShift / CRC (recommended for this repo)
+`make kind-up` deploys Keycloak automatically. The backend is configured with:
+- `SSO_ISSUER_URL` — points to the in-cluster Keycloak
+- `SSO_AUDIENCE` — `ambient-frontend`
+
+To test backend endpoints directly with a Keycloak JWT:
 
 ```bash
-# Login and obtain a user token
-oc login ...
-export OC_TOKEN="$(oc whoami -t)"
+# Get a JWT from Keycloak (from within the cluster)
+JWT=$(kubectl run -n ambient-code jwt-dev --rm -i --restart=Never --quiet \
+  --image=curlimages/curl -- sh -c \
+  ‘curl -sf -X POST http://keycloak-service:8080/realms/ambient-code/protocol/openid-connect/token \
+    -d client_id=ambient-frontend \
+    -d client_secret=dev-secret-do-not-use-in-prod \
+    -d grant_type=password \
+    -d username=developer \
+    -d password=developer \
+    -d scope=openid’ 2>/dev/null | jq -r ‘.access_token’)
 
-# Example request
-curl -H "Authorization: Bearer ${OC_TOKEN}" \
-  http://localhost:8080/health
+curl -H "Authorization: Bearer $JWT" http://localhost:12646/api/projects
 ```
 
-#### Option B: kind (ServiceAccount token for local dev)
-
-Kubernetes v1.24+ supports `kubectl create token`:
+K8s ServiceAccount tokens also work (dual-path auth):
 
 ```bash
-export DEV_NS=ambient-code
-kubectl create namespace "${DEV_NS}" 2>/dev/null || true
-
-kubectl -n "${DEV_NS}" create serviceaccount backend-dev 2>/dev/null || true
-
-# Minimal example permissions (adjust as needed)
-kubectl -n "${DEV_NS}" create role backend-dev \
-  --verb=get,list,watch,create,update,patch,delete \
-  --resource=secrets,configmaps,services,pods,rolebindings 2>/dev/null || true
-
-kubectl -n "${DEV_NS}" create rolebinding backend-dev \
-  --role=backend-dev \
-  --serviceaccount="${DEV_NS}:backend-dev" 2>/dev/null || true
-
-export DEV_TOKEN="$(kubectl -n "${DEV_NS}" create token backend-dev)"
-
-curl -H "Authorization: Bearer ${DEV_TOKEN}" \
-  http://localhost:8080/health
-```
-
-If you’re on an older cluster that does **not** support `kubectl create token`, you can use a legacy Secret-backed token:
-
-```bash
-export DEV_NS=ambient-code
-kubectl -n "${DEV_NS}" create serviceaccount backend-dev 2>/dev/null || true
-
-SECRET_NAME="$(kubectl -n "${DEV_NS}" get sa backend-dev -o jsonpath='{.secrets[0].name}')"
-export DEV_TOKEN="$(kubectl -n "${DEV_NS}" get secret "${SECRET_NAME}" -o jsonpath='{.data.token}' | base64 -d)"
-```
-
-#### Calling project-scoped APIs (example)
-
-```bash
-export TOKEN="..."
-export PROJECT="my-project"
-
-curl -H "Authorization: Bearer ${TOKEN}" \
-  "http://localhost:8080/api/projects/${PROJECT}/agentic-sessions"
+TOKEN=$(kubectl get secret test-user-token -n ambient-code \
+  -o jsonpath=’{.data.token}’ | base64 -d)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:12646/api/projects
 ```
 
 #### Unit tests note
 
-Unit tests **must not** use `DISABLE_AUTH`. Handler unit tests use:
+Unit tests use:
 
 - `go test -tags=test ./handlers`
 - `SetValidTestToken(...)` (see `components/backend/tests/test_utils/http_utils.go`)
