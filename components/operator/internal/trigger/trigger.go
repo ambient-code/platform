@@ -13,12 +13,14 @@ import (
 	"strings"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/rest"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
 
+	"ambient-code-operator/internal/config"
 	"ambient-code-operator/internal/types"
 )
 
@@ -33,39 +35,28 @@ func RunSessionTrigger() {
 		log.Fatalf("Required environment variables SESSION_TEMPLATE, PROJECT_NAMESPACE, and SCHEDULED_SESSION_NAME must be set")
 	}
 
-	// Init K8s client
-	cfg, err := rest.InClusterConfig()
-	if err != nil {
-		log.Fatalf("Failed to get in-cluster config: %v", err)
+	if err := config.InitK8sClients(); err != nil {
+		log.Fatalf("Failed to initialize Kubernetes clients: %v", err)
 	}
 
-	dynamicClient, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		log.Fatalf("Failed to create dynamic client: %v", err)
-	}
-
-	// Parse session template
 	var template map[string]interface{}
 	if err := json.Unmarshal([]byte(sessionTemplate), &template); err != nil {
 		log.Fatalf("Failed to parse SESSION_TEMPLATE JSON: %v", err)
 	}
 
-	// Check if reuse mode is enabled
 	reuseLastSession := strings.EqualFold(strings.TrimSpace(os.Getenv("REUSE_LAST_SESSION")), "true")
 
 	if reuseLastSession {
-		reused, err := tryReuseLastSession(dynamicClient, projectNamespace, scheduledSessionName, template)
+		reused, err := tryReuseLastSession(config.DynamicClient, projectNamespace, scheduledSessionName, template)
 		if err != nil {
-			// Don't fall through to create — the reuse may have partially succeeded
 			log.Fatalf("Failed to reuse last session for %s: %v", scheduledSessionName, err)
 		}
 		if reused {
 			return
 		}
-		// No reusable session found — fall through to create a new one
 	}
 
-	createNewSession(dynamicClient, projectNamespace, scheduledSessionName, template)
+	createNewSession(config.DynamicClient, projectNamespace, scheduledSessionName, template)
 }
 
 // tryReuseLastSession finds the most recent session for this scheduled session and either
@@ -244,19 +235,56 @@ func resumeSessionWithPrompt(dynamicClient dynamic.Interface, namespace, session
 	})
 }
 
-// createNewSession creates a new AgenticSession CR (original behavior).
+// applyFeatureFlagOverrides reads workspace feature flag overrides from ConfigMap
+// and applies them to the session template. Non-fatal: logs warnings but continues
+// if ConfigMap is missing or read fails (degraded operation acceptable).
+func applyFeatureFlagOverrides(ctx context.Context, k8sClient kubernetes.Interface, namespace string, template map[string]interface{}) error {
+	cm, err := k8sClient.CoreV1().ConfigMaps(namespace).Get(ctx, types.FeatureFlagOverridesConfigMap, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		log.Printf("WARNING: failed to read feature flag overrides for namespace %s: %v", namespace, err)
+		return nil
+	}
+
+	val, exists := cm.Data[types.JiraWriteFlagKey]
+	if !exists || val != "true" {
+		return nil
+	}
+
+	spec, ok := template["spec"].(map[string]interface{})
+	if !ok {
+		spec = map[string]interface{}{}
+		template["spec"] = spec
+	}
+
+	envVars, ok := spec["environmentVariables"].(map[string]interface{})
+	if !ok {
+		envVars = map[string]interface{}{}
+	}
+
+	envVars[types.JiraReadOnlyModeEnvVar] = "false"
+	spec["environmentVariables"] = envVars
+
+	log.Printf("Applied jira-write feature flag: %s=false", types.JiraReadOnlyModeEnvVar)
+	return nil
+}
+
 func createNewSession(dynamicClient dynamic.Interface, namespace, scheduledSessionName string, template map[string]interface{}) {
-	// Build session name and display name.
-	// The most restrictive derived K8s resource name is the Service:
-	//   "session-" (8 chars) + sessionName ≤ 63  →  sessionName ≤ 55
-	// sanitizeName caps at 40 chars, so namePrefix + "-" + timestamp (10)
-	// yields at most 51 chars — well within the 55-char budget.
+	if config.K8sClient != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := applyFeatureFlagOverrides(ctx, config.K8sClient, namespace, template); err != nil {
+			log.Printf("WARNING: failed to apply feature flag overrides: %v", err)
+		}
+	}
+
 	now := time.Now()
 	ts := strconv.FormatInt(now.Unix(), 10)
 	namePrefix := sanitizeName(scheduledSessionName)
 	if dn, ok := template["displayName"].(string); ok && dn != "" {
 		namePrefix = sanitizeName(dn)
-		// Set display name with human-readable timestamp, e.g. "Daily Jira Summary (Jan 1, 2026 - 00:00:00)"
 		template["displayName"] = fmt.Sprintf("%s (%s)", dn, now.UTC().Format("Jan 2, 2006 - 15:04:05"))
 	}
 	sessionName := fmt.Sprintf("%s-%s", namePrefix, ts)
@@ -277,7 +305,6 @@ func createNewSession(dynamicClient dynamic.Interface, namespace, scheduledSessi
 		},
 	}
 
-	// Create via dynamic client
 	gvr := types.GetAgenticSessionResource()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

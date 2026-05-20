@@ -1,7 +1,14 @@
 package trigger
 
 import (
+	"context"
 	"testing"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
+
+	"ambient-code-operator/internal/types"
 )
 
 func TestSanitizeName(t *testing.T) {
@@ -102,5 +109,122 @@ func TestSanitizeName_TruncationPreservesValidSuffix(t *testing.T) {
 	}
 	if result[len(result)-1] == '-' {
 		t.Errorf("sanitizeName(%q) ends with hyphen: %q", input, result)
+	}
+}
+
+func TestApplyFeatureFlagOverrides(t *testing.T) {
+	tests := []struct {
+		name            string
+		configMapData   map[string]string
+		existingEnvVars map[string]interface{}
+		expectedEnvVars map[string]interface{}
+	}{
+		{
+			name:            "jira-write enabled sets JIRA_READ_ONLY_MODE to false",
+			configMapData:   map[string]string{"jira-write": "true"},
+			existingEnvVars: nil,
+			expectedEnvVars: map[string]interface{}{"JIRA_READ_ONLY_MODE": "false"},
+		},
+		{
+			name:            "jira-write disabled does not set env var",
+			configMapData:   map[string]string{"jira-write": "false"},
+			existingEnvVars: nil,
+			expectedEnvVars: nil,
+		},
+		{
+			name:            "no overrides ConfigMap does not set env var",
+			configMapData:   nil,
+			existingEnvVars: nil,
+			expectedEnvVars: nil,
+		},
+		{
+			name:            "preserves existing env vars",
+			configMapData:   map[string]string{"jira-write": "true"},
+			existingEnvVars: map[string]interface{}{"CUSTOM_VAR": "value"},
+			expectedEnvVars: map[string]interface{}{
+				"CUSTOM_VAR":          "value",
+				"JIRA_READ_ONLY_MODE": "false",
+			},
+		},
+		{
+			name:            "other flags do not affect env vars",
+			configMapData:   map[string]string{"other-flag": "true"},
+			existingEnvVars: nil,
+			expectedEnvVars: nil,
+		},
+		{
+			name:            "jira-write with non-true value does not set env var",
+			configMapData:   map[string]string{"jira-write": "yes"},
+			existingEnvVars: nil,
+			expectedEnvVars: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create fake K8s client
+			var k8sClient *fake.Clientset
+			if tt.configMapData != nil {
+				configMap := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      types.FeatureFlagOverridesConfigMap,
+						Namespace: "test-namespace",
+					},
+					Data: tt.configMapData,
+				}
+				k8sClient = fake.NewSimpleClientset(configMap)
+			} else {
+				k8sClient = fake.NewSimpleClientset()
+			}
+
+			// Create template with optional existing env vars
+			template := map[string]interface{}{
+				"spec": map[string]interface{}{},
+			}
+			if tt.existingEnvVars != nil {
+				spec := template["spec"].(map[string]interface{})
+				spec["environmentVariables"] = tt.existingEnvVars
+			}
+
+			// Apply feature flag overrides
+			ctx := context.Background()
+			err := applyFeatureFlagOverrides(ctx, k8sClient, "test-namespace", template)
+			if err != nil {
+				t.Fatalf("applyFeatureFlagOverrides() unexpected error: %v", err)
+			}
+
+			// Verify environment variables
+			spec, ok := template["spec"].(map[string]interface{})
+			if !ok {
+				t.Fatal("template[spec] is not a map")
+			}
+
+			envVars, ok := spec["environmentVariables"].(map[string]interface{})
+			if tt.expectedEnvVars == nil {
+				if envVars != nil && len(envVars) > 0 {
+					t.Errorf("Expected no environmentVariables, got %v", envVars)
+				}
+				return
+			}
+
+			if !ok {
+				t.Fatal("spec[environmentVariables] is not a map")
+			}
+
+			if len(envVars) != len(tt.expectedEnvVars) {
+				t.Errorf("environmentVariables count = %d, want %d", len(envVars), len(tt.expectedEnvVars))
+			}
+
+			for key, expectedVal := range tt.expectedEnvVars {
+				actualVal, exists := envVars[key]
+				if !exists {
+					t.Errorf("environmentVariables[%q] missing, want %q", key, expectedVal)
+					continue
+				}
+				if actualVal != expectedVal {
+					t.Errorf("environmentVariables[%q] = %q, want %q", key, actualVal, expectedVal)
+				}
+			}
+		})
 	}
 }
