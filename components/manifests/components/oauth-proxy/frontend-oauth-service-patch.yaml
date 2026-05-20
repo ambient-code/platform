@@ -1,10 +1,12 @@
 # Patch to add OAuth port to frontend service
+# - Adds HTTPS port for OAuth proxy sidecar
+# - Uses service.alpha annotation for auto-generated TLS cert
 apiVersion: v1
 kind: Service
 metadata:
   name: frontend-service
   annotations:
-    service.beta.openshift.io/serving-cert-secret-name: dashboard-proxy-tls
+    service.alpha.openshift.io/serving-cert-secret-name: frontend-proxy-tls
 spec:
   ports:
   - port: 8443

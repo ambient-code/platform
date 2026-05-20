@@ -1071,6 +1071,28 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 
 			VolumeMounts: runnerVolumeMounts,
 
+			// Health probes to prevent Service routing before FastAPI is ready
+			ReadinessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: "/health",
+						Port: intstr.FromInt32(runnerPort),
+					},
+				},
+				InitialDelaySeconds: 3,
+				PeriodSeconds:       5,
+			},
+			LivenessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: "/health",
+						Port: intstr.FromInt32(runnerPort),
+					},
+				},
+				InitialDelaySeconds: 20,
+				PeriodSeconds:       30,
+			},
+
 			// Lifecycle hook to copy Google credentials from read-only secret mount to writable workspace
 			Lifecycle: &corev1.Lifecycle{
 				PostStart: &corev1.LifecycleHandler{
@@ -1148,6 +1170,7 @@ func handleAgenticSessionEvent(obj *unstructured.Unstructured) error {
 				// Core session env vars
 				base = append(base,
 					corev1.EnvVar{Name: "INITIAL_PROMPT", Value: prompt},
+					corev1.EnvVar{Name: "INITIAL_PROMPT_DELAY_SECONDS", Value: "10"},
 					corev1.EnvVar{Name: "LLM_MODEL", Value: model},
 					corev1.EnvVar{Name: "LLM_TEMPERATURE", Value: fmt.Sprintf("%.2f", temperature)},
 					corev1.EnvVar{Name: "LLM_MAX_TOKENS", Value: fmt.Sprintf("%d", maxTokens)},

@@ -46,6 +46,12 @@ patches:
     kind: Deployment
     name: ambient-api-server
     version: v1
+- path: ambient-api-server-migration-ssl-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ambient-api-server
+    version: v1
 - path: ambient-api-server-service-ca-patch.yaml
   target:
     kind: Service

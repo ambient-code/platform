@@ -41,20 +41,20 @@ spec:
         - name: PGHOST
           valueFrom:
             secretKeyRef:
-              name: ambient-api-server-db
+              name: ambient-code-rds
               key: db.host
         - name: PGUSER
           valueFrom:
             secretKeyRef:
-              name: ambient-api-server-db
+              name: ambient-code-rds
               key: db.user
         - name: PGPASSWORD
           valueFrom:
             secretKeyRef:
-              name: ambient-api-server-db
+              name: ambient-code-rds
               key: db.password
         - name: PGDATABASE
           valueFrom:
             secretKeyRef:
-              name: ambient-api-server-db
+              name: ambient-code-rds
               key: db.name

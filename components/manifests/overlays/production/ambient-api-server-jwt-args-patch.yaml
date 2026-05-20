@@ -33,9 +33,8 @@ spec:
             - --metrics-server-bindaddress=:4433
             - --health-check-server-bindaddress=:4434
             - --enable-health-check-https=true
-            # SSL disabled: PostgreSQL is in-cluster (same namespace, pod network only).
-            # Switch to --db-sslmode=require if using an external database.
-            - --db-sslmode=disable
+            # SSL required: Using external AWS RDS database
+            - --db-sslmode=require
             - --db-max-open-connections=50
             - --enable-db-debug=false
             - --enable-metrics-https=false
