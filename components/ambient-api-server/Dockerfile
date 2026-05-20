@@ -23,10 +23,15 @@ ARG GIT_COMMIT=unknown
 RUN \
     microdnf install -y \
     util-linux \
+    shadow-utils \
     && \
-    microdnf clean all
+    microdnf clean all \
+    && \
+    useradd -u 1000 -M -s /sbin/nologin -r appuser
 
 COPY --from=builder /workspace/ambient-api-server /usr/local/bin/
+
+USER 1000
 
 EXPOSE 8000
 
