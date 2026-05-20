@@ -1,7 +1,7 @@
 # Ambient Runner Spec
 
 **Date:** 2026-04-05
-**Status:** Living Document — current state documented
+**Status:** Living Document
 **Related:** `../control-plane/control-plane.spec.md` — CP provisioning, token endpoint, start context assembly
 
 ---
@@ -372,6 +372,37 @@ Claude can call these tools to interact with the Ambient platform:
 
 ---
 
+## Tool Permission Model
+
+ACP sessions are headless — there is no interactive terminal for permission prompts. The runner uses a pre-approval model: all tools Claude should use are pre-approved, and tools that need user interaction halt the stream.
+
+| Mechanism | SDK Option | Purpose |
+|-----------|-----------|---------|
+| Permission mode | `permission_mode: "acceptEdits"` | Auto-approves file write operations without prompting |
+| Built-in tool allowlist | `allowed_tools: [...]` | Pre-approves every Claude Code built-in tool the runner permits |
+| MCP tool patterns | `allowed_tools: ["mcp__{server}__*"]` | Wildcards auto-approve all tools from registered MCP servers |
+
+Any built-in tool NOT in the allowlist triggers a permission prompt. The runner has no prompt handler, so unlisted tools hang indefinitely — completeness of the allowlist is a correctness requirement.
+
+### Tool Handling Tiers
+
+**Tier 1 — Allowlist-only.** Execute autonomously. Adding to the allowlist is sufficient.
+
+Read, Write, Edit, MultiEdit, NotebookEdit, Glob, Grep, Bash, WebFetch, WebSearch, TodoWrite, Skill, Agent, TaskOutput, TaskStop, EnterPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, ScheduleWakeup
+
+**Tier 2 — HITL halt.** These tools halt the event stream, interrupt the SDK worker, and wait for the user's next message before resuming. Today only `AskUserQuestion` uses this path (via `BUILTIN_FRONTEND_TOOLS` in the adapter). `ExitPlanMode` needs the same treatment.
+
+| Tool | Why it halts |
+|------|-------------|
+| AskUserQuestion | Claude needs the user's actual answer |
+| ExitPlanMode | Claude has written a plan — the user must review and approve, reject, or request changes |
+
+The halt sequence: emit `TOOL_CALL_END` → set adapter halted → stop event stream → interrupt worker → wait for user message (delivered as tool result). No timeout — the session stays halted until the user responds or the session is stopped externally.
+
+For prompts not covered by the allowlist or HITL set, the runner should reject with a logged warning using the SDK's `can_use_tool` callback or `PermissionRequest` hook. No prompt should hang indefinitely.
+
+---
+
 ## System Prompt Construction
 
 The system prompt is assembled once during `_setup_platform()` and passed to the Claude SDK:
@@ -474,3 +505,5 @@ The resolved `(cwd_path, add_dirs)` tuple is passed to the Claude SDK via `Claud
 | SSE queue pre-registered before `INITIAL_PROMPT` push | Backend opens `GET /events/{thread_id}` before `PushSessionMessage`; pre-registration in lifespan eliminates the race |
 | `--resume` via persisted session IDs | Claude Code saves state to `.claude/` on graceful subprocess shutdown; session IDs survive `mark_dirty()` rebuilds via JSON file and `_saved_session_ids` snapshot |
 | Credential URL validated to cluster-local hostname | Prevents exfiltration of user tokens to external hosts if `BACKEND_API_URL` is tampered with |
+| Pre-approval tool permission model (allowlist + `acceptEdits`) | ACP sessions are headless — no interactive terminal for permission prompts. The allowlist and permission mode pre-approve all legitimate tool use. Any tool not in the allowlist hangs indefinitely, making allowlist completeness a correctness requirement. |
+| HITL halt for `ExitPlanMode` (same as `AskUserQuestion`) | Plan approval requires human judgment. The conversation stream shows the plan; the user must explicitly approve, reject, or request changes. Auto-approving would bypass the user's ability to review and redirect before execution begins. |
