@@ -14,7 +14,8 @@ usage() {
   echo "Environment variables:"
   echo "  REGISTRY   Image registry prefix (default: quay.io/ambient_code)"
   echo "  OC         oc/kubectl binary (default: oc)"
-  echo "  SKIP_RBAC  Set to 1 to skip ClusterRole/ClusterRoleBinding creation"
+  echo "  SKIP_RBAC         Set to 1 to skip ClusterRole/ClusterRoleBinding creation"
+  echo "  ANTHROPIC_API_KEY  Anthropic API key for runner pods (required for sessions to work)"
   exit 1
 }
 
@@ -62,6 +63,18 @@ if ! $CLI get secret ambient-api-server -n "$NAMESPACE" &>/dev/null; then
     --from-literal=clientSecret=dev-secret
 else
   echo "    Secret OK: ambient-api-server"
+fi
+
+if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+  if ! $CLI get secret ambient-anthropic -n "$NAMESPACE" &>/dev/null; then
+    echo "    Creating ambient-anthropic secret (Anthropic API key)"
+    $CLI create secret generic ambient-anthropic -n "$NAMESPACE" \
+      --from-literal=api-key="$ANTHROPIC_API_KEY"
+  else
+    echo "    Secret OK: ambient-anthropic"
+  fi
+else
+  echo "    WARNING: ANTHROPIC_API_KEY not set — runner pods will fail to call Claude"
 fi
 
 echo "==> Step 2: Ensuring ServiceAccount and RBAC for control-plane"
@@ -523,6 +536,12 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ambient-anthropic
+              key: api-key
+              optional: true
         resources:
           requests:
             cpu: 50m
