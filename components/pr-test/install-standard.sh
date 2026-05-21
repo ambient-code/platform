@@ -15,7 +15,10 @@ usage() {
   echo "  REGISTRY   Image registry prefix (default: quay.io/ambient_code)"
   echo "  OC         oc/kubectl binary (default: oc)"
   echo "  SKIP_RBAC         Set to 1 to skip ClusterRole/ClusterRoleBinding creation"
-  echo "  ANTHROPIC_API_KEY  Anthropic API key for runner pods (required for sessions to work)"
+  echo "  ANTHROPIC_API_KEY  Anthropic API key for runner pods"
+  echo "  VERTEX_SOURCE_NS   Namespace to copy ambient-vertex secret from (enables Vertex AI)"
+  echo ""
+  echo "  Set either ANTHROPIC_API_KEY or VERTEX_SOURCE_NS for runners to work."
   exit 1
 }
 
@@ -65,7 +68,28 @@ else
   echo "    Secret OK: ambient-api-server"
 fi
 
-if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+VERTEX_SOURCE_NS="${VERTEX_SOURCE_NS:-}"
+USE_VERTEX=0
+VERTEX_KEY_FILE="${VERTEX_KEY_FILE:-unused}"
+VERTEX_PROJECT_ID="${VERTEX_PROJECT_ID:-}"
+VERTEX_REGION="${VERTEX_REGION:-global}"
+
+if [[ -n "$VERTEX_SOURCE_NS" ]]; then
+  if ! $CLI get secret ambient-vertex -n "$NAMESPACE" &>/dev/null; then
+    echo "    Copying ambient-vertex secret from $VERTEX_SOURCE_NS"
+    $CLI get secret ambient-vertex -n "$VERTEX_SOURCE_NS" -o json | \
+      python3 -c "import json,sys; s=json.load(sys.stdin); s['metadata']={'name':s['metadata']['name'],'namespace':'$NAMESPACE'}; json.dump(s,sys.stdout)" | \
+      $CLI apply -n "$NAMESPACE" -f -
+  else
+    echo "    Secret OK: ambient-vertex"
+  fi
+  USE_VERTEX=1
+  VERTEX_KEY_FILE=$($CLI get secret ambient-vertex -n "$NAMESPACE" -o jsonpath='{.data}' | python3 -c "import json,sys; print(list(json.load(sys.stdin).keys())[0])")
+  if [[ -z "$VERTEX_PROJECT_ID" ]]; then
+    VERTEX_PROJECT_ID=$(echo "$VERTEX_KEY_FILE" | sed 's/\.json$//')-claude
+    echo "    Auto-detected VERTEX_PROJECT_ID=$VERTEX_PROJECT_ID (override with VERTEX_PROJECT_ID env var)"
+  fi
+elif [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
   if ! $CLI get secret ambient-anthropic -n "$NAMESPACE" &>/dev/null; then
     echo "    Creating ambient-anthropic secret (Anthropic API key)"
     $CLI create secret generic ambient-anthropic -n "$NAMESPACE" \
@@ -74,7 +98,7 @@ if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
     echo "    Secret OK: ambient-anthropic"
   fi
 else
-  echo "    WARNING: ANTHROPIC_API_KEY not set — runner pods will fail to call Claude"
+  echo "    WARNING: Neither ANTHROPIC_API_KEY nor VERTEX_SOURCE_NS set — runners will fail"
 fi
 
 echo "==> Step 2: Ensuring ServiceAccount and RBAC for control-plane"
@@ -536,12 +560,28 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        - name: USE_VERTEX
+          value: "${USE_VERTEX}"
         - name: ANTHROPIC_API_KEY
           valueFrom:
             secretKeyRef:
               name: ambient-anthropic
               key: api-key
               optional: true
+        - name: ANTHROPIC_VERTEX_PROJECT_ID
+          value: "${VERTEX_PROJECT_ID:-}"
+        - name: CLOUD_ML_REGION
+          value: "${VERTEX_REGION:-global}"
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: "/app/vertex/${VERTEX_KEY_FILE:-unused}"
+        - name: VERTEX_SECRET_NAME
+          value: "ambient-vertex"
+        - name: VERTEX_SECRET_NAMESPACE
+          value: "${NAMESPACE}"
+        volumeMounts:
+        - name: vertex-credentials
+          mountPath: /app/vertex
+          readOnly: true
         resources:
           requests:
             cpu: 50m
@@ -549,6 +589,12 @@ spec:
           limits:
             cpu: 200m
             memory: 256Mi
+      volumes:
+      - name: vertex-credentials
+        secret:
+          secretName: ambient-vertex
+          optional: true
+          defaultMode: 420
       restartPolicy: Always
 EOF
 
