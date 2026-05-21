@@ -193,7 +193,45 @@ def _expand_env_vars(value: str) -> str:
     return _re.sub(r"\$\{([^}]+)}", _replace, value)
 
 
+_CREDENTIAL_SIDECAR_SERVER_NAMES: dict[str, str] = {
+    "github": "github",
+    "jira": "mcp-atlassian",
+    "kubeconfig": "openshift",
+    "google": "google-workspace",
+}
+
+
 def build_credential_mcp_servers() -> dict:
+    credential_mcp_urls_raw = os.getenv("CREDENTIAL_MCP_URLS", "").strip()
+    if credential_mcp_urls_raw:
+        return _build_sidecar_mcp_servers(credential_mcp_urls_raw)
+    return _build_subprocess_mcp_servers()
+
+
+def _build_sidecar_mcp_servers(credential_mcp_urls_raw: str) -> dict:
+    try:
+        credential_mcp_urls = json.loads(credential_mcp_urls_raw)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("Failed to parse CREDENTIAL_MCP_URLS — skipping credential MCP servers")
+        return {}
+
+    servers: dict = {}
+    for provider, url in credential_mcp_urls.items():
+        server_name = _CREDENTIAL_SIDECAR_SERVER_NAMES.get(provider, provider)
+        servers[server_name] = {
+            "type": "sse",
+            "url": f"{url.rstrip('/')}/sse",
+        }
+        logger.info(
+            "Configured %s credential sidecar (SSE) at %s",
+            server_name,
+            url,
+        )
+
+    return servers
+
+
+def _build_subprocess_mcp_servers() -> dict:
     credential_ids_raw = os.getenv("CREDENTIAL_IDS", "").strip()
     if not credential_ids_raw:
         return {}

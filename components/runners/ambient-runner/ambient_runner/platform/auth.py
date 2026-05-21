@@ -383,13 +383,25 @@ async def fetch_token_for_url(context: RunnerContext, url: str) -> str:
         return os.getenv("GITHUB_TOKEN") or await fetch_github_token(context)
 
 
+def _using_credential_sidecars() -> bool:
+    return bool(os.getenv("CREDENTIAL_MCP_URLS", "").strip())
+
+
 async def populate_runtime_credentials(context: RunnerContext) -> None:
     """Fetch all credentials from backend and populate environment variables.
 
     Called before each SDK run to ensure MCP servers have fresh tokens.
     Also configures git identity from GitHub/GitLab credentials.
+
+    When credential sidecars are active (CREDENTIAL_MCP_URLS is set),
+    integration tokens are NOT injected into the runner environment.
+    Only git identity (user name/email) is extracted for commit attribution.
     """
-    logger.info("Fetching fresh credentials from backend API...")
+    sidecar_mode = _using_credential_sidecars()
+    if sidecar_mode:
+        logger.info("Credential sidecars active — fetching identity only (no token injection)")
+    else:
+        logger.info("Fetching fresh credentials from backend API...")
 
     # Fetch all credentials concurrently
     (
@@ -421,7 +433,7 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         logger.warning(f"Failed to refresh Google credentials: {google_creds}")
         if isinstance(google_creds, PermissionError):
             auth_failures.append(str(google_creds))
-    elif google_creds.get("token") or google_creds.get("accessToken"):
+    elif not sidecar_mode and (google_creds.get("token") or google_creds.get("accessToken")):
         try:
             if google_creds.get("accessToken"):
                 _GOOGLE_WORKSPACE_CREDS_DIR.mkdir(parents=True, exist_ok=True)
@@ -475,7 +487,7 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         logger.warning(f"Failed to refresh Jira credentials: {jira_creds}")
         if isinstance(jira_creds, PermissionError):
             auth_failures.append(str(jira_creds))
-    elif jira_creds.get("token") or jira_creds.get("apiToken"):
+    elif not sidecar_mode and (jira_creds.get("token") or jira_creds.get("apiToken")):
         os.environ["JIRA_URL"] = jira_creds.get("url", "")
         os.environ["JIRA_API_TOKEN"] = jira_creds.get("apiToken") or jira_creds.get(
             "token", ""
@@ -489,15 +501,14 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         if isinstance(gitlab_creds, PermissionError):
             auth_failures.append(str(gitlab_creds))
     elif gitlab_creds.get("token"):
-        os.environ["GITLAB_TOKEN"] = gitlab_creds["token"]
-        # Also write to file so the git credential helper picks up mid-run
-        # refreshes even after the CLI subprocess has been spawned.
-        try:
-            _GITLAB_TOKEN_FILE.write_text(gitlab_creds["token"])
-            _GITLAB_TOKEN_FILE.chmod(0o600)
-        except OSError as e:
-            logger.warning(f"Failed to write GitLab token file: {e}")
-        logger.info("Updated GitLab token in environment")
+        if not sidecar_mode:
+            os.environ["GITLAB_TOKEN"] = gitlab_creds["token"]
+            try:
+                _GITLAB_TOKEN_FILE.write_text(gitlab_creds["token"])
+                _GITLAB_TOKEN_FILE.chmod(0o600)
+            except OSError as e:
+                logger.warning(f"Failed to write GitLab token file: {e}")
+            logger.info("Updated GitLab token in environment")
         if gitlab_creds.get("userName"):
             git_user_name = gitlab_creds["userName"]
         if gitlab_creds.get("email"):
@@ -509,15 +520,14 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         if isinstance(github_creds, PermissionError):
             auth_failures.append(str(github_creds))
     elif github_creds.get("token"):
-        os.environ["GITHUB_TOKEN"] = github_creds["token"]
-        # Also write to file so the git credential helper picks up mid-run
-        # refreshes even after the CLI subprocess has been spawned.
-        try:
-            _GITHUB_TOKEN_FILE.write_text(github_creds["token"])
-            _GITHUB_TOKEN_FILE.chmod(0o600)
-        except OSError as e:
-            logger.warning(f"Failed to write GitHub token file: {e}")
-        logger.info("Updated GitHub token in environment")
+        if not sidecar_mode:
+            os.environ["GITHUB_TOKEN"] = github_creds["token"]
+            try:
+                _GITHUB_TOKEN_FILE.write_text(github_creds["token"])
+                _GITHUB_TOKEN_FILE.chmod(0o600)
+            except OSError as e:
+                logger.warning(f"Failed to write GitHub token file: {e}")
+            logger.info("Updated GitHub token in environment")
         if github_creds.get("userName"):
             git_user_name = github_creds["userName"]
         if github_creds.get("email"):
@@ -549,7 +559,7 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         logger.warning(f"Failed to refresh kubeconfig credentials: {kubeconfig_creds}")
         if isinstance(kubeconfig_creds, PermissionError):
             auth_failures.append(str(kubeconfig_creds))
-    elif kubeconfig_creds.get("token"):
+    elif not sidecar_mode and kubeconfig_creds.get("token"):
         try:
             _KUBECONFIG_FILE.write_text(kubeconfig_creds["token"])
             _KUBECONFIG_FILE.chmod(0o600)
@@ -558,10 +568,13 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         except OSError as e:
             logger.warning(f"Failed to write kubeconfig file: {e}")
 
-    # Configure git identity, credential helper, and gh CLI wrapper
+    # Configure git identity
     await configure_git_identity(git_user_name, git_user_email)
-    install_git_credential_helper()
-    install_gh_wrapper()
+
+    # Only install credential helper and gh wrapper in legacy mode
+    if not sidecar_mode:
+        install_git_credential_helper()
+        install_gh_wrapper()
 
     if auth_failures:
         raise PermissionError(
