@@ -12,12 +12,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   return proxyToKeycloak(request, await params);
 }
 
+const ALLOWED_PATH_PREFIX = /^realms\/[^/]+\/(protocol\/openid-connect|\.well-known|login-actions|resources)\b/;
+
 async function proxyToKeycloak(request: NextRequest, params: { path: string[] }) {
   if (!SSO_ORIGIN) {
     return NextResponse.json({ error: "SSO not configured" }, { status: 503 });
   }
 
   const path = params.path.join("/");
+  if (!ALLOWED_PATH_PREFIX.test(path)) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   const target = new URL(`/${path}`, SSO_ORIGIN);
   target.search = request.nextUrl.search;
 

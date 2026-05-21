@@ -3,11 +3,22 @@ import { cookies } from "next/headers";
 import { exchangeCode } from "@/lib/oidc";
 import { getSession } from "@/lib/session";
 
+function safeReturnTo(value: string | undefined): string {
+  if (!value) return "/";
+  try {
+    const parsed = new URL(value, "http://localhost");
+    if (parsed.origin !== "http://localhost") return "/";
+    return parsed.pathname + parsed.search;
+  } catch {
+    return "/";
+  }
+}
+
 export async function GET(request: NextRequest) {
   const cookieStore = await cookies();
   const codeVerifier = cookieStore.get("oidc_code_verifier")?.value;
   const expectedState = cookieStore.get("oidc_state")?.value;
-  const returnTo = cookieStore.get("oidc_return_to")?.value || "/";
+  const returnTo = safeReturnTo(cookieStore.get("oidc_return_to")?.value);
 
   const publicOrigin = process.env.SSO_REDIRECT_URI
     ? new URL(process.env.SSO_REDIRECT_URI).origin

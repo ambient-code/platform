@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildAuthorizationUrl } from "@/lib/oidc";
 
+function safeReturnTo(value: string | null | undefined): string {
+  if (!value) return "/";
+  try {
+    const parsed = new URL(value, "http://localhost");
+    if (parsed.origin !== "http://localhost") return "/";
+    return parsed.pathname + parsed.search;
+  } catch {
+    return "/";
+  }
+}
+
 export async function GET(request: NextRequest) {
   let redirectUri = process.env.SSO_REDIRECT_URI
     || `${request.nextUrl.origin}/api/auth/sso/callback`;
@@ -9,7 +20,7 @@ export async function GET(request: NextRequest) {
     u.searchParams.set("retried", "1");
     redirectUri = u.toString();
   }
-  const returnTo = request.nextUrl.searchParams.get("returnTo") || "/";
+  const returnTo = safeReturnTo(request.nextUrl.searchParams.get("returnTo"));
 
   const { url, codeVerifier, state } = await buildAuthorizationUrl(redirectUri);
 

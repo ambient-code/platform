@@ -15,7 +15,7 @@ spec:
         app: keycloak
     spec:
       securityContext:
-        runAsNonRoot: false
+        runAsNonRoot: false # Keycloak upstream image requires root; acceptable in Kind dev only
       containers:
         - name: keycloak
           image: quay.io/keycloak/keycloak:26.0

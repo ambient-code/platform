@@ -32,6 +32,7 @@ export async function getAccessToken(): Promise<string | undefined> {
   }
 
   if (!session.refreshToken) {
+    console.warn("SSO: session expired with no refresh token, destroying");
     session.destroy();
     return undefined;
   }
