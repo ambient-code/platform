@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"log"
+	"os"
 	"strings"
 
 	"ambient-code-backend/featureflags"
@@ -19,6 +20,9 @@ import (
 const ssoFeatureFlag = "sso-authentication"
 
 func SSOEnabled() bool {
+	if os.Getenv("SSO_ENABLED") == "true" {
+		return true
+	}
 	return featureflags.IsEnabled(ssoFeatureFlag)
 }
 
@@ -28,9 +32,9 @@ func buildImpersonatingClients(claims *jwtauth.Claims) (kubernetes.Interface, dy
 		return nil, nil
 	}
 
-	impersonateUser := claims.Email
+	impersonateUser := claims.PreferredUsername
 	if impersonateUser == "" {
-		impersonateUser = claims.PreferredUsername
+		impersonateUser = claims.Email
 	}
 	if impersonateUser == "" {
 		impersonateUser = claims.Sub
@@ -40,10 +44,15 @@ func buildImpersonatingClients(claims *jwtauth.Claims) (kubernetes.Interface, dy
 		return nil, nil
 	}
 
+	groups := claims.Groups
+	if len(groups) == 0 {
+		groups = []string{"system:authenticated"}
+	}
+
 	cfg := rest.CopyConfig(BaseKubeConfig)
 	cfg.Impersonate = rest.ImpersonationConfig{
 		UserName: impersonateUser,
-		Groups:   claims.Groups,
+		Groups:   groups,
 	}
 
 	kc, err1 := kubernetes.NewForConfig(cfg)

@@ -136,13 +136,15 @@ func SanitizeUserID(userID string) string {
 func forwardedIdentityMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// SSO path: extract identity from JWT Bearer token
-		if featureflags.IsEnabled("sso-authentication") && JWTValidator != nil {
+		if (featureflags.IsEnabled("sso-authentication") || os.Getenv("SSO_ENABLED") == "true") && JWTValidator != nil {
 			if token := extractBearerToken(c); token != "" {
 				if claims, err := JWTValidator.Validate(token); err == nil {
 					setIdentityFromClaims(c, claims)
 					c.Set("ssoValidatedClaims", claims)
 					c.Next()
 					return
+				} else {
+					log.Printf("SSO: JWT validation failed for %s: %v", c.FullPath(), err)
 				}
 				// JWT validation failed — fall through to header-based extraction
 				// (API keys will be handled by getK8sClientsDefault via TokenReview)
