@@ -470,6 +470,7 @@ func streamMessagesContinuous(cmd *cobra.Command, client *sdkclient.Client, sess
 
 func renderSSEStream(stream io.Reader, out io.Writer, jsonMode, exitOnRunFinished bool) error {
 	scanner := bufio.NewScanner(stream)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	var reasoningBuf strings.Builder
 	var inText bool
 	for scanner.Scan() {
