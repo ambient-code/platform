@@ -5,7 +5,9 @@ namespace: jsell-ambient-sso-poc
 
 resources:
 - ../../../base
-- sso-credentials.yaml
+# sso-credentials.yaml is excluded — it contains CHANGE_ME placeholders.
+# Create the secret manually per workflows/deploy-native-sso.md Step 3a,
+# or apply sso-credentials.yaml separately after replacing values.
 - frontend-route.yaml
 - public-api-route.yaml
 - api-server-route.yaml
