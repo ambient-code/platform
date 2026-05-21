@@ -46,12 +46,6 @@ patches:
     kind: Secret
     name: ambient-api-server
     version: v1
-- path: control-plane-rbac-patch.yaml
-  target:
-    group: rbac.authorization.k8s.io
-    kind: ClusterRoleBinding
-    name: ambient-control-plane
-    version: v1
 - path: minio-pvc-patch.yaml
   target:
     kind: PersistentVolumeClaim

@@ -226,11 +226,17 @@ stringData:
   clientId: $CP_CLIENT_ID
 ```
 
-### 4g. `control-plane-rbac-patch.yaml`
+### 4g. `clusterrolebindings.yaml`
 
-Update the namespace in the subject:
+**Applied separately from kustomize** (kustomize's `namespace:` transformer rewrites all subject namespaces, which would break the `ambient-code` bindings).
+
+Update all subject namespaces to include both `ambient-code` and `$NAMESPACE`. If deploying to `ambient-code` itself, only one subject per binding is needed.
+
 ```yaml
 subjects:
+- kind: ServiceAccount
+  name: ambient-control-plane
+  namespace: ambient-code
 - kind: ServiceAccount
   name: ambient-control-plane
   namespace: $NAMESPACE
@@ -261,6 +267,12 @@ data:
 
 ```bash
 cd /path/to/platform
+
+# Apply ClusterRoleBindings separately (kustomize's namespace transformer
+# would rewrite the ambient-code subject namespaces)
+oc apply -f components/manifests/overlays/hcmais/jsell-sso-poc/clusterrolebindings.yaml
+
+# Apply everything else via kustomize
 oc apply -k components/manifests/overlays/hcmais/jsell-sso-poc/
 ```
 

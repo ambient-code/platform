@@ -1,8 +1,0 @@
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: ambient-control-plane
-subjects:
-- kind: ServiceAccount
-  name: ambient-control-plane
-  namespace: jsell-ambient-sso-poc
