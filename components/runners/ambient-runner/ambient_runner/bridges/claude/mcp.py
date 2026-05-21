@@ -231,8 +231,15 @@ def _build_sidecar_mcp_servers(credential_mcp_urls_raw: str) -> dict:
         logger.warning("Failed to parse CREDENTIAL_MCP_URLS — skipping credential MCP servers")
         return {}
 
+    if not isinstance(credential_mcp_urls, dict):
+        logger.warning("CREDENTIAL_MCP_URLS is not a JSON object — skipping credential MCP servers")
+        return {}
+
     servers: dict = {}
     for provider, url in credential_mcp_urls.items():
+        if not isinstance(url, str) or not url.strip():
+            logger.warning("Skipping credential sidecar %s: invalid URL", provider)
+            continue
         spec = _CREDENTIAL_SIDECAR_REGISTRY.get(provider, {})
         server_name = spec.get("server_name", provider)
         transport_type = spec.get("type", "sse")

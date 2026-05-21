@@ -241,7 +241,14 @@ def build_workspace_context_prompt(
             for repo in auto_push_repos:
                 repo_name = repo.get("name", "unknown")
                 prompt += f"- **repos/{repo_name}/**\n"
+            has_github_mcp = False
             if credential_mcp_urls:
+                try:
+                    import json as _json
+                    has_github_mcp = "github" in _json.loads(credential_mcp_urls)
+                except (ValueError, TypeError):
+                    pass
+            if has_github_mcp:
                 prompt += GIT_PUSH_MCP_STEPS.format(branch=push_branch)
             else:
                 prompt += GIT_PUSH_STEPS.format(branch=push_branch)

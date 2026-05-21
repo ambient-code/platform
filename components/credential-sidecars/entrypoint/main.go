@@ -29,8 +29,7 @@ func main() {
 
 	if tokenURL == "" || publicKey == "" || sessionID == "" {
 		fmt.Fprintf(os.Stderr, "AMBIENT_CP_TOKEN_URL, AMBIENT_CP_TOKEN_PUBLIC_KEY, SESSION_ID required\n")
-		execCommand(os.Args[1:])
-		return
+		os.Exit(1)
 	}
 
 	exchanger, err := tokenexchange.New(tokenURL, publicKey, sessionID)
@@ -85,18 +84,12 @@ func fetchAndSetCredential(bearerToken, apiURL, provider string) error {
 	}
 
 	credID := credentialIDs[provider]
-	project := os.Getenv("PROJECT_NAME")
-	if project == "" {
-		project = os.Getenv("AGENTIC_SESSION_NAMESPACE")
+	if credID == "" {
+		return fmt.Errorf("no credential ID for provider %s in CREDENTIAL_IDS", provider)
 	}
 
-	var credURL string
-	if credID != "" && project != "" {
-		credURL = fmt.Sprintf("%s/api/ambient/v1/projects/%s/credentials/%s/token",
-			strings.TrimRight(apiURL, "/"), project, credID)
-	} else {
-		return fmt.Errorf("missing CREDENTIAL_IDS[%s] or PROJECT_NAME", provider)
-	}
+	credURL := fmt.Sprintf("%s/api/ambient/v1/credentials/%s/token",
+		strings.TrimRight(apiURL, "/"), credID)
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequest(http.MethodGet, credURL, nil)
@@ -116,7 +109,7 @@ func fetchAndSetCredential(bearerToken, apiURL, provider string) error {
 		return fmt.Errorf("read credential response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("credential fetch HTTP %d: %s", resp.StatusCode, string(body))
+		return fmt.Errorf("credential fetch HTTP %d (response length: %d)", resp.StatusCode, len(body))
 	}
 
 	var credData map[string]interface{}

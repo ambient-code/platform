@@ -10,6 +10,7 @@
 .PHONY: setup-minio minio-console minio-logs minio-status
 .PHONY: validate-makefile lint-makefile check-shell makefile-health benchmark benchmark-ci
 .PHONY: _create-operator-config _auto-port-forward _show-access-info _kind-load-images
+.PHONY: build-credential-sidecars build-credential-github build-credential-jira build-credential-k8s build-credential-google
 
 # Default target
 .DEFAULT_GOAL := help
@@ -236,19 +237,22 @@ build-credential-github: ## Build GitHub credential sidecar image
 
 build-credential-jira: ## Build Jira credential sidecar image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building Jira credential sidecar with $(CONTAINER_ENGINE)..."
-	@cd components/credential-sidecars/jira && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-f components/credential-sidecars/jira/Dockerfile \
 		-t $(JIRA_MCP_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Jira credential sidecar built: $(JIRA_MCP_IMAGE)"
 
 build-credential-k8s: ## Build K8s credential sidecar image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building K8s credential sidecar with $(CONTAINER_ENGINE)..."
-	@cd components/credential-sidecars/k8s && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-f components/credential-sidecars/k8s/Dockerfile \
 		-t $(K8S_MCP_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) K8s credential sidecar built: $(K8S_MCP_IMAGE)"
 
 build-credential-google: ## Build Google credential sidecar image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building Google credential sidecar with $(CONTAINER_ENGINE)..."
-	@cd components/credential-sidecars/google && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-f components/credential-sidecars/google/Dockerfile \
 		-t $(GOOGLE_MCP_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Google credential sidecar built: $(GOOGLE_MCP_IMAGE)"
 

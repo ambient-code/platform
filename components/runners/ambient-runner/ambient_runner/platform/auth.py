@@ -384,7 +384,14 @@ async def fetch_token_for_url(context: RunnerContext, url: str) -> str:
 
 
 def _using_credential_sidecars() -> bool:
-    return bool(os.getenv("CREDENTIAL_MCP_URLS", "").strip())
+    raw = os.getenv("CREDENTIAL_MCP_URLS", "").strip()
+    if not raw:
+        return False
+    try:
+        parsed = json.loads(raw)
+        return isinstance(parsed, dict) and len(parsed) > 0
+    except (json.JSONDecodeError, TypeError):
+        return False
 
 
 async def populate_runtime_credentials(context: RunnerContext) -> None:

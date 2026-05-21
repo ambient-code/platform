@@ -488,17 +488,23 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 		r.logger.Info().Str("session_id", session.ID).Msg("MCP sidecar enabled for session")
 	}
 
-	credSidecars, credMCPURLs := r.buildCredentialSidecars(session.ID, credentialIDs)
-	containers = append(containers, credSidecars...)
-	if len(credMCPURLs) > 0 {
-		raw, err := json.Marshal(credMCPURLs)
-		if err == nil {
-			containers[0].(map[string]interface{})["env"] = append(
-				containers[0].(map[string]interface{})["env"].([]interface{}),
-				envVar("CREDENTIAL_MCP_URLS", string(raw)),
-			)
+	if r.cfg.CPTokenURL != "" && r.cfg.CPTokenPublicKey != "" {
+		credSidecars, credMCPURLs := r.buildCredentialSidecars(session.ID, namespace, credentialIDs)
+		containers = append(containers, credSidecars...)
+		if len(credMCPURLs) > 0 {
+			raw, err := json.Marshal(credMCPURLs)
+			if err != nil {
+				r.logger.Error().Err(err).Str("session_id", session.ID).Msg("failed to marshal credential MCP URLs")
+			} else {
+				containers[0].(map[string]interface{})["env"] = append(
+					containers[0].(map[string]interface{})["env"].([]interface{}),
+					envVar("CREDENTIAL_MCP_URLS", string(raw)),
+				)
+			}
+			r.logger.Info().Int("count", len(credSidecars)).Str("session_id", session.ID).Msg("credential sidecars injected")
 		}
-		r.logger.Info().Int("count", len(credSidecars)).Str("session_id", session.ID).Msg("credential sidecars injected")
+	} else if len(credentialIDs) > 0 {
+		r.logger.Warn().Str("session_id", session.ID).Msg("credential sidecars skipped: CPTokenURL or CPTokenPublicKey not configured")
 	}
 
 	pod := &unstructured.Unstructured{
@@ -892,9 +898,11 @@ func (r *SimpleKubeReconciler) credentialSidecarImage(provider string) string {
 	}
 }
 
-func (r *SimpleKubeReconciler) buildCredentialSidecars(sessionID string, credentialIDs map[string]string) ([]interface{}, map[string]string) {
+func (r *SimpleKubeReconciler) buildCredentialSidecars(sessionID string, namespace string, credentialIDs map[string]string) ([]interface{}, map[string]string) {
 	var sidecars []interface{}
 	mcpURLs := map[string]string{}
+
+	credIDsRaw, _ := json.Marshal(credentialIDs)
 
 	for provider := range credentialIDs {
 		spec, ok := credentialSidecarRegistry[provider]
@@ -913,6 +921,8 @@ func (r *SimpleKubeReconciler) buildCredentialSidecars(sessionID string, credent
 
 		env := []interface{}{
 			envVar("SESSION_ID", sessionID),
+			envVar("CREDENTIAL_IDS", string(credIDsRaw)),
+			envVar("AGENTIC_SESSION_NAMESPACE", namespace),
 			envVar("AMBIENT_API_URL", r.cfg.MCPAPIServerURL),
 			envVar("AMBIENT_CP_TOKEN_URL", r.cfg.CPTokenURL),
 			envVar("AMBIENT_CP_TOKEN_PUBLIC_KEY", r.cfg.CPTokenPublicKey),
