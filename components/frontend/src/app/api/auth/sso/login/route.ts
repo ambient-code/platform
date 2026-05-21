@@ -1,16 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildAuthorizationUrl } from "@/lib/oidc";
-
-function safeReturnTo(value: string | null | undefined): string {
-  if (!value) return "/";
-  try {
-    const parsed = new URL(value, "http://localhost");
-    if (parsed.origin !== "http://localhost") return "/";
-    return parsed.pathname + parsed.search;
-  } catch {
-    return "/";
-  }
-}
+import { safeReturnTo } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
   let redirectUri = process.env.SSO_REDIRECT_URI

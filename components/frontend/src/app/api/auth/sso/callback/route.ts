@@ -2,17 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { exchangeCode } from "@/lib/oidc";
 import { getSession } from "@/lib/session";
-
-function safeReturnTo(value: string | undefined): string {
-  if (!value) return "/";
-  try {
-    const parsed = new URL(value, "http://localhost");
-    if (parsed.origin !== "http://localhost") return "/";
-    return parsed.pathname + parsed.search;
-  } catch {
-    return "/";
-  }
-}
+import { safeReturnTo } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
   const cookieStore = await cookies();
@@ -49,6 +39,7 @@ export async function GET(request: NextRequest) {
     const session = await getSession();
     session.accessToken = tokens.accessToken;
     session.refreshToken = tokens.refreshToken;
+    session.idToken = tokens.idToken;
     session.expiresAt = tokens.expiresAt;
     await session.save();
 
