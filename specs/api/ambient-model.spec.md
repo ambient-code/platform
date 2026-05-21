@@ -338,7 +338,17 @@ All four are assembled into the start context in that order. Pokes roll downhill
 
 SessionMessages provide a **concise, human-readable** view of the conversation. This is the Messages API — prompts, replies, and high-level tool invocations summarized for human consumption.
 
-`seq` is monotonically increasing within a session. `event_type` follows simplified categories: `user`, `assistant`, `tool_use`, `tool_result`, `system`, `error`.
+`seq` is monotonically increasing within a session. `event_type` uses **simplified legacy types** (distinct from AG-UI event types used in SessionEvent):
+
+**Messages API Event Types** (6 types):
+- `user` — User prompt or message
+- `assistant` — Agent reply or response
+- `tool_use` — Tool invocation summary
+- `tool_result` — Tool execution result summary
+- `system` — System notification or status
+- `error` — Error condition
+
+These are **not** AG-UI event types. For the complete AG-UI protocol with 33 granular event types, see SessionEvent below.
 
 SessionMessages are never deleted or edited. They represent the conversation summary — what the user asked, what the agent replied, which tools were used.
 
@@ -431,6 +441,8 @@ Each event carries:
 - `thread_id` — session identifier (maps to `session_id` in DB)
 - Payload fields specific to the event type (e.g., `message_id`, `tool_id`, `content`, `args`)
 
+**Note on Event Naming:** Thinking and Reasoning events are prefixed variants of base text message types. For example, `THINKING_TEXT_MESSAGE_CONTENT` is a distinct event type from `TEXT_MESSAGE_CONTENT`, emitted during extended thinking blocks. The prefixes indicate the semantic context (regular message vs thinking vs reasoning).
+
 **Start/End Pairing:** Events with `_START` / `_END` suffixes define stream boundaries. Content events (`_CONTENT`, `_ARGS`, `_CHUNK`) appear between their corresponding start/end markers.
 
 **Example sequence:**
@@ -498,16 +510,18 @@ Events are compressed **before persistence** by the runner's gRPC client. Compre
 {"seq":14, "event_type":"TEXT_MESSAGE_END", "payload":"{}"}
 ```
 
-**After Compression:**
+**After Compression (with gaps):**
 ```json
 {"seq":10, "event_type":"TEXT_MESSAGE_START", "payload":"{\"message_id\":\"msg_1\",\"role\":\"assistant\"}"}
 {"seq":11, "event_type":"TEXT_MESSAGE_CONTENT", "payload":"{\"content\":\"Let me check\"}", "event_count":3, "completed_at":"2026-05-21T..."}
-{"seq":12, "event_type":"TEXT_MESSAGE_END", "payload":"{}"}
+{"seq":14, "event_type":"TEXT_MESSAGE_END", "payload":"{}"}
 ```
+
+**Note:** Sequence numbers preserve gaps after compression (11 → 14) to avoid renumbering all subsequent events. This makes compression idempotent and prevents race conditions with concurrent event streams.
 
 **Space Savings:** Typical compression ratios range from **5:1** (simple text) to **20:1** (complex tool arguments with many JSON fragments).
 
-**Backward Compatibility:** Existing queries and APIs continue to work. Compressed events are decompressed on read if clients require token-level replay (future enhancement).
+**Backward Compatibility:** Existing queries and APIs continue to work. Compression is transparent to readers — gaps in `seq` indicate compressed ranges.
 
 #### Storage Model
 
@@ -530,6 +544,38 @@ CREATE INDEX idx_session_events_session_id ON session_events(session_id);
 CREATE INDEX idx_session_events_event_type ON session_events(event_type);
 CREATE INDEX idx_session_events_created_at ON session_events(created_at);
 ```
+
+#### Migration from Current State
+
+**Database Schema Changes** (API server):
+
+1. Create `session_events` table with compression fields:
+   ```sql
+   -- New table creation (no existing data to migrate)
+   CREATE TABLE session_events (
+       id           VARCHAR(36) PRIMARY KEY,
+       session_id   VARCHAR(36) NOT NULL REFERENCES sessions(id),
+       seq          BIGINT NOT NULL,
+       event_type   VARCHAR(255) NOT NULL,
+       payload      TEXT NOT NULL,
+       created_at   TIMESTAMPTZ NOT NULL,
+       completed_at TIMESTAMPTZ,
+       event_count  INT DEFAULT 1,
+       UNIQUE(session_id, seq)
+   );
+   
+   CREATE INDEX idx_session_events_session_id ON session_events(session_id);
+   CREATE INDEX idx_session_events_event_type ON session_events(event_type);
+   CREATE INDEX idx_session_events_created_at ON session_events(created_at);
+   ```
+
+2. No schema changes required for `session_messages` table (Messages API unchanged).
+
+**Backward Compatibility:**
+- Compression is opt-in at the runner gRPC client level
+- Legacy runners can continue pushing uncompressed events indefinitely (`event_count=1`, `completed_at=NULL`)
+- API server accepts both compressed and uncompressed events transparently
+- Existing `session_messages` table and Messages API remain unchanged
 
 **Field Semantics:**
 
@@ -627,9 +673,9 @@ rpc PushSessionEvent(PushSessionEventRequest) returns (SessionEvent)
 
 message PushSessionEventRequest {
   string session_id = 1;
-  string event_type = 2;                              // AG-UI event type (33 types)
-  string payload = 3;                                 // JSON-encoded event payload
-  optional google.protobuf.Timestamp completed_at = 4; // Last event timestamp (for compressed)
+  string event_type = 2;                               // AG-UI event type (33 types)
+  string payload = 3;                                  // JSON-encoded event payload
+  optional google.protobuf.Timestamp completed_at = 4; // Last event timestamp (for compressed events)
   optional int32 event_count = 5;                      // Number of events compressed (default 1)
 }
 
