@@ -941,16 +941,19 @@ func getUserSubjectFromContext(c *gin.Context) (string, error) {
 		return fmt.Sprintf("system:serviceaccount:%s:%s", ns, saName), nil
 	}
 
-	// Prefer email — this matches the impersonation identity (Impersonate-User)
-	// so RoleBindings created with this subject are effective under impersonation.
+	// Must match the order in buildImpersonatingClients (sso.go):
+	// preferred_username > email > sub. If these diverge, RoleBindings
+	// created here won't match the impersonated identity.
+	if userName, exists := c.Get("userName"); exists && userName != nil {
+		if s := fmt.Sprintf("%v", userName); s != "" {
+			return s, nil
+		}
+	}
 	if email := c.GetString("userEmail"); email != "" {
 		return email, nil
 	}
 	if userIDOrig := c.GetString("userIDOriginal"); userIDOrig != "" {
 		return userIDOrig, nil
-	}
-	if userName, exists := c.Get("userName"); exists && userName != nil {
-		return fmt.Sprintf("%v", userName), nil
 	}
 	if userID, exists := c.Get("userID"); exists && userID != nil {
 		return fmt.Sprintf("%v", userID), nil

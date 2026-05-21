@@ -268,12 +268,12 @@ data:
 ```bash
 cd /path/to/platform
 
-# Apply ClusterRoleBindings separately (kustomize's namespace transformer
-# would rewrite the ambient-code subject namespaces)
-oc apply -f components/manifests/overlays/hcmais/jsell-sso-poc/clusterrolebindings.yaml
-
-# Apply everything else via kustomize
+# Apply kustomize first
 oc apply -k components/manifests/overlays/hcmais/jsell-sso-poc/
+
+# Then apply CRBs AFTER kustomize to restore the ambient-code subjects
+# that kustomize's namespace transformer overwrites
+oc apply -f components/manifests/overlays/hcmais/jsell-sso-poc/clusterrolebindings.yaml
 ```
 
 Verify all deployments come up:

@@ -24,15 +24,15 @@ const defaultJwkCertURL = "https://sso.redhat.com/auth/realms/redhat-external/pr
 func (e *ProductionEnvImpl) OverrideConfig(c *config.ApplicationConfig) error {
 	c.Server.CORSAllowedHeaders = []string{"X-Ambient-Project"}
 
-	// Priority: env var > CLI flag > default.
+	// Priority: CLI flag > env var > default.
 	// The framework parses --jwk-cert-url before OverrideConfig runs,
 	// so c.Auth.JwkCertURL already holds the flag value (or the flag's
 	// built-in default if not explicitly set).
 	switch {
-	case os.Getenv("JWK_CERT_URL") != "":
-		c.Auth.JwkCertURL = os.Getenv("JWK_CERT_URL")
 	case c.Auth.JwkCertURL != "" && c.Auth.JwkCertURL != defaultJwkCertURL:
 		// CLI flag was explicitly set to a non-default value; keep it.
+	case os.Getenv("JWK_CERT_URL") != "":
+		c.Auth.JwkCertURL = os.Getenv("JWK_CERT_URL")
 	default:
 		c.Auth.JwkCertURL = defaultJwkCertURL
 	}
