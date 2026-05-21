@@ -76,6 +76,8 @@ describe('error paths: pagination adapters propagate errors through hooks', () =
       getProjectPermissions: vi.fn(),
       addProjectPermission: vi.fn(),
       removeProjectPermission: vi.fn(),
+      getProjectSettings: vi.fn(),
+      updateProjectSettings: vi.fn(),
     };
     const adapter = createProjectsAdapter(fakeApi);
 
@@ -136,6 +138,8 @@ describe('error paths: single-resource queries propagate errors', () => {
       getProjectPermissions: vi.fn(),
       addProjectPermission: vi.fn(),
       removeProjectPermission: vi.fn(),
+      getProjectSettings: vi.fn(),
+      updateProjectSettings: vi.fn(),
     };
     const adapter = createProjectsAdapter(fakeApi);
 
@@ -363,6 +367,8 @@ describe('error paths: mutation adapters propagate errors', () => {
       getProjectPermissions: vi.fn(),
       addProjectPermission: vi.fn(),
       removeProjectPermission: vi.fn(),
+      getProjectSettings: vi.fn(),
+      updateProjectSettings: vi.fn(),
     };
     const adapter = createProjectsAdapter(fakeApi);
 

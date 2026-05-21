@@ -22,14 +22,16 @@ const (
 )
 
 type Project struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Metadata      *ObjectReference       `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	DisplayName   *string                `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
-	Description   *string                `protobuf:"bytes,4,opt,name=description,proto3,oneof" json:"description,omitempty"`
-	Labels        *string                `protobuf:"bytes,5,opt,name=labels,proto3,oneof" json:"labels,omitempty"`
-	Annotations   *string                `protobuf:"bytes,6,opt,name=annotations,proto3,oneof" json:"annotations,omitempty"`
-	Status        *string                `protobuf:"bytes,7,opt,name=status,proto3,oneof" json:"status,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Metadata *ObjectReference       `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	Name     string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// TODO(proto-cleanup): display_name was removed from model.go (migration 202505090001).
+	// Remove this field and regenerate with `buf generate` when buf is available.
+	DisplayName   *string `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
+	Description   *string `protobuf:"bytes,4,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	Labels        *string `protobuf:"bytes,5,opt,name=labels,proto3,oneof" json:"labels,omitempty"`
+	Annotations   *string `protobuf:"bytes,6,opt,name=annotations,proto3,oneof" json:"annotations,omitempty"`
+	Status        *string `protobuf:"bytes,7,opt,name=status,proto3,oneof" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -114,12 +116,13 @@ func (x *Project) GetStatus() string {
 }
 
 type CreateProjectRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	DisplayName   *string                `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
-	Description   *string                `protobuf:"bytes,3,opt,name=description,proto3,oneof" json:"description,omitempty"`
-	Labels        *string                `protobuf:"bytes,4,opt,name=labels,proto3,oneof" json:"labels,omitempty"`
-	Annotations   *string                `protobuf:"bytes,5,opt,name=annotations,proto3,oneof" json:"annotations,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// TODO(proto-cleanup): display_name removed from model.go; remove here and regenerate.
+	DisplayName   *string `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
+	Description   *string `protobuf:"bytes,3,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	Labels        *string `protobuf:"bytes,4,opt,name=labels,proto3,oneof" json:"labels,omitempty"`
+	Annotations   *string `protobuf:"bytes,5,opt,name=annotations,proto3,oneof" json:"annotations,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -234,14 +237,15 @@ func (x *GetProjectRequest) GetId() string {
 }
 
 type UpdateProjectRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name          *string                `protobuf:"bytes,2,opt,name=name,proto3,oneof" json:"name,omitempty"`
-	DisplayName   *string                `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
-	Description   *string                `protobuf:"bytes,4,opt,name=description,proto3,oneof" json:"description,omitempty"`
-	Labels        *string                `protobuf:"bytes,5,opt,name=labels,proto3,oneof" json:"labels,omitempty"`
-	Annotations   *string                `protobuf:"bytes,6,opt,name=annotations,proto3,oneof" json:"annotations,omitempty"`
-	Status        *string                `protobuf:"bytes,7,opt,name=status,proto3,oneof" json:"status,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name  *string                `protobuf:"bytes,2,opt,name=name,proto3,oneof" json:"name,omitempty"`
+	// TODO(proto-cleanup): display_name removed from model.go; remove here and regenerate.
+	DisplayName   *string `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
+	Description   *string `protobuf:"bytes,4,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	Labels        *string `protobuf:"bytes,5,opt,name=labels,proto3,oneof" json:"labels,omitempty"`
+	Annotations   *string `protobuf:"bytes,6,opt,name=annotations,proto3,oneof" json:"annotations,omitempty"`
+	Status        *string `protobuf:"bytes,7,opt,name=status,proto3,oneof" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

@@ -23,14 +23,16 @@ var _ MappedNullable = &ProjectSettings{}
 
 // ProjectSettings struct for ProjectSettings
 type ProjectSettings struct {
-	Id           *string    `json:"id,omitempty"`
-	Kind         *string    `json:"kind,omitempty"`
-	Href         *string    `json:"href,omitempty"`
-	CreatedAt    *time.Time `json:"created_at,omitempty"`
-	UpdatedAt    *time.Time `json:"updated_at,omitempty"`
-	ProjectId    string     `json:"project_id"`
-	GroupAccess  *string    `json:"group_access,omitempty"`
-	Repositories *string    `json:"repositories,omitempty"`
+	Id                    *string    `json:"id,omitempty"`
+	Kind                  *string    `json:"kind,omitempty"`
+	Href                  *string    `json:"href,omitempty"`
+	CreatedAt             *time.Time `json:"created_at,omitempty"`
+	UpdatedAt             *time.Time `json:"updated_at,omitempty"`
+	ProjectId             string     `json:"project_id"`
+	GroupAccess           *string    `json:"group_access,omitempty"`
+	Repositories          *string    `json:"repositories,omitempty"`
+	RunnerImage           *string    `json:"runner_image,omitempty"`
+	RunnerImagePullSecret *string    `json:"runner_image_pull_secret,omitempty"`
 }
 
 type _ProjectSettings ProjectSettings
@@ -301,6 +303,70 @@ func (o *ProjectSettings) SetRepositories(v string) {
 	o.Repositories = &v
 }
 
+// GetRunnerImage returns the RunnerImage field value if set, zero value otherwise.
+func (o *ProjectSettings) GetRunnerImage() string {
+	if o == nil || IsNil(o.RunnerImage) {
+		var ret string
+		return ret
+	}
+	return *o.RunnerImage
+}
+
+// GetRunnerImageOk returns a tuple with the RunnerImage field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ProjectSettings) GetRunnerImageOk() (*string, bool) {
+	if o == nil || IsNil(o.RunnerImage) {
+		return nil, false
+	}
+	return o.RunnerImage, true
+}
+
+// HasRunnerImage returns a boolean if a field has been set.
+func (o *ProjectSettings) HasRunnerImage() bool {
+	if o != nil && !IsNil(o.RunnerImage) {
+		return true
+	}
+
+	return false
+}
+
+// SetRunnerImage gets a reference to the given string and assigns it to the RunnerImage field.
+func (o *ProjectSettings) SetRunnerImage(v string) {
+	o.RunnerImage = &v
+}
+
+// GetRunnerImagePullSecret returns the RunnerImagePullSecret field value if set, zero value otherwise.
+func (o *ProjectSettings) GetRunnerImagePullSecret() string {
+	if o == nil || IsNil(o.RunnerImagePullSecret) {
+		var ret string
+		return ret
+	}
+	return *o.RunnerImagePullSecret
+}
+
+// GetRunnerImagePullSecretOk returns a tuple with the RunnerImagePullSecret field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ProjectSettings) GetRunnerImagePullSecretOk() (*string, bool) {
+	if o == nil || IsNil(o.RunnerImagePullSecret) {
+		return nil, false
+	}
+	return o.RunnerImagePullSecret, true
+}
+
+// HasRunnerImagePullSecret returns a boolean if a field has been set.
+func (o *ProjectSettings) HasRunnerImagePullSecret() bool {
+	if o != nil && !IsNil(o.RunnerImagePullSecret) {
+		return true
+	}
+
+	return false
+}
+
+// SetRunnerImagePullSecret gets a reference to the given string and assigns it to the RunnerImagePullSecret field.
+func (o *ProjectSettings) SetRunnerImagePullSecret(v string) {
+	o.RunnerImagePullSecret = &v
+}
+
 func (o ProjectSettings) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
@@ -332,6 +398,12 @@ func (o ProjectSettings) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.Repositories) {
 		toSerialize["repositories"] = o.Repositories
+	}
+	if !IsNil(o.RunnerImage) {
+		toSerialize["runner_image"] = o.RunnerImage
+	}
+	if !IsNil(o.RunnerImagePullSecret) {
+		toSerialize["runner_image_pull_secret"] = o.RunnerImagePullSecret
 	}
 	return toSerialize, nil
 }

@@ -13,6 +13,8 @@ message ProjectSettings {
   reserved 4;
   reserved "runner_secrets";
   optional string repositories = 5;
+  optional string runner_image = 6;
+  optional string runner_image_pull_secret = 7;
 }
 
 message CreateProjectSettingsRequest {
@@ -21,6 +23,8 @@ message CreateProjectSettingsRequest {
   reserved 3;
   reserved "runner_secrets";
   optional string repositories = 4;
+  optional string runner_image = 5;
+  optional string runner_image_pull_secret = 6;
 }
 
 message GetProjectSettingsRequest {
@@ -34,6 +38,8 @@ message UpdateProjectSettingsRequest {
   reserved 4;
   reserved "runner_secrets";
   optional string repositories = 5;
+  optional string runner_image = 6;
+  optional string runner_image_pull_secret = 7;
 }
 
 message DeleteProjectSettingsRequest {

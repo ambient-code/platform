@@ -22,13 +22,15 @@ const (
 )
 
 type ProjectSettings struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Metadata      *ObjectReference       `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	ProjectId     string                 `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	GroupAccess   *string                `protobuf:"bytes,3,opt,name=group_access,json=groupAccess,proto3,oneof" json:"group_access,omitempty"`
-	Repositories  *string                `protobuf:"bytes,5,opt,name=repositories,proto3,oneof" json:"repositories,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	Metadata              *ObjectReference       `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	ProjectId             string                 `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	GroupAccess           *string                `protobuf:"bytes,3,opt,name=group_access,json=groupAccess,proto3,oneof" json:"group_access,omitempty"`
+	Repositories          *string                `protobuf:"bytes,5,opt,name=repositories,proto3,oneof" json:"repositories,omitempty"`
+	RunnerImage           *string                `protobuf:"bytes,6,opt,name=runner_image,json=runnerImage,proto3,oneof" json:"runner_image,omitempty"`
+	RunnerImagePullSecret *string                `protobuf:"bytes,7,opt,name=runner_image_pull_secret,json=runnerImagePullSecret,proto3,oneof" json:"runner_image_pull_secret,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *ProjectSettings) Reset() {
@@ -89,13 +91,29 @@ func (x *ProjectSettings) GetRepositories() string {
 	return ""
 }
 
+func (x *ProjectSettings) GetRunnerImage() string {
+	if x != nil && x.RunnerImage != nil {
+		return *x.RunnerImage
+	}
+	return ""
+}
+
+func (x *ProjectSettings) GetRunnerImagePullSecret() string {
+	if x != nil && x.RunnerImagePullSecret != nil {
+		return *x.RunnerImagePullSecret
+	}
+	return ""
+}
+
 type CreateProjectSettingsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	GroupAccess   *string                `protobuf:"bytes,2,opt,name=group_access,json=groupAccess,proto3,oneof" json:"group_access,omitempty"`
-	Repositories  *string                `protobuf:"bytes,4,opt,name=repositories,proto3,oneof" json:"repositories,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId             string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	GroupAccess           *string                `protobuf:"bytes,2,opt,name=group_access,json=groupAccess,proto3,oneof" json:"group_access,omitempty"`
+	Repositories          *string                `protobuf:"bytes,4,opt,name=repositories,proto3,oneof" json:"repositories,omitempty"`
+	RunnerImage           *string                `protobuf:"bytes,5,opt,name=runner_image,json=runnerImage,proto3,oneof" json:"runner_image,omitempty"`
+	RunnerImagePullSecret *string                `protobuf:"bytes,6,opt,name=runner_image_pull_secret,json=runnerImagePullSecret,proto3,oneof" json:"runner_image_pull_secret,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *CreateProjectSettingsRequest) Reset() {
@@ -149,6 +167,20 @@ func (x *CreateProjectSettingsRequest) GetRepositories() string {
 	return ""
 }
 
+func (x *CreateProjectSettingsRequest) GetRunnerImage() string {
+	if x != nil && x.RunnerImage != nil {
+		return *x.RunnerImage
+	}
+	return ""
+}
+
+func (x *CreateProjectSettingsRequest) GetRunnerImagePullSecret() string {
+	if x != nil && x.RunnerImagePullSecret != nil {
+		return *x.RunnerImagePullSecret
+	}
+	return ""
+}
+
 type GetProjectSettingsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -194,13 +226,15 @@ func (x *GetProjectSettingsRequest) GetId() string {
 }
 
 type UpdateProjectSettingsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	ProjectId     *string                `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
-	GroupAccess   *string                `protobuf:"bytes,3,opt,name=group_access,json=groupAccess,proto3,oneof" json:"group_access,omitempty"`
-	Repositories  *string                `protobuf:"bytes,5,opt,name=repositories,proto3,oneof" json:"repositories,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	Id                    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ProjectId             *string                `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
+	GroupAccess           *string                `protobuf:"bytes,3,opt,name=group_access,json=groupAccess,proto3,oneof" json:"group_access,omitempty"`
+	Repositories          *string                `protobuf:"bytes,5,opt,name=repositories,proto3,oneof" json:"repositories,omitempty"`
+	RunnerImage           *string                `protobuf:"bytes,6,opt,name=runner_image,json=runnerImage,proto3,oneof" json:"runner_image,omitempty"`
+	RunnerImagePullSecret *string                `protobuf:"bytes,7,opt,name=runner_image_pull_secret,json=runnerImagePullSecret,proto3,oneof" json:"runner_image_pull_secret,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *UpdateProjectSettingsRequest) Reset() {
@@ -257,6 +291,20 @@ func (x *UpdateProjectSettingsRequest) GetGroupAccess() string {
 func (x *UpdateProjectSettingsRequest) GetRepositories() string {
 	if x != nil && x.Repositories != nil {
 		return *x.Repositories
+	}
+	return ""
+}
+
+func (x *UpdateProjectSettingsRequest) GetRunnerImage() string {
+	if x != nil && x.RunnerImage != nil {
+		return *x.RunnerImage
+	}
+	return ""
+}
+
+func (x *UpdateProjectSettingsRequest) GetRunnerImagePullSecret() string {
+	if x != nil && x.RunnerImagePullSecret != nil {
+		return *x.RunnerImagePullSecret
 	}
 	return ""
 }
@@ -546,33 +594,45 @@ var File_ambient_v1_project_settings_proto protoreflect.FileDescriptor
 const file_ambient_v1_project_settings_proto_rawDesc = "" +
 	"\n" +
 	"!ambient/v1/project_settings.proto\x12\n" +
-	"ambient.v1\x1a\x17ambient/v1/common.proto\"\xf2\x01\n" +
+	"ambient.v1\x1a\x17ambient/v1/common.proto\"\x86\x03\n" +
 	"\x0fProjectSettings\x127\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x1b.ambient.v1.ObjectReferenceR\bmetadata\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x02 \x01(\tR\tprojectId\x12&\n" +
 	"\fgroup_access\x18\x03 \x01(\tH\x00R\vgroupAccess\x88\x01\x01\x12'\n" +
-	"\frepositories\x18\x05 \x01(\tH\x01R\frepositories\x88\x01\x01B\x0f\n" +
+	"\frepositories\x18\x05 \x01(\tH\x01R\frepositories\x88\x01\x01\x12&\n" +
+	"\frunner_image\x18\x06 \x01(\tH\x02R\vrunnerImage\x88\x01\x01\x12<\n" +
+	"\x18runner_image_pull_secret\x18\a \x01(\tH\x03R\x15runnerImagePullSecret\x88\x01\x01B\x0f\n" +
 	"\r_group_accessB\x0f\n" +
-	"\r_repositoriesJ\x04\b\x04\x10\x05R\x0erunner_secrets\"\xc6\x01\n" +
+	"\r_repositoriesB\x0f\n" +
+	"\r_runner_imageB\x1b\n" +
+	"\x19_runner_image_pull_secretJ\x04\b\x04\x10\x05R\x0erunner_secrets\"\xda\x02\n" +
 	"\x1cCreateProjectSettingsRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12&\n" +
 	"\fgroup_access\x18\x02 \x01(\tH\x00R\vgroupAccess\x88\x01\x01\x12'\n" +
-	"\frepositories\x18\x04 \x01(\tH\x01R\frepositories\x88\x01\x01B\x0f\n" +
+	"\frepositories\x18\x04 \x01(\tH\x01R\frepositories\x88\x01\x01\x12&\n" +
+	"\frunner_image\x18\x05 \x01(\tH\x02R\vrunnerImage\x88\x01\x01\x12<\n" +
+	"\x18runner_image_pull_secret\x18\x06 \x01(\tH\x03R\x15runnerImagePullSecret\x88\x01\x01B\x0f\n" +
 	"\r_group_accessB\x0f\n" +
-	"\r_repositoriesJ\x04\b\x03\x10\x04R\x0erunner_secrets\"+\n" +
+	"\r_repositoriesB\x0f\n" +
+	"\r_runner_imageB\x1b\n" +
+	"\x19_runner_image_pull_secretJ\x04\b\x03\x10\x04R\x0erunner_secrets\"+\n" +
 	"\x19GetProjectSettingsRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"\xea\x01\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\xfe\x02\n" +
 	"\x1cUpdateProjectSettingsRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\"\n" +
 	"\n" +
 	"project_id\x18\x02 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12&\n" +
 	"\fgroup_access\x18\x03 \x01(\tH\x01R\vgroupAccess\x88\x01\x01\x12'\n" +
-	"\frepositories\x18\x05 \x01(\tH\x02R\frepositories\x88\x01\x01B\r\n" +
+	"\frepositories\x18\x05 \x01(\tH\x02R\frepositories\x88\x01\x01\x12&\n" +
+	"\frunner_image\x18\x06 \x01(\tH\x03R\vrunnerImage\x88\x01\x01\x12<\n" +
+	"\x18runner_image_pull_secret\x18\a \x01(\tH\x04R\x15runnerImagePullSecret\x88\x01\x01B\r\n" +
 	"\v_project_idB\x0f\n" +
 	"\r_group_accessB\x0f\n" +
-	"\r_repositoriesJ\x04\b\x04\x10\x05R\x0erunner_secrets\".\n" +
+	"\r_repositoriesB\x0f\n" +
+	"\r_runner_imageB\x1b\n" +
+	"\x19_runner_image_pull_secretJ\x04\b\x04\x10\x05R\x0erunner_secrets\".\n" +
 	"\x1cDeleteProjectSettingsRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"D\n" +
 	"\x1aListProjectSettingsRequest\x12\x12\n" +

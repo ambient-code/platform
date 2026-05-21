@@ -11,6 +11,9 @@ import type {
   PaginationParams,
 } from '@/types/api';
 import type { MCPServersConfig } from '@/types/agentic-session';
+import { projectSettingsAdapter } from '../adapters/project-settings';
+import type { ProjectSettingsPort } from '../ports/project-settings';
+import type { ProjectSettingsPatchRequest } from '../api/projects';
 import { BACKEND_VERSION } from './query-keys';
 
 export const projectKeys = {
@@ -22,6 +25,7 @@ export const projectKeys = {
   permissions: (name: string) => [...projectKeys.detail(name), 'permissions'] as const,
   integrationStatus: (name: string) => [...projectKeys.detail(name), 'integration-status'] as const,
   mcpServers: (name: string) => [...projectKeys.detail(name), 'mcp-servers'] as const,
+  projectSettings: (name: string) => [...projectKeys.detail(name), 'project-settings'] as const,
 };
 
 export function useProjectsPaginated(params: PaginationParams = {}, port: ProjectsPort = projectsAdapter) {
@@ -208,6 +212,28 @@ export function useUpdateProjectMcpServers(projectName: string, port: ProjectsPo
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: projectKeys.mcpServers(projectName),
+      });
+    },
+  });
+}
+
+export function useProjectSettings(projectName: string, port: ProjectSettingsPort = projectSettingsAdapter) {
+  return useQuery({
+    queryKey: projectKeys.projectSettings(projectName),
+    queryFn: () => port.getProjectSettings(projectName),
+    enabled: !!projectName,
+    staleTime: 30000,
+  });
+}
+
+export function useUpdateProjectSettings(projectName: string, port: ProjectSettingsPort = projectSettingsAdapter) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ settingsId, patch }: { settingsId: string; patch: ProjectSettingsPatchRequest }) =>
+      port.updateProjectSettings(settingsId, patch),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: projectKeys.projectSettings(projectName),
       });
     },
   });

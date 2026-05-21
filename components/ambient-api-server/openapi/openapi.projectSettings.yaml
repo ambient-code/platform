@@ -221,6 +221,10 @@ components:
               type: string
             repositories:
               type: string
+            runner_image:
+              type: string
+            runner_image_pull_secret:
+              type: string
             created_at:
               type: string
               format: date-time
@@ -244,6 +248,10 @@ components:
         group_access:
           type: string
         repositories:
+          type: string
+        runner_image:
+          type: string
+        runner_image_pull_secret:
           type: string
   parameters:
       id:

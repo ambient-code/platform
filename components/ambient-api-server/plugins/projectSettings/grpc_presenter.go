@@ -18,8 +18,10 @@ func projectSettingsToProto(ps *ProjectSettings) *pb.ProjectSettings {
 			Kind:      "ProjectSettings",
 			Href:      "/api/ambient/v1/project_settings/" + ps.ID,
 		},
-		ProjectId:    ps.ProjectId,
-		GroupAccess:  ps.GroupAccess,
-		Repositories: ps.Repositories,
+		ProjectId:             ps.ProjectId,
+		GroupAccess:           ps.GroupAccess,
+		Repositories:          ps.Repositories,
+		RunnerImage:           ps.RunnerImage,
+		RunnerImagePullSecret: ps.RunnerImagePullSecret,
 	}
 }

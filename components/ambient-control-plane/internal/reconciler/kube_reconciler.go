@@ -7,11 +7,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ambient-code/platform/components/ambient-control-plane/internal/imageref"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/informer"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
 	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	"github.com/rs/zerolog"
+	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -22,27 +24,29 @@ const (
 )
 
 type KubeReconcilerConfig struct {
-	RunnerImage           string
-	BackendURL            string
-	RunnerGRPCURL         string
-	RunnerGRPCUseTLS      bool
-	AnthropicAPIKey       string
-	VertexEnabled         bool
-	VertexProjectID       string
-	VertexRegion          string
-	VertexCredentialsPath string
-	VertexSecretName      string
-	VertexSecretNamespace string
-	RunnerImageNamespace  string
-	MCPImage              string
-	MCPAPIServerURL       string
-	RunnerLogLevel        string
-	CPRuntimeNamespace    string
-	CPTokenURL            string
-	CPTokenPublicKey      string
-	HTTPProxy             string
-	HTTPSProxy            string
-	NoProxy               string
+	RunnerImage                  string
+	BackendURL                   string
+	RunnerGRPCURL                string
+	RunnerGRPCUseTLS             bool
+	AnthropicAPIKey              string
+	VertexEnabled                bool
+	VertexProjectID              string
+	VertexRegion                 string
+	VertexCredentialsPath        string
+	VertexSecretName             string
+	VertexSecretNamespace        string
+	RunnerImageNamespace         string
+	MCPImage                     string
+	MCPAPIServerURL              string
+	RunnerLogLevel               string
+	CPRuntimeNamespace           string
+	CPTokenURL                   string
+	CPTokenPublicKey             string
+	HTTPProxy                    string
+	HTTPSProxy                   string
+	NoProxy                      string
+	RunnerImageAllowedRegistries string
+	CustomRunnerImageEnabled     bool
 }
 
 type SimpleKubeReconciler struct {
@@ -51,6 +55,7 @@ type SimpleKubeReconciler struct {
 	projectKube *kubeclient.KubeClient
 	provisioner kubeclient.NamespaceProvisioner
 	cfg         KubeReconcilerConfig
+	inf         *informer.Informer
 	logger      zerolog.Logger
 }
 
@@ -61,13 +66,14 @@ func (r *SimpleKubeReconciler) nsKube() *kubeclient.KubeClient {
 	return r.kube
 }
 
-func NewKubeReconciler(factory *SDKClientFactory, kube *kubeclient.KubeClient, projectKube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, cfg KubeReconcilerConfig, logger zerolog.Logger) *SimpleKubeReconciler {
+func NewKubeReconciler(factory *SDKClientFactory, kube *kubeclient.KubeClient, projectKube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, cfg KubeReconcilerConfig, inf *informer.Informer, logger zerolog.Logger) *SimpleKubeReconciler {
 	return &SimpleKubeReconciler{
 		factory:     factory,
 		kube:        kube,
 		projectKube: projectKube,
 		provisioner: provisioner,
 		cfg:         cfg,
+		inf:         inf,
 		logger:      logger.With().Str("reconciler", "kube").Logger(),
 	}
 }
@@ -407,6 +413,33 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 		imagePullPolicy = "IfNotPresent"
 	}
 
+	var imagePullSecrets []interface{}
+	if r.cfg.CustomRunnerImageEnabled && r.inf != nil {
+		if ps, found := r.inf.GetProjectSettingsByProjectID(session.ProjectID); found && ps.RunnerImage != "" {
+			if _, _, _, parseErr := imageref.ParseImageReference(ps.RunnerImage); parseErr != nil {
+				return fmt.Errorf("custom runner image reference invalid: %w", parseErr)
+			}
+			allowlist := imageref.ParseAllowlist(r.cfg.RunnerImageAllowedRegistries)
+			if err := imageref.ValidateRegistryAllowlist(ps.RunnerImage, allowlist); err != nil {
+				return fmt.Errorf("custom runner image registry not allowed: %w", err)
+			}
+			if ps.RunnerImagePullSecret != "" {
+				secret, secretErr := r.nsKube().GetSecret(ctx, namespace, ps.RunnerImagePullSecret)
+				if secretErr != nil {
+					return fmt.Errorf("pull secret %q not found in namespace %s: %w", ps.RunnerImagePullSecret, namespace, secretErr)
+				}
+				secretType, _, _ := unstructured.NestedString(secret.Object, "type")
+				if secretType != string(corev1.SecretTypeDockerConfigJson) {
+					return fmt.Errorf("pull secret %q must be type %s, got %s", ps.RunnerImagePullSecret, corev1.SecretTypeDockerConfigJson, secretType)
+				}
+				imagePullSecrets = append(imagePullSecrets, map[string]interface{}{"name": ps.RunnerImagePullSecret})
+			}
+			runnerImage = ps.RunnerImage
+			imagePullPolicy = imageref.DetermineImagePullPolicy(ps.RunnerImage)
+			r.logger.Info().Str("session_id", session.ID).Str("image", runnerImage).Msg("using custom runner image from ProjectSettings")
+		}
+	}
+
 	labels := sessionLabels(session.ID, session.ProjectID)
 	useMCPSidecar := r.cfg.MCPImage != "" && r.cfg.CPTokenURL != "" && r.cfg.CPTokenPublicKey != ""
 	if r.cfg.MCPImage != "" && !useMCPSidecar {
@@ -464,14 +497,20 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 					"ambient-code.io/session-name": session.Name,
 				},
 			},
-			"spec": map[string]interface{}{
-				"serviceAccountName":            saName,
-				"automountServiceAccountToken":  true,
-				"restartPolicy":                 "Never",
-				"terminationGracePeriodSeconds": int64(60),
-				"volumes":                       r.buildVolumes(),
-				"containers":                    containers,
-			},
+			"spec": func() map[string]interface{} {
+				spec := map[string]interface{}{
+					"serviceAccountName":            saName,
+					"automountServiceAccountToken":  true,
+					"restartPolicy":                 "Never",
+					"terminationGracePeriodSeconds": int64(60),
+					"volumes":                       r.buildVolumes(),
+					"containers":                    containers,
+				}
+				if len(imagePullSecrets) > 0 {
+					spec["imagePullSecrets"] = imagePullSecrets
+				}
+				return spec
+			}(),
 		},
 	}
 

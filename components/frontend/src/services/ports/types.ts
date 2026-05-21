@@ -23,7 +23,7 @@ export type { GerritAuthMethod, GerritConnectRequest, GerritTestRequest, GerritT
 export type { JiraStatus, JiraConnectRequest } from '@/services/api/jira-auth'
 export type { CodeRabbitStatus, CodeRabbitConnectRequest } from '@/services/api/coderabbit-auth'
 export type { MCPServerStatus, MCPConnectRequest } from '@/services/api/mcp-credentials'
-export type { IntegrationStatus } from '@/services/api/projects'
+export type { IntegrationStatus, ProjectSettingsResponse, ProjectSettingsPatchRequest } from '@/services/api/projects'
 export type { TaskOutputResponse } from '@/types/background-task'
 export type { MCPServersConfig } from '@/types/agentic-session'
 export type ProjectAccess = {

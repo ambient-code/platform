@@ -7,80 +7,84 @@ import (
 )
 
 type ControlPlaneConfig struct {
-	APIServerURL          string
-	APIToken              string
-	GRPCServerAddr        string
-	GRPCUseTLS            bool
-	LogLevel              string
-	Kubeconfig            string
-	Mode                  string
-	PlatformMode          string
-	MPPConfigNamespace    string
-	CPRuntimeNamespace    string
-	OIDCTokenURL          string
-	OIDCClientID          string
-	OIDCClientSecret      string
-	Reconcilers           []string
-	RunnerImage           string
-	RunnerGRPCUseTLS      bool
-	BackendURL            string
-	Namespace             string
-	AnthropicAPIKey       string
-	VertexEnabled         bool
-	VertexProjectID       string
-	VertexRegion          string
-	VertexCredentialsPath string
-	VertexSecretName      string
-	VertexSecretNamespace string
-	RunnerImageNamespace  string
-	MCPImage              string
-	MCPAPIServerURL       string
-	RunnerLogLevel        string
-	ProjectKubeTokenFile  string
-	CPTokenListenAddr     string
-	CPTokenURL            string
-	HTTPProxy             string
-	HTTPSProxy            string
-	NoProxy               string
+	APIServerURL                 string
+	APIToken                     string
+	GRPCServerAddr               string
+	GRPCUseTLS                   bool
+	LogLevel                     string
+	Kubeconfig                   string
+	Mode                         string
+	PlatformMode                 string
+	MPPConfigNamespace           string
+	CPRuntimeNamespace           string
+	OIDCTokenURL                 string
+	OIDCClientID                 string
+	OIDCClientSecret             string
+	Reconcilers                  []string
+	RunnerImage                  string
+	RunnerGRPCUseTLS             bool
+	BackendURL                   string
+	Namespace                    string
+	AnthropicAPIKey              string
+	VertexEnabled                bool
+	VertexProjectID              string
+	VertexRegion                 string
+	VertexCredentialsPath        string
+	VertexSecretName             string
+	VertexSecretNamespace        string
+	RunnerImageNamespace         string
+	MCPImage                     string
+	MCPAPIServerURL              string
+	RunnerLogLevel               string
+	ProjectKubeTokenFile         string
+	CPTokenListenAddr            string
+	CPTokenURL                   string
+	HTTPProxy                    string
+	HTTPSProxy                   string
+	NoProxy                      string
+	RunnerImageAllowedRegistries string
+	CustomRunnerImageEnabled     bool
 }
 
 func Load() (*ControlPlaneConfig, error) {
 	cfg := &ControlPlaneConfig{
-		APIServerURL:          envOrDefault("AMBIENT_API_SERVER_URL", "http://localhost:8000"),
-		APIToken:              os.Getenv("AMBIENT_API_TOKEN"),
-		GRPCServerAddr:        envOrDefault("AMBIENT_GRPC_SERVER_ADDR", "localhost:8001"),
-		GRPCUseTLS:            os.Getenv("AMBIENT_GRPC_USE_TLS") == "true",
-		LogLevel:              envOrDefault("LOG_LEVEL", "info"),
-		Kubeconfig:            os.Getenv("KUBECONFIG"),
-		Mode:                  envOrDefault("MODE", "kube"),
-		PlatformMode:          envOrDefault("PLATFORM_MODE", "standard"),
-		MPPConfigNamespace:    envOrDefault("MPP_CONFIG_NAMESPACE", "ambient-code--config"),
-		CPRuntimeNamespace:    envOrDefault("CP_RUNTIME_NAMESPACE", envOrDefault("NAMESPACE", "ambient-code")),
-		OIDCTokenURL:          envOrDefault("OIDC_TOKEN_URL", "https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token"),
-		OIDCClientID:          os.Getenv("OIDC_CLIENT_ID"),
-		OIDCClientSecret:      os.Getenv("OIDC_CLIENT_SECRET"),
-		Reconcilers:           parseReconcilers(envOrDefault("RECONCILERS", "tally,kube")),
-		RunnerImage:           envOrDefault("RUNNER_IMAGE", "quay.io/ambient_code/vteam_claude_runner:latest"),
-		RunnerGRPCUseTLS:      os.Getenv("AMBIENT_GRPC_USE_TLS") == "true",
-		BackendURL:            envOrDefault("BACKEND_API_URL", envOrDefault("AMBIENT_API_SERVER_URL", "http://localhost:8000")),
-		Namespace:             envOrDefault("NAMESPACE", "ambient-code"),
-		AnthropicAPIKey:       os.Getenv("ANTHROPIC_API_KEY"),
-		VertexEnabled:         os.Getenv("USE_VERTEX") == "1" || os.Getenv("USE_VERTEX") == "true",
-		VertexProjectID:       os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID"),
-		VertexRegion:          envOrDefault("CLOUD_ML_REGION", "global"),
-		VertexCredentialsPath: envOrDefault("GOOGLE_APPLICATION_CREDENTIALS", "/app/vertex/ambient-code-key.json"),
-		VertexSecretName:      envOrDefault("VERTEX_SECRET_NAME", "ambient-vertex"),
-		VertexSecretNamespace: envOrDefault("VERTEX_SECRET_NAMESPACE", "ambient-code"),
-		RunnerImageNamespace:  os.Getenv("RUNNER_IMAGE_NAMESPACE"),
-		MCPImage:              os.Getenv("MCP_IMAGE"),
-		MCPAPIServerURL:       envOrDefault("MCP_API_SERVER_URL", ""),
-		RunnerLogLevel:        envOrDefault("RUNNER_LOG_LEVEL", "info"),
-		ProjectKubeTokenFile:  os.Getenv("PROJECT_KUBE_TOKEN_FILE"),
-		CPTokenListenAddr:     envOrDefault("CP_TOKEN_LISTEN_ADDR", ":8080"),
-		CPTokenURL:            os.Getenv("CP_TOKEN_URL"),
-		HTTPProxy:             os.Getenv("HTTP_PROXY"),
-		HTTPSProxy:            os.Getenv("HTTPS_PROXY"),
-		NoProxy:               os.Getenv("NO_PROXY"),
+		APIServerURL:                 envOrDefault("AMBIENT_API_SERVER_URL", "http://localhost:8000"),
+		APIToken:                     os.Getenv("AMBIENT_API_TOKEN"),
+		GRPCServerAddr:               envOrDefault("AMBIENT_GRPC_SERVER_ADDR", "localhost:8001"),
+		GRPCUseTLS:                   os.Getenv("AMBIENT_GRPC_USE_TLS") == "true",
+		LogLevel:                     envOrDefault("LOG_LEVEL", "info"),
+		Kubeconfig:                   os.Getenv("KUBECONFIG"),
+		Mode:                         envOrDefault("MODE", "kube"),
+		PlatformMode:                 envOrDefault("PLATFORM_MODE", "standard"),
+		MPPConfigNamespace:           envOrDefault("MPP_CONFIG_NAMESPACE", "ambient-code--config"),
+		CPRuntimeNamespace:           envOrDefault("CP_RUNTIME_NAMESPACE", envOrDefault("NAMESPACE", "ambient-code")),
+		OIDCTokenURL:                 envOrDefault("OIDC_TOKEN_URL", "https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token"),
+		OIDCClientID:                 os.Getenv("OIDC_CLIENT_ID"),
+		OIDCClientSecret:             os.Getenv("OIDC_CLIENT_SECRET"),
+		Reconcilers:                  parseReconcilers(envOrDefault("RECONCILERS", "tally,kube")),
+		RunnerImage:                  envOrDefault("RUNNER_IMAGE", "quay.io/ambient_code/vteam_claude_runner:latest"),
+		RunnerGRPCUseTLS:             os.Getenv("AMBIENT_GRPC_USE_TLS") == "true",
+		BackendURL:                   envOrDefault("BACKEND_API_URL", envOrDefault("AMBIENT_API_SERVER_URL", "http://localhost:8000")),
+		Namespace:                    envOrDefault("NAMESPACE", "ambient-code"),
+		AnthropicAPIKey:              os.Getenv("ANTHROPIC_API_KEY"),
+		VertexEnabled:                os.Getenv("USE_VERTEX") == "1" || os.Getenv("USE_VERTEX") == "true",
+		VertexProjectID:              os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID"),
+		VertexRegion:                 envOrDefault("CLOUD_ML_REGION", "global"),
+		VertexCredentialsPath:        envOrDefault("GOOGLE_APPLICATION_CREDENTIALS", "/app/vertex/ambient-code-key.json"),
+		VertexSecretName:             envOrDefault("VERTEX_SECRET_NAME", "ambient-vertex"),
+		VertexSecretNamespace:        envOrDefault("VERTEX_SECRET_NAMESPACE", "ambient-code"),
+		RunnerImageNamespace:         os.Getenv("RUNNER_IMAGE_NAMESPACE"),
+		MCPImage:                     os.Getenv("MCP_IMAGE"),
+		MCPAPIServerURL:              envOrDefault("MCP_API_SERVER_URL", ""),
+		RunnerLogLevel:               envOrDefault("RUNNER_LOG_LEVEL", "info"),
+		ProjectKubeTokenFile:         os.Getenv("PROJECT_KUBE_TOKEN_FILE"),
+		CPTokenListenAddr:            envOrDefault("CP_TOKEN_LISTEN_ADDR", ":8080"),
+		CPTokenURL:                   os.Getenv("CP_TOKEN_URL"),
+		HTTPProxy:                    os.Getenv("HTTP_PROXY"),
+		HTTPSProxy:                   os.Getenv("HTTPS_PROXY"),
+		NoProxy:                      os.Getenv("NO_PROXY"),
+		RunnerImageAllowedRegistries: os.Getenv("RUNNER_IMAGE_ALLOWED_REGISTRIES"),
+		CustomRunnerImageEnabled:     os.Getenv("CUSTOM_RUNNER_IMAGE_ENABLED") == "true" || os.Getenv("CUSTOM_RUNNER_IMAGE_ENABLED") == "1",
 	}
 
 	if cfg.MCPAPIServerURL == "" {

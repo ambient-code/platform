@@ -1,6 +1,7 @@
 FROM registry.access.redhat.com/ubi10/ubi@sha256:f573194e8e5231f1c9340c497e1f8d9aa9dbb42b2849e60341e34f50eec9477e
 
 ARG GIT_COMMIT=unknown
+ARG RUNNER_CONTRACT_VERSION=1.0.0
 
 USER 0
 
@@ -61,6 +62,11 @@ ENV AGUI_PORT=8001
 RUN echo "umask 0022" >> /etc/profile && \
     echo "umask 0022" >> /root/.bashrc
 
+# Create directories required by platform runtime and conformance tests
+RUN mkdir -p /workspace /home/user && \
+    chown 1001:0 /workspace /home/user && \
+    chmod 775 /workspace /home/user
+
 # OpenShift compatibility
 RUN chmod -R g=u /app && chmod -R g=u /usr/local && chmod g=u /etc/passwd
 
@@ -76,5 +82,6 @@ EXPOSE 8001
 # Start FastAPI AG-UI server using uvicorn
 # The main module is installed as part of the package
 LABEL org.opencontainers.image.revision=$GIT_COMMIT
+LABEL dev.ambient.runner.contract-version=$RUNNER_CONTRACT_VERSION
 
 CMD ["/bin/bash", "-c", "umask 0022 && cd /app/ambient-runner && uvicorn main:app --host 0.0.0.0 --port 8001"]

@@ -120,6 +120,17 @@ func New(sdk *sdkclient.Client, watchManager *watcher.WatchManager, logger zerol
 	}
 }
 
+func (inf *Informer) GetProjectSettingsByProjectID(projectID string) (types.ProjectSettings, bool) {
+	inf.mu.RLock()
+	defer inf.mu.RUnlock()
+	for _, ps := range inf.projectSettingsCache {
+		if strings.EqualFold(ps.ProjectID, projectID) {
+			return ps, true
+		}
+	}
+	return types.ProjectSettings{}, false
+}
+
 func (inf *Informer) RegisterHandler(resource string, handler EventHandler) {
 	inf.mu.Lock()
 	defer inf.mu.Unlock()
@@ -566,9 +577,11 @@ func protoProjectSettingsToSDK(ps *pb.ProjectSettings) types.ProjectSettings {
 		return types.ProjectSettings{}
 	}
 	settings := types.ProjectSettings{
-		ProjectID:    ps.GetProjectId(),
-		GroupAccess:  ps.GetGroupAccess(),
-		Repositories: ps.GetRepositories(),
+		ProjectID:             ps.GetProjectId(),
+		GroupAccess:           ps.GetGroupAccess(),
+		Repositories:          ps.GetRepositories(),
+		RunnerImage:           ps.GetRunnerImage(),
+		RunnerImagePullSecret: ps.GetRunnerImagePullSecret(),
 	}
 	if m := ps.GetMetadata(); m != nil {
 		settings.ID = m.GetId()
