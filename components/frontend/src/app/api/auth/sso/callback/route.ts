@@ -39,7 +39,6 @@ export async function GET(request: NextRequest) {
     const session = await getSession();
     session.accessToken = tokens.accessToken;
     session.refreshToken = tokens.refreshToken;
-    session.idToken = tokens.idToken;
     session.expiresAt = tokens.expiresAt;
     await session.save();
 
@@ -50,7 +49,17 @@ export async function GET(request: NextRequest) {
     const origin = process.env.SSO_REDIRECT_URI
       ? new URL(process.env.SSO_REDIRECT_URI).origin
       : request.nextUrl.origin;
-    return NextResponse.redirect(new URL(returnTo, origin));
+    const response = NextResponse.redirect(new URL(returnTo, origin));
+    if (tokens.idToken) {
+      response.cookies.set("oidc_id_token", tokens.idToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 86400,
+      });
+    }
+    return response;
   } catch (err) {
     console.error("OIDC callback failed:", err instanceof Error ? err.message : err);
     cookieStore.delete("oidc_code_verifier");

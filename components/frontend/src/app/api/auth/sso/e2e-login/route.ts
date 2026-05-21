@@ -21,7 +21,6 @@ export async function POST(request: NextRequest) {
   const session = await getSession();
   session.accessToken = token;
   session.refreshToken = "";
-  session.idToken = "";
   session.expiresAt = Math.floor(Date.now() / 1000) + 86400;
   await session.save();
 
