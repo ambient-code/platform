@@ -193,11 +193,27 @@ def _expand_env_vars(value: str) -> str:
     return _re.sub(r"\$\{([^}]+)}", _replace, value)
 
 
-_CREDENTIAL_SIDECAR_SERVER_NAMES: dict[str, str] = {
-    "github": "github",
-    "jira": "mcp-atlassian",
-    "kubeconfig": "openshift",
-    "google": "google-workspace",
+_CREDENTIAL_SIDECAR_REGISTRY: dict[str, dict[str, str]] = {
+    "github": {
+        "server_name": "github",
+        "type": "streamable_http",
+        "path": "/mcp",
+    },
+    "jira": {
+        "server_name": "mcp-atlassian",
+        "type": "sse",
+        "path": "/sse",
+    },
+    "kubeconfig": {
+        "server_name": "openshift",
+        "type": "sse",
+        "path": "/sse",
+    },
+    "google": {
+        "server_name": "google-workspace",
+        "type": "sse",
+        "path": "/sse",
+    },
 }
 
 
@@ -217,14 +233,18 @@ def _build_sidecar_mcp_servers(credential_mcp_urls_raw: str) -> dict:
 
     servers: dict = {}
     for provider, url in credential_mcp_urls.items():
-        server_name = _CREDENTIAL_SIDECAR_SERVER_NAMES.get(provider, provider)
+        spec = _CREDENTIAL_SIDECAR_REGISTRY.get(provider, {})
+        server_name = spec.get("server_name", provider)
+        transport_type = spec.get("type", "sse")
+        path = spec.get("path", "/sse")
         servers[server_name] = {
-            "type": "sse",
-            "url": f"{url.rstrip('/')}/sse",
+            "type": transport_type,
+            "url": f"{url.rstrip('/')}{path}",
         }
         logger.info(
-            "Configured %s credential sidecar (SSE) at %s",
+            "Configured %s credential sidecar (%s) at %s",
             server_name,
+            transport_type,
             url,
         )
 
