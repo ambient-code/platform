@@ -21,6 +21,39 @@ const (
 	mcpSidecarURL  = "http://localhost:8090"
 )
 
+type credentialSidecarSpec struct {
+	Name         string
+	ImageField   string
+	Port         int64
+	ProviderEnvs map[string]string
+}
+
+var credentialSidecarRegistry = map[string]credentialSidecarSpec{
+	"github": {
+		Name:       "credential-github",
+		ImageField: "GitHubMCPImage",
+		Port:       8091,
+		ProviderEnvs: map[string]string{
+			"GITHUB_PERSONAL_ACCESS_TOKEN": "__CREDENTIAL_TOKEN__",
+		},
+	},
+	"jira": {
+		Name:       "credential-jira",
+		ImageField: "JiraMCPImage",
+		Port:       8092,
+	},
+	"kubeconfig": {
+		Name:       "credential-k8s",
+		ImageField: "K8sMCPImage",
+		Port:       8093,
+	},
+	"google": {
+		Name:       "credential-google",
+		ImageField: "GoogleMCPImage",
+		Port:       8094,
+	},
+}
+
 type KubeReconcilerConfig struct {
 	RunnerImage           string
 	BackendURL            string
@@ -36,6 +69,10 @@ type KubeReconcilerConfig struct {
 	RunnerImageNamespace  string
 	MCPImage              string
 	MCPAPIServerURL       string
+	GitHubMCPImage        string
+	JiraMCPImage          string
+	K8sMCPImage           string
+	GoogleMCPImage        string
 	RunnerLogLevel        string
 	CPRuntimeNamespace    string
 	CPTokenURL            string
@@ -451,6 +488,19 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 		r.logger.Info().Str("session_id", session.ID).Msg("MCP sidecar enabled for session")
 	}
 
+	credSidecars, credMCPURLs := r.buildCredentialSidecars(session.ID, credentialIDs)
+	containers = append(containers, credSidecars...)
+	if len(credMCPURLs) > 0 {
+		raw, err := json.Marshal(credMCPURLs)
+		if err == nil {
+			containers[0].(map[string]interface{})["env"] = append(
+				containers[0].(map[string]interface{})["env"].([]interface{}),
+				envVar("CREDENTIAL_MCP_URLS", string(raw)),
+			)
+		}
+		r.logger.Info().Int("count", len(credSidecars)).Str("session_id", session.ID).Msg("credential sidecars injected")
+	}
+
 	pod := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "v1",
@@ -825,6 +875,106 @@ func boolToStr(b bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+func (r *SimpleKubeReconciler) credentialSidecarImage(provider string) string {
+	switch provider {
+	case "github":
+		return r.cfg.GitHubMCPImage
+	case "jira":
+		return r.cfg.JiraMCPImage
+	case "kubeconfig":
+		return r.cfg.K8sMCPImage
+	case "google":
+		return r.cfg.GoogleMCPImage
+	default:
+		return ""
+	}
+}
+
+func (r *SimpleKubeReconciler) buildCredentialSidecars(sessionID string, credentialIDs map[string]string) ([]interface{}, map[string]string) {
+	var sidecars []interface{}
+	mcpURLs := map[string]string{}
+
+	for provider := range credentialIDs {
+		spec, ok := credentialSidecarRegistry[provider]
+		if !ok {
+			continue
+		}
+		image := r.credentialSidecarImage(provider)
+		if image == "" {
+			continue
+		}
+
+		imagePullPolicy := "Always"
+		if strings.HasPrefix(image, "localhost/") {
+			imagePullPolicy = "IfNotPresent"
+		}
+
+		env := []interface{}{
+			envVar("SESSION_ID", sessionID),
+			envVar("AMBIENT_API_URL", r.cfg.MCPAPIServerURL),
+			envVar("AMBIENT_CP_TOKEN_URL", r.cfg.CPTokenURL),
+			envVar("AMBIENT_CP_TOKEN_PUBLIC_KEY", r.cfg.CPTokenPublicKey),
+			envVar("SSL_CERT_FILE", "/etc/pki/ca-trust/extracted/pem/service-ca.crt"),
+		}
+		for k, v := range spec.ProviderEnvs {
+			env = append(env, envVar(k, v))
+		}
+		if r.cfg.HTTPProxy != "" {
+			env = append(env, envVar("HTTP_PROXY", r.cfg.HTTPProxy))
+		}
+		if r.cfg.HTTPSProxy != "" {
+			env = append(env, envVar("HTTPS_PROXY", r.cfg.HTTPSProxy))
+		}
+		if r.cfg.NoProxy != "" {
+			env = append(env, envVar("NO_PROXY", r.cfg.NoProxy))
+		}
+
+		sidecar := map[string]interface{}{
+			"name":            spec.Name,
+			"image":           image,
+			"imagePullPolicy": imagePullPolicy,
+			"ports": []interface{}{
+				map[string]interface{}{
+					"name":          fmt.Sprintf("cred-%s", provider),
+					"containerPort": spec.Port,
+					"protocol":      "TCP",
+				},
+			},
+			"env": env,
+			"volumeMounts": []interface{}{
+				map[string]interface{}{
+					"name":      "service-ca",
+					"mountPath": "/etc/pki/ca-trust/extracted/pem/service-ca.crt",
+					"subPath":   "service-ca.crt",
+					"readOnly":  true,
+				},
+			},
+			"resources": map[string]interface{}{
+				"requests": map[string]interface{}{
+					"cpu":    "100m",
+					"memory": "128Mi",
+				},
+				"limits": map[string]interface{}{
+					"cpu":    "500m",
+					"memory": "256Mi",
+				},
+			},
+			"securityContext": map[string]interface{}{
+				"allowPrivilegeEscalation": false,
+				"capabilities": map[string]interface{}{
+					"drop": []interface{}{"ALL"},
+				},
+			},
+		}
+
+		sidecars = append(sidecars, sidecar)
+		mcpURLs[provider] = fmt.Sprintf("http://localhost:%d", spec.Port)
+		r.logger.Debug().Str("provider", provider).Str("image", image).Int64("port", spec.Port).Msg("credential sidecar configured")
+	}
+
+	return sidecars, mcpURLs
 }
 
 func (r *SimpleKubeReconciler) buildMCPSidecar(sessionID string) interface{} {

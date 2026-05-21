@@ -35,6 +35,10 @@ type ControlPlaneConfig struct {
 	RunnerImageNamespace  string
 	MCPImage              string
 	MCPAPIServerURL       string
+	GitHubMCPImage        string
+	JiraMCPImage          string
+	K8sMCPImage           string
+	GoogleMCPImage        string
 	RunnerLogLevel        string
 	ProjectKubeTokenFile  string
 	CPTokenListenAddr     string
@@ -74,6 +78,10 @@ func Load() (*ControlPlaneConfig, error) {
 		RunnerImageNamespace:  os.Getenv("RUNNER_IMAGE_NAMESPACE"),
 		MCPImage:              os.Getenv("MCP_IMAGE"),
 		MCPAPIServerURL:       envOrDefault("MCP_API_SERVER_URL", ""),
+		GitHubMCPImage:        os.Getenv("GITHUB_MCP_IMAGE"),
+		JiraMCPImage:          os.Getenv("JIRA_MCP_IMAGE"),
+		K8sMCPImage:           os.Getenv("K8S_MCP_IMAGE"),
+		GoogleMCPImage:        os.Getenv("GOOGLE_MCP_IMAGE"),
 		RunnerLogLevel:        envOrDefault("RUNNER_LOG_LEVEL", "info"),
 		ProjectKubeTokenFile:  os.Getenv("PROJECT_KUBE_TOKEN_FILE"),
 		CPTokenListenAddr:     envOrDefault("CP_TOKEN_LISTEN_ADDR", ":8080"),
