@@ -348,6 +348,12 @@ spec:
         env:
         - name: AMBIENT_ENV
           value: development
+        - name: AMBIENT_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: ambient-control-plane-token
+              key: token
+              optional: true
         ports:
         - name: api
           containerPort: 8000
