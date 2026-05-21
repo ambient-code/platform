@@ -151,9 +151,11 @@ erDiagram
         string ID PK
         string session_id FK
         int    seq "monotonic within session"
-        string event_type "user | assistant | tool_use | tool_result | system | error"
-        string payload "message body or JSON-encoded event"
+        string event_type "AG-UI event type (33 types: TEXT_MESSAGE_START, TOOL_CALL_START, etc.)"
+        string payload "JSON-encoded event payload"
         time   created_at
+        time   completed_at "nullable — last event timestamp for compressed events"
+        int32  event_count "number of raw events compressed; 1 = uncompressed"
     }
 
     %% ── RBAC ─────────────────────────────────────────────────────────────────
@@ -336,6 +338,240 @@ SessionMessages are never deleted or edited. They are the canonical record of wh
 | `GET /sessions/{id}/events` | Runner pod SSE (`GET /events/{thread_id}`) | Ephemeral; runner-local in-memory queue | Live AG-UI turn events during an active run |
 
 The runner's `/events/{thread_id}` endpoint registers an asyncio queue into `bridge._active_streams[thread_id]` and streams every AG-UI event as SSE until `RUN_FINISHED` / `RUN_ERROR` or client disconnect. The API server's `/sessions/{id}/events` proxies this from the runner pod for the active session, routing via pod IP or session service. Keepalive pings fire every 30s to hold the connection open.
+
+### Events API — AG-UI Event Protocol
+
+The Events API provides structured access to the AG-UI event stream emitted by runner pods during session execution. Events are the atomic units of a conversation: text deltas, tool calls, thinking blocks, state updates, and control flow markers.
+
+#### AG-UI Event Types
+
+Events follow the [AG-UI protocol](https://github.com/anthropics/ag-ui), a streaming protocol for agentic UIs. The protocol defines 33 event types organized into semantic categories:
+
+| Category | Event Types | Purpose |
+|----------|-------------|---------|
+| **Run Lifecycle** | `RUN_STARTED`, `RUN_FINISHED`, `RUN_ERROR` | Session execution boundaries |
+| **Step Lifecycle** | `STEP_STARTED`, `STEP_FINISHED` | Multi-step execution boundaries (LangGraph pattern) |
+| **Text Messages** | `TEXT_MESSAGE_START`, `TEXT_MESSAGE_CONTENT`, `TEXT_MESSAGE_END`, `TEXT_MESSAGE_CHUNK` | User or assistant text content |
+| **Tool Calls** | `TOOL_CALL_START`, `TOOL_CALL_ARGS`, `TOOL_CALL_END`, `TOOL_CALL_CHUNK`, `TOOL_CALL_RESULT` | Tool invocations and results |
+| **Thinking** | `THINKING_START`, `THINKING_END`, `THINKING_TEXT_MESSAGE_START`, `THINKING_TEXT_MESSAGE_CONTENT`, `THINKING_TEXT_MESSAGE_END` | Extended thinking blocks (Claude 4+ models) |
+| **Reasoning** | `REASONING_START`, `REASONING_END`, `REASONING_MESSAGE_START`, `REASONING_MESSAGE_CONTENT`, `REASONING_MESSAGE_END`, `REASONING_MESSAGE_CHUNK`, `REASONING_ENCRYPTED_VALUE` | Reasoning trace (Gemini 2.5+ Deep Research) |
+| **State** | `STATE_SNAPSHOT`, `STATE_DELTA`, `MESSAGES_SNAPSHOT`, `ACTIVITY_SNAPSHOT`, `ACTIVITY_DELTA` | Bidirectional state sync (LangGraph pattern) |
+| **Custom** | `RAW`, `CUSTOM` | Framework-specific or debug events |
+
+Each event carries:
+- `type` — event type from the enum above
+- `run_id` — AG-UI run identifier (scoped to a single execution turn)
+- `thread_id` — session identifier (maps to `session_id` in DB)
+- Payload fields specific to the event type (e.g., `message_id`, `tool_id`, `content`, `args`)
+
+**Start/End Pairing:** Events with `_START` / `_END` suffixes define stream boundaries. Content events (`_CONTENT`, `_ARGS`, `_CHUNK`) appear between their corresponding start/end markers.
+
+**Example sequence:**
+```
+RUN_STARTED
+├── TEXT_MESSAGE_START (role=assistant, message_id=msg_abc)
+│   ├── TEXT_MESSAGE_CONTENT (content="Let me")
+│   ├── TEXT_MESSAGE_CONTENT (content=" check")
+│   └── TEXT_MESSAGE_END
+├── TOOL_CALL_START (tool_name=Read, tool_call_id=tc_123)
+│   ├── TOOL_CALL_ARGS (args='{"file')
+│   ├── TOOL_CALL_ARGS (args='_path":')
+│   ├── TOOL_CALL_ARGS (args='"/app/file.txt"}')
+│   └── TOOL_CALL_END
+├── TOOL_CALL_RESULT (tool_call_id=tc_123, result="file contents...")
+└── RUN_FINISHED
+```
+
+#### Event Compression
+
+AG-UI events stream at **token-level granularity** — a single word or JSON fragment can emit one event. Without compression, sessions generate thousands of tiny rows (e.g., `TEXT_MESSAGE_CONTENT` with `"Let"`, then `" me"`, then `" check"`). This creates storage bloat and query overhead.
+
+**Compression Strategy — Context-Aware Accumulation:**
+
+Events are compressed **before persistence** by the runner's gRPC client. Compression groups consecutive events sharing the same **context** (message_id, tool_call_id, role). When the context changes or a boundary event arrives, the accumulated content is flushed as a single compressed event.
+
+**Compression Rules:**
+
+| Event Type | Compression Behavior |
+|------------|---------------------|
+| `TEXT_MESSAGE_START` | **Boundary** — flushes prior accumulated content; starts new message context |
+| `TEXT_MESSAGE_CONTENT` | **Accumulate** — append `content` to buffer within current message context |
+| `TEXT_MESSAGE_END` | **Boundary** — flushes accumulated content; ends message context |
+| `TOOL_CALL_START` | **Boundary** — starts new tool call context |
+| `TOOL_CALL_ARGS` | **Accumulate** — append `args` fragment to buffer within current tool context |
+| `TOOL_CALL_END` | **Boundary** — flushes accumulated args; ends tool context |
+| `THINKING_TEXT_MESSAGE_CONTENT` | **Accumulate** — within thinking message context |
+| `REASONING_MESSAGE_CONTENT` | **Accumulate** — within reasoning message context |
+| All `_START`, `_END`, `_RESULT`, run/step lifecycle | **Never compressed** — stored as individual events |
+
+**Context Definition:**
+- Text messages: `(message_id, role)`
+- Tool calls: `(tool_call_id)`
+- Thinking: `(message_id, thinking_id)`
+- Reasoning: `(message_id, reasoning_id)`
+
+**Flush Triggers:**
+1. Context change (new message_id / tool_call_id)
+2. Boundary event (`_START`, `_END`)
+3. Event type transition (TEXT → TOOL, TOOL → TEXT)
+4. Buffer size threshold (optional; e.g., 10 KB per compressed event)
+5. Time threshold (optional; e.g., 5 seconds idle)
+
+**Metadata Preservation:**
+- `created_at` — timestamp of the **first** event in the compressed group
+- `completed_at` — timestamp of the **last** event (new field on `SessionMessage`)
+- `event_count` — number of raw events compressed into this row (new field)
+
+**Example — Before Compression:**
+```json
+{"seq":10, "event_type":"TEXT_MESSAGE_START", "payload":"{\"message_id\":\"msg_1\",\"role\":\"assistant\"}"}
+{"seq":11, "event_type":"TEXT_MESSAGE_CONTENT", "payload":"{\"content\":\"Let\"}"}
+{"seq":12, "event_type":"TEXT_MESSAGE_CONTENT", "payload":"{\"content\":\" me\"}"}
+{"seq":13, "event_type":"TEXT_MESSAGE_CONTENT", "payload":"{\"content\":\" check\"}"}
+{"seq":14, "event_type":"TEXT_MESSAGE_END", "payload":"{}"}
+```
+
+**After Compression:**
+```json
+{"seq":10, "event_type":"TEXT_MESSAGE_START", "payload":"{\"message_id\":\"msg_1\",\"role\":\"assistant\"}"}
+{"seq":11, "event_type":"TEXT_MESSAGE_CONTENT", "payload":"{\"content\":\"Let me check\"}", "event_count":3, "completed_at":"2026-05-21T..."}
+{"seq":12, "event_type":"TEXT_MESSAGE_END", "payload":"{}"}
+```
+
+**Space Savings:** Typical compression ratios range from **5:1** (simple text) to **20:1** (complex tool arguments with many JSON fragments).
+
+**Backward Compatibility:** Existing queries and APIs continue to work. Compressed events are decompressed on read if clients require token-level replay (future enhancement).
+
+#### Storage Model
+
+Compressed events are stored in the existing `session_messages` table with schema extensions:
+
+```sql
+CREATE TABLE session_messages (
+    id          VARCHAR(36) PRIMARY KEY,
+    session_id  VARCHAR(36) NOT NULL REFERENCES sessions(id),
+    seq         BIGINT NOT NULL,
+    event_type  VARCHAR(255) NOT NULL,
+    payload     TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL,
+    completed_at TIMESTAMPTZ,          -- NEW: timestamp of last event in compressed group
+    event_count  INT DEFAULT 1,        -- NEW: number of raw events compressed (1 = uncompressed)
+    UNIQUE(session_id, seq)
+);
+
+CREATE INDEX idx_session_messages_session_id ON session_messages(session_id);
+CREATE INDEX idx_session_messages_event_type ON session_messages(event_type);
+```
+
+**Field Semantics:**
+
+| Field | Description |
+|-------|-------------|
+| `seq` | Monotonic sequence within session; gaps allowed after compression |
+| `event_type` | AG-UI event type enum (see table above) |
+| `payload` | JSON-encoded event payload; structure varies by event type |
+| `created_at` | First event timestamp (for compressed events) or single event timestamp |
+| `completed_at` | Last event timestamp for compressed events; `NULL` for uncompressed |
+| `event_count` | Number of raw events compressed; `1` = uncompressed, `>1` = compressed |
+
+**Backward Compatibility:** Existing rows have `completed_at=NULL` and `event_count=1`. Migration backfills default values without data loss.
+
+#### API Endpoints
+
+```
+GET    /api/ambient/v1/sessions/{id}/messages                # List compressed events (paginated)
+POST   /api/ambient/v1/sessions/{id}/messages                # Push user message (HTTP; validated as event_type=user)
+GET    /api/ambient/v1/sessions/{id}/events                  # SSE proxy to runner pod (live, ephemeral)
+```
+
+**Query Parameters (GET /messages):**
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `after_seq` | int64 | Return events with `seq > after_seq` (for replay/catch-up) |
+| `event_type` | string | Filter by event type (e.g., `TOOL_CALL_START`) |
+| `limit` | int | Max events to return (default 100, max 1000) |
+
+**Response (GET /messages):**
+```json
+{
+  "items": [
+    {
+      "id": "01HXY...",
+      "session_id": "2abc...",
+      "seq": 42,
+      "event_type": "TEXT_MESSAGE_CONTENT",
+      "payload": "{\"content\":\"Let me check the file\"}",
+      "created_at": "2026-05-21T10:00:00Z",
+      "completed_at": "2026-05-21T10:00:02Z",
+      "event_count": 8
+    }
+  ],
+  "page": 1,
+  "size": 100,
+  "total": 523
+}
+```
+
+#### gRPC Protocol
+
+Runners push events via `PushSessionMessage`:
+
+```protobuf
+message PushSessionMessageRequest {
+  string session_id = 1;
+  string event_type = 2;  // AG-UI event type
+  string payload = 3;     // JSON-encoded event payload
+}
+
+message SessionMessage {
+  string id = 1;
+  string session_id = 2;
+  int64 seq = 3;
+  string event_type = 4;
+  string payload = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp completed_at = 7;  // NEW
+  int32 event_count = 8;                       // NEW
+}
+```
+
+**Compression in gRPC Client:**
+
+The runner's gRPC client (`ambient-runner` Python package) implements compression **before** calling `PushSessionMessage`. The compressor maintains:
+- **Context stack** — tracks active message_id, tool_call_id, thinking_id, reasoning_id
+- **Accumulation buffer** — collects content/args fragments for current context
+- **Flush logic** — detects boundary events and context transitions
+
+When a flush occurs, the compressor:
+1. Concatenates accumulated fragments into a single payload
+2. Attaches `event_count` and `completed_at` metadata
+3. Calls `PushSessionMessage` once with the compressed event
+4. Resets the accumulation buffer
+
+**Implementation Note:** Compression is **opt-in per runner framework**. Legacy runners continue to push uncompressed events (stored with `event_count=1`). The API server and database accept both formats transparently.
+
+#### Event Type Mapping (Legacy Compatibility)
+
+The current `event_type` field in `session_messages` stores simplified event types (`user`, `assistant`, `tool_use`, `tool_result`, `system`, `error`). These are **legacy shims** from the pre-AG-UI era. New implementations use the full AG-UI event type vocabulary.
+
+**Migration Path:**
+1. Extend `event_type` column to accept AG-UI event types (`VARCHAR(255)` already sufficient)
+2. Runners emit AG-UI event types verbatim
+3. API backward compatibility: map AG-UI types to legacy types for clients expecting old schema
+
+**Mapping Table:**
+
+| AG-UI Event Type | Legacy `event_type` |
+|------------------|---------------------|
+| `TEXT_MESSAGE_START` (role=user) | `user` |
+| `TEXT_MESSAGE_START` (role=assistant) | `assistant` |
+| `TOOL_CALL_START` | `tool_use` |
+| `TOOL_CALL_RESULT` | `tool_result` |
+| `RUN_ERROR` | `error` |
+| All others | Store verbatim; no legacy mapping |
+
+**Implementation Status:** ✅ Runners already emit AG-UI event types. API server accepts and stores them verbatim. Legacy mapping is provided for backward compatibility in read queries only (future optional enhancement).
 
 ---
 
@@ -1243,6 +1479,8 @@ _Last updated: 2026-04-28. Use this as the authoritative index — click into co
 | **Sessions — start/stop** | ✅ `/start` `/stop` | ✅ `SessionAPI.{Start,Stop}` | ✅ `start`/`stop` commands | |
 | **Sessions — messages (list/push/watch)** | ✅ `/messages` | ✅ `PushMessage`, `ListMessages`, `WatchSessionMessages` (gRPC) | ✅ `session messages`, `session send` | gRPC watch via `session_watch.go` |
 | **Sessions — live events (SSE proxy)** | ✅ `/events` → runner pod | ✅ `SessionAPI.StreamEvents` → `io.ReadCloser` | ✅ `session events` | Runner must be Running; 502 if unreachable |
+| **Events API — compression** | 🔲 runner gRPC client compression | 🔲 `completed_at`, `event_count` fields | 🔲 migration pending | Compression is opt-in; legacy uncompressed events supported |
+| **Events API — AG-UI event types** | ✅ runners emit AG-UI types | ✅ stored verbatim in `event_type` | ✅ query support | Legacy mapping available for backward compat |
 | **Sessions — labels/annotations** | ✅ PATCH accepts `labels`/`annotations` | ✅ fields on `Session` type; `SessionAPI.Update(patch map[string]any)` | ⚠️ no dedicated subcommand; use `acpctl get session -o json` + manual PATCH | |
 | **Sessions — workspace files** | ✅ sessions plugin; stubs empty list when no runner; 503 per-file-op | 🔲 | 🔲 `session workspace list/get/put/delete` | Requires running session for file ops |
 | **Sessions — pre-upload files** | ✅ sessions plugin; stubs empty list when no runner; 503 per-file-op | 🔲 | 🔲 `session files list/upload/delete` | S3-staged; available before session starts |
