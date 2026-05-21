@@ -10,9 +10,10 @@ export async function GET(request: NextRequest) {
   session.destroy();
   cookieStore.delete("oidc_id_token");
 
-  const postLogoutRedirectUri = process.env.SSO_REDIRECT_URI
+  const origin = process.env.SSO_REDIRECT_URI
     ? new URL(process.env.SSO_REDIRECT_URI).origin
     : request.nextUrl.origin;
+  const postLogoutRedirectUri = `${origin}/logged-out`;
 
   if (process.env.SSO_ISSUER_URL) {
     const endSessionUrl = await getEndSessionUrl(postLogoutRedirectUri, idToken);
