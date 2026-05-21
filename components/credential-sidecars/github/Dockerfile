@@ -2,7 +2,7 @@ FROM ghcr.io/github/github-mcp-server:latest AS upstream
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 
-COPY --from=upstream /github-mcp-server /usr/local/bin/github-mcp-server
+COPY --from=upstream /server/github-mcp-server /usr/local/bin/github-mcp-server
 
 RUN microdnf install -y procps-ng shadow-utils && \
     microdnf clean all && \
