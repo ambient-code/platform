@@ -13,7 +13,14 @@ COPY plugins/ plugins/
 COPY openapi/ openapi/
 
 # Build the binary
-RUN go build -ldflags="-s -w" -o ambient-api-server ./cmd/ambient-api-server
+ARG GIT_VERSION=
+ARG BUILD_TIME=
+ARG GIT_TAG=
+RUN go build -ldflags="-s -w \
+  -X github.com/ambient-code/platform/components/ambient-api-server/pkg/api.Version=${GIT_VERSION} \
+  -X github.com/ambient-code/platform/components/ambient-api-server/pkg/api.BuildTime=${BUILD_TIME} \
+  -X github.com/ambient-code/platform/components/ambient-api-server/pkg/api.GitTag=${GIT_TAG}" \
+  -o ambient-api-server ./cmd/ambient-api-server
 
 # Runtime stage
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
