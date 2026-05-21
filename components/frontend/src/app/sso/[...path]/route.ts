@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const SSO_ORIGIN = process.env.SSO_ISSUER_URL
-  ? new URL(process.env.SSO_ISSUER_URL).origin
-  : null;
+function parseSSOOrigin(): string | null {
+  try {
+    return process.env.SSO_ISSUER_URL
+      ? new URL(process.env.SSO_ISSUER_URL).origin
+      : null;
+  } catch {
+    console.error("SSO_ISSUER_URL is not a valid URL:", process.env.SSO_ISSUER_URL);
+    return null;
+  }
+}
+const SSO_ORIGIN = parseSSOOrigin();
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   return proxyToKeycloak(request, await params);
@@ -45,7 +53,7 @@ async function proxyToKeycloak(request: NextRequest, params: { path: string[] })
     if (key === "transfer-encoding") continue;
     // Rewrite Location headers from internal to proxy URL
     if (key === "location" && SSO_ORIGIN) {
-      responseHeaders.set(key, value.replace(SSO_ORIGIN, request.nextUrl.origin + "/sso"));
+      responseHeaders.set(key, value.replaceAll(SSO_ORIGIN, request.nextUrl.origin + "/sso"));
     } else {
       responseHeaders.set(key, value);
     }

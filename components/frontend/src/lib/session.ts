@@ -44,6 +44,16 @@ export async function getAccessToken(): Promise<string | undefined> {
     session.refreshToken = tokens.refreshToken;
     session.expiresAt = tokens.expiresAt;
     await session.save();
+    if (tokens.idToken) {
+      const cookieStore = await cookies();
+      cookieStore.set("oidc_id_token", tokens.idToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 86400,
+      });
+    }
     console.log("SSO: token refreshed, new expiry", new Date(tokens.expiresAt * 1000).toISOString());
     return session.accessToken;
   } catch (err) {

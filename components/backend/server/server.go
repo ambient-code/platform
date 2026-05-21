@@ -146,8 +146,10 @@ func forwardedIdentityMiddleware() gin.HandlerFunc {
 				} else {
 					log.Printf("SSO: JWT validation failed for %s: %v", c.FullPath(), err)
 				}
-				// JWT validation failed — fall through to header-based extraction
-				// (API keys will be handled by getK8sClientsDefault via TokenReview)
+				// JWT failed in SSO mode — don't fall through to X-Forwarded-* headers.
+				// Identity will be established by tokenReviewIdentity in getK8sClientsDefault.
+				c.Next()
+				return
 			}
 		}
 
@@ -210,13 +212,22 @@ func extractBearerToken(c *gin.Context) string {
 }
 
 func setIdentityFromClaims(c *gin.Context, claims *jwtauth.Claims) {
+	// Primary identity — must match buildImpersonatingClients order:
+	// preferred_username > email > sub
+	primaryID := claims.PreferredUsername
+	if primaryID == "" {
+		primaryID = claims.Email
+	}
+	if primaryID == "" {
+		primaryID = claims.Sub
+	}
+	if primaryID != "" {
+		c.Set("userID", SanitizeUserID(primaryID))
+		c.Set("userIDOriginal", primaryID)
+	}
+
 	if claims.Email != "" {
-		c.Set("userID", SanitizeUserID(claims.Email))
-		c.Set("userIDOriginal", claims.Email)
 		c.Set("userEmail", claims.Email)
-	} else if claims.Sub != "" {
-		c.Set("userID", SanitizeUserID(claims.Sub))
-		c.Set("userIDOriginal", claims.Sub)
 	}
 
 	if claims.PreferredUsername != "" {

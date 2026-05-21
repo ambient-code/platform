@@ -1,4 +1,5 @@
 {
+  "_comment": "REQUIRED: Replace all CHANGE_ME values before deploying. Client secrets must match the corresponding K8s secrets (sso-credentials, control-plane-oidc).",
   "realm": "ambient-code",
   "enabled": true,
   "sslRequired": "external",
@@ -29,7 +30,8 @@
       "defaultClientScopes": [
         "openid",
         "email",
-        "profile"
+        "profile",
+        "groups"
       ],
       "protocolMappers": [
         {
@@ -100,7 +102,47 @@
       "defaultClientScopes": [
         "openid",
         "email",
-        "profile"
+        "profile",
+        "groups"
+      ],
+      "protocolMappers": [
+        {
+          "name": "audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "ambient-frontend",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "groups",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "groups",
+            "userinfo.token.claim": "true"
+          }
+        }
       ]
     }
   ],

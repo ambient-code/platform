@@ -58,7 +58,7 @@ export async function buildAuthorizationUrl(redirectUri: string): Promise<{
 
   const redirectTo = client.buildAuthorizationUrl(config, {
     redirect_uri: redirectUri,
-    scope: "openid",
+    scope: "openid email profile",
     code_challenge: codeChallenge,
     code_challenge_method: "S256",
     state,
