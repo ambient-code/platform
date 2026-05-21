@@ -229,7 +229,8 @@ build-credential-sidecars: build-credential-github build-credential-jira build-c
 
 build-credential-github: ## Build GitHub credential sidecar image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building GitHub credential sidecar with $(CONTAINER_ENGINE)..."
-	@cd components/credential-sidecars/github && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-f components/credential-sidecars/github/Dockerfile \
 		-t $(GITHUB_MCP_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) GitHub credential sidecar built: $(GITHUB_MCP_IMAGE)"
 
