@@ -14,3 +14,8 @@ const (
 )
 
 var NewID = trexapi.NewID
+
+var (
+	Version   = "dev"
+	BuildTime = "unknown"
+)
