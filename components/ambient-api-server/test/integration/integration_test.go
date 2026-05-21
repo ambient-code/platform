@@ -26,3 +26,8 @@ func TestMain(m *testing.M) {
 	helper.Teardown()
 	os.Exit(exitCode)
 }
+
+func TestServerStarts(t *testing.T) {
+	// Validates that the test server bootstraps without errors.
+	// TestMain handles setup; reaching this function means startup succeeded.
+}
