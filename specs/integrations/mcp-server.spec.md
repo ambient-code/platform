@@ -986,11 +986,10 @@ container has **no** integration credential tokens in its environment or filesys
 
 | Credential Provider | Sidecar Name | Image | Port | Env Vars Injected |
 |---|---|---|---|---|
-| `github` | `github-mcp` | `ghcr.io/github/github-mcp-server` | `:8091` | `GITHUB_PERSONAL_ACCESS_TOKEN`, `AMBIENT_API_URL`, `AMBIENT_CP_TOKEN_URL`, `SESSION_ID` |
-| `gitlab` | `gitlab-mcp` | TBD — no official MCP server exists yet; will require a community or custom image | `:8092` | `GITLAB_TOKEN`, `GITLAB_HOST`, `AMBIENT_API_URL`, `AMBIENT_CP_TOKEN_URL`, `SESSION_ID` |
-| `jira` | `jira-mcp` | `uvx mcp-atlassian` (init + run) | `:8093` | `JIRA_URL`, `JIRA_API_TOKEN`, `JIRA_EMAIL`, `AMBIENT_API_URL`, `AMBIENT_CP_TOKEN_URL`, `SESSION_ID` |
-| `kubeconfig` | `k8s-mcp` | `uvx kubernetes-mcp-server` (init + run) | `:8094` | `KUBECONFIG` (file mount), `AMBIENT_API_URL`, `AMBIENT_CP_TOKEN_URL`, `SESSION_ID` |
-| `google` | `google-mcp` | `uvx workspace-mcp` (init + run) | `:8095` | `GOOGLE_OAUTH_*`, `USER_GOOGLE_EMAIL`, `AMBIENT_API_URL`, `AMBIENT_CP_TOKEN_URL`, `SESSION_ID` |
+| `github` | `credential-github` | `ghcr.io/github/github-mcp-server` (via `mcp-proxy`) | `:8091` | `GITHUB_PERSONAL_ACCESS_TOKEN`, `AMBIENT_API_URL`, `AMBIENT_CP_TOKEN_URL`, `SESSION_ID` |
+| `jira` | `credential-jira` | `mcp-atlassian` (native SSE) | `:8092` | `JIRA_URL`, `JIRA_API_TOKEN`, `JIRA_EMAIL`, `AMBIENT_API_URL`, `AMBIENT_CP_TOKEN_URL`, `SESSION_ID` |
+| `kubeconfig` | `credential-k8s` | `kubernetes-mcp-server` (Go binary) | `:8093` | `KUBECONFIG` (file mount), `AMBIENT_API_URL`, `AMBIENT_CP_TOKEN_URL`, `SESSION_ID` |
+| `google` | `credential-google` | `workspace-mcp` (init + run) | `:8094` | `GOOGLE_OAUTH_*`, `USER_GOOGLE_EMAIL`, `AMBIENT_API_URL`, `AMBIENT_CP_TOKEN_URL`, `SESSION_ID` |
 
 The runner connects to each sidecar as an SSE MCP client on `http://localhost:{port}/sse`.
 
@@ -1046,7 +1045,7 @@ Job Pod (session-{id}-runner)
 ├── container: jira-mcp            (only if jira credential bound)
 │     JIRA_URL, JIRA_API_TOKEN, JIRA_EMAIL
 │     AMBIENT_API_URL, AMBIENT_CP_TOKEN_URL, SESSION_ID
-│     Listens :8093
+│     Listens :8092
 │
 └── ... (additional credential sidecars as needed)
 ```

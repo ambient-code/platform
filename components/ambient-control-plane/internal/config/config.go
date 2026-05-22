@@ -46,6 +46,7 @@ type ControlPlaneConfig struct {
 	HTTPProxy             string
 	HTTPSProxy            string
 	NoProxy               string
+	ImagePullSecret       string
 }
 
 func Load() (*ControlPlaneConfig, error) {
@@ -89,6 +90,7 @@ func Load() (*ControlPlaneConfig, error) {
 		HTTPProxy:             os.Getenv("HTTP_PROXY"),
 		HTTPSProxy:            os.Getenv("HTTPS_PROXY"),
 		NoProxy:               os.Getenv("NO_PROXY"),
+		ImagePullSecret:       os.Getenv("IMAGE_PULL_SECRET"),
 	}
 
 	if cfg.MCPAPIServerURL == "" {

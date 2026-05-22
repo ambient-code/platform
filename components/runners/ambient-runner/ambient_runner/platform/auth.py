@@ -383,15 +383,17 @@ async def fetch_token_for_url(context: RunnerContext, url: str) -> str:
         return os.getenv("GITHUB_TOKEN") or await fetch_github_token(context)
 
 
-def _using_credential_sidecars() -> bool:
+def _parse_credential_mcp_urls() -> dict:
     raw = os.getenv("CREDENTIAL_MCP_URLS", "").strip()
     if not raw:
-        return False
+        return {}
     try:
-        parsed = json.loads(raw)
-        return isinstance(parsed, dict) and len(parsed) > 0
-    except (json.JSONDecodeError, TypeError):
-        return False
+        parsed = _json.loads(raw)
+        if isinstance(parsed, dict) and len(parsed) > 0:
+            return parsed
+    except (_json.JSONDecodeError, TypeError):
+        pass
+    return {}
 
 
 async def populate_runtime_credentials(context: RunnerContext) -> None:
@@ -404,7 +406,8 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     integration tokens are NOT injected into the runner environment.
     Only git identity (user name/email) is extracted for commit attribution.
     """
-    sidecar_mode = _using_credential_sidecars()
+    credential_mcp_urls = _parse_credential_mcp_urls()
+    sidecar_mode = bool(credential_mcp_urls)
     if sidecar_mode:
         logger.info("Credential sidecars active — fetching identity only (no token injection)")
     else:
@@ -503,12 +506,13 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         logger.info("Updated Jira credentials in environment")
 
     # GitLab credentials (with user identity)
+    # GitLab has no sidecar — always inject the token, even in sidecar mode.
     if isinstance(gitlab_creds, Exception):
         logger.warning(f"Failed to refresh GitLab credentials: {gitlab_creds}")
         if isinstance(gitlab_creds, PermissionError):
             auth_failures.append(str(gitlab_creds))
     elif gitlab_creds.get("token"):
-        if not sidecar_mode:
+        if not sidecar_mode or "gitlab" not in credential_mcp_urls:
             os.environ["GITLAB_TOKEN"] = gitlab_creds["token"]
             try:
                 _GITLAB_TOKEN_FILE.write_text(gitlab_creds["token"])
@@ -566,7 +570,7 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         logger.warning(f"Failed to refresh kubeconfig credentials: {kubeconfig_creds}")
         if isinstance(kubeconfig_creds, PermissionError):
             auth_failures.append(str(kubeconfig_creds))
-    elif not sidecar_mode and kubeconfig_creds.get("token"):
+    elif kubeconfig_creds.get("token") and (not sidecar_mode or "kubeconfig" not in credential_mcp_urls):
         try:
             _KUBECONFIG_FILE.write_text(kubeconfig_creds["token"])
             _KUBECONFIG_FILE.chmod(0o600)

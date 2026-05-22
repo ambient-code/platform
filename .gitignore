@@ -147,3 +147,4 @@ hack/
 # Personal exports
 *.csv
 components/credential-sidecars/entrypoint/credential-entrypoint
+components/credential-sidecars/entrypoint/entrypoint

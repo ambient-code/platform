@@ -155,6 +155,7 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		HTTPProxy:             cfg.HTTPProxy,
 		HTTPSProxy:            cfg.HTTPSProxy,
 		NoProxy:               cfg.NoProxy,
+		ImagePullSecret:       cfg.ImagePullSecret,
 	}
 
 	conn, err := grpc.NewClient(cfg.GRPCServerAddr, grpc.WithTransportCredentials(grpcCredentials(cfg.GRPCUseTLS)))

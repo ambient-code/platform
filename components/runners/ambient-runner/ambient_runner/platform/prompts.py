@@ -7,6 +7,7 @@ framework-specific wrapping (e.g. Claude Code preset format) belongs in the
 bridge layer.
 """
 
+import json
 import logging
 import os
 from pathlib import Path
@@ -244,8 +245,7 @@ def build_workspace_context_prompt(
             has_github_mcp = False
             if credential_mcp_urls:
                 try:
-                    import json as _json
-                    has_github_mcp = "github" in _json.loads(credential_mcp_urls)
+                    has_github_mcp = "github" in json.loads(credential_mcp_urls)
                 except (ValueError, TypeError):
                     pass
             if has_github_mcp:
@@ -262,8 +262,7 @@ def build_workspace_context_prompt(
     # Token visibility — tell Claude what credentials are available
     if credential_mcp_urls:
         try:
-            import json as _json
-            urls = _json.loads(credential_mcp_urls)
+            urls = json.loads(credential_mcp_urls)
             if "github" in urls:
                 prompt += GITHUB_MCP_PROMPT
         except (ValueError, TypeError):

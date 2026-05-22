@@ -196,8 +196,8 @@ def _expand_env_vars(value: str) -> str:
 _CREDENTIAL_SIDECAR_REGISTRY: dict[str, dict[str, str]] = {
     "github": {
         "server_name": "github",
-        "type": "streamable_http",
-        "path": "/mcp",
+        "type": "sse",
+        "path": "/sse",
     },
     "jira": {
         "server_name": "mcp-atlassian",
@@ -255,7 +255,53 @@ def _build_sidecar_mcp_servers(credential_mcp_urls_raw: str) -> dict:
             url,
         )
 
+    _wait_for_sidecar_readiness(servers)
     return servers
+
+
+def _wait_for_sidecar_readiness(
+    servers: dict,
+    timeout: float = 60.0,
+    poll_interval: float = 1.0,
+) -> None:
+    import socket
+    import time
+    from urllib.parse import urlparse
+
+    if not servers:
+        return
+
+    endpoints: list[tuple[str, str, int]] = []
+    for name, cfg in servers.items():
+        url = cfg.get("url", "")
+        parsed = urlparse(url)
+        host = parsed.hostname or "127.0.0.1"
+        port = parsed.port
+        if port:
+            endpoints.append((name, host, port))
+
+    if not endpoints:
+        return
+
+    logger.info("Waiting for %d credential sidecar(s) to become ready (timeout=%ds)", len(endpoints), int(timeout))
+    deadline = time.monotonic() + timeout
+    pending = list(endpoints)
+
+    while pending and time.monotonic() < deadline:
+        still_pending = []
+        for name, host, port in pending:
+            try:
+                with socket.create_connection((host, port), timeout=1.0):
+                    logger.info("Credential sidecar %s ready at %s:%d", name, host, port)
+            except (ConnectionRefusedError, OSError, socket.timeout):
+                still_pending.append((name, host, port))
+        pending = still_pending
+        if pending:
+            time.sleep(poll_interval)
+
+    if pending:
+        names = [p[0] for p in pending]
+        logger.warning("Credential sidecar(s) not ready after %ds: %s", int(timeout), names)
 
 
 def _build_subprocess_mcp_servers() -> dict:

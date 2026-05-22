@@ -374,9 +374,9 @@ The runner assembles the full MCP server configuration at setup time. Claude see
 | External (`.mcp.json`) | stdio / SSE | whatever the server exposes | user config |
 | `ambient` | SSE (`AMBIENT_MCP_URL`) | 16 platform tools (sessions, agents, projects) | CP-injected sidecar |
 | `github-mcp` | SSE (`:8091`) | GitHub API tools (repos, issues, PRs, actions) | CP-injected sidecar, only if `github` credential bound |
-| `jira-mcp` | SSE (`:8093`) | Jira API tools (issues, search, transitions) | CP-injected sidecar, only if `jira` credential bound |
-| `k8s-mcp` | SSE (`:8094`) | Kubernetes tools (kubectl via MCP) | CP-injected sidecar, only if `kubeconfig` credential bound |
-| `google-mcp` | SSE (`:8095`) | Google Workspace tools (Gmail, Drive) | CP-injected sidecar, only if `google` credential bound |
+| `jira-mcp` | SSE (`:8092`) | Jira API tools (issues, search, transitions) | CP-injected sidecar, only if `jira` credential bound |
+| `k8s-mcp` | SSE (`:8093`) | Kubernetes tools (kubectl via MCP) | CP-injected sidecar, only if `kubeconfig` credential bound |
+| `google-mcp` | SSE (`:8094`) | Google Workspace tools (Gmail, Drive) | CP-injected sidecar, only if `google` credential bound |
 | `session` | in-process | `refresh_credentials` | always registered |
 | `rubric` | in-process | `evaluate_rubric` | registered if `.ambient/rubric.md` found |
 | `corrections` | in-process | `log_correction` | always registered |

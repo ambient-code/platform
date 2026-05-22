@@ -46,7 +46,7 @@ func main() {
 
 	if apiURL != "" && provider != "" {
 		if err := fetchAndSetCredential(bearerToken, apiURL, provider); err != nil {
-			fmt.Fprintf(os.Stderr, "credential fetch failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, "credential fetch failed for %s: %v\n", provider, err)
 		}
 	}
 
@@ -88,37 +88,57 @@ func fetchAndSetCredential(bearerToken, apiURL, provider string) error {
 		return fmt.Errorf("no credential ID for provider %s in CREDENTIAL_IDS", provider)
 	}
 
-	credURL := fmt.Sprintf("%s/api/ambient/v1/credentials/%s/token",
-		strings.TrimRight(apiURL, "/"), credID)
-
+	baseURL := strings.TrimRight(apiURL, "/")
 	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, credURL, nil)
+
+	credTokenURL := fmt.Sprintf("%s/api/ambient/v1/credentials/%s/token", baseURL, credID)
+	tokenData, err := fetchJSON(client, credTokenURL, bearerToken)
 	if err != nil {
-		return fmt.Errorf("create request: %w", err)
+		return fmt.Errorf("credential token fetch: %w", err)
+	}
+
+	metaData, err := fetchJSON(client, fmt.Sprintf("%s/api/ambient/v1/credentials/%s", baseURL, credID), bearerToken)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "credential metadata fetch failed (non-fatal): %v\n", err)
+		metaData = map[string]interface{}{}
+	}
+
+	for k, v := range metaData {
+		if _, exists := tokenData[k]; !exists {
+			tokenData[k] = v
+		}
+	}
+
+	setCredentialEnv(provider, tokenData)
+	return nil
+}
+
+func fetchJSON(client *http.Client, fetchURL, bearerToken string) (map[string]interface{}, error) {
+	req, err := http.NewRequest(http.MethodGet, fetchURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+bearerToken)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("credential request failed: %w", err)
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("read credential response: %w", err)
+		return nil, fmt.Errorf("read response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("credential fetch HTTP %d (response length: %d)", resp.StatusCode, len(body))
+		return nil, fmt.Errorf("HTTP %d (response length: %d)", resp.StatusCode, len(body))
 	}
 
-	var credData map[string]interface{}
-	if err := json.Unmarshal(body, &credData); err != nil {
-		return fmt.Errorf("parse credential response: %w", err)
+	var data map[string]interface{}
+	if err := json.Unmarshal(body, &data); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
 	}
-
-	setCredentialEnv(provider, credData)
-	return nil
+	return data, nil
 }
 
 func setCredentialEnv(provider string, data map[string]interface{}) {
@@ -128,13 +148,17 @@ func setCredentialEnv(provider string, data map[string]interface{}) {
 			os.Setenv("GITHUB_PERSONAL_ACCESS_TOKEN", token)
 		}
 	case "jira":
-		if token, ok := data["apiToken"].(string); ok {
+		token, _ := data["apiToken"].(string)
+		if token == "" {
+			token, _ = data["token"].(string)
+		}
+		if token != "" {
 			os.Setenv("JIRA_API_TOKEN", token)
 		}
-		if url, ok := data["url"].(string); ok {
-			os.Setenv("JIRA_URL", url)
+		if jiraURL, ok := data["url"].(string); ok && jiraURL != "" {
+			os.Setenv("JIRA_URL", jiraURL)
 		}
-		if email, ok := data["email"].(string); ok {
+		if email, ok := data["email"].(string); ok && email != "" {
 			os.Setenv("JIRA_USERNAME", email)
 		}
 	case "kubeconfig":

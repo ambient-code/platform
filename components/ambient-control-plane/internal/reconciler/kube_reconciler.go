@@ -22,35 +22,26 @@ const (
 )
 
 type credentialSidecarSpec struct {
-	Name         string
-	ImageField   string
-	Port         int64
-	ProviderEnvs map[string]string
+	Name string
+	Port int64
 }
 
 var credentialSidecarRegistry = map[string]credentialSidecarSpec{
 	"github": {
-		Name:       "credential-github",
-		ImageField: "GitHubMCPImage",
-		Port:       8091,
-		ProviderEnvs: map[string]string{
-			"GITHUB_PERSONAL_ACCESS_TOKEN": "__CREDENTIAL_TOKEN__",
-		},
+		Name: "credential-github",
+		Port: 8091,
 	},
 	"jira": {
-		Name:       "credential-jira",
-		ImageField: "JiraMCPImage",
-		Port:       8092,
+		Name: "credential-jira",
+		Port: 8092,
 	},
 	"kubeconfig": {
-		Name:       "credential-k8s",
-		ImageField: "K8sMCPImage",
-		Port:       8093,
+		Name: "credential-k8s",
+		Port: 8093,
 	},
 	"google": {
-		Name:       "credential-google",
-		ImageField: "GoogleMCPImage",
-		Port:       8094,
+		Name: "credential-google",
+		Port: 8094,
 	},
 }
 
@@ -80,6 +71,7 @@ type KubeReconcilerConfig struct {
 	HTTPProxy             string
 	HTTPSProxy            string
 	NoProxy               string
+	ImagePullSecret       string
 }
 
 type SimpleKubeReconciler struct {
@@ -496,10 +488,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 			if err != nil {
 				r.logger.Error().Err(err).Str("session_id", session.ID).Msg("failed to marshal credential MCP URLs")
 			} else {
-				containers[0].(map[string]interface{})["env"] = append(
-					containers[0].(map[string]interface{})["env"].([]interface{}),
-					envVar("CREDENTIAL_MCP_URLS", string(raw)),
-				)
+				appendRunnerEnv(&containers, envVar("CREDENTIAL_MCP_URLS", string(raw)))
 			}
 			r.logger.Info().Int("count", len(credSidecars)).Str("session_id", session.ID).Msg("credential sidecars injected")
 		}
@@ -529,6 +518,12 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 				"containers":                    containers,
 			},
 		},
+	}
+
+	if r.cfg.ImagePullSecret != "" {
+		pod.Object["spec"].(map[string]interface{})["imagePullSecrets"] = []interface{}{
+			map[string]interface{}{"name": r.cfg.ImagePullSecret},
+		}
 	}
 
 	if _, err := r.nsKube().CreatePod(ctx, pod); err != nil && !k8serrors.IsAlreadyExists(err) {
@@ -876,6 +871,19 @@ func envVar(name, value string) interface{} {
 	return map[string]interface{}{"name": name, "value": value}
 }
 
+func appendRunnerEnv(containers *[]interface{}, envEntry interface{}) {
+	for _, c := range *containers {
+		ctr, ok := c.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if ctr["name"] == "ambient-code-runner" {
+			ctr["env"] = append(ctr["env"].([]interface{}), envEntry)
+			return
+		}
+	}
+}
+
 func boolToStr(b bool) string {
 	if b {
 		return "true"
@@ -902,9 +910,7 @@ func (r *SimpleKubeReconciler) buildCredentialSidecars(sessionID string, namespa
 	var sidecars []interface{}
 	mcpURLs := map[string]string{}
 
-	credIDsRaw, _ := json.Marshal(credentialIDs)
-
-	for provider := range credentialIDs {
+	for provider, credID := range credentialIDs {
 		spec, ok := credentialSidecarRegistry[provider]
 		if !ok {
 			continue
@@ -919,17 +925,18 @@ func (r *SimpleKubeReconciler) buildCredentialSidecars(sessionID string, namespa
 			imagePullPolicy = "IfNotPresent"
 		}
 
+		sidecarCredIDs := map[string]string{provider: credID}
+		sidecarCredIDsRaw, _ := json.Marshal(sidecarCredIDs)
+
 		env := []interface{}{
 			envVar("SESSION_ID", sessionID),
-			envVar("CREDENTIAL_IDS", string(credIDsRaw)),
+			envVar("CREDENTIAL_IDS", string(sidecarCredIDsRaw)),
+			envVar("CREDENTIAL_PROVIDER", provider),
 			envVar("AGENTIC_SESSION_NAMESPACE", namespace),
 			envVar("AMBIENT_API_URL", r.cfg.MCPAPIServerURL),
 			envVar("AMBIENT_CP_TOKEN_URL", r.cfg.CPTokenURL),
 			envVar("AMBIENT_CP_TOKEN_PUBLIC_KEY", r.cfg.CPTokenPublicKey),
 			envVar("SSL_CERT_FILE", "/etc/pki/ca-trust/extracted/pem/service-ca.crt"),
-		}
-		for k, v := range spec.ProviderEnvs {
-			env = append(env, envVar(k, v))
 		}
 		if r.cfg.HTTPProxy != "" {
 			env = append(env, envVar("HTTP_PROXY", r.cfg.HTTPProxy))
@@ -964,11 +971,11 @@ func (r *SimpleKubeReconciler) buildCredentialSidecars(sessionID string, namespa
 			"resources": map[string]interface{}{
 				"requests": map[string]interface{}{
 					"cpu":    "100m",
-					"memory": "128Mi",
+					"memory": "256Mi",
 				},
 				"limits": map[string]interface{}{
 					"cpu":    "500m",
-					"memory": "256Mi",
+					"memory": "512Mi",
 				},
 			},
 			"securityContext": map[string]interface{}{
