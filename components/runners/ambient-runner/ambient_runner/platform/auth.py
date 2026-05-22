@@ -531,7 +531,7 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         if isinstance(github_creds, PermissionError):
             auth_failures.append(str(github_creds))
     elif github_creds.get("token"):
-        if not sidecar_mode:
+        if not sidecar_mode or "github" not in credential_mcp_urls:
             os.environ["GITHUB_TOKEN"] = github_creds["token"]
             try:
                 _GITHUB_TOKEN_FILE.write_text(github_creds["token"])
@@ -582,8 +582,7 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
     # Configure git identity
     await configure_git_identity(git_user_name, git_user_email)
 
-    # Only install credential helper and gh wrapper in legacy mode
-    if not sidecar_mode:
+    if not sidecar_mode or "github" not in credential_mcp_urls:
         install_git_credential_helper()
         install_gh_wrapper()
 

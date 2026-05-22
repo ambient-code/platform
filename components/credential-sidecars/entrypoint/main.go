@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
 	"syscall"
 	"time"
@@ -47,6 +48,7 @@ func main() {
 	if apiURL != "" && provider != "" {
 		if err := fetchAndSetCredential(bearerToken, apiURL, provider); err != nil {
 			fmt.Fprintf(os.Stderr, "credential fetch failed for %s: %v\n", provider, err)
+			os.Exit(1)
 		}
 	}
 
@@ -60,7 +62,7 @@ func main() {
 	exchanger.StartBackgroundRefresh()
 	defer exchanger.Stop()
 
-	execCommand(os.Args[1:])
+	runSubprocess(os.Args[1:])
 }
 
 func fetchAndSetCredential(bearerToken, apiURL, provider string) error {
@@ -176,14 +178,30 @@ func setCredentialEnv(provider string, data map[string]interface{}) {
 	}
 }
 
-func execCommand(args []string) {
-	binary, err := exec.LookPath(args[0])
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "command not found: %s\n", args[0])
+func runSubprocess(args []string) {
+	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	cmd.Env = os.Environ()
+
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to start %s: %v\n", args[0], err)
 		os.Exit(1)
 	}
-	if err := syscall.Exec(binary, args, os.Environ()); err != nil {
-		fmt.Fprintf(os.Stderr, "exec failed: %v\n", err)
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		s := <-sig
+		_ = cmd.Process.Signal(s)
+	}()
+
+	if err := cmd.Wait(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			os.Exit(exitErr.ExitCode())
+		}
+		fmt.Fprintf(os.Stderr, "subprocess failed: %v\n", err)
 		os.Exit(1)
 	}
 }

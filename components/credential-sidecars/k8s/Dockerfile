@@ -17,6 +17,7 @@ RUN microdnf install -y procps-ng shadow-utils && \
     useradd -u 1001 -r -g 0 -s /sbin/nologin runner && \
     curl -fsSL https://github.com/containers/kubernetes-mcp-server/releases/download/v0.0.62/kubernetes-mcp-server-linux-amd64 \
       -o /usr/local/bin/kubernetes-mcp-server && \
+    echo "4e323948bcf1c9b256140669ea56a53b31246fceec71e8cd533617624f4250e5  /usr/local/bin/kubernetes-mcp-server" | sha256sum -c - && \
     chmod +x /usr/local/bin/kubernetes-mcp-server
 
 COPY --from=builder /credential-entrypoint /usr/local/bin/credential-entrypoint
@@ -28,4 +29,4 @@ USER 1001
 EXPOSE 8093
 
 ENTRYPOINT ["credential-entrypoint", "kubernetes-mcp-server"]
-CMD ["--port", "8093"]
+CMD ["--port", "8093", "--disable-multi-cluster"]
