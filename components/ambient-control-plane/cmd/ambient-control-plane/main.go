@@ -196,6 +196,8 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		inf.RegisterHandler("sessions", sessionRec.Reconcile)
 	}
 
+	podSyncer := reconciler.NewPodStatusSyncer(factory, provisionerKube, log.Logger)
+
 	tsErrCh := make(chan error, 1)
 	go func() {
 		tsErrCh <- startTokenServer(ctx, cfg, tokenProvider, kp)
@@ -206,6 +208,11 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		infErrCh <- inf.Run(ctx)
 	}()
 
+	podSyncErrCh := make(chan error, 1)
+	go func() {
+		podSyncErrCh <- podSyncer.Run(ctx)
+	}()
+
 	select {
 	case tsErr := <-tsErrCh:
 		if tsErr != nil {
@@ -214,6 +221,8 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		return <-infErrCh
 	case infErr := <-infErrCh:
 		return infErr
+	case podSyncErr := <-podSyncErrCh:
+		return fmt.Errorf("pod status syncer: %w", podSyncErr)
 	}
 }
 
