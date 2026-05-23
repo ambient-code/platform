@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -165,8 +166,12 @@ func setCredentialEnv(provider string, data map[string]interface{}) {
 		}
 	case "kubeconfig":
 		if token, ok := data["token"].(string); ok && token != "" {
+			content := []byte(token)
+			if decoded, err := base64.StdEncoding.DecodeString(token); err == nil {
+				content = decoded
+			}
 			path := "/tmp/.ambient_kubeconfig"
-			if err := os.WriteFile(path, []byte(token), 0600); err != nil {
+			if err := os.WriteFile(path, content, 0600); err != nil {
 				fmt.Fprintf(os.Stderr, "write kubeconfig failed: %v\n", err)
 			}
 			os.Setenv("KUBECONFIG", path)
