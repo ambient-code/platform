@@ -6,7 +6,8 @@ COPY components/credential-sidecars/entrypoint/ ./entrypoint/
 COPY components/ambient-mcp/ ./ambient-mcp/
 
 WORKDIR /build/entrypoint
-RUN go mod tidy && \
+RUN go mod edit -replace github.com/ambient-code/platform/components/ambient-mcp=../ambient-mcp && \
+    go mod tidy && \
     CGO_ENABLED=0 go build -o /credential-entrypoint .
 
 FROM registry.access.redhat.com/ubi9/python-312:latest
