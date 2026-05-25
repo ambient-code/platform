@@ -177,13 +177,9 @@ func TestApplyFeatureFlagOverrides(t *testing.T) {
 				k8sClient = fake.NewSimpleClientset()
 			}
 
-			// Create template with optional existing env vars
-			template := map[string]interface{}{
-				"spec": map[string]interface{}{},
-			}
+			template := map[string]interface{}{}
 			if tt.existingEnvVars != nil {
-				spec := template["spec"].(map[string]interface{})
-				spec["environmentVariables"] = tt.existingEnvVars
+				template["environmentVariables"] = tt.existingEnvVars
 			}
 
 			// Apply feature flag overrides
@@ -193,13 +189,7 @@ func TestApplyFeatureFlagOverrides(t *testing.T) {
 				t.Fatalf("applyFeatureFlagOverrides() unexpected error: %v", err)
 			}
 
-			// Verify environment variables
-			spec, ok := template["spec"].(map[string]interface{})
-			if !ok {
-				t.Fatal("template[spec] is not a map")
-			}
-
-			envVars, ok := spec["environmentVariables"].(map[string]interface{})
+			envVars, ok := template["environmentVariables"].(map[string]interface{})
 			if tt.expectedEnvVars == nil {
 				if envVars != nil && len(envVars) > 0 {
 					t.Errorf("Expected no environmentVariables, got %v", envVars)
@@ -208,7 +198,7 @@ func TestApplyFeatureFlagOverrides(t *testing.T) {
 			}
 
 			if !ok {
-				t.Fatal("spec[environmentVariables] is not a map")
+				t.Fatal("environmentVariables is not a map")
 			}
 
 			if len(envVars) != len(tt.expectedEnvVars) {

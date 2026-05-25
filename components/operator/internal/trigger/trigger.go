@@ -253,19 +253,13 @@ func applyFeatureFlagOverrides(ctx context.Context, k8sClient kubernetes.Interfa
 		return nil
 	}
 
-	spec, ok := template["spec"].(map[string]interface{})
-	if !ok {
-		spec = map[string]interface{}{}
-		template["spec"] = spec
-	}
-
-	envVars, ok := spec["environmentVariables"].(map[string]interface{})
+	envVars, ok := template["environmentVariables"].(map[string]interface{})
 	if !ok {
 		envVars = map[string]interface{}{}
 	}
 
 	envVars[types.JiraReadOnlyModeEnvVar] = "false"
-	spec["environmentVariables"] = envVars
+	template["environmentVariables"] = envVars
 
 	log.Printf("Applied jira-write feature flag: %s=false", types.JiraReadOnlyModeEnvVar)
 	return nil
