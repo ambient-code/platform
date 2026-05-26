@@ -55,6 +55,7 @@ var createArgs struct {
 	bindAgentID   string
 	bindSessionID string
 	bindCredID    string
+	scopeID       string
 }
 
 func init() {
@@ -80,6 +81,7 @@ func init() {
 	Cmd.Flags().StringVar(&createArgs.bindAgentID, "agent-id-fk", "", "Agent FK for role-binding")
 	Cmd.Flags().StringVar(&createArgs.bindSessionID, "session-id-fk", "", "Session FK for role-binding")
 	Cmd.Flags().StringVar(&createArgs.bindCredID, "credential-id-fk", "", "Credential FK for role-binding")
+	Cmd.Flags().StringVar(&createArgs.scopeID, "scope-id", "", "Scope target ID for role-binding (shorthand for --{scope}-id-fk)")
 }
 
 func run(cmd *cobra.Command, cmdArgs []string) error {
@@ -297,6 +299,21 @@ func createRoleBinding(cmd *cobra.Command, ctx context.Context, client *sdkclien
 	}
 	if createArgs.scope == "" {
 		return fmt.Errorf("--scope is required")
+	}
+
+	if createArgs.scopeID != "" {
+		switch createArgs.scope {
+		case "project":
+			createArgs.bindProjectID = createArgs.scopeID
+		case "agent":
+			createArgs.bindAgentID = createArgs.scopeID
+		case "session":
+			createArgs.bindSessionID = createArgs.scopeID
+		case "credential":
+			createArgs.bindCredID = createArgs.scopeID
+		default:
+			return fmt.Errorf("--scope-id not supported for scope %q; use the explicit FK flag", createArgs.scope)
+		}
 	}
 
 	builder := sdktypes.NewRoleBindingBuilder().
