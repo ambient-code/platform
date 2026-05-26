@@ -372,6 +372,20 @@ async def fetch_kubeconfig_credential(context: RunnerContext) -> dict:
 
 async def fetch_token_for_url(context: RunnerContext, url: str) -> str:
     """Fetch appropriate token based on repository URL host."""
+    if _is_sidecar_mode():
+        sidecar_providers = set(_parse_credential_mcp_urls().keys())
+        try:
+            parsed = urlparse(url)
+            hostname = parsed.hostname or ""
+            if "gitlab" in hostname.lower() and "gitlab" in sidecar_providers:
+                logger.info("GitLab token fetch blocked (sidecar handles gitlab)")
+                return ""
+            if "github" in sidecar_providers:
+                logger.info("GitHub token fetch blocked (sidecar handles github)")
+                return ""
+        except Exception:
+            pass
+        return ""
     try:
         parsed = urlparse(url)
         hostname = parsed.hostname or ""
@@ -381,6 +395,10 @@ async def fetch_token_for_url(context: RunnerContext, url: str) -> str:
     except Exception as e:
         logger.warning(f"Failed to parse URL {url}: {e}, falling back to GitHub token")
         return os.getenv("GITHUB_TOKEN") or await fetch_github_token(context)
+
+
+def _is_sidecar_mode() -> bool:
+    return os.getenv("CREDENTIAL_SIDECAR_MODE") == "true"
 
 
 def _parse_credential_mcp_urls() -> dict:
@@ -899,7 +917,17 @@ def ensure_git_auth(
 
     Consolidates the repeated pattern of setting override tokens and
     calling install_git_credential_helper() used across multiple endpoints.
+
+    In sidecar mode, token injection is blocked to preserve isolation.
     """
+    if _is_sidecar_mode():
+        sidecar_providers = set(_parse_credential_mcp_urls().keys())
+        if github_token and "github" in sidecar_providers:
+            logger.info("Ignoring github_token override (sidecar handles github)")
+            github_token = None
+        if gitlab_token and "gitlab" in sidecar_providers:
+            logger.info("Ignoring gitlab_token override (sidecar handles gitlab)")
+            gitlab_token = None
     if github_token:
         os.environ["GITHUB_TOKEN"] = github_token
     if gitlab_token:

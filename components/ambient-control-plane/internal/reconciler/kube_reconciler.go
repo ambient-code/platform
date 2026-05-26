@@ -480,8 +480,11 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 		r.logger.Info().Str("session_id", session.ID).Msg("MCP sidecar enabled for session")
 	}
 
+	credentialSidecarMode := false
+	var credTmpVolumes []interface{}
 	if r.cfg.CPTokenURL != "" && r.cfg.CPTokenPublicKey != "" {
-		credSidecars, credMCPURLs := r.buildCredentialSidecars(session.ID, namespace, credentialIDs)
+		credSidecars, credMCPURLs, credTmpVols := r.buildCredentialSidecars(session.ID, namespace, credentialIDs)
+		credTmpVolumes = credTmpVols
 		containers = append(containers, credSidecars...)
 		if len(credMCPURLs) > 0 {
 			raw, err := json.Marshal(credMCPURLs)
@@ -489,11 +492,20 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 				r.logger.Error().Err(err).Str("session_id", session.ID).Msg("failed to marshal credential MCP URLs")
 			} else {
 				appendRunnerEnv(&containers, envVar("CREDENTIAL_MCP_URLS", string(raw)))
+				appendRunnerEnv(&containers, envVar("CREDENTIAL_SIDECAR_MODE", "true"))
+				credentialSidecarMode = true
 			}
 			r.logger.Info().Int("count", len(credSidecars)).Str("session_id", session.ID).Msg("credential sidecars injected")
 		}
 	} else if len(credentialIDs) > 0 {
 		r.logger.Warn().Str("session_id", session.ID).Msg("credential sidecars skipped: CPTokenURL or CPTokenPublicKey not configured")
+	}
+
+	if !credentialSidecarMode && len(credentialIDs) > 0 {
+		raw, err := json.Marshal(credentialIDs)
+		if err == nil {
+			appendRunnerEnv(&containers, envVar("CREDENTIAL_IDS", string(raw)))
+		}
 	}
 
 	pod := &unstructured.Unstructured{
@@ -514,7 +526,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 				"automountServiceAccountToken":  true,
 				"restartPolicy":                 "Never",
 				"terminationGracePeriodSeconds": int64(60),
-				"volumes":                       r.buildVolumes(),
+				"volumes":                       r.buildVolumes(credTmpVolumes),
 				"containers":                    containers,
 			},
 		},
@@ -534,7 +546,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 	return nil
 }
 
-func (r *SimpleKubeReconciler) buildVolumes() []interface{} {
+func (r *SimpleKubeReconciler) buildVolumes(extraVolumes []interface{}) []interface{} {
 	vols := []interface{}{
 		map[string]interface{}{
 			"name":     "workspace",
@@ -556,6 +568,7 @@ func (r *SimpleKubeReconciler) buildVolumes() []interface{} {
 			},
 		})
 	}
+	vols = append(vols, extraVolumes...)
 	return vols
 }
 
@@ -685,13 +698,6 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 	}
 	if session.RepoURL != "" {
 		env = append(env, envVar("REPOS_JSON", fmt.Sprintf(`[{"url":%q}]`, session.RepoURL)))
-	}
-
-	if len(credentialIDs) > 0 {
-		raw, err := json.Marshal(credentialIDs)
-		if err == nil {
-			env = append(env, envVar("CREDENTIAL_IDS", string(raw)))
-		}
 	}
 
 	if r.cfg.HTTPProxy != "" {
@@ -906,8 +912,9 @@ func (r *SimpleKubeReconciler) credentialSidecarImage(provider string) string {
 	}
 }
 
-func (r *SimpleKubeReconciler) buildCredentialSidecars(sessionID string, namespace string, credentialIDs map[string]string) ([]interface{}, map[string]string) {
+func (r *SimpleKubeReconciler) buildCredentialSidecars(sessionID string, namespace string, credentialIDs map[string]string) ([]interface{}, map[string]string, []interface{}) {
 	var sidecars []interface{}
+	var tmpVolumes []interface{}
 	mcpURLs := map[string]string{}
 
 	for provider, credID := range credentialIDs {
@@ -980,18 +987,33 @@ func (r *SimpleKubeReconciler) buildCredentialSidecars(sessionID string, namespa
 			},
 			"securityContext": map[string]interface{}{
 				"allowPrivilegeEscalation": false,
+				"runAsNonRoot":             true,
+				"readOnlyRootFilesystem":   true,
 				"capabilities": map[string]interface{}{
 					"drop": []interface{}{"ALL"},
 				},
 			},
 		}
 
+		tmpVolName := "cred-tmp-" + provider
+		sidecar["volumeMounts"] = append(
+			sidecar["volumeMounts"].([]interface{}),
+			map[string]interface{}{
+				"name":      tmpVolName,
+				"mountPath": "/tmp",
+			},
+		)
+
 		sidecars = append(sidecars, sidecar)
+		tmpVolumes = append(tmpVolumes, map[string]interface{}{
+			"name":     tmpVolName,
+			"emptyDir": map[string]interface{}{"sizeLimit": "10Mi"},
+		})
 		mcpURLs[provider] = fmt.Sprintf("http://localhost:%d", spec.Port)
 		r.logger.Debug().Str("provider", provider).Str("image", image).Int64("port", spec.Port).Msg("credential sidecar configured")
 	}
 
-	return sidecars, mcpURLs
+	return sidecars, mcpURLs, tmpVolumes
 }
 
 func (r *SimpleKubeReconciler) buildMCPSidecar(sessionID string) interface{} {

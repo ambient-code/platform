@@ -90,17 +90,20 @@ func fetchAndSetCredential(bearerToken, apiURL, provider string) error {
 	if credID == "" {
 		return fmt.Errorf("no credential ID for provider %s in CREDENTIAL_IDS", provider)
 	}
+	if !isValidCredentialID(credID) {
+		return fmt.Errorf("invalid credential ID for provider %s", provider)
+	}
 
 	baseURL := strings.TrimRight(apiURL, "/")
 	client := &http.Client{Timeout: 10 * time.Second}
 
-	credTokenURL := fmt.Sprintf("%s/api/ambient/v1/credentials/%s/token", baseURL, credID)
+	credTokenURL := fmt.Sprintf("%s/api/ambient/v1/credentials/%s/token", baseURL, url.PathEscape(credID))
 	tokenData, err := fetchJSON(client, credTokenURL, bearerToken)
 	if err != nil {
 		return fmt.Errorf("credential token fetch: %w", err)
 	}
 
-	metaData, err := fetchJSON(client, fmt.Sprintf("%s/api/ambient/v1/credentials/%s", baseURL, credID), bearerToken)
+	metaData, err := fetchJSON(client, fmt.Sprintf("%s/api/ambient/v1/credentials/%s", baseURL, url.PathEscape(credID)), bearerToken)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "credential metadata fetch failed (non-fatal): %v\n", err)
 		metaData = map[string]interface{}{}
@@ -129,7 +132,7 @@ func fetchJSON(client *http.Client, fetchURL, bearerToken string) (map[string]in
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
@@ -181,6 +184,15 @@ func setCredentialEnv(provider string, data map[string]interface{}) {
 			os.Setenv("GOOGLE_ACCESS_TOKEN", token)
 		}
 	}
+}
+
+func isValidCredentialID(id string) bool {
+	for _, c := range id {
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '_' && c != '-' {
+			return false
+		}
+	}
+	return len(id) > 0
 }
 
 func runSubprocess(args []string) {
