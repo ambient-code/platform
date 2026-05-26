@@ -205,6 +205,16 @@ func (kc *KubeClient) DeletePodsByLabel(ctx context.Context, namespace, labelSel
 	return kc.deleteCollectionWithFallback(ctx, PodGVR, namespace, labelSelector)
 }
 
+func (kc *KubeClient) ListPodsByLabel(ctx context.Context, namespace, labelSelector string) (*unstructured.UnstructuredList, error) {
+	opts := metav1.ListOptions{LabelSelector: labelSelector}
+	return kc.dynamic.Resource(PodGVR).Namespace(namespace).List(ctx, opts)
+}
+
+func (kc *KubeClient) ListNamespacesByLabel(ctx context.Context, labelSelector string) (*unstructured.UnstructuredList, error) {
+	opts := metav1.ListOptions{LabelSelector: labelSelector}
+	return kc.dynamic.Resource(NamespaceGVR).List(ctx, opts)
+}
+
 // Service operations
 func (kc *KubeClient) GetService(ctx context.Context, namespace, name string) (*unstructured.Unstructured, error) {
 	return kc.dynamic.Resource(ServiceGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
