@@ -144,6 +144,10 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		RunnerImageNamespace:  cfg.RunnerImageNamespace,
 		MCPImage:              cfg.MCPImage,
 		MCPAPIServerURL:       cfg.MCPAPIServerURL,
+		GitHubMCPImage:        cfg.GitHubMCPImage,
+		JiraMCPImage:          cfg.JiraMCPImage,
+		K8sMCPImage:           cfg.K8sMCPImage,
+		GoogleMCPImage:        cfg.GoogleMCPImage,
 		RunnerLogLevel:        cfg.RunnerLogLevel,
 		CPRuntimeNamespace:    cfg.CPRuntimeNamespace,
 		CPTokenURL:            cfg.CPTokenURL,
@@ -151,6 +155,7 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		HTTPProxy:             cfg.HTTPProxy,
 		HTTPSProxy:            cfg.HTTPSProxy,
 		NoProxy:               cfg.NoProxy,
+		ImagePullSecret:       cfg.ImagePullSecret,
 	}
 
 	conn, err := grpc.NewClient(cfg.GRPCServerAddr, grpc.WithTransportCredentials(grpcCredentials(cfg.GRPCUseTLS)))
@@ -191,6 +196,8 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		inf.RegisterHandler("sessions", sessionRec.Reconcile)
 	}
 
+	podSyncer := reconciler.NewPodStatusSyncer(factory, provisionerKube, log.Logger)
+
 	tsErrCh := make(chan error, 1)
 	go func() {
 		tsErrCh <- startTokenServer(ctx, cfg, tokenProvider, kp)
@@ -201,6 +208,11 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		infErrCh <- inf.Run(ctx)
 	}()
 
+	podSyncErrCh := make(chan error, 1)
+	go func() {
+		podSyncErrCh <- podSyncer.Run(ctx)
+	}()
+
 	select {
 	case tsErr := <-tsErrCh:
 		if tsErr != nil {
@@ -209,6 +221,8 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		return <-infErrCh
 	case infErr := <-infErrCh:
 		return infErr
+	case podSyncErr := <-podSyncErrCh:
+		return fmt.Errorf("pod status syncer: %w", podSyncErr)
 	}
 }
 

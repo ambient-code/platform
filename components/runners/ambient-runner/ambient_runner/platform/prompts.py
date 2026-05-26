@@ -7,6 +7,7 @@ framework-specific wrapping (e.g. Claude Code preset format) belongs in the
 bridge layer.
 """
 
+import json
 import logging
 import os
 from pathlib import Path
@@ -47,6 +48,18 @@ GITHUB_TOKEN_PROMPT = (
     "The token is automatically used by git and the GitHub CLI.\n\n"
 )
 
+GITHUB_MCP_PROMPT = (
+    "## GitHub Access (MCP)\n"
+    "GitHub operations are available through the **github** MCP server. "
+    "Use MCP tools for repository operations:\n"
+    "- `mcp__github__push_files` to push file changes\n"
+    "- `mcp__github__create_pull_request` to create pull requests\n"
+    "- `mcp__github__create_or_update_file` for single file operations\n"
+    "- `mcp__github__search_repositories`, `mcp__github__list_commits`, etc.\n\n"
+    "**IMPORTANT**: Do NOT use `git push` or `gh pr create` directly. "
+    "All GitHub write operations must go through MCP tools.\n\n"
+)
+
 GITLAB_TOKEN_PROMPT = (
     "## GitLab Access\n"
     "A `GITLAB_TOKEN` environment variable is set in this session. "
@@ -70,6 +83,17 @@ GIT_PUSH_STEPS = (
     "4. Create a pull request using `gh pr create` targeting the default branch\n\n"
     "**IMPORTANT**: NEVER push directly to `main` or `master`. Always work on "
     "the feature branch (`{branch}`). If push fails, do NOT fall back to main.\n\n"
+)
+
+GIT_PUSH_MCP_STEPS = (
+    "\nAfter making changes to any auto-push repository:\n"
+    "1. Use `git add` to stage your changes\n"
+    '2. Use `git commit -m "description"` to commit with a descriptive message\n'
+    "3. Use `mcp__github__push_files` to push changes to branch `{branch}`\n"
+    "4. Use `mcp__github__create_pull_request` targeting the default branch\n\n"
+    "**IMPORTANT**: NEVER push directly to `main` or `master`. Always work on "
+    "the feature branch (`{branch}`). Do NOT use `git push` or `gh pr create` "
+    "directly — use the MCP tools instead.\n\n"
 )
 
 RUBRIC_EVALUATION_HEADER = "## Rubric Evaluation\n\n"
@@ -144,6 +168,7 @@ def build_workspace_context_prompt(
     Returns:
         Formatted prompt string.
     """
+    credential_mcp_urls = os.getenv("CREDENTIAL_MCP_URLS", "").strip()
     prompt = WORKSPACE_STRUCTURE_HEADER
     prompt += WORKSPACE_FIXED_PATHS_PROMPT
 
@@ -217,7 +242,16 @@ def build_workspace_context_prompt(
             for repo in auto_push_repos:
                 repo_name = repo.get("name", "unknown")
                 prompt += f"- **repos/{repo_name}/**\n"
-            prompt += GIT_PUSH_STEPS.format(branch=push_branch)
+            has_github_mcp = False
+            if credential_mcp_urls:
+                try:
+                    has_github_mcp = "github" in json.loads(credential_mcp_urls)
+                except (ValueError, TypeError):
+                    pass
+            if has_github_mcp:
+                prompt += GIT_PUSH_MCP_STEPS.format(branch=push_branch)
+            else:
+                prompt += GIT_PUSH_STEPS.format(branch=push_branch)
 
     # Human-in-the-loop instructions
     prompt += HUMAN_INPUT_INSTRUCTIONS
@@ -226,9 +260,16 @@ def build_workspace_context_prompt(
     prompt += MCP_INTEGRATIONS_PROMPT
 
     # Token visibility — tell Claude what credentials are available
-    if os.getenv("GITHUB_TOKEN"):
+    if credential_mcp_urls:
+        try:
+            urls = json.loads(credential_mcp_urls)
+            if "github" in urls:
+                prompt += GITHUB_MCP_PROMPT
+        except (ValueError, TypeError):
+            pass
+    elif os.getenv("GITHUB_TOKEN"):
         prompt += GITHUB_TOKEN_PROMPT
-    if os.getenv("GITLAB_TOKEN"):
+    if not credential_mcp_urls and os.getenv("GITLAB_TOKEN"):
         prompt += GITLAB_TOKEN_PROMPT
 
     # Workflow instructions

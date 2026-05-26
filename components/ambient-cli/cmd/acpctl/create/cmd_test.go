@@ -249,6 +249,35 @@ func TestCreateRoleBinding_Success(t *testing.T) {
 	}
 }
 
+func TestCreateRoleBinding_ScopeID(t *testing.T) {
+	srv := testhelper.NewServer(t)
+	srv.Handle("/api/ambient/v1/role_bindings", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		credID := "cred-1"
+		srv.RespondJSON(t, w, http.StatusCreated, &types.RoleBinding{
+			ObjectReference: types.ObjectReference{ID: "rb-scope"},
+			RoleID:          "r-1",
+			Scope:           "credential",
+			CredentialID:    &credID,
+		})
+	})
+
+	testhelper.Configure(t, srv.URL)
+	result := testhelper.Run(t, Cmd, "role-binding",
+		"--role-id", "r-1",
+		"--scope", "credential",
+		"--scope-id", "cred-1",
+	)
+	if result.Err != nil {
+		t.Fatalf("unexpected error: %v\nstdout: %s\nstderr: %s", result.Err, result.Stdout, result.Stderr)
+	}
+	if !strings.Contains(result.Stdout, "role-binding/rb-scope") {
+		t.Errorf("expected 'role-binding/rb-scope created', got: %s", result.Stdout)
+	}
+}
+
 func TestCreateRoleBinding_MissingScope(t *testing.T) {
 	srv := testhelper.NewServer(t)
 	testhelper.Configure(t, srv.URL)
