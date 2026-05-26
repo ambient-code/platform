@@ -321,23 +321,47 @@ Sequence:
 
 ## Credential Management
 
-Credentials are **ephemeral per-turn**. They are populated before each Claude turn and cleared after.
+Integration credentials are **isolated in sidecar containers**. The runner container
+has no integration tokens in its environment or filesystem. Each credential-bearing
+MCP sidecar holds only its own credentials and exposes tools via SSE on a localhost
+port.
+
+LLM provider credentials (Anthropic API key, Vertex AI service account) remain in
+the runner container — they are necessary for inference.
+
+### Sidecar Credential Flow
 
 ```
-populate_runtime_credentials(context):
-  concurrent asyncio.gather:
-    _fetch_credential("github") → GITHUB_TOKEN, /tmp/.ambient_github_token
-    _fetch_credential("gitlab") → GITLAB_TOKEN, /tmp/.ambient_gitlab_token
-    _fetch_credential("google") → GOOGLE_APPLICATION_CREDENTIALS, credentials.json
-    _fetch_credential("jira")   → JIRA_URL, JIRA_API_TOKEN, JIRA_EMAIL
-
-clear_runtime_credentials():
-  unset all env vars + delete all temp files
+CP resolves CREDENTIAL_IDS for the Project
+  → For each bound credential:
+      CP adds a sidecar container to the pod spec
+      Sidecar environment contains only its own credential
+      Sidecar exposes MCP tools on localhost:{port}/sse
+  → Runner connects to sidecars as SSE MCP clients
+  → Agent calls MCP tools — never sees raw tokens
 ```
 
-The credential fetch uses `context.caller_token` (the user's bearer from `x-caller-token` header) so each user can only access their own credentials. The `BACKEND_API_URL` is validated to be a cluster-local hostname before any request is made (prevents token exfiltration to external hosts).
+Credential sidecars manage their own token refresh cycles. The `refresh_credentials`
+MCP tool (registered under the `session` MCP server) signals sidecars to re-fetch
+tokens from the backend API. Rate-limited to once per 30 seconds.
 
-The `refresh_credentials` MCP tool (registered under the `session` MCP server) lets Claude proactively refresh credentials mid-turn. Rate-limited to once per 30 seconds.
+The credential-free fallback: Projects with no bound credentials get no credential
+sidecars. The runner operates without integration credentials.
+
+### Git Operations
+
+The runner container has no git credential helper and no GitHub/GitLab tokens.
+Git write operations use MCP tools exclusively:
+
+- **Push commits**: `github-mcp` → `PushFiles` tool (commits and pushes via GitHub API)
+- **Create PRs**: `github-mcp` → `CreatePullRequest` tool
+- **Clone repos**: Init container (runs before the agent, credential-isolated)
+
+Direct `git push` and `gh pr create` from the runner container are not supported
+— they require tokens in the runner environment, which violates the isolation
+model. System prompts instruct the agent to use MCP tools for all git write
+operations. See the [MCP server spec](../integrations/mcp-server.spec.md) for
+sidecar details.
 
 ---
 
@@ -348,27 +372,26 @@ The runner assembles the full MCP server configuration at setup time. Claude see
 | Server | Transport | Tools | Source |
 |--------|-----------|-------|--------|
 | External (`.mcp.json`) | stdio / SSE | whatever the server exposes | user config |
-| `ambient-mcp` | SSE (`AMBIENT_MCP_URL`) | platform-provided tools | operator-injected |
+| `ambient` | SSE (`AMBIENT_MCP_URL`) | 16 platform tools (sessions, agents, projects) | CP-injected sidecar |
+| `github-mcp` | SSE (`:8091`) | GitHub API tools (repos, issues, PRs, actions) | CP-injected sidecar, only if `github` credential bound |
+| `jira-mcp` | SSE (`:8092`) | Jira API tools (issues, search, transitions) | CP-injected sidecar, only if `jira` credential bound |
+| `k8s-mcp` | SSE (`:8093`) | Kubernetes tools (kubectl via MCP) | CP-injected sidecar, only if `kubeconfig` credential bound |
+| `google-mcp` | SSE (`:8094`) | Google Workspace tools (Gmail, Drive) | CP-injected sidecar, only if `google` credential bound |
 | `session` | in-process | `refresh_credentials` | always registered |
 | `rubric` | in-process | `evaluate_rubric` | registered if `.ambient/rubric.md` found |
 | `corrections` | in-process | `log_correction` | always registered |
-| `acp` | in-process | `acp_*` (9 tools) | always registered |
 
-### `acp` MCP Server Tools
+### Migration: `acp` In-Process MCP Server Removed
 
-Claude can call these tools to interact with the Ambient platform:
+The previous `acp` in-process MCP server (9 tools: `acp_list_sessions`,
+`acp_get_session`, `acp_create_session`, `acp_stop_session`, `acp_send_message`,
+`acp_get_session_status`, `acp_restart_session`, `acp_list_workflows`,
+`acp_get_api_reference`) is replaced by the `ambient` SSE sidecar on `:8090`.
 
-| Tool | Description |
-|------|-------------|
-| `acp_list_sessions` | List sessions with phase/search/pagination filtering |
-| `acp_get_session` | Read full session object |
-| `acp_create_session` | Create a child session (inherits parent credentials via `parentSessionId`) |
-| `acp_stop_session` | Stop a running session |
-| `acp_send_message` | Send a message to a session's AG-UI run endpoint |
-| `acp_get_session_status` | Session details + recent text messages |
-| `acp_restart_session` | Stop then start |
-| `acp_list_workflows` | List OOTB workflows |
-| `acp_get_api_reference` | Full Ambient REST API docs with current context values |
+The `ambient-mcp` sidecar exposes the same platform tools (sessions, agents,
+projects) via the MCP protocol over SSE. Tool names change from `acp_*` prefix
+to unprefixed (`list_sessions`, `get_session`, etc.). Existing agent prompts
+referencing `acp_*` tool names must be updated.
 
 ---
 
@@ -466,7 +489,7 @@ The resolved `(cwd_path, add_dirs)` tuple is passed to the Claude SDK via `Claud
 | Bridge ABC over direct Claude dependency | Enables Gemini CLI, LangGraph, and future bridges without changing app or platform layer |
 | `SessionWorker` isolates Claude subprocess | Claude SDK uses anyio internally — running it in a background asyncio.Task with queue-based API prevents anyio/asyncio event loop conflicts |
 | `_setup_platform()` deferred to first run | App startup must be fast; credential fetching, MCP server loading, and system prompt construction are I/O-heavy and done once per pod lifetime |
-| Credentials cleared after every turn | Enforces per-user isolation; prevents a second user's run from inheriting credentials from the first user's turn |
+| Credentials isolated in sidecar containers | Prevents token exfiltration by the agent via Bash/Read tools; each sidecar holds only its own credential |
 | RSA-OAEP for CP token auth | CP SA cannot create `tokenreviews` at cluster scope (tenant RBAC restriction); asymmetric encryption with a self-generated keypair (persisted in S0 Secret) requires no cluster-scoped permissions |
 | `set_bot_token()` module-level cache | CP-fetched OIDC token must be available to `get_bot_token()` for all HTTP API calls (credential fetches, backend tools); gRPC token and HTTP token are the same identity |
 | `GRPCMessageWriter` stores only last `MESSAGES_SNAPSHOT` | Each snapshot is a complete replacement; accumulating all would waste memory for long turns |
@@ -474,3 +497,4 @@ The resolved `(cwd_path, add_dirs)` tuple is passed to the Claude SDK via `Claud
 | SSE queue pre-registered before `INITIAL_PROMPT` push | Backend opens `GET /events/{thread_id}` before `PushSessionMessage`; pre-registration in lifespan eliminates the race |
 | `--resume` via persisted session IDs | Claude Code saves state to `.claude/` on graceful subprocess shutdown; session IDs survive `mark_dirty()` rebuilds via JSON file and `_saved_session_ids` snapshot |
 | Credential URL validated to cluster-local hostname | Prevents exfiltration of user tokens to external hosts if `BACKEND_API_URL` is tampered with |
+| LLM credentials (Anthropic/Vertex) remain in runner | These are necessary for inference and cannot be moved to sidecars without changing the SDK contract |

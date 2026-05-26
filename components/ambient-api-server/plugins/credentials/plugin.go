@@ -61,6 +61,16 @@ func init() {
 		credentialsRouter.HandleFunc("/{cred_id}/token", credentialHandler.GetToken).Methods(http.MethodGet)
 		credentialsRouter.Use(authMiddleware.AuthenticateAccountJWT)
 		credentialsRouter.Use(authzMiddleware.AuthorizeApi)
+
+		projectCredRouter := apiV1Router.PathPrefix("/projects").Subrouter()
+		projectCredRouter.HandleFunc("/{id}/credentials", credentialHandler.List).Methods(http.MethodGet)
+		projectCredRouter.HandleFunc("/{id}/credentials", credentialHandler.Create).Methods(http.MethodPost)
+		projectCredRouter.HandleFunc("/{id}/credentials/{cred_id}", credentialHandler.Get).Methods(http.MethodGet)
+		projectCredRouter.HandleFunc("/{id}/credentials/{cred_id}", credentialHandler.Patch).Methods(http.MethodPatch)
+		projectCredRouter.HandleFunc("/{id}/credentials/{cred_id}", credentialHandler.Delete).Methods(http.MethodDelete)
+		projectCredRouter.HandleFunc("/{id}/credentials/{cred_id}/token", credentialHandler.GetToken).Methods(http.MethodGet)
+		projectCredRouter.Use(authMiddleware.AuthenticateAccountJWT)
+		projectCredRouter.Use(authzMiddleware.AuthorizeApi)
 	})
 
 	pkgserver.RegisterController("Credentials", func(manager *controllers.KindControllerManager, services pkgserver.ServicesInterface) {

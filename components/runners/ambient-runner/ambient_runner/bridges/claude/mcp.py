@@ -193,7 +193,118 @@ def _expand_env_vars(value: str) -> str:
     return _re.sub(r"\$\{([^}]+)}", _replace, value)
 
 
+_CREDENTIAL_SIDECAR_REGISTRY: dict[str, dict[str, str]] = {
+    "github": {
+        "server_name": "github",
+        "type": "sse",
+        "path": "/sse",
+    },
+    "jira": {
+        "server_name": "mcp-atlassian",
+        "type": "sse",
+        "path": "/sse",
+    },
+    "kubeconfig": {
+        "server_name": "openshift",
+        "type": "sse",
+        "path": "/sse",
+    },
+    "google": {
+        "server_name": "google-workspace",
+        "type": "sse",
+        "path": "/sse",
+    },
+}
+
+
 def build_credential_mcp_servers() -> dict:
+    credential_mcp_urls_raw = os.getenv("CREDENTIAL_MCP_URLS", "").strip()
+    if credential_mcp_urls_raw:
+        return _build_sidecar_mcp_servers(credential_mcp_urls_raw)
+    return _build_subprocess_mcp_servers()
+
+
+def _build_sidecar_mcp_servers(credential_mcp_urls_raw: str) -> dict:
+    try:
+        credential_mcp_urls = json.loads(credential_mcp_urls_raw)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("Failed to parse CREDENTIAL_MCP_URLS — skipping credential MCP servers")
+        return {}
+
+    if not isinstance(credential_mcp_urls, dict):
+        logger.warning("CREDENTIAL_MCP_URLS is not a JSON object — skipping credential MCP servers")
+        return {}
+
+    servers: dict = {}
+    for provider, url in credential_mcp_urls.items():
+        if not isinstance(url, str) or not url.strip():
+            logger.warning("Skipping credential sidecar %s: invalid URL", provider)
+            continue
+        spec = _CREDENTIAL_SIDECAR_REGISTRY.get(provider, {})
+        server_name = spec.get("server_name", provider)
+        transport_type = spec.get("type", "sse")
+        path = spec.get("path", "/sse")
+        servers[server_name] = {
+            "type": transport_type,
+            "url": f"{url.rstrip('/')}{path}",
+        }
+        logger.info(
+            "Configured %s credential sidecar (%s) at %s",
+            server_name,
+            transport_type,
+            url,
+        )
+
+    _wait_for_sidecar_readiness(servers)
+    return servers
+
+
+def _wait_for_sidecar_readiness(
+    servers: dict,
+    timeout: float = 60.0,
+    poll_interval: float = 1.0,
+) -> None:
+    import socket
+    import time
+    from urllib.parse import urlparse
+
+    if not servers:
+        return
+
+    endpoints: list[tuple[str, str, int]] = []
+    for name, cfg in servers.items():
+        url = cfg.get("url", "")
+        parsed = urlparse(url)
+        host = parsed.hostname or "127.0.0.1"
+        port = parsed.port
+        if port:
+            endpoints.append((name, host, port))
+
+    if not endpoints:
+        return
+
+    logger.info("Waiting for %d credential sidecar(s) to become ready (timeout=%ds)", len(endpoints), int(timeout))
+    deadline = time.monotonic() + timeout
+    pending = list(endpoints)
+
+    while pending and time.monotonic() < deadline:
+        still_pending = []
+        for name, host, port in pending:
+            try:
+                with socket.create_connection((host, port), timeout=1.0):
+                    logger.info("Credential sidecar %s ready at %s:%d", name, host, port)
+            except (ConnectionRefusedError, OSError, socket.timeout):
+                still_pending.append((name, host, port))
+        pending = still_pending
+        if pending:
+            time.sleep(poll_interval)
+
+    if pending:
+        names = [p[0] for p in pending]
+        logger.warning("Credential sidecar(s) not ready after %ds: %s", int(timeout), names)
+
+
+def _build_subprocess_mcp_servers() -> dict:
     credential_ids_raw = os.getenv("CREDENTIAL_IDS", "").strip()
     if not credential_ids_raw:
         return {}
