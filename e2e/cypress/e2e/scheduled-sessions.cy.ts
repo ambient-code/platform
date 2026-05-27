@@ -411,8 +411,28 @@ describe('Scheduled Sessions', () => {
         expect(resp.status).to.be.oneOf([200, 201])
         const scheduleName = resp.body.name
 
+        // Stub the OOTB workflows API so the test doesn't depend on live GitHub access
+        cy.intercept('GET', `/api/workflows/ootb*`, {
+          statusCode: 200,
+          body: {
+            workflows: [
+              {
+                id: 'bugfix',
+                name: 'Fix a bug',
+                description: 'Systematic workflow for analyzing, fixing, and verifying software bugs.',
+                gitUrl: 'https://github.com/ambient-code/workflows.git',
+                branch: 'main',
+                path: 'workflows/bugfix',
+                enabled: true,
+              },
+            ],
+          },
+        }).as('ootbWorkflows')
+
         // Navigate to edit page
         cy.visit(`/projects/${workspaceSlug}/scheduled-sessions/${scheduleName}/edit`)
+
+        cy.wait('@ootbWorkflows')
 
         // The workflow select should show the OOTB workflow name, not "Custom workflow..."
         cy.get('[data-testid="workflow-select"]', { timeout: 10000 })
