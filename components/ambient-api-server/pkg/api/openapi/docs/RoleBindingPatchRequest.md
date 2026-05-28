@@ -4,10 +4,10 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**UserId** | Pointer to **string** |  | [optional] 
-**RoleId** | Pointer to **string** |  | [optional] 
-**Scope** | Pointer to **string** |  | [optional] 
-**ScopeId** | Pointer to **string** |  | [optional] 
+**UserId** | Pointer to **string** |  | [optional]
+**RoleId** | Pointer to **string** |  | [optional]
+**Scope** | Pointer to **string** |  | [optional]
+**ScopeId** | Pointer to **string** |  | [optional]
 
 ## Methods
 
@@ -130,5 +130,3 @@ HasScopeId returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
-
-

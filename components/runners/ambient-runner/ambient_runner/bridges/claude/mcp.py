@@ -201,7 +201,9 @@ def build_credential_mcp_servers() -> dict:
     try:
         credential_ids = json.loads(credential_ids_raw)
     except (json.JSONDecodeError, TypeError):
-        logger.warning("Failed to parse CREDENTIAL_IDS — skipping credential MCP servers")
+        logger.warning(
+            "Failed to parse CREDENTIAL_IDS — skipping credential MCP servers"
+        )
         return {}
 
     servers: dict = {}
