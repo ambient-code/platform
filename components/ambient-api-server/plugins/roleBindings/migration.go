@@ -32,7 +32,7 @@ func migration() *gormigrate.Migration {
 
 func typedFKMigration() *gormigrate.Migration {
 	return &gormigrate.Migration{
-		ID: "202505130001",
+		ID: "202603100139",
 		Migrate: func(tx *gorm.DB) error {
 			// Drop the old unique index that depends on scope_id before altering columns
 			if err := tx.Exec(`DROP INDEX IF EXISTS idx_binding_lookup`).Error; err != nil {

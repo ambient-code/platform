@@ -5,6 +5,7 @@ import { useParams, useRouter, usePathname } from "next/navigation";
 import { PanelLeft, Plug, LogOut, Menu } from "lucide-react";
 import Link from "next/link";
 import { useVersion } from "@/services/queries/use-version";
+import { useCurrentUser } from "@/services/queries";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,9 +50,14 @@ export default function ProjectLayout({
   );
   const sidebarResize = useResizePanel("session-sidebar-width", 280, 220, 450, "left");
   const { data: version } = useVersion();
+  const { data: me } = useCurrentUser();
 
   const handleLogout = () => {
-    window.location.href = '/oauth/sign_out';
+    if (me?.ssoEnabled) {
+      window.location.href = '/api/auth/sso/logout';
+    } else {
+      window.location.href = '/oauth/sign_out';
+    }
   };
 
   // Persist last visited project for redirect on next visit

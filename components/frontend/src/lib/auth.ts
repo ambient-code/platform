@@ -119,6 +119,11 @@ export function buildForwardHeaders(request: Request, extra?: Record<string, str
 
 // Async version that can optionally consult oc CLI in dev and wait for results
 export async function buildForwardHeadersAsync(request: Request, extra?: Record<string, string>): Promise<ForwardHeaders> {
+  // SSO path: extract JWT from session cookie and forward to backend
+  if (process.env.SSO_ENABLED === 'true') {
+    return buildForwardHeadersSSO(request, extra);
+  }
+
   const headers = buildForwardHeaders(request, extra);
 
   // Local development mode: inject mock user when DISABLE_AUTH is true
@@ -153,6 +158,49 @@ export async function buildForwardHeadersAsync(request: Request, extra?: Record<
         headers['X-Forwarded-Access-Token'] = t;
         headers['Authorization'] = `Bearer ${t}`;
       }
+    }
+  }
+
+  return headers;
+}
+
+async function buildForwardHeadersSSO(request: Request, extra?: Record<string, string>): Promise<ForwardHeaders> {
+  const { getAccessToken } = await import('./session');
+  const { decodeJwt } = await import('jose');
+
+  const headers: ForwardHeaders = {
+    'Accept': 'application/json',
+  };
+
+  // Try session token first (browser users with SSO cookie)
+  let accessToken = await getAccessToken();
+
+  // Fall back to Bearer token from request (E2E tests, API clients, service accounts)
+  // This enables dual-auth: SSO sessions + direct Bearer token authentication
+  if (!accessToken) {
+    accessToken = extractAccessToken(request) || undefined;
+  }
+
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+
+    try {
+      const claims = decodeJwt(accessToken);
+      if (claims.email) headers['X-Forwarded-Email'] = String(claims.email);
+      if (claims.preferred_username) headers['X-Forwarded-Preferred-Username'] = String(claims.preferred_username);
+      if (claims.sub) headers['X-Forwarded-User'] = String(claims.sub);
+      if (Array.isArray(claims.groups)) headers['X-Forwarded-Groups'] = claims.groups.join(',');
+    } catch {
+      // Backend extracts identity from its own JWT validation
+    }
+  }
+
+  const project = request.headers.get('X-OpenShift-Project');
+  if (project) headers['X-OpenShift-Project'] = project;
+
+  if (extra) {
+    for (const [k, v] of Object.entries(extra)) {
+      if (v !== undefined && v !== null) headers[k] = String(v);
     }
   }
 

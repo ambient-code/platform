@@ -7,19 +7,18 @@ Cypress E2E tests for the Ambient Code Platform. Tests run against a live cluste
 ## Quick Start
 
 ```bash
-# Prerequisites: frontend running (npm run dev), backend port-forwarded
+# Prerequisites: Kind cluster running (make kind-up), port-forwarded (make kind-port-forward)
 cd e2e && npm install
 
+# Extract test token (uses Keycloak client_credentials when available, falls back to K8s SA)
+bash scripts/extract-token.sh
+
 # Run headless
-TEST_TOKEN=$(kubectl get secret test-user-token -n ambient-code \
-  -o jsonpath='{.data.token}' | base64 -d) \
-CYPRESS_BASE_URL=http://localhost:3000 \
+source .env.test
 npx cypress run --browser chrome --spec "cypress/e2e/sessions.cy.ts"
 
 # Interactive mode (for debugging)
-TEST_TOKEN=$(kubectl get secret test-user-token -n ambient-code \
-  -o jsonpath='{.data.token}' | base64 -d) \
-CYPRESS_BASE_URL=http://localhost:3000 \
+source .env.test
 npx cypress open
 ```
 

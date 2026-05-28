@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: operator-config
+  labels:
+    app: agentic-operator
+    deployment-type: openshift
+data:
+  # Vertex AI Configuration - Enabled for standard OpenShift deployments
+  USE_VERTEX: "1"
+  CLOUD_ML_REGION: "global"
+  ANTHROPIC_VERTEX_PROJECT_ID: "itpc-gcp-hcm-pe-eng-claude"
+  GOOGLE_APPLICATION_CREDENTIALS: "/app/vertex/itpc-gcp-hcm-pe-eng.json"

@@ -35,6 +35,7 @@ export default defineConfig({
       // CYPRESS_* env vars are automatically exposed, but we explicitly set these too
       config.env.ANTHROPIC_API_KEY = process.env.CYPRESS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || ''
       config.env.TEST_TOKEN = process.env.CYPRESS_TEST_TOKEN || process.env.TEST_TOKEN || config.env.TEST_TOKEN || ''
+      config.env.SSO_MODE = process.env.E2E_USE_SSO === 'true'
 
       // Force 1x DPI for screenshot consistency across platforms
       if (process.env.CYPRESS_SCREENSHOT_MODE) {

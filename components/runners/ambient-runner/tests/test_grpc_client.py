@@ -99,7 +99,6 @@ class TestEncryptSessionID:
 
 class TestFetchTokenFromCP:
     def _mock_successful_response(self, token: str = "api-token-xyz"):
-
         mock_resp = MagicMock()
         mock_resp.read.return_value = json.dumps({"token": token}).encode()
         mock_resp.__enter__ = MagicMock(return_value=mock_resp)
