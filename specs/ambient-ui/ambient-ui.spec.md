@@ -15,7 +15,7 @@ The Ambient UI SHALL be a Next.js application acting as a Backend-for-Frontend (
 The BFF SHALL support two authentication modes:
 
 - **Native SSO**: OIDC Authorization Code Flow against a Keycloak or Red Hat SSO issuer. The BFF is the confidential client.
-- **OAuth-proxy sidecar**: When deployed with an oauth-proxy sidecar, the BFF SHALL accept the `X-Forwarded-User` and `X-Forwarded-Email` headers set by the proxy and use them to establish identity.
+- **OAuth-proxy sidecar**: When deployed with an oauth-proxy sidecar, the BFF SHALL accept the `X-Forwarded-User` and `X-Forwarded-Email` headers set by the proxy and use them to establish identity. The BFF SHALL only trust these headers when a positive trust check confirms the request originates from the configured proxy (e.g., network policy isolation, trusted source IP, or mutual TLS). The BFF SHALL reject forwarded identity headers when the trust check is absent or fails (fail-closed).
 
 The active mode SHALL be determined by deployment configuration, not runtime detection.
 
@@ -38,8 +38,16 @@ The active mode SHALL be determined by deployment configuration, not runtime det
 
 - GIVEN the Ambient UI is deployed with an oauth-proxy sidecar
 - WHEN a request arrives with `X-Forwarded-User` and `X-Forwarded-Email` headers
+- AND the request passes the trusted-proxy check
 - THEN the BFF uses those headers to establish user identity
 - AND proxies requests to the ambient-api-server with appropriate authentication
+
+#### Scenario: Untrusted forwarded headers rejected
+
+- GIVEN the Ambient UI is deployed without an oauth-proxy sidecar (or the trust check fails)
+- WHEN a request arrives with `X-Forwarded-User` and `X-Forwarded-Email` headers
+- THEN the BFF ignores the forwarded identity headers
+- AND falls back to requiring OIDC session authentication
 
 ### Requirement: Port/Adapter API Layer
 
@@ -546,12 +554,26 @@ Status filtering requires enrichment data. When enrichment is unavailable, the s
 
 Sessions with an `ambient-code.io/ui/preview-url` annotation SHALL offer a live preview panel. The preview SHALL render the target URL in an iframe within a near-fullscreen overlay.
 
+The preview iframe SHALL be hardened:
+- The `sandbox` attribute SHALL be set with minimal permissions (`allow-scripts allow-same-origin allow-forms`). Top-level navigation (`allow-top-navigation`) and popups (`allow-popups`) SHALL NOT be granted.
+- The UI SHALL validate the preview URL against a configurable allowlist of trusted host patterns (e.g., `*.apps.rosa.example.com`, `*.apps.cluster.local`). URLs not matching the allowlist SHALL be rejected with an error message instead of rendered.
+- A Content-Security-Policy `frame-src` directive SHALL restrict the iframe to the allowlisted hosts.
+
 #### Scenario: Preview mode activation
 
 - GIVEN a session with `ambient-code.io/ui/preview-url: "https://app.example.com"` and `ambient-code.io/ui/preview-title: "SSO Login v2"`
+- AND the URL matches the configured preview host allowlist
 - WHEN the user clicks "Open Preview" in the session detail
-- THEN a near-fullscreen overlay opens with the URL loaded in an iframe
+- THEN a near-fullscreen overlay opens with the URL loaded in a sandboxed iframe
 - AND the overlay header shows the preview title, device size toggles (Desktop/Tablet/Mobile), and a Comment button
+
+#### Scenario: Preview URL rejected (untrusted host)
+
+- GIVEN a session with `ambient-code.io/ui/preview-url: "https://evil.example.com"`
+- AND the URL does not match the configured preview host allowlist
+- WHEN the user clicks "Open Preview"
+- THEN the preview does not render
+- AND an error message is displayed: "Preview URL is not on the trusted hosts allowlist"
 
 #### Scenario: Device size emulation
 

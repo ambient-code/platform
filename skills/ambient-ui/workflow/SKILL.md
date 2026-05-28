@@ -59,7 +59,7 @@ When testing, fakes are to be preferred over mocks. Tests that don't test realit
 ##### Technology
 
 - React/Next.js
-- Shadcdn components
+- shadcn/ui components
 
 ##### Colors
 
@@ -202,7 +202,7 @@ Mono should only be used when demonstrating code snippets in communications and 
 Launch the following agents in parallel to review and critique your work:
 
 1. Security review agent: 
-- Expert in OWSAP vulnerability classes
+- Expert in OWASP vulnerability classes
 - Thoroughly vets for supply chain vulnerabilities
 
 2. Spec alignment review agent: 
