@@ -11,7 +11,6 @@ func migration() *gormigrate.Migration {
 	type Project struct {
 		db.Model
 		Name        string `gorm:"uniqueIndex;not null"`
-		DisplayName *string
 		Description *string
 		Labels      *string
 		Annotations *string

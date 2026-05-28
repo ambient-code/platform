@@ -10,6 +10,7 @@
 .PHONY: setup-minio minio-console minio-logs minio-status
 .PHONY: validate-makefile lint-makefile check-shell makefile-health benchmark benchmark-ci
 .PHONY: _create-operator-config _auto-port-forward _show-access-info _kind-load-images
+.PHONY: build-credential-sidecars build-credential-github build-credential-jira build-credential-k8s build-credential-google
 
 # Default target
 .DEFAULT_GOAL := help
@@ -67,6 +68,10 @@ STATE_SYNC_IMAGE ?= vteam_state_sync:$(IMAGE_TAG)
 PUBLIC_API_IMAGE ?= vteam_public_api:$(IMAGE_TAG)
 API_SERVER_IMAGE ?= vteam_api_server:$(IMAGE_TAG)
 OBSERVABILITY_DASHBOARD_IMAGE ?= vteam_observability_dashboard:$(IMAGE_TAG)
+GITHUB_MCP_IMAGE ?= vteam_credential_github:$(IMAGE_TAG)
+JIRA_MCP_IMAGE ?= vteam_credential_jira:$(IMAGE_TAG)
+K8S_MCP_IMAGE ?= vteam_credential_k8s:$(IMAGE_TAG)
+GOOGLE_MCP_IMAGE ?= vteam_credential_google:$(IMAGE_TAG)
 
 # kind-local overlay always references localhost/vteam_* images.
 # Podman produces this prefix natively; for Docker we tag before loading.
@@ -220,6 +225,36 @@ build-observability-dashboard: ## Build observability dashboard image
 	@cd ../observability/dashboard && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
 		-t $(OBSERVABILITY_DASHBOARD_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Observability dashboard built: $(OBSERVABILITY_DASHBOARD_IMAGE)"
+
+build-credential-sidecars: build-credential-github build-credential-jira build-credential-k8s build-credential-google ## Build all credential sidecar images
+
+build-credential-github: ## Build GitHub credential sidecar image
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building GitHub credential sidecar with $(CONTAINER_ENGINE)..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-f components/credential-sidecars/github/Dockerfile \
+		-t $(GITHUB_MCP_IMAGE) .
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) GitHub credential sidecar built: $(GITHUB_MCP_IMAGE)"
+
+build-credential-jira: ## Build Jira credential sidecar image
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building Jira credential sidecar with $(CONTAINER_ENGINE)..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-f components/credential-sidecars/jira/Dockerfile \
+		-t $(JIRA_MCP_IMAGE) .
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Jira credential sidecar built: $(JIRA_MCP_IMAGE)"
+
+build-credential-k8s: ## Build K8s credential sidecar image
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building K8s credential sidecar with $(CONTAINER_ENGINE)..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-f components/credential-sidecars/k8s/Dockerfile \
+		-t $(K8S_MCP_IMAGE) .
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) K8s credential sidecar built: $(K8S_MCP_IMAGE)"
+
+build-credential-google: ## Build Google credential sidecar image
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building Google credential sidecar with $(CONTAINER_ENGINE)..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-f components/credential-sidecars/google/Dockerfile \
+		-t $(GOOGLE_MCP_IMAGE) .
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Google credential sidecar built: $(GOOGLE_MCP_IMAGE)"
 
 build-cli: ## Build acpctl CLI binary
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building acpctl CLI..."

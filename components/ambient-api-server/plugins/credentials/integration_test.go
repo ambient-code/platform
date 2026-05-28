@@ -50,7 +50,7 @@ func TestCredentialPost(t *testing.T) {
 	ctx := h.NewAuthenticatedContext(account)
 
 	credentialInput := openapi.Credential{
-		ProjectId:   testProjectID,
+		ProjectId:   openapi.PtrString(testProjectID),
 		Name:        "test-name",
 		Description: openapi.PtrString("test-description"),
 		Provider:    "test-provider",
