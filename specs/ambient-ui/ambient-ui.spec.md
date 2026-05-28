@@ -65,7 +65,7 @@ The port layer SHALL define canonical domain types that represent the UI's view 
 
 - GIVEN the complete ambient-api-server API surface
 - WHEN the port layer is fully implemented
-- THEN ports exist for: Projects, Agents, Sessions, SessionMessages, SessionEvents, Credentials, RoleBindings, ScheduledSessions, Inbox, Annotations (enrichment)
+- THEN ports exist for: Projects, Agents, Sessions, SessionMessages, SessionEvents, Credentials, RoleBindings, ScheduledSessions, Inbox
 
 ### Requirement: Domain-Oriented Observability
 
@@ -152,6 +152,8 @@ The Ambient UI SHALL support keyboard-first navigation for power users.
 - THEN they can search across session names, agent names, and registered annotation values (Jira issue keys, PR numbers)
 - AND results are grouped by type and clickable
 
+Global search SHALL be implemented client-side by querying multiple API endpoints (`GET /sessions?search=...`, `GET /projects/{id}/agents?search=...`) and aggregating results. No cross-resource search endpoint exists in the API today.
+
 #### Scenario: Escape to go back
 
 - GIVEN a user is in a detail view, sidebar, or modal
@@ -166,9 +168,11 @@ The Ambient UI SHALL support keyboard-first navigation for power users.
 
 The Fleet view SHALL display a table of all sessions in the active project. Each row SHALL show operational data answering: "Does this session need my attention?"
 
-The table SHALL display: Phase (with activity indicator), Session Name, Agent, Duration, Tool Calls (with error count), Model, Last Activity, and Cost.
+The table SHALL display: Phase (with activity indicator), Session Name, Agent, Duration, Model, Last Activity, and Cost.
 
 Phase SHALL be the single status indicator. There SHALL NOT be a separate "Status" column. When a session is Running and the agent is actively working, the Phase badge SHALL display a pulsing indicator.
+
+Cost is annotation-driven: the UI reads the `ambient-code.io/cost/estimate` annotation value. Sessions without this annotation display "—" in the Cost column.
 
 #### Scenario: Fleet table rendering
 
@@ -195,32 +199,32 @@ Phase SHALL be the single status indicator. There SHALL NOT be a separate "Statu
 
 Sessions with registered annotations SHALL display compact visual indicators in the Fleet table. Indicators SHALL appear as small, muted icons to the right of the session name — never as inline chips that break the table's horizontal scan line.
 
-Only annotations with registered prefixes SHALL produce indicators. Unregistered annotations SHALL not produce any visual element in the Fleet table.
+Only annotations with registered keys SHALL produce indicators. Unregistered annotations SHALL NOT produce any visual element in the Fleet table or any other operational view.
 
 Full annotation details SHALL be available on hover (as a popover) or in the session detail view.
 
 #### Scenario: Annotation indicators in fleet
 
-- GIVEN a session with annotations `jira.issue: "HYPERFLEET-234"` and `github.pr: "org/repo#1847"`
+- GIVEN a session with annotations `ambient-code.io/jira/issue: "HYPERFLEET-234"` and `ambient-code.io/github/pr: "org/repo#1847"`
 - WHEN the Fleet table renders
 - THEN the session row shows small muted icons (Jira icon, PR icon) next to the session name
-- AND hovering over the session name reveals a popover with full annotation chips
+- AND hovering over the session name reveals a popover with full annotation details
 
-#### Scenario: Unregistered annotation ignored in fleet
+#### Scenario: Unregistered annotation ignored
 
-- GIVEN a session with annotation `internal.scratch: "step 3 done"`
-- WHEN the Fleet table renders
-- THEN no indicator appears for that annotation in the Fleet table
+- GIVEN a session with annotation `ambient-code.io/desired-phase: "Running"`
+- WHEN the session appears in the Fleet table or any operational view
+- THEN no visual element is produced for that annotation
 
-### Requirement: Virtual Folder Tree (ui.path)
+### Requirement: Virtual Folder Tree (ambient-code.io/ui/path)
 
-Sessions with a `ui.path` annotation SHALL be organizable into a virtual folder hierarchy. The folder tree SHALL be toggleable — hidden by default, shown when the user activates it.
+Sessions with an `ambient-code.io/ui/path` annotation SHALL be organizable into a virtual folder hierarchy. The folder tree SHALL be toggleable — hidden by default, shown when the user activates it.
 
-The `ui.path` annotation value is a forward-slash-delimited string (e.g., `"backend/auth"`). The UI SHALL parse these into a tree structure. This is a flat namespace rendered as a tree — like S3 prefixes.
+The annotation value is a forward-slash-delimited string (e.g., `"backend/auth"`). The UI SHALL parse these into a tree structure. This is a flat namespace rendered as a tree — like S3 prefixes.
 
 #### Scenario: Folder tree activation
 
-- GIVEN sessions with `ui.path` annotations like `"backend/auth"`, `"backend/testing"`, `"infra/networking"`
+- GIVEN sessions with `ambient-code.io/ui/path` annotations like `"backend/auth"`, `"backend/testing"`, `"infra/networking"`
 - WHEN the user toggles the folder tree
 - THEN a tree panel appears showing the parsed hierarchy with session counts per node
 - AND clicking a folder filters the Fleet table to sessions with that path prefix
@@ -242,14 +246,16 @@ Clicking a session in the Fleet table SHALL open a detail view with tabbed conte
 
 **Action bar:** Stop (when Running), Restart (when terminal), Clone, Export, Delete. Destructive actions (Stop, Delete) SHALL require confirmation.
 
-**Tabs:** Status, Logs, Resources, Details, Chat.
+**Tabs:** Phase, Logs, Resources, Details, Chat.
 
-#### Scenario: Status tab
+#### Scenario: Phase tab
 
 - GIVEN a session in Running phase
-- WHEN the Status tab renders
+- WHEN the Phase tab renders
 - THEN it displays: compact phase timeline, Conditions table (with semantically correct colors), Pod Events, key metadata (session name, project, agent link, owner, timestamps)
 - AND a collapsible Metrics section showing: tool call count, success/failure rate, average duration, message count, wall clock time, SDK restart count
+
+Tool call metrics SHALL be computed client-side from SessionMessages (event types `tool_use` and `tool_result`). The API does not provide pre-computed metrics.
 
 #### Scenario: Conditions table semantic colors
 
@@ -258,6 +264,8 @@ Clicking a session in the Fleet table SHALL open a detail view with tabbed conte
 - THEN the condition displays as green (healthy — timeout has NOT fired)
 - AND "Ready: True" displays as green (healthy)
 - AND "Error: True" displays as red (unhealthy)
+
+Condition colors SHALL reflect semantic health, not literal True/False values. "Problem" conditions (InactivityTimeout, Error) invert the color mapping: True = red (bad), False = green (good).
 
 #### Scenario: Logs tab
 
@@ -280,7 +288,7 @@ Clicking a session in the Fleet table SHALL open a detail view with tabbed conte
 - WHEN the Details tab renders
 - THEN it shows a Configuration section (model, temperature, max tokens, timeouts, workflow, env vars as key-value)
 - AND an Annotations section with two parts:
-  - Registered annotations rendered as rich cards (Jira ticket card, PR card, etc.)
+  - Registered annotations rendered as rich cards (Jira ticket card, PR card, etc.) with enriched data when available, or raw values as fallback
   - Raw annotations table showing ALL annotations as key-value pairs (the "kubectl describe" view)
 
 #### Scenario: Chat tab (Full AG-UI)
@@ -311,7 +319,7 @@ The Fleet table's "Last Activity" column SHALL support toggling between relative
 
 The Agents view SHALL display a table of agents in the active project. Clicking an agent row SHALL open a right-side detail panel.
 
-The table SHALL display: Name, Model, Owner, Current Session (clickable), Inbox (unread count), Last Active, Status.
+The table SHALL display: Name, Model, Owner, Current Session (clickable), Inbox (unread count), Last Active.
 
 There SHALL be only ONE interaction pattern for agent rows: clicking anywhere on the row opens the sidebar panel.
 
@@ -319,7 +327,7 @@ There SHALL be only ONE interaction pattern for agent rows: clicking anywhere on
 
 - GIVEN the user clicks an agent row
 - WHEN the sidebar panel slides in from the right
-- THEN it displays: Quick Info (status, model, owner, current session link, last active), Annotations (registered annotations as chips), Inbox messages (last 3-5 with sender, preview, timestamp), Recent Sessions (clickable, navigate to workload inspector), Prompt Preview (truncated, expandable), Chat section (collapsible, for direct agent interaction)
+- THEN it displays: Quick Info (model, owner, current session link, last active), Annotations (registered annotations only), Inbox messages (last 3-5 with sender, preview, timestamp), Recent Sessions (clickable, navigate to workload inspector), Prompt Preview (truncated, expandable), Chat section (collapsible, for direct agent interaction)
 
 #### Scenario: Agent session navigation
 
@@ -378,9 +386,14 @@ Credentials SHALL be bindable to **specific agents** within a project OR to **al
 
 The Credentials view SHALL display bindings as compact indicators showing the project name and either "(all agents)" or specific agent names.
 
+To display bindings for a credential, the UI SHALL query `GET /api/ambient/v1/role_bindings` filtered by `credential_id`. The `GET /credentials/{cred_id}/role_bindings` scoped endpoint is planned but not yet implemented; the generic endpoint is the interim path.
+
+Binding a credential to a project requires the user to hold `project:owner` on that project (per the security spec). The UI SHALL only show bindable projects where the user has `project:owner`.
+
 #### Scenario: Bind credential to all agents
 
 - GIVEN the user manages credential "github-pat"
+- AND the user holds `project:owner` on project "platform"
 - WHEN they check project "platform" and select "All agents"
 - THEN a RoleBinding is created with `credential_id=<cred>`, `project_id=<project>`, `agent_id=NULL`
 - AND the credential row shows: "platform (all agents)"
@@ -395,6 +408,8 @@ The Credentials view SHALL display bindings as compact indicators showing the pr
 ### Requirement: Credential CRUD with Modals
 
 The Credentials view SHALL provide Add and Manage modals for credential lifecycle operations.
+
+The UI SHALL NOT access credential tokens. The `credential:token-reader` role is platform-internal and granted only to runner service accounts. The UI operates with `credential:owner` (CRUD) and `credential:viewer` (metadata read) roles.
 
 #### Scenario: Add credential
 
@@ -417,57 +432,47 @@ The Credentials view SHALL provide Add and Manage modals for credential lifecycl
 - THEN the credential is soft-deleted via the API
 - AND associated RoleBindings are removed
 
-### Requirement: Platform-Managed Credential Visibility
-
-The Credentials view SHALL display a read-only indicator for platform-managed credentials (e.g., Vertex AI service accounts, cluster auth tokens). These credentials are configured by administrators and are not editable by users.
-
-#### Scenario: Platform credential visibility
-
-- GIVEN platform-managed credentials exist
-- WHEN the Credentials view renders
-- THEN a muted informational banner appears above user-managed credentials
-- AND expanding the banner reveals a read-only list of platform credentials with lock icons
-- AND no "Manage" or "Delete" actions are available for platform credentials
-
 ---
 
 ## Annotation System
 
-### Requirement: Registered Annotation Prefixes
+### Requirement: Registered Annotation Keys
 
-The Ambient UI SHALL maintain a registry of annotation prefixes with defined UI behavior. Only registered prefixes produce visual elements in operational views. Unregistered annotations are invisible in all views except the raw annotations table in the Details tab.
+The Ambient UI SHALL maintain a registry of annotation keys with defined UI behavior. Only registered keys produce visual elements in operational views. Unregistered annotations are invisible in all views except the raw annotations table in the Details tab.
 
 Annotations are general-purpose metadata — agents write arbitrary annotations for their own purposes. The UI does not render unknown annotations. The registry defines which annotations the UI understands and how it renders them.
 
-**Registered prefixes and their UI behavior:**
+All registered annotation keys SHALL use the `ambient-code.io/` namespace prefix, consistent with the platform's existing annotation namespace. Integration-specific annotations use path hierarchy under `ambient-code.io/` (e.g., `ambient-code.io/jira/issue`, `ambient-code.io/github/pr`). Platform-internal annotations (e.g., `ambient-code.io/desired-phase`, `ambient-code.io/session-id`) share the same namespace but are not in the UI registry and are therefore invisible in operational views.
 
-| Prefix | Example Value | UI Behavior |
-|--------|---------------|-------------|
-| `ui.path` | `"backend/auth"` | Virtual folder tree grouping in Fleet view |
-| `ui.pinned` | `"true"` | Pin icon next to session name; sorts to top |
-| `ui.priority` | `"high"` | Colored priority icon (red/amber/gray) left of session name |
-| `ui.tag` | `"docs"` | Muted tag chip in annotation popover |
-| `ui.preview-url` | `"https://app.example.com"` | Live preview panel with feedback mode |
-| `ui.preview-title` | `"SSO Login v2"` | Title for the preview panel |
-| `jira.issue` | `"HYPERFLEET-234"` | Enriched Jira chip (icon, key); tooltip with summary, status, assignee, priority via server-side enrichment |
-| `jira.epic` | `"HYPERFLEET-100"` | Epic reference chip; used for grouping/filtering |
-| `github.pr` | `"org/repo#1847"` | Enriched PR chip (icon, number); tooltip with title, status, checks, diff stats via server-side enrichment |
-| `github.repo` | `"org/repo"` | Repository reference |
-| `github.branch` | `"feat/new-auth"` | Branch reference |
-| `gitlab.mr` | `"org/repo!423"` | Enriched MR chip (icon, number); tooltip via server-side enrichment |
-| `gerrit.change` | `"change/12345"` | Gerrit change link |
-| `review.status` | `"needs-review"` | Status badge (amber/green/red) |
-| `review.reviewer` | `"@mchen"` | Reviewer reference |
-| `triggered-by` | `"schedule/nightly"` | Provenance indicator with contextual icon |
-| `cost.estimate` | `"$4.12"` | Muted cost display |
-| `oncall.incident` | `"INC-003"` | Red incident chip with alert icon |
-| `parent.agent` | `"orchestrator"` | Agent delegation reference |
+**Registered annotation keys and their UI behavior:**
+
+| Key | Example Value | UI Behavior |
+|-----|---------------|-------------|
+| `ambient-code.io/ui/path` | `"backend/auth"` | Virtual folder tree grouping in Fleet view |
+| `ambient-code.io/ui/pinned` | `"true"` | Pin icon next to session name; sorts to top |
+| `ambient-code.io/ui/priority` | `"high"` | Colored priority icon (red/amber/gray) left of session name |
+| `ambient-code.io/ui/tag` | `"docs"` | Muted tag chip in annotation popover |
+| `ambient-code.io/ui/preview-url` | `"https://app.example.com"` | Live preview panel with feedback mode |
+| `ambient-code.io/ui/preview-title` | `"SSO Login v2"` | Title for the preview panel |
+| `ambient-code.io/jira/issue` | `"HYPERFLEET-234"` | Jira chip (icon, key); enriched tooltip when available |
+| `ambient-code.io/jira/epic` | `"HYPERFLEET-100"` | Epic reference chip; used for grouping/filtering |
+| `ambient-code.io/github/pr` | `"org/repo#1847"` | PR chip (icon, number); enriched tooltip when available |
+| `ambient-code.io/github/repo` | `"org/repo"` | Repository reference |
+| `ambient-code.io/github/branch` | `"feat/new-auth"` | Branch reference |
+| `ambient-code.io/gitlab/mr` | `"org/repo!423"` | MR chip (icon, number); enriched tooltip when available |
+| `ambient-code.io/gerrit/change` | `"change/12345"` | Gerrit change link |
+| `ambient-code.io/review/status` | `"needs-review"` | Status badge (amber/green/red). This is external review metadata, distinct from session phase. |
+| `ambient-code.io/review/reviewer` | `"@mchen"` | Reviewer reference |
+| `ambient-code.io/triggered-by` | `"schedule/nightly"` | Provenance indicator with contextual icon |
+| `ambient-code.io/cost/estimate` | `"$4.12"` | Muted cost display in Fleet table |
+| `ambient-code.io/oncall/incident` | `"INC-003"` | Red incident chip with alert icon |
+| `ambient-code.io/parent-agent` | `"orchestrator"` | Agent delegation reference |
 
 #### Scenario: Registered annotation rendered
 
-- GIVEN a session with annotation `jira.issue: "HYPERFLEET-234"`
+- GIVEN a session with annotation `ambient-code.io/jira/issue: "HYPERFLEET-234"`
 - WHEN the session appears in any view
-- THEN the Jira annotation is rendered as a styled chip with server-enriched tooltip data
+- THEN the Jira annotation is rendered as a styled chip
 - AND the annotation appears in the Details tab both as a rich card and in the raw table
 
 #### Scenario: Unregistered annotation not rendered
@@ -477,34 +482,36 @@ Annotations are general-purpose metadata — agents write arbitrary annotations 
 - THEN no visual element is produced for that annotation
 - AND the annotation is visible ONLY in the raw annotations table in the Details tab
 
-#### Scenario: Annotation prefix registration is explicit
+#### Scenario: Annotation key registration is explicit
 
-- GIVEN an agent writes annotation `slack.channel: "#team-platform"`
+- GIVEN an agent writes annotation `ambient-code.io/slack/channel: "#team-platform"`
 - WHEN the Ambient UI encounters this annotation
-- THEN it produces no visual element (the prefix `slack.*` is not registered)
-- AND adding support for `slack.*` requires a code change to the annotation renderer registry
+- THEN it produces no visual element (this key is not in the registry)
+- AND adding support for it requires a code change to the annotation renderer registry
 
-### Requirement: Server-Side Annotation Enrichment
+### Requirement: Annotation Enrichment (Planned)
 
-For registered annotation prefixes that reference external resources (Jira issues, GitHub PRs, GitLab MRs), the ambient-api-server SHALL provide enrichment by resolving references using the user's bound credentials.
+For registered annotations that reference external resources (Jira issues, GitHub PRs, GitLab MRs), the UI SHOULD display enriched data (issue title, status, assignee, PR checks) when available. Enrichment is a server-side concern — the UI SHALL NOT call external APIs directly.
 
-The Ambient UI SHALL NOT call external APIs directly. Enrichment is a server-side concern.
+**Dependency:** Annotation enrichment requires a new ambient-api-server endpoint that resolves annotation references using bound credentials. This endpoint does not exist today. Until it ships, the UI SHALL render raw annotation values as styled, clickable chips linking to the external resource. Enriched tooltips and detail cards SHALL be populated only when the enrichment API is available.
 
-#### Scenario: Jira enrichment
+The enrichment endpoint specification is out of scope for this document and SHALL be defined in a separate API spec.
 
-- GIVEN a session with annotation `jira.issue: "HYPERFLEET-234"`
-- AND the project has a Jira credential bound
+#### Scenario: Enrichment available
+
+- GIVEN a session with annotation `ambient-code.io/jira/issue: "HYPERFLEET-234"`
+- AND the enrichment API is available and the project has a Jira credential bound
 - WHEN the UI requests enrichment
-- THEN the API server uses the bound Jira credential to fetch issue details (summary, status, assignee, priority)
-- AND returns the enriched data to the UI
+- THEN the API server returns enriched data (summary, status, assignee, priority)
+- AND the UI renders a rich tooltip on the Jira chip
 
-#### Scenario: Enrichment without credentials
+#### Scenario: Enrichment unavailable (graceful degradation)
 
-- GIVEN a session with annotation `jira.issue: "HYPERFLEET-234"`
-- AND the project has no Jira credential bound
-- WHEN the UI requests enrichment
-- THEN the API server returns the raw annotation value without enrichment
-- AND the UI renders the Jira key as plain text (no tooltip with details)
+- GIVEN a session with annotation `ambient-code.io/jira/issue: "HYPERFLEET-234"`
+- AND the enrichment API is not available OR the project has no Jira credential bound
+- WHEN the UI renders the annotation
+- THEN it displays "HYPERFLEET-234" as a styled, clickable chip linking to the Jira instance
+- AND no tooltip with enriched details is shown
 
 ---
 
@@ -512,13 +519,13 @@ The Ambient UI SHALL NOT call external APIs directly. Enrichment is a server-sid
 
 ### Requirement: Aggregated Integration References
 
-The Issues view SHALL aggregate all registered integration annotations (Jira issues, GitHub PRs, GitLab MRs) across sessions in the active project into dedicated tables.
+The Issues view SHALL aggregate all registered integration annotations (`ambient-code.io/jira/issue`, `ambient-code.io/github/pr`, `ambient-code.io/gitlab/mr`) across sessions in the active project into dedicated tables.
 
 The view SHALL support search and status filtering.
 
 #### Scenario: Issues view rendering
 
-- GIVEN sessions in a project with various `jira.issue`, `github.pr`, and `gitlab.mr` annotations
+- GIVEN sessions in a project with various integration annotations
 - WHEN the Issues view renders
 - THEN it displays separate tables for Jira Issues, Pull Requests, and Merge Requests
 - AND each row shows the reference, enriched details (if available), linked sessions, and agent
@@ -529,17 +536,19 @@ The view SHALL support search and status filtering.
 - WHEN the user selects "In Progress" from the status filter
 - THEN only Jira issues with "In Progress" status are displayed
 
+Status filtering requires enrichment data. When enrichment is unavailable, the status filter SHALL be hidden.
+
 ---
 
 ## Live Preview and Visual Feedback
 
 ### Requirement: Live Preview Mode
 
-Sessions with a `ui.preview-url` annotation SHALL offer a live preview panel. The preview SHALL render the target URL in an iframe within a near-fullscreen overlay.
+Sessions with an `ambient-code.io/ui/preview-url` annotation SHALL offer a live preview panel. The preview SHALL render the target URL in an iframe within a near-fullscreen overlay.
 
 #### Scenario: Preview mode activation
 
-- GIVEN a session with `ui.preview-url: "https://app.example.com"` and `ui.preview-title: "SSO Login v2"`
+- GIVEN a session with `ambient-code.io/ui/preview-url: "https://app.example.com"` and `ambient-code.io/ui/preview-title: "SSO Login v2"`
 - WHEN the user clicks "Open Preview" in the session detail
 - THEN a near-fullscreen overlay opens with the URL loaded in an iframe
 - AND the overlay header shows the preview title, device size toggles (Desktop/Tablet/Mobile), and a Comment button
@@ -593,14 +602,14 @@ Feedback SHALL be delivered to the agent via the appropriate channel based on se
 
 - GIVEN the session is in Running phase
 - WHEN feedback is sent
-- THEN it is posted as a session message via `POST /sessions/{id}/messages`
+- THEN it is posted as a session message via `POST /api/ambient/v1/sessions/{id}/messages`
 - AND the agent receives it as a user turn in the active conversation
 
 #### Scenario: Feedback to inactive session
 
 - GIVEN the session is in Completed or Stopped phase
 - WHEN feedback is sent
-- THEN it is posted to the agent's inbox via `POST /agents/{id}/inbox`
+- THEN it is posted to the agent's inbox via `POST /api/ambient/v1/projects/{project_id}/agents/{agent_id}/inbox`
 - AND the agent receives it on next start as part of the drained inbox context
 
 ### Requirement: Feedback Panel Position
@@ -628,15 +637,24 @@ The Ambient UI SHALL use Server-Sent Events as the primary mechanism for real-ti
 
 - GIVEN a user is viewing a Running session's Logs or Chat tab
 - WHEN the agent produces new events
-- THEN the UI receives them via `GET /sessions/{id}/events` SSE stream
+- THEN the UI receives them via `GET /api/ambient/v1/sessions/{id}/events` SSE stream
 - AND renders them in real-time without polling
 
-#### Scenario: Session message watching
+#### Scenario: Fleet table polling
 
 - GIVEN a user is viewing the Fleet table
 - WHEN a session's phase changes
-- THEN the UI detects the change via the session watch mechanism
-- AND the Fleet table row updates without manual refresh
+- THEN the UI detects the change via periodic polling of `GET /api/ambient/v1/sessions` (5s interval)
+- AND the Fleet table row updates on the next poll cycle
+
+No list-watch endpoint exists for sessions today. Polling is the interim mechanism.
+
+#### Scenario: SSE unavailable (runner unreachable)
+
+- GIVEN a user is viewing a session's Logs or Chat tab
+- WHEN the runner pod is unreachable (SSE returns 502)
+- THEN the UI falls back to polling `GET /api/ambient/v1/sessions/{id}/messages` for historical messages
+- AND displays a status indicator: "Live stream unavailable — showing cached messages"
 
 #### Scenario: Non-streamable resource polling
 
@@ -682,3 +700,32 @@ The top bar SHALL display a cluster connection status indicator that reflects th
 - WHEN the UI detects connection failure
 - THEN the cluster indicator changes to red with "Disconnected" label
 - AND a pulsing animation draws attention to the status change
+
+---
+
+## API Dependencies
+
+This section documents API endpoints and capabilities that this spec depends on but which do not yet exist. These are not requirements of this spec — they are requirements on other specs.
+
+| Dependency | Required By | Status | Interim |
+|------------|-------------|--------|---------|
+| Annotation enrichment endpoint (resolve `ambient-code.io/jira/issue` etc. against bound credentials) | Annotation enrichment, Issues view status filtering | Not yet specified | Render raw annotation values as clickable chips |
+| `GET /credentials/{cred_id}/role_bindings` (scoped query) | Credential binding display | Planned, not implemented | Use generic `GET /role_bindings` filtered by `credential_id` |
+| Cross-resource search endpoint | Global search | Not planned | Client-side aggregation across multiple list endpoints |
+| Session list-watch endpoint (`GET /sessions?watch=true`) | Fleet real-time phase updates | Not available | Poll `GET /sessions` at 5s interval |
+| SSE availability guarantee (runner reachability) | Logs/Chat real-time streaming | Runner returns 502 when unreachable | Fall back to polling `GET /sessions/{id}/messages` |
+
+## Design Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| Next.js BFF (not pure SPA) | Secure OIDC confidential client. Tokens never reach the browser. Proven pattern from existing frontend. |
+| Port/adapter over SDK (not SDK types directly) | Domain types decouple UI from generated code. SDK regeneration doesn't cascade into component changes. |
+| `ambient-code.io/*` annotation namespace | Consistent with the platform's existing annotation namespace. UI-registered keys and platform-internal keys share the same domain; the UI registry determines which are rendered. |
+| Annotation registry is a code enum (not dynamic) | Simplicity. Adding a new annotation type is a PR, not a config change. The set of annotations the UI understands should be deliberate and reviewed. |
+| Enrichment as graceful degradation | UI ships without enrichment API. Raw annotation values are useful on their own (clickable links). Enriched tooltips are additive. |
+| Cost as annotation, not API field | Cost is agent-computed and written as `ambient-code.io/cost/estimate`. No API-level cost computation. |
+| Tool metrics computed client-side | The API stores raw SessionMessages. Aggregating tool call stats is a UI concern, not an API concern. |
+| SSE for sessions, polling for rest | Sessions have real-time SSE streams. Credentials, schedules, and agents change infrequently — polling is sufficient and simpler. |
+| Single interaction pattern per entity | Agent rows: sidebar only (no expand + sidebar). Fleet rows: detail view only. Reduces cognitive load per Krug's "Don't Make Me Think." |
+| Feedback delivery is context-dependent | Running session → session message (immediate). Stopped session → agent inbox (queued). Matches the platform's existing message model. |
