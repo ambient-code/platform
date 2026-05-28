@@ -1241,24 +1241,17 @@ describe('Ambient Session Management Tests', () => {
       cy.get('body').then(($body) => {
         if ($body.find(':contains("Runner API Keys")').length) {
           cy.contains('Runner API Keys').click({ force: true })
-          cy.wait(500)
 
-          // Find any input fields and type
-          cy.get('body').then(($inner) => {
-            const inputs = $inner.find('input[type="text"], input[type="password"]')
-            if (inputs.length) {
-              cy.wrap(inputs.first()).clear({ force: true }).type('test-api-key-value', { force: true })
-              cy.wait(200)
-            }
-          })
+          // Wait for loading skeletons to disappear and real inputs to render
+          cy.get('#runner-secrets-panel', { timeout: 10000 }).should('exist')
+          cy.get('#runner-secrets-panel').find('[class*="skeleton"]', { timeout: 0 }).should('not.exist')
+
+          // Use Cypress queries (retry-able) instead of jQuery snapshots
+          cy.get('#runner-secrets-panel input[type="text"], #runner-secrets-panel input[type="password"]', { timeout: 5000 }).first().clear({ force: true }).type('test-api-key-value', { force: true })
 
           // Click "Save Runner API Keys" button
-          cy.get('body').then(($inner) => {
-            if ($inner.find('button:contains("Save Runner API Keys")').length) {
-              cy.contains('button', 'Save Runner API Keys').click({ force: true })
-              cy.wait(1000)
-            }
-          })
+          cy.contains('button', 'Save Runner API Keys', { timeout: 5000 }).click({ force: true })
+          cy.wait(1000)
         }
       })
 
