@@ -1,0 +1,218 @@
+{
+  "_comment": "REQUIRED: Replace all CHANGE_ME values before deploying. Client secrets must match the corresponding K8s secrets (sso-credentials, control-plane-oidc).",
+  "realm": "ambient-code",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "accessTokenLifespan": 300,
+  "ssoSessionMaxLifespan": 1800,
+  "clients": [
+    {
+      "clientId": "ambient-frontend",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "CHANGE_ME",
+      "redirectUris": [
+        "https://ambient.corp.stage.redhat.com/*",
+        "https://frontend-route-jsell-ambient-sso-poc.apps.rosa.hcmais01ue1.s9m2.p3.openshiftapps.com/*"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "https://ambient.corp.stage.redhat.com/*##https://frontend-route-jsell-ambient-sso-poc.apps.rosa.hcmais01ue1.s9m2.p3.openshiftapps.com/*"
+      },
+      "webOrigins": [
+        "+"
+      ],
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": true,
+      "defaultClientScopes": [
+        "openid",
+        "email",
+        "profile",
+        "groups"
+      ],
+      "protocolMappers": [
+        {
+          "name": "audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "ambient-frontend",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "consentRequired": false,
+          "config": {
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "email",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "email",
+            "claim.name": "email",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "preferred_username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "username",
+            "claim.name": "preferred_username",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "ambient-cli",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "redirectUris": [
+        "http://localhost/callback",
+        "http://127.0.0.1/callback"
+      ],
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "defaultClientScopes": [
+        "openid",
+        "email",
+        "profile",
+        "groups"
+      ],
+      "protocolMappers": [
+        {
+          "name": "audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "ambient-frontend",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "groups",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "groups",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "identityProviders": [
+    {
+      "alias": "redhat-sso",
+      "displayName": "Red Hat SSO",
+      "providerId": "oidc",
+      "enabled": true,
+      "trustEmail": true,
+      "storeToken": false,
+      "firstBrokerLoginFlowAlias": "first broker login",
+      "config": {
+        "clientId": "ambient-code",
+        "clientSecret": "CHANGE_ME",
+        "authorizationUrl": "https://auth.stage.redhat.com/auth/realms/EmployeeIDP/protocol/openid-connect/auth",
+        "tokenUrl": "https://auth.stage.redhat.com/auth/realms/EmployeeIDP/protocol/openid-connect/token",
+        "userInfoUrl": "https://auth.stage.redhat.com/auth/realms/EmployeeIDP/protocol/openid-connect/userinfo",
+        "jwksUrl": "https://auth.stage.redhat.com/auth/realms/EmployeeIDP/protocol/openid-connect/certs",
+        "issuer": "https://auth.stage.redhat.com/auth/realms/EmployeeIDP",
+        "defaultScope": "openid email profile",
+        "syncMode": "FORCE",
+        "useJwksUrl": "true",
+        "validateSignature": "true",
+        "pkceEnabled": "true",
+        "pkceMethod": "S256",
+        "isAccessTokenJWT": "true",
+        "forwardParameters": ""
+      }
+    }
+  ],
+  "identityProviderMappers": [
+    {
+      "name": "email",
+      "identityProviderAlias": "redhat-sso",
+      "identityProviderMapper": "oidc-user-attribute-idp-mapper",
+      "config": {
+        "claim": "email",
+        "user.attribute": "email",
+        "syncMode": "FORCE"
+      }
+    },
+    {
+      "name": "first-name",
+      "identityProviderAlias": "redhat-sso",
+      "identityProviderMapper": "oidc-user-attribute-idp-mapper",
+      "config": {
+        "claim": "given_name",
+        "user.attribute": "firstName",
+        "syncMode": "FORCE"
+      }
+    },
+    {
+      "name": "last-name",
+      "identityProviderAlias": "redhat-sso",
+      "identityProviderMapper": "oidc-user-attribute-idp-mapper",
+      "config": {
+        "claim": "family_name",
+        "user.attribute": "lastName",
+        "syncMode": "FORCE"
+      }
+    },
+    {
+      "name": "username",
+      "identityProviderAlias": "redhat-sso",
+      "identityProviderMapper": "oidc-username-idp-mapper",
+      "config": {
+        "template": "${CLAIM.preferred_username}",
+        "syncMode": "FORCE"
+      }
+    }
+  ]
+}

@@ -4,9 +4,9 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**ProjectId** | Pointer to **string** |  | [optional] 
-**GroupAccess** | Pointer to **string** |  | [optional] 
-**Repositories** | Pointer to **string** |  | [optional] 
+**ProjectId** | Pointer to **string** |  | [optional]
+**GroupAccess** | Pointer to **string** |  | [optional]
+**Repositories** | Pointer to **string** |  | [optional]
 
 ## Methods
 
@@ -104,5 +104,3 @@ HasRepositories returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
-
-

@@ -1,0 +1,16 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: ambient-api-server-route
+spec:
+  host: ambient-api-server-jsell-ambient-sso-poc.apps.rosa.hcmais01ue1.s9m2.p3.openshiftapps.com
+  to:
+    kind: Service
+    name: ambient-api-server
+    weight: 100
+  port:
+    targetPort: 8000
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None

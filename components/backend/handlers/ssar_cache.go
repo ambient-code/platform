@@ -40,9 +40,11 @@ var globalSSARCache = &ssarCache{
 }
 
 // ssarCacheKey builds a cache key from the request parameters.
-// The token is hashed so raw credentials are never stored.
-func ssarCacheKey(token, namespace, verb, group, resource string) string {
-	h := sha256.Sum256([]byte(token))
+// The identity parameter is hashed so raw credentials are never stored.
+// Under SSO, identity is the user's OIDC sub claim (unique per user).
+// Under legacy auth, identity is the raw bearer token.
+func ssarCacheKey(identity, namespace, verb, group, resource string) string {
+	h := sha256.Sum256([]byte(identity))
 	return fmt.Sprintf("%x:%s:%s:%s:%s", h[:8], namespace, verb, group, resource)
 }
 

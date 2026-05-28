@@ -242,10 +242,80 @@ jobs:
         echo "Checking services..."
         kubectl get svc -n ambient-code
 
-    - name: Run Cypress E2E tests
+    - name: Run Cypress E2E tests (legacy auth)
       working-directory: e2e
       run: ./scripts/run-tests.sh
 
+    - name: Toggle SSO auth mode
+      run: |
+        # Verify Keycloak is healthy before toggling (backend needs it for OIDC discovery)
+        echo "Verifying Keycloak is ready..."
+        kubectl wait --for=condition=available --timeout=60s deployment/keycloak -n ambient-code
+
+        # Enable SSO on frontend
+        kubectl set env deployment/frontend -n ambient-code SSO_ENABLED=true NEXT_PUBLIC_SSO_ENABLED=true
+
+        # Enable SSO feature flag in Unleash
+        UNLEASH_ADMIN_TOKEN=$(kubectl get secret unleash-credentials -n ambient-code -o jsonpath='{.data.admin-api-token}' | base64 -d)
+        kubectl port-forward -n ambient-code svc/unleash 4242:4242 &
+        PF=$!
+        sleep 3
+        # Create flag if it doesn't exist, then enable
+        curl -sf -X POST "http://localhost:4242/api/admin/projects/default/features" \
+          -H "Authorization: $UNLEASH_ADMIN_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{"name":"sso-authentication","type":"release"}' 2>/dev/null || true
+        curl -sf -X POST "http://localhost:4242/api/admin/projects/default/features/sso-authentication/environments/development/strategies" \
+          -H "Authorization: $UNLEASH_ADMIN_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{"name":"default","parameters":{}}' 2>/dev/null || true
+        curl -sf -X POST "http://localhost:4242/api/admin/projects/default/features/sso-authentication/environments/development/on" \
+          -H "Authorization: $UNLEASH_ADMIN_TOKEN" 2>/dev/null || true
+        kill $PF 2>/dev/null || true
+
+        # Wait for frontend rollout
+        kubectl rollout status deployment/frontend -n ambient-code --timeout=60s
+
+        # Restart backend to pick up flag change faster
+        kubectl rollout restart deployment/backend-api -n ambient-code
+        kubectl rollout status deployment/backend-api -n ambient-code --timeout=60s
+
+        # Verify backend JWT validator initialized (OIDC discovery reached Keycloak)
+        echo "Verifying backend SSO initialization..."
+        for i in $(seq 1 15); do
+          if kubectl logs -n ambient-code -l app=backend-api --tail=50 2>/dev/null | grep -q "SSO: JWT validator initialized"; then
+            echo "Backend JWT validator initialized"
+            break
+          fi
+          if [ "$i" -eq 15 ]; then
+            echo "WARNING: Backend JWT validator may not have initialized"
+            kubectl logs -n ambient-code -l app=backend-api --tail=20 | grep -i sso || true
+          fi
+          sleep 2
+        done
+
+    - name: Run Cypress E2E tests (SSO auth)
+      working-directory: e2e
+      env:
+        E2E_USE_SSO: "true"
+      run: |
+        # Re-extract token using Keycloak client_credentials
+        ./scripts/extract-token.sh
+        # Verify frontend is healthy after SSO toggle before running tests
+        echo "Waiting for frontend to be ready with SSO..."
+        for i in $(seq 1 30); do
+          if curl -sf -o /dev/null http://localhost/api/version 2>/dev/null; then
+            echo "Frontend ready"
+            break
+          fi
+          if [ "$i" -eq 30 ]; then
+            echo "Frontend not ready after 60s"
+            kubectl logs -n ambient-code -l app=frontend --tail=20 || true
+            exit 1
+          fi
+          sleep 2
+        done
+        ./scripts/run-tests.sh
 
     - name: Upload test results
       if: failure()

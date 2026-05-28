@@ -4,16 +4,16 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**Name** | Pointer to **string** |  | [optional] 
-**DisplayName** | Pointer to **string** |  | [optional] 
-**Description** | Pointer to **string** |  | [optional] 
-**Prompt** | Pointer to **string** | Update agent prompt (access controlled by RBAC) | [optional] 
-**RepoUrl** | Pointer to **string** |  | [optional] 
-**LlmModel** | Pointer to **string** |  | [optional] 
-**LlmTemperature** | Pointer to **float64** |  | [optional] 
-**LlmMaxTokens** | Pointer to **int32** |  | [optional] 
-**Labels** | Pointer to **string** |  | [optional] 
-**Annotations** | Pointer to **string** |  | [optional] 
+**Name** | Pointer to **string** |  | [optional]
+**DisplayName** | Pointer to **string** |  | [optional]
+**Description** | Pointer to **string** |  | [optional]
+**Prompt** | Pointer to **string** | Update agent prompt (access controlled by RBAC) | [optional]
+**RepoUrl** | Pointer to **string** |  | [optional]
+**LlmModel** | Pointer to **string** |  | [optional]
+**LlmTemperature** | Pointer to **float64** |  | [optional]
+**LlmMaxTokens** | Pointer to **int32** |  | [optional]
+**Labels** | Pointer to **string** |  | [optional]
+**Annotations** | Pointer to **string** |  | [optional]
 
 ## Methods
 
@@ -286,5 +286,3 @@ HasAnnotations returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
-
-
