@@ -39,18 +39,18 @@ spec:
         - --skip-auth-regex=^/metrics
         ports:
         - containerPort: 8443
-          name: ambient-ui-proxy
+          name: oauthproxy
         livenessProbe:
           httpGet:
             path: /oauth/healthz
-            port: ambient-ui-proxy
+            port: oauthproxy
             scheme: HTTP
           initialDelaySeconds: 30
           periodSeconds: 5
         readinessProbe:
           httpGet:
             path: /oauth/healthz
-            port: ambient-ui-proxy
+            port: oauthproxy
             scheme: HTTP
           initialDelaySeconds: 5
           periodSeconds: 5
