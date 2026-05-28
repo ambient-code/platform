@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-ui
+  labels:
+    app: ambient-ui
+spec:
+  selector:
+    matchLabels:
+      app: ambient-ui
+  template:
+    metadata:
+      labels:
+        app: ambient-ui
+    spec:
+      containers:
+      - name: ambient-ui
+        imagePullPolicy: Always
+        image: quay.io/ambient_code/vteam_ambient_ui:latest
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: API_SERVER_URL
+          value: "http://ambient-api-server:8000"
+        - name: NODE_ENV
+          value: "production"
+        - name: AUTH_MODE
+          value: "none"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - name: next-cache
+          mountPath: /app/.next/cache
+        - name: tmp
+          mountPath: /tmp
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: next-cache
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ambient-ui-service
+  labels:
+    app: ambient-ui
+spec:
+  selector:
+    app: ambient-ui
+  ports:
+  - port: 3000
+    targetPort: http
+    protocol: TCP
+    name: http
+  type: ClusterIP
