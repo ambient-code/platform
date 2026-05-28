@@ -44,6 +44,12 @@ spec:
               name: unleash-credentials
               key: client-api-token
               optional: true
+        - name: GITHUB_CALLBACK_URL
+          valueFrom:
+            configMapKeyRef:
+              name: frontend-config
+              key: github-callback-url
+              optional: true
         resources:
           requests:
             cpu: 100m

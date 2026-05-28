@@ -10,7 +10,7 @@ spec:
     name: ambient-ui-service
     weight: 100
   port:
-    targetPort: ambient-ui-proxy
+    targetPort: oauthproxy
   tls:
     termination: edge
     insecureEdgeTerminationPolicy: Redirect
