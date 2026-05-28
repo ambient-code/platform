@@ -1,4 +1,5 @@
 import { getIronSession, type SessionOptions } from "iron-session"
+import { randomBytes } from "crypto"
 import { cookies } from "next/headers"
 import { env } from "@/lib/env"
 
@@ -14,10 +15,8 @@ function getSessionOptions(): SessionOptions {
     if (env.AUTH_MODE === "native-sso") {
       throw new Error("SESSION_SECRET must be set when AUTH_MODE=native-sso")
     }
-    // Non-SSO modes don't use iron-session, but provide a safe default
-    // in case this function is called during module initialization
     return {
-      password: "dev-session-secret-must-be-at-least-32-chars-long",
+      password: randomBytes(32).toString("hex"),
       cookieName: "ambient-ui-session",
       cookieOptions: {
         secure: process.env.NODE_ENV === "production",
