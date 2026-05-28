@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-ui
+spec:
+  template:
+    spec:
+      containers:
+      - name: ambient-ui
+        env:
+        - name: API_SERVER_URL
+          value: "http://ambient-api-server:8000"
+        - name: NODE_ENV
+          value: "production"
+        - name: AUTH_MODE
+          value: "oauth-proxy"
+        resources:
+          requests:
+            memory: 512Mi
+            cpu: 200m
+          limits:
+            memory: 2Gi
+            cpu: 1000m
+      - name: oauth-proxy
+        image: quay.io/openshift/origin-oauth-proxy:4.14
+        args:
+        - --http-address=:8443
+        - --https-address=
+        - --provider=openshift
+        - --upstream=http://localhost:3000
+        - --client-id=ambient-ui
+        - --client-secret-file=/etc/oauth/config/client-secret
+        - --cookie-secret-file=/etc/oauth/config/cookie_secret
+        - --cookie-expire=23h0m0s
+        - --cookie-refresh=1h
+        - --pass-access-token
+        - --scope=user:full
+        - --openshift-delegate-urls={"/":{"resource":"projects","verb":"list"}}
+        - --skip-auth-regex=^/metrics
+        ports:
+        - containerPort: 8443
+          name: ambient-ui-proxy
+        livenessProbe:
+          httpGet:
+            path: /oauth/healthz
+            port: ambient-ui-proxy
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /oauth/healthz
+            port: ambient-ui-proxy
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 50m
+          limits:
+            memory: 512Mi
+            cpu: 200m
+        volumeMounts:
+        - mountPath: /etc/oauth/config
+          name: ambient-ui-oauth-config
+        - mountPath: /etc/tls/private
+          name: ambient-ui-proxy-tls
+      volumes:
+      - name: ambient-ui-oauth-config
+        secret:
+          secretName: ambient-ui-oauth-config
+      - name: ambient-ui-proxy-tls
+        secret:
+          secretName: ambient-ui-proxy-tls
