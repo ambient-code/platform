@@ -86,8 +86,8 @@ Legacy mode (when `SSO_ENABLED` is not set): the frontend falls back to forwardi
 ### Environment variables
 - `BACKEND_URL` (default: `http://localhost:8080/api`) — backend API for server-side routes
 - `FEEDBACK_URL` (optional) — feedback link in the masthead
-- `GITHUB_APP_SLUG` (required for GitHub integration) — GitHub App slug
-- `GITHUB_CALLBACK_URL` (optional) — explicit GitHub OAuth callback URL
+- `GITHUB_APP_SLUG` (required for GitHub integration) — GitHub App slug (e.g. `ambient-code`)
+- `GITHUB_CALLBACK_URL` (optional) — explicit callback URL for GitHub App OAuth. Used when multiple clusters share one GitHub App. Falls back to `<current origin>/api/auth/github/user/callback`. In production, set via `frontend-config` ConfigMap (key: `github-callback-url`).
 - `SSO_ISSUER_URL` — Keycloak OIDC issuer URL (e.g. `http://keycloak-service:8080/realms/ambient-code`)
 - `SSO_CLIENT_ID` — OIDC confidential client ID (e.g. `ambient-frontend`)
 - `SSO_CLIENT_SECRET` — OIDC client secret
