@@ -332,6 +332,10 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'components/ambient-ui/package-lock.json'
 
+      - name: Build ambient-sdk (file: dependency)
+        working-directory: components/ambient-sdk/ts-sdk
+        run: npm ci && npm run build
+
       - name: Install dependencies
         run: npm ci
 
