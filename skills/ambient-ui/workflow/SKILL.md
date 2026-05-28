@@ -27,6 +27,9 @@ the request.
 
 ### 2. Perform Test Driven Development
 
+Determine the size of the work. If it is large, break it down into smaller atomic units of work and execute
+this workflow for each one. You can use subagents to handle this gracefully, preserving your context.
+
 Define tests that are relevant and that, when they pass, provide a genuine trust
 that the system is properly implemented in a way that aligns with the spec and the user's intent.
 
@@ -242,6 +245,19 @@ After addressing review comments, loop back to step 3.
 If step 3 provides no actionable comments, proceed to the next step. Do not worry if you spend
 many cycles in this stage. Correctness is worth the effort.
 
-### 5. Complete
+### 5. Request User Feedback
 
-Your work is done. Ensure it's committed.
+Get the UI in a running state so that the user can provide feedback. There are two
+ways for you to do this:
+
+#### Running inside ambient
+
+If you are running within the ambient platform, you will have instructions
+for building images, and deploying to an OpenShift cluster. You should do this,
+create a route, and add the route to the relevant annotation (see your operating instructions.)
+
+#### Running locally
+
+If you are running locally, simply follow the local development setup, and provide
+the user with the URL to open in their browser to provide feedback. Let them know
+what to test and where to look.
