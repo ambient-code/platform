@@ -7,6 +7,6 @@ metadata:
 spec:
   ports:
   - port: 8443
-    targetPort: ambient-ui-proxy
+    targetPort: oauthproxy
     protocol: TCP
-    name: ambient-ui-proxy
+    name: oauthproxy
