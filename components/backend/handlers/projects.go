@@ -930,8 +930,10 @@ func checkUserCanAccessNamespace(userClient kubernetes.Interface, namespace stri
 	return checkUserCanViewProject(userClient, namespace)
 }
 
-// getUserSubjectFromContext extracts the user subject from the JWT token in the request
-// Returns subject in format like "user@example.com" or "system:serviceaccount:namespace:name"
+// getUserSubjectFromContext extracts the user subject from the JWT token in the request.
+// Returns subject in format like "user@example.com" or "system:serviceaccount:namespace:name".
+// The subject must match the identity used for K8s impersonation so that RoleBindings
+// created here are effective for subsequent RBAC checks.
 func getUserSubjectFromContext(c *gin.Context) (string, error) {
 	// Try to extract from ServiceAccount first
 	ns, saName, ok := ExtractServiceAccountFromAuth(c)
@@ -939,9 +941,19 @@ func getUserSubjectFromContext(c *gin.Context) (string, error) {
 		return fmt.Sprintf("system:serviceaccount:%s:%s", ns, saName), nil
 	}
 
-	// Otherwise try to get from context (set by middleware)
+	// Must match the order in buildImpersonatingClients (sso.go):
+	// preferred_username > email > sub. If these diverge, RoleBindings
+	// created here won't match the impersonated identity.
 	if userName, exists := c.Get("userName"); exists && userName != nil {
-		return fmt.Sprintf("%v", userName), nil
+		if s := fmt.Sprintf("%v", userName); s != "" {
+			return s, nil
+		}
+	}
+	if email := c.GetString("userEmail"); email != "" {
+		return email, nil
+	}
+	if userIDOrig := c.GetString("userIDOriginal"); userIDOrig != "" {
+		return userIDOrig, nil
 	}
 	if userID, exists := c.Get("userID"); exists && userID != nil {
 		return fmt.Sprintf("%v", userID), nil

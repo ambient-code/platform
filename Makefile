@@ -3,7 +3,7 @@
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
 .PHONY: local-test local-test-dev local-test-quick test-all local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-backend kind-reload-frontend kind-reload-operator kind-status kind-login
+.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-backend kind-reload-frontend kind-reload-operator kind-status kind-login kind-sso-toggle
 .PHONY: preflight-cluster preflight dev-env dev
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: unleash-port-forward unleash-status
@@ -1099,6 +1099,42 @@ kind-reload-operator: check-kind check-kubectl check-local-context ## Rebuild an
 	@kubectl rollout restart deployment/agentic-operator -n $(NAMESPACE) $(QUIET_REDIRECT)
 	@kubectl rollout status deployment/agentic-operator -n $(NAMESPACE) --timeout=60s
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Operator reloaded"
+
+kind-sso-toggle: check-kubectl ## Toggle SSO auth on/off in Kind (affects both frontend and backend)
+	@UNLEASH_ADMIN_TOKEN=$$(kubectl get secret unleash-credentials -n $(NAMESPACE) -o jsonpath='{.data.admin-api-token}' | base64 -d); \
+	CURRENT=$$(kubectl get deployment frontend -n $(NAMESPACE) -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="SSO_ENABLED")].value}' 2>/dev/null); \
+	if [ "$$CURRENT" = "true" ]; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Disabling SSO auth (switching to legacy mode)..."; \
+		kubectl set env deployment/frontend -n $(NAMESPACE) SSO_ENABLED=false NEXT_PUBLIC_SSO_ENABLED=false; \
+		kubectl port-forward -n $(NAMESPACE) svc/unleash 4242:4242 >/dev/null 2>&1 & PF=$$!; sleep 2; \
+		curl -sf -X POST "http://localhost:4242/api/admin/projects/default/features/sso-authentication/environments/development/off" \
+			-H "Authorization: $$UNLEASH_ADMIN_TOKEN" >/dev/null 2>&1 || true; \
+		kill $$PF 2>/dev/null; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) SSO disabled. Frontend will use OC_TOKEN/OAuth proxy headers."; \
+	else \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Enabling SSO auth (switching to Keycloak OIDC)..."; \
+		SSO_HOST="http://localhost:$(KIND_FWD_FRONTEND_PORT)"; \
+		kubectl set env deployment/frontend -n $(NAMESPACE) \
+			SSO_ENABLED=true NEXT_PUBLIC_SSO_ENABLED=true \
+			SSO_REDIRECT_URI="$$SSO_HOST/api/auth/sso/callback" \
+			SSO_PUBLIC_ISSUER_URL="$$SSO_HOST/sso/realms/ambient-code"; \
+		kubectl set env deployment/backend-api -n $(NAMESPACE) \
+			SSO_PUBLIC_ISSUER_URL="$$SSO_HOST/sso/realms/ambient-code"; \
+		kubectl set env deployment/keycloak -n $(NAMESPACE) \
+			KC_HOSTNAME="$$SSO_HOST/sso"; \
+		kubectl port-forward -n $(NAMESPACE) svc/unleash 4242:4242 >/dev/null 2>&1 & PF=$$!; sleep 2; \
+		curl -sf -X POST "http://localhost:4242/api/admin/projects/default/features/sso-authentication/environments/development/on" \
+			-H "Authorization: $$UNLEASH_ADMIN_TOKEN" >/dev/null 2>&1 || true; \
+		kill $$PF 2>/dev/null; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) SSO enabled at $$SSO_HOST"; \
+	fi
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for rollouts..."
+	@kubectl rollout status deployment/keycloak -n $(NAMESPACE) --timeout=120s >/dev/null 2>&1 || true
+	@kubectl rollout status deployment/frontend -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1
+	@# Restart backend after Keycloak is ready (OIDC discovery needs Keycloak)
+	@kubectl rollout restart deployment/backend-api -n $(NAMESPACE) >/dev/null 2>&1 || true
+	@kubectl rollout status deployment/backend-api -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1 || true
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Done. Restart port-forwards if needed: make kind-port-forward"
 
 kind-status: check-kind ## Show all kind clusters and their port assignments
 	@echo "$(COLOR_BOLD)Kind Cluster Status$(COLOR_RESET)"

@@ -30,9 +30,7 @@ _credential_expiry: dict[str, float] = {}
 # How many seconds before expiry to trigger a proactive refresh.
 _EXPIRY_BUFFER_SEC = 5 * 60
 
-_GOOGLE_WORKSPACE_CREDS_DIR = Path(
-    "/workspace/.google_workspace_mcp/credentials"
-)
+_GOOGLE_WORKSPACE_CREDS_DIR = Path("/workspace/.google_workspace_mcp/credentials")
 
 _GOOGLE_WORKSPACE_LEGACY_CREDS_FILE = _GOOGLE_WORKSPACE_CREDS_DIR / "credentials.json"
 
@@ -500,13 +498,21 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
                 else:
                     creds_filename = "credentials.json"
                 creds_file = _GOOGLE_WORKSPACE_CREDS_DIR / creds_filename
-                if _GOOGLE_WORKSPACE_LEGACY_CREDS_FILE.exists() and creds_filename != "credentials.json":
+                if (
+                    _GOOGLE_WORKSPACE_LEGACY_CREDS_FILE.exists()
+                    and creds_filename != "credentials.json"
+                ):
                     _GOOGLE_WORKSPACE_LEGACY_CREDS_FILE.unlink(missing_ok=True)
-                    logger.info("Removed legacy credentials.json in favor of %s", creds_filename)
+                    logger.info(
+                        "Removed legacy credentials.json in favor of %s", creds_filename
+                    )
                 with open(creds_file, "w") as f:
                     _json.dump(creds_data, f, indent=2)
                 creds_file.chmod(0o600)
-                logger.info("Updated Google credentials file for workspace-mcp: %s", creds_filename)
+                logger.info(
+                    "Updated Google credentials file for workspace-mcp: %s",
+                    creds_filename,
+                )
             else:
                 sa_json = google_creds["token"]
                 gac_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")

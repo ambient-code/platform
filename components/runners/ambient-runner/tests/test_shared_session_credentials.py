@@ -675,6 +675,7 @@ class TestPopulateCredentialsResponseFormats:
             server.server_close()
             thread.join(timeout=2)
             import shutil
+
             shutil.rmtree(tmp_creds_dir, ignore_errors=True)
             clear_runtime_credentials()
 

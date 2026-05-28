@@ -2,7 +2,25 @@
  * React Query client configuration
  */
 
-import { QueryClient, DefaultOptions } from '@tanstack/react-query';
+import { QueryClient, DefaultOptions, QueryCache, MutationCache } from '@tanstack/react-query';
+import { ApiClientError } from '@/types/api/common';
+
+let sessionExpiredCallback: (() => void) | null = null;
+
+export function onSessionExpired(cb: () => void) {
+  sessionExpiredCallback = cb;
+}
+
+function handleError(error: unknown) {
+  if (error instanceof ApiClientError && error.code === '401') {
+    sessionExpiredCallback?.();
+  }
+}
+
+function shouldRetry(failureCount: number, error: unknown): boolean {
+  if (error instanceof ApiClientError && error.code === '401') return false;
+  return failureCount < 1;
+}
 
 const queryConfig: DefaultOptions = {
   queries: {
@@ -12,8 +30,7 @@ const queryConfig: DefaultOptions = {
     // Cache time: 10 minutes - unused data is garbage collected after 10 minutes
     gcTime: 10 * 60 * 1000,
 
-    // Retry failed requests once
-    retry: 1,
+    retry: shouldRetry,
 
     // Retry delay with exponential backoff
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
@@ -25,8 +42,7 @@ const queryConfig: DefaultOptions = {
     refetchOnMount: false,
   },
   mutations: {
-    // Retry mutations once
-    retry: 1,
+    retry: shouldRetry,
   },
 };
 
@@ -37,6 +53,8 @@ const queryConfig: DefaultOptions = {
 export function makeQueryClient() {
   return new QueryClient({
     defaultOptions: queryConfig,
+    queryCache: new QueryCache({ onError: handleError }),
+    mutationCache: new MutationCache({ onError: handleError }),
   });
 }
 
