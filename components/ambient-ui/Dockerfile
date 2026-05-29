@@ -5,8 +5,10 @@ WORKDIR /app
 
 USER 0
 
-# Copy SDK dependency first (it's a file: dependency in package.json)
-COPY ambient-sdk/ts-sdk ./ambient-sdk/ts-sdk
+# Copy and build SDK dependency. package.json references file:../ambient-sdk/ts-sdk
+# which resolves to /ambient-sdk/ts-sdk from WORKDIR /app.
+COPY ambient-sdk/ts-sdk /ambient-sdk/ts-sdk
+RUN cd /ambient-sdk/ts-sdk && npm install --ignore-scripts && npm run build
 
 # Copy ambient-ui package files
 COPY ambient-ui/package.json ambient-ui/package-lock.json* ./
@@ -21,9 +23,9 @@ USER 0
 
 WORKDIR /app
 
-# Copy node_modules from deps stage
+# Copy node_modules and SDK from deps stage
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/ambient-sdk ./ambient-sdk
+COPY --from=deps /ambient-sdk /ambient-sdk
 COPY ambient-ui/ .
 
 # Next.js collects completely anonymous telemetry data about general usage.
