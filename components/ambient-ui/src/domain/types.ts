@@ -45,3 +45,31 @@ export type ListParams = {
   search?: string
   orderBy?: string
 }
+
+export type DomainSessionMessage = {
+  id: string
+  sessionId: string
+  eventType: string
+  payload: string
+  seq: number
+  createdAt: string
+}
+
+export type FeedbackItem = {
+  id: string
+  type: 'element' | 'region'
+  comment: string
+  position: { x: number; y: number }
+  dimensions?: { width: number; height: number }
+  capturedHtml?: string
+  viewportWidth: number
+  viewportHeight: number
+  deviceSize: string
+  timestamp: string
+}
+
+export type FeedbackBatch = {
+  items: FeedbackItem[]
+  sessionId: string
+  previewUrl: string
+}
