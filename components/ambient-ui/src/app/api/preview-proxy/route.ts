@@ -32,9 +32,16 @@ export async function GET(request: Request): Promise<Response> {
 
   const parsedUrl = validation.parsed
 
+  // SSRF guard: only fetch URLs that passed allowlist validation above.
+  // Re-check protocol as defense-in-depth for static analysis (CodeQL).
+  const targetUrl = parsedUrl.toString()
+  if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
+    return Response.json({ error: "Invalid protocol" }, { status: 403 })
+  }
+
   let upstream: Response
   try {
-    upstream = await fetch(parsedUrl.toString(), {
+    upstream = await fetch(targetUrl, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         Accept:

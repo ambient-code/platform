@@ -14,7 +14,7 @@ function formatFeedbackPayload(batch: FeedbackBatch): string {
 }
 
 function sanitizeForPayload(value: string): string {
-  return value.replace(/`/g, '\\`').replace(/\r?\n/g, ' ')
+  return value.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\r?\n/g, ' ')
 }
 
 function formatFeedbackItem(item: FeedbackItem, index: number): string {
