@@ -68,13 +68,6 @@ patches:
     kind: Service
     name: ambient-ui-service
     version: v1
-- path: frontend-github-callback-patch.yaml
-  target:
-    group: apps
-    kind: Deployment
-    name: frontend
-    version: v1
-
 # Production images
 images:
 - name: quay.io/ambient_code/vteam_api_server:latest
