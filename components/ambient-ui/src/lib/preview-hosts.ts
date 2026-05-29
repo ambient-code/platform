@@ -73,6 +73,12 @@ export function isAllowedPreviewHost(url: string): boolean {
     if (!pattern.includes(':')) {
       return matchesGlobPattern(hostnameOnly, pattern)
     }
+    // If the pattern has a port wildcard (e.g. localhost:*) and the URL has
+    // no port, try matching hostname-only against the part before the colon
+    if (pattern.endsWith(':*')) {
+      const patternHost = pattern.slice(0, -2)
+      return matchesGlobPattern(hostnameOnly, patternHost)
+    }
     return false
   })
 }

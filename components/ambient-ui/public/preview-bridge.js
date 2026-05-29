@@ -14,16 +14,22 @@
 
   var currentHighlight = null;
 
+  function getClassName(el) {
+    // SVG elements have SVGAnimatedString for className, not a plain string
+    return el.getAttribute('class') || null;
+  }
+
   // Element capture: parent asks for the element at (x, y)
   window.addEventListener('message', function (e) {
     if (!e.data || e.data.type !== 'ambient-capture') return;
+    if (!e.origin || e.origin === 'null') return;
 
     var x = e.data.x;
     var y = e.data.y;
     var el = document.elementFromPoint(x, y);
 
     if (!el) {
-      e.source.postMessage({ type: 'ambient-captured', html: null, rect: null }, '*');
+      e.source.postMessage({ type: 'ambient-captured', html: null, rect: null }, e.origin);
       return;
     }
 
@@ -33,15 +39,16 @@
       html: el.outerHTML.slice(0, 500),
       tagName: el.tagName.toLowerCase(),
       id: el.id || null,
-      className: el.className || null,
+      className: getClassName(el),
       textContent: (el.textContent || '').slice(0, 100),
       rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
-    }, '*');
+    }, e.origin);
   });
 
   // Hover highlight: parent sends cursor position, bridge outlines the element
   window.addEventListener('message', function (e) {
     if (!e.data || e.data.type !== 'ambient-hover') return;
+    if (!e.origin || e.origin === 'null') return;
 
     var el = document.elementFromPoint(e.data.x, e.data.y);
 
@@ -63,7 +70,7 @@
       e.source.postMessage({
         type: 'ambient-hovered',
         rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
-      }, '*');
+      }, e.origin);
     }
   });
 

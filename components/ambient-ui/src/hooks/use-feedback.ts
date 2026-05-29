@@ -44,11 +44,9 @@ export function useFeedback(): UseFeedbackReturn {
   }, [])
 
   const markAsSent = useCallback(() => {
-    setPendingItems((prev) => {
-      setSentItems((sent) => [...sent, ...prev])
-      return []
-    })
-  }, [])
+    setSentItems((sent) => [...sent, ...pendingItems])
+    setPendingItems([])
+  }, [pendingItems])
 
   const clearPending = useCallback(() => {
     setPendingItems([])
