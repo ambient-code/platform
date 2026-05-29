@@ -20,6 +20,7 @@ resources:
 - operator-config-openshift.yaml
 - ldap-config.yaml
 - frontend-hpa.yaml
+- ambient-ui-route.yaml
 
 components:
 - ../../components/oauth-proxy
@@ -56,7 +57,17 @@ patches:
     kind: PersistentVolumeClaim
     name: minio-data
     version: v1
-
+- path: ambient-ui-oauth-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ambient-ui
+    version: v1
+- path: ambient-ui-service-patch.yaml
+  target:
+    kind: Service
+    name: ambient-ui-service
+    version: v1
 # Production images
 images:
 - name: quay.io/ambient_code/vteam_api_server:latest
@@ -103,4 +114,10 @@ images:
   newTag: latest
 - name: ghcr.io/ambient-code/observability:latest
   newName: ghcr.io/ambient-code/observability
+  newTag: latest
+- name: quay.io/ambient_code/vteam_ambient_ui
+  newName: quay.io/ambient_code/vteam_ambient_ui
+  newTag: latest
+- name: quay.io/ambient_code/vteam_ambient_ui:latest
+  newName: quay.io/ambient_code/vteam_ambient_ui
   newTag: latest

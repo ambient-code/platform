@@ -1,9 +1,9 @@
-.PHONY: help setup build-all build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-cli deploy clean check-architecture
+.PHONY: help setup build-all build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-cli build-ambient-ui deploy clean check-architecture
 .PHONY: local-down local-status local-reload-api-server local-up local-clean local-rebuild local-reload-backend local-reload-frontend local-reload-operator
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
 .PHONY: local-test local-test-dev local-test-quick test-all local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-backend kind-reload-frontend kind-reload-operator kind-status kind-login
+.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-backend kind-reload-frontend kind-reload-operator kind-reload-ambient-ui kind-status kind-login kind-sso-toggle
 .PHONY: preflight-cluster preflight dev-env dev
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: unleash-port-forward unleash-status
@@ -72,6 +72,7 @@ GITHUB_MCP_IMAGE ?= vteam_credential_github:$(IMAGE_TAG)
 JIRA_MCP_IMAGE ?= vteam_credential_jira:$(IMAGE_TAG)
 K8S_MCP_IMAGE ?= vteam_credential_k8s:$(IMAGE_TAG)
 GOOGLE_MCP_IMAGE ?= vteam_credential_google:$(IMAGE_TAG)
+AMBIENT_UI_IMAGE ?= vteam_ambient_ui:$(IMAGE_TAG)
 
 # kind-local overlay always references localhost/vteam_* images.
 # Podman produces this prefix natively; for Docker we tag before loading.
@@ -168,7 +169,7 @@ help: ## Display this help message
 
 ##@ Building
 
-build-all: build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-api-server build-observability-dashboard ## Build all container images
+build-all: build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-api-server build-observability-dashboard build-ambient-ui ## Build all container images
 
 build-frontend: ## Build frontend image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building frontend with $(CONTAINER_ENGINE)..."
@@ -176,6 +177,14 @@ build-frontend: ## Build frontend image
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(FRONTEND_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Frontend built: $(FRONTEND_IMAGE)"
+
+build-ambient-ui: ## Build ambient-ui image
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building ambient-ui with $(CONTAINER_ENGINE)..."
+	@cd components && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-f ambient-ui/Dockerfile \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		-t $(AMBIENT_UI_IMAGE) .
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Ambient UI built: $(AMBIENT_UI_IMAGE)"
 
 build-backend: ## Build backend image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building backend with $(CONTAINER_ENGINE)..."
@@ -1085,6 +1094,22 @@ kind-reload-frontend: check-kind check-kubectl check-local-context ## Rebuild an
 	@kubectl rollout status deployment/frontend -n $(NAMESPACE) --timeout=60s
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Frontend reloaded"
 
+kind-reload-ambient-ui: check-kind check-kubectl check-local-context ## Rebuild and reload ambient-ui only (kind)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding ambient-ui..."
+	@cd components && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) \
+		-f ambient-ui/Dockerfile \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		-t $(AMBIENT_UI_IMAGE) . $(QUIET_REDIRECT)
+	@$(CONTAINER_ENGINE) tag $(AMBIENT_UI_IMAGE) localhost/$(AMBIENT_UI_IMAGE) 2>/dev/null || true
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading image into kind cluster ($(KIND_CLUSTER_NAME))..."
+	@$(CONTAINER_ENGINE) save localhost/$(AMBIENT_UI_IMAGE) | \
+		$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
+		ctr --namespace=k8s.io images import -
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting ambient-ui..."
+	@kubectl rollout restart deployment/ambient-ui -n $(NAMESPACE) $(QUIET_REDIRECT)
+	@kubectl rollout status deployment/ambient-ui -n $(NAMESPACE) --timeout=60s
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Ambient UI reloaded"
+
 kind-reload-operator: check-kind check-kubectl check-local-context ## Rebuild and reload operator only (kind)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding operator..."
 	@cd components/operator && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) \
@@ -1099,6 +1124,42 @@ kind-reload-operator: check-kind check-kubectl check-local-context ## Rebuild an
 	@kubectl rollout restart deployment/agentic-operator -n $(NAMESPACE) $(QUIET_REDIRECT)
 	@kubectl rollout status deployment/agentic-operator -n $(NAMESPACE) --timeout=60s
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Operator reloaded"
+
+kind-sso-toggle: check-kubectl ## Toggle SSO auth on/off in Kind (affects both frontend and backend)
+	@UNLEASH_ADMIN_TOKEN=$$(kubectl get secret unleash-credentials -n $(NAMESPACE) -o jsonpath='{.data.admin-api-token}' | base64 -d); \
+	CURRENT=$$(kubectl get deployment frontend -n $(NAMESPACE) -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="SSO_ENABLED")].value}' 2>/dev/null); \
+	if [ "$$CURRENT" = "true" ]; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Disabling SSO auth (switching to legacy mode)..."; \
+		kubectl set env deployment/frontend -n $(NAMESPACE) SSO_ENABLED=false NEXT_PUBLIC_SSO_ENABLED=false; \
+		kubectl port-forward -n $(NAMESPACE) svc/unleash 4242:4242 >/dev/null 2>&1 & PF=$$!; sleep 2; \
+		curl -sf -X POST "http://localhost:4242/api/admin/projects/default/features/sso-authentication/environments/development/off" \
+			-H "Authorization: $$UNLEASH_ADMIN_TOKEN" >/dev/null 2>&1 || true; \
+		kill $$PF 2>/dev/null; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) SSO disabled. Frontend will use OC_TOKEN/OAuth proxy headers."; \
+	else \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Enabling SSO auth (switching to Keycloak OIDC)..."; \
+		SSO_HOST="http://localhost:$(KIND_FWD_FRONTEND_PORT)"; \
+		kubectl set env deployment/frontend -n $(NAMESPACE) \
+			SSO_ENABLED=true NEXT_PUBLIC_SSO_ENABLED=true \
+			SSO_REDIRECT_URI="$$SSO_HOST/api/auth/sso/callback" \
+			SSO_PUBLIC_ISSUER_URL="$$SSO_HOST/sso/realms/ambient-code"; \
+		kubectl set env deployment/backend-api -n $(NAMESPACE) \
+			SSO_PUBLIC_ISSUER_URL="$$SSO_HOST/sso/realms/ambient-code"; \
+		kubectl set env deployment/keycloak -n $(NAMESPACE) \
+			KC_HOSTNAME="$$SSO_HOST/sso"; \
+		kubectl port-forward -n $(NAMESPACE) svc/unleash 4242:4242 >/dev/null 2>&1 & PF=$$!; sleep 2; \
+		curl -sf -X POST "http://localhost:4242/api/admin/projects/default/features/sso-authentication/environments/development/on" \
+			-H "Authorization: $$UNLEASH_ADMIN_TOKEN" >/dev/null 2>&1 || true; \
+		kill $$PF 2>/dev/null; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) SSO enabled at $$SSO_HOST"; \
+	fi
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for rollouts..."
+	@kubectl rollout status deployment/keycloak -n $(NAMESPACE) --timeout=120s >/dev/null 2>&1 || true
+	@kubectl rollout status deployment/frontend -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1
+	@# Restart backend after Keycloak is ready (OIDC discovery needs Keycloak)
+	@kubectl rollout restart deployment/backend-api -n $(NAMESPACE) >/dev/null 2>&1 || true
+	@kubectl rollout status deployment/backend-api -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1 || true
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Done. Restart port-forwards if needed: make kind-port-forward"
 
 kind-status: check-kind ## Show all kind clusters and their port assignments
 	@echo "$(COLOR_BOLD)Kind Cluster Status$(COLOR_RESET)"
@@ -1264,7 +1325,7 @@ check-architecture: ## Validate build architecture matches host
 
 _kind-load-images: ## Internal: Load images into kind cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading images into kind ($(KIND_CLUSTER_NAME))..."
-	@for img in $(BACKEND_IMAGE) $(FRONTEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE) $(API_SERVER_IMAGE) $(OBSERVABILITY_DASHBOARD_IMAGE); do \
+	@for img in $(BACKEND_IMAGE) $(FRONTEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE) $(API_SERVER_IMAGE) $(OBSERVABILITY_DASHBOARD_IMAGE) $(AMBIENT_UI_IMAGE); do \
 		echo "  Loading $(KIND_IMAGE_PREFIX)$$img..."; \
 		if [ -n "$(KIND_HOST)" ] || [ "$(CONTAINER_ENGINE)" = "podman" ]; then \
 			$(CONTAINER_ENGINE) save $(KIND_IMAGE_PREFIX)$$img | \

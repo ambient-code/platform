@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-api-server
+spec:
+  template:
+    spec:
+      containers:
+        - name: api-server
+          env:
+            - name: AMBIENT_ENV
+              value: production
+            - name: BACKEND_URL
+              value: "http://backend-service.jsell-ambient-sso-poc.svc:8080"
+            - name: JWK_CERT_URL
+              value: "https://keycloak-ambient-keycloak.apps.rosa.hcmais01ue1.s9m2.p3.openshiftapps.com/realms/ambient-code/protocol/openid-connect/certs"

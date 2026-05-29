@@ -83,6 +83,7 @@ specs/
 | `sessions/` | Lifecycle, initialization, status, messages, events |
 | `agents/` | Agent model, runtime registry, prompts, runners |
 | `control-plane/` | Reconciliation, operator, scheduling |
+| `ambient-ui/` | Operations console: fleet monitoring, annotation-driven UI, live preview, credentials |
 | `frontend/` | UI rendering, session views, markdown, navigation |
 | `integrations/` | MCP, Gerrit, external services |
 | `security/` | Identity boundaries, credential authorization, per-session isolation |
