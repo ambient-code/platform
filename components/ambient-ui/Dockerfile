@@ -5,9 +5,10 @@ WORKDIR /app
 
 USER 0
 
-# Copy SDK dependency where package.json's file:../ambient-sdk/ts-sdk expects it.
-# From WORKDIR /app, "../ambient-sdk/ts-sdk" resolves to /ambient-sdk/ts-sdk.
+# Copy and build SDK dependency. package.json references file:../ambient-sdk/ts-sdk
+# which resolves to /ambient-sdk/ts-sdk from WORKDIR /app.
 COPY ambient-sdk/ts-sdk /ambient-sdk/ts-sdk
+RUN cd /ambient-sdk/ts-sdk && npm install --ignore-scripts && npm run build
 
 # Copy ambient-ui package files
 COPY ambient-ui/package.json ambient-ui/package-lock.json* ./
