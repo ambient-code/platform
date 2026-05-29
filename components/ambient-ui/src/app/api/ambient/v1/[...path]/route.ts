@@ -15,8 +15,7 @@ async function proxyRequest(
     return Response.json({ error: "invalid_path" }, { status: 400 })
   }
   const pathStr = path.map(s => encodeURIComponent(s)).join("/")
-  // SDK uses /api/ambient/v1, server uses /api/adp/v1
-  const url = new URL(`/api/adp/v1/${pathStr}`, API_SERVER_URL)
+  const url = new URL(`/api/ambient/v1/${pathStr}`, API_SERVER_URL)
   url.search = new URL(request.url).search
 
   const accessToken = await resolveAccessToken(request)
