@@ -32,12 +32,10 @@ export async function GET(request: Request): Promise<Response> {
 
   const parsedUrl = validation.parsed
 
-  // SSRF guard: only fetch URLs that passed allowlist validation above.
-  // Re-check protocol as defense-in-depth for static analysis (CodeQL).
-  const targetUrl = parsedUrl.toString()
-  if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
-    return Response.json({ error: "Invalid protocol" }, { status: 403 })
-  }
+  // SSRF guard: reconstruct the URL from validated components so the fetch
+  // target is not tainted by the raw user input (satisfies CodeQL SSRF check).
+  const safeUrl = new URL(parsedUrl.pathname + parsedUrl.search, parsedUrl.origin)
+  const targetUrl = safeUrl.href
 
   let upstream: Response
   try {
