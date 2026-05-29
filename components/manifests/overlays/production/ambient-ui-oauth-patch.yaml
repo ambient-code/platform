@@ -28,7 +28,7 @@ spec:
         - --https-address=
         - --provider=openshift
         - --upstream=http://localhost:3000
-        - --client-id=ambient-ui
+        - --client-id=ambient-frontend
         - --client-secret-file=/etc/oauth/config/client-secret
         - --cookie-secret-file=/etc/oauth/config/cookie_secret
         - --cookie-expire=23h0m0s
