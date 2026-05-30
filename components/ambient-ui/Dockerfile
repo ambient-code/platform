@@ -36,8 +36,11 @@ RUN npm run build
 
 # Prepare standalone output with OpenShift-compatible permissions in the builder
 # (the hardened runner image is distroless — no shell or chmod available)
+# outputFileTracingRoot is set to ../.. (monorepo root), so standalone output
+# nests files under components/ambient-ui/ within .next/standalone/
 RUN mkdir -p /app-output/public /app-output/.next/static && \
-    cp -r .next/standalone/. /app-output/ && \
+    cp -r .next/standalone/components/ambient-ui/. /app-output/ && \
+    cp -r .next/standalone/node_modules /app-output/node_modules 2>/dev/null || true && \
     cp -r .next/static/. /app-output/.next/static/ && \
     cp -r public/. /app-output/public/ && \
     chmod -R g=u /app-output && \
