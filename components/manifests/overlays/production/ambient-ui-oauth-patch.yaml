@@ -9,7 +9,9 @@ spec:
       - name: ambient-ui
         env:
         - name: API_SERVER_URL
-          value: "http://ambient-api-server:8000"
+          value: "https://ambient-api-server:8000"
+        - name: NODE_TLS_REJECT_UNAUTHORIZED
+          value: "0"
         - name: NODE_ENV
           value: "production"
         - name: AUTH_MODE
@@ -61,6 +63,12 @@ spec:
           limits:
             memory: 512Mi
             cpu: 200m
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: true
         volumeMounts:
         - mountPath: /etc/oauth/config
           name: ambient-ui-oauth-config
