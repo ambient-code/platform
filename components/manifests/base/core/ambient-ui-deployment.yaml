@@ -13,6 +13,7 @@ spec:
       labels:
         app: ambient-ui
     spec:
+      serviceAccountName: ambient-ui
       containers:
       - name: ambient-ui
         imagePullPolicy: Always
@@ -47,13 +48,13 @@ spec:
           mountPath: /tmp
         livenessProbe:
           httpGet:
-            path: /
+            path: /api/healthz
             port: http
-          initialDelaySeconds: 30
+          initialDelaySeconds: 10
           periodSeconds: 10
         readinessProbe:
           httpGet:
-            path: /
+            path: /api/healthz
             port: http
           initialDelaySeconds: 5
           periodSeconds: 5
@@ -62,6 +63,11 @@ spec:
         emptyDir: {}
       - name: tmp
         emptyDir: {}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ambient-ui
 ---
 apiVersion: v1
 kind: Service
