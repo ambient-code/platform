@@ -78,23 +78,10 @@ export async function resolveAccessToken(request: Request): Promise<string | und
     }
 
     case "oauth-proxy": {
-      const trustedIps = env.OAUTH_PROXY_TRUSTED_IPS
-      if (!trustedIps) {
-        console.warn("AUTH_MODE=oauth-proxy but OAUTH_PROXY_TRUSTED_IPS is not set; fail-closed")
-        return undefined
-      }
-
-      const clientIp = getClientIp(request)
-      if (!clientIp) {
-        console.warn("oauth-proxy: no client IP found in request headers; fail-closed")
-        return undefined
-      }
-
-      if (!isTrustedIp(clientIp, trustedIps)) {
-        console.warn(`oauth-proxy: client IP ${clientIp} is not in trusted CIDR list; fail-closed`)
-        return undefined
-      }
-
+      // In sidecar mode, the oauth-proxy runs in the same pod and is the only
+      // process that can reach port 3000 (not exposed via Service). The
+      // X-Forwarded-For header contains the end-user's IP from the ingress
+      // router, not the proxy's IP, so IP-based trust checks are not meaningful.
       const token = request.headers.get("x-forwarded-access-token")?.trim()
       return token || undefined
     }
