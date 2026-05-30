@@ -16,5 +16,4 @@ export const env = {
   SSO_CLIENT_SECRET: getOptionalEnv('SSO_CLIENT_SECRET'),
   SSO_REDIRECT_URI: getOptionalEnv('SSO_REDIRECT_URI'),
   SESSION_SECRET: getOptionalEnv('SESSION_SECRET'),
-  OAUTH_PROXY_TRUSTED_IPS: getOptionalEnv('OAUTH_PROXY_TRUSTED_IPS'),
 } as const

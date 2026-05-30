@@ -21,6 +21,7 @@ resources:
 - ldap-config.yaml
 - frontend-hpa.yaml
 - ambient-ui-route.yaml
+- ambient-ui-rbac.yaml
 
 components:
 - ../../components/oauth-proxy
