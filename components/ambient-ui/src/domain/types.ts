@@ -47,6 +47,8 @@ export type ListParams = {
 }
 
 export type SessionEventType =
+  | 'user'
+  | 'assistant'
   | 'text'
   | 'tool_use'
   | 'tool_result'

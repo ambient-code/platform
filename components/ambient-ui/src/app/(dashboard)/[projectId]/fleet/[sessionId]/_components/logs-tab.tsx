@@ -11,6 +11,8 @@ import { cn } from '@/lib/utils'
 import { EventTypeBadge } from './event-type-badge'
 
 const ALL_EVENT_TYPES: SessionEventType[] = [
+  'user',
+  'assistant',
   'text',
   'tool_use',
   'tool_result',
@@ -21,6 +23,8 @@ const ALL_EVENT_TYPES: SessionEventType[] = [
 ]
 
 const EVENT_TYPE_LABELS: Record<SessionEventType, string> = {
+  user: 'User',
+  assistant: 'Assistant',
   text: 'Text',
   tool_use: 'Tool Call',
   tool_result: 'Tool Result',

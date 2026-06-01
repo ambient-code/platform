@@ -8,6 +8,14 @@ type EventBadgeConfig = {
 }
 
 const EVENT_BADGE_CONFIG: Record<SessionEventType, EventBadgeConfig> = {
+  user: {
+    label: 'User',
+    className: 'bg-[#e0f0ff] text-[#003366] border-[#b9dafc]',
+  },
+  assistant: {
+    label: 'Assistant',
+    className: 'bg-[#ece6ff] text-[#21134d] border-[#d0c5f4]',
+  },
   text: {
     label: 'Text',
     className: 'bg-[#e0e0e0] text-[#383838] border-[#c7c7c7]',
