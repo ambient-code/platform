@@ -25,59 +25,52 @@ export function NavHeader({ projectId, projectName, pageName, sessionName }: Nav
       <SidebarTrigger />
       <Separator orientation="vertical" className="mx-1 h-5" />
 
-      <div className="flex flex-1 items-center justify-between">
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <Link href="/">
-                  <span className="font-semibold">Ambient</span>
-                </Link>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href="/">
+                <span className="font-semibold">Ambient</span>
+              </Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
 
-            {projectId && (
-              <>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
+          {projectId && (
+            <>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbLink asChild>
+                  <Link href={`/${projectId}/fleet`}>{projectName ?? projectId}</Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+            </>
+          )}
+
+          {pageName && (
+            <>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                {sessionName ? (
                   <BreadcrumbLink asChild>
-                    <Link href={`/${projectId}/fleet`}>{projectName ?? projectId}</Link>
+                    <Link href={`/${projectId}/fleet`}>{pageName}</Link>
                   </BreadcrumbLink>
-                </BreadcrumbItem>
-              </>
-            )}
+                ) : (
+                  <BreadcrumbPage>{pageName}</BreadcrumbPage>
+                )}
+              </BreadcrumbItem>
+            </>
+          )}
 
-            {pageName && (
-              <>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                  {sessionName ? (
-                    <BreadcrumbLink asChild>
-                      <Link href={`/${projectId}/fleet`}>{pageName}</Link>
-                    </BreadcrumbLink>
-                  ) : (
-                    <BreadcrumbPage>{pageName}</BreadcrumbPage>
-                  )}
-                </BreadcrumbItem>
-              </>
-            )}
-
-            {sessionName && (
-              <>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                  <BreadcrumbPage>{sessionName}</BreadcrumbPage>
-                </BreadcrumbItem>
-              </>
-            )}
-          </BreadcrumbList>
-        </Breadcrumb>
-
-        <div className="flex items-center gap-2">
-          <span className="inline-block size-2.5 rounded-full bg-status-success-foreground" aria-label="Cluster connected" />
-          <span className="text-xs text-muted-foreground">Connected</span>
-        </div>
-      </div>
+          {sessionName && (
+            <>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>{sessionName}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </>
+          )}
+        </BreadcrumbList>
+      </Breadcrumb>
     </header>
   )
 }
