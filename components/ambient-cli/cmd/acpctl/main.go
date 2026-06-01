@@ -29,7 +29,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var insecureSkipTLSVerify bool
+var (
+	insecureSkipTLSVerify bool
+	apiURLOverride        string
+)
 
 var root = &cobra.Command{
 	Use:           "acpctl",
@@ -42,12 +45,16 @@ var root = &cobra.Command{
 		if insecureSkipTLSVerify {
 			connection.SetInsecureSkipTLSVerify(true)
 		}
+		if apiURLOverride != "" {
+			os.Setenv("AMBIENT_API_URL", apiURLOverride)
+		}
 		return nil
 	},
 }
 
 func init() {
 	root.PersistentFlags().BoolVar(&insecureSkipTLSVerify, "insecure-skip-tls-verify", false, "Skip TLS certificate verification (insecure)")
+	root.PersistentFlags().StringVar(&apiURLOverride, "api-url", "", "Override the API server URL for this invocation")
 	root.AddCommand(login.Cmd)
 	root.AddCommand(logout.Cmd)
 	root.AddCommand(version.Cmd)
