@@ -70,7 +70,17 @@ ls *.spec.md 2>/dev/null
 
 Read the relevant spec before implementing — code reconciles against specs, not the other way around.
 
-### 4. Check Standards
+### 4. Check Deployment Skills
+
+If the work involves deployment, manifests, Docker builds, or cluster operations, check for deployment skills:
+
+```bash
+ls skills/deployments/ 2>/dev/null
+```
+
+Read the relevant SKILL.md — these contain environment config, prerequisites, and troubleshooting for deploying each component.
+
+### 5. Check Standards
 
 Load the standards for the component you're modifying:
 
@@ -80,7 +90,7 @@ ls specs/standards/*/
 
 Pick the relevant domain (backend, frontend, control-plane, security, platform).
 
-### 5. Report and Proceed
+### 6. Report and Proceed
 
 Summarize what you found:
 - Which domains are involved
