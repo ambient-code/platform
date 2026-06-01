@@ -22,27 +22,17 @@ const TERMINAL_PHASES: ReadonlySet<SessionPhase> = new Set([
   'Stopped',
 ])
 
-function getPollingInterval(sessions: DomainSession[] | undefined): number | false {
+function getPollingInterval(sessions: DomainSession[] | undefined): number {
   if (!sessions || sessions.length === 0) {
-    return false
+    return 3000
   }
 
   const hasTransitioning = sessions.some(s => TRANSITIONING_PHASES.has(s.phase))
   if (hasTransitioning) {
-    return 2000
+    return 1000
   }
 
-  const hasActive = sessions.some(s => ACTIVE_PHASES.has(s.phase))
-  if (hasActive) {
-    return 5000
-  }
-
-  const allTerminal = sessions.every(s => TERMINAL_PHASES.has(s.phase))
-  if (allTerminal) {
-    return false
-  }
-
-  return 5000
+  return 3000
 }
 
 let defaultPort: SessionsPort | null = null
@@ -82,10 +72,9 @@ export function useSession(
     enabled: !!sessionId,
     refetchInterval: (query) => {
       const session = query.state.data
-      if (!session) return 5000
-      if (TRANSITIONING_PHASES.has(session.phase)) return 2000
-      if (ACTIVE_PHASES.has(session.phase)) return 5000
-      return false
+      if (!session) return 3000
+      if (TRANSITIONING_PHASES.has(session.phase)) return 1000
+      return 3000
     },
   })
 }

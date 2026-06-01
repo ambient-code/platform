@@ -23,6 +23,6 @@ export function useSessionMessages(
     queryKey: queryKeys.messages.list(sessionId),
     queryFn: () => adapter.list(sessionId, { size: 100 }),
     enabled: !!sessionId,
-    refetchInterval: 5000,
+    refetchInterval: 3000,
   })
 }
