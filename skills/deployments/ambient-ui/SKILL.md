@@ -1,0 +1,205 @@
+---
+name: deploy
+description: >
+  Deploy, update manifests, and troubleshoot the ambient-ui component.
+  Use when creating or modifying deployment manifests, adding ambient-ui
+  to a new overlay, building images, or debugging cluster issues.
+---
+
+# Ambient UI Deployment
+
+Instructions for deploying the ambient-ui component across environments.
+
+## User Input
+
+```text
+$ARGUMENTS
+```
+
+## Architecture
+
+The ambient-ui is a Next.js BFF (Backend-for-Frontend) that handles OIDC
+authentication as a confidential client, manages server-side sessions,
+and proxies API requests to the ambient-api-server with JWT relay.
+
+```
+Route (port 443, TLS edge termination)
+  → Service (port 3000)
+    → Next.js BFF (port 3000)
+      ├── OIDC auth (Authorization Code Flow + PKCE against Red Hat SSO)
+      ├── Server-side session (iron-session, httpOnly cookie)
+      ├── JWT relay to ambient-api-server (Authorization: Bearer <jwt>)
+      └── ambient-api-server (port 8000, HTTPS, validates JWT against same issuer)
+```
+
+No sidecar proxy. The BFF IS the confidential OIDC client. The browser
+never receives a raw JWT — only an httpOnly session cookie.
+
+In local/kind environments, `AUTH_MODE=none` disables auth entirely.
+
+## Manifest File Map
+
+| File | Purpose |
+|------|---------|
+| `components/manifests/base/core/ambient-ui-deployment.yaml` | Base Deployment, ServiceAccount, Service |
+| `components/manifests/overlays/kind/kustomization.yaml` | Kind overlay (Quay images, no auth) |
+| `components/manifests/overlays/kind-local/kustomization.yaml` | Kind-local overlay (localhost images) |
+| `components/ambient-ui/Dockerfile` | Multi-stage Docker build |
+| `.github/workflows/components-build-deploy.yml` | CI build matrix entry |
+
+Production overlay files exist (`ambient-ui-oauth-patch.yaml`, etc.) but are
+disabled — they used origin-oauth-proxy which can't produce JWTs. See Auth section.
+
+## Docker Build
+
+**Build context** is `./components` (not `./components/ambient-ui`), because
+the Dockerfile references `ambient-sdk/ts-sdk` as a sibling.
+
+### Critical details
+
+1. **SDK dist/ is gitignored.** The Dockerfile must build it:
+   ```dockerfile
+   COPY ambient-sdk/ts-sdk /ambient-sdk/ts-sdk
+   RUN cd /ambient-sdk/ts-sdk && npm install --ignore-scripts && npm run build
+   ```
+
+2. **Standalone output path.** `outputFileTracingRoot: ../..` in next.config.js
+   resolves to `/` in Docker (WORKDIR `/app`), so standalone nests under `app/`:
+   ```dockerfile
+   cp -r .next/standalone/app/. /app-output/
+   ```
+   Locally it nests under `components/ambient-ui/`. Always verify with:
+   ```bash
+   find .next/standalone -name server.js -not -path '*/node_modules/*'
+   ```
+
+3. **Webpack, not Turbopack.** The build script is `next build --webpack`.
+   Turbopack cannot resolve `file:` linked dependencies.
+
+4. **OpenShift permissions.** The builder stage must run:
+   ```dockerfile
+   chmod -R g=u /app-output && chgrp -R 0 /app-output
+   ```
+   The runner image (Red Hat Hardened Image) is distroless — no shell at runtime.
+
+### Local build & test
+
+```bash
+podman build -t ambient-ui-test -f components/ambient-ui/Dockerfile components/
+podman run --rm ambient-ui-test node -e 'require("fs").statSync("/app/server.js"); console.log("server.js found")'
+podman run -d --name ambient-ui-test -e HOSTNAME=0.0.0.0 ambient-ui-test
+podman exec ambient-ui-test node -e "require('http').get('http://localhost:3000/', r => { console.log(r.statusCode); r.on('data',()=>{}); r.on('end',()=>process.exit(0)); })"
+podman stop ambient-ui-test && podman rm ambient-ui-test
+```
+
+## Environment Configuration
+
+| Env Var | kind / local | Production |
+|---------|-------------|------------|
+| `AUTH_MODE` | `none` | `native-sso` |
+| `API_SERVER_URL` | `http://ambient-api-server:8000` | `https://ambient-api-server:8000` |
+| `NODE_EXTRA_CA_CERTS` | (unset) | `/etc/ssl/service-ca/service-ca.crt` (from service-ca ConfigMap) |
+| `SSO_ISSUER_URL` | (unset) | `https://sso.redhat.com/auth/realms/redhat-external` |
+| `SSO_CLIENT_ID` | (unset) | OIDC client ID |
+| `SSO_CLIENT_SECRET` | (unset) | OIDC client secret (from Secret) |
+| `SESSION_SECRET` | (unset) | Random 32+ byte string (from Secret) |
+| `NEXT_PUBLIC_PREVIEW_ALLOWED_HOSTS` | (unset, defaults `localhost:*`) | target domains |
+
+## Authentication
+
+### Native SSO (target architecture)
+
+The BFF handles OIDC directly using Authorization Code Flow with PKCE:
+
+1. User visits ambient-ui → BFF redirects to SSO issuer authorize endpoint
+2. User authenticates at Red Hat SSO → redirected back with auth code
+3. BFF exchanges code for tokens (access token = JWT, refresh token, ID token)
+4. BFF stores tokens in an iron-session encrypted httpOnly cookie
+5. On API requests, BFF extracts JWT from session and forwards as `Authorization: Bearer`
+6. ambient-api-server validates JWT against `sso.redhat.com` JWKS endpoint
+
+This is already implemented in:
+- `src/lib/oidc.ts` — OIDC discovery, auth URL, code exchange, token refresh
+- `src/lib/session.ts` — iron-session storage, token expiry, auto-refresh
+- `src/lib/auth.ts` — `resolveAccessToken()` extracts JWT from session
+- `src/app/api/auth/sso/login/route.ts` — initiates OIDC flow
+- `src/app/api/auth/sso/callback/route.ts` — handles callback, stores tokens
+- `src/app/api/auth/sso/logout/route.ts` — destroys session
+
+### What's needed to enable native SSO
+
+An OIDC confidential client on `sso.redhat.com/auth/realms/redhat-external`:
+- Client protocol: `openid-connect`, access type: `confidential`
+- Valid redirect URI: `https://<ambient-ui-route>/api/auth/sso/callback`
+- Scopes: `openid`, `email`, `profile`
+
+Then set the env vars: `SSO_ISSUER_URL`, `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET`,
+`SESSION_SECRET`, and `AUTH_MODE=native-sso`.
+
+### Why origin-oauth-proxy doesn't work
+
+The OpenShift `origin-oauth-proxy` issues opaque `sha256~` tokens, not JWTs.
+The ambient-api-server requires Red Hat SSO JWTs (`--enable-jwt=true`).
+Confirmed via source code audit: origin-oauth-proxy has zero JWT support.
+The upstream OIDC id_token is decoded for claims and permanently discarded
+by the OpenShift OAuth server. No configuration can change this.
+
+Production overlay files for oauth-proxy exist as reference but are disabled.
+
+## Prerequisites (Manual Steps)
+
+### 1. Quay.io repository
+
+`quay.io/ambient_code/vteam_ambient_ui` with push access for `vteamrobbit`.
+
+### 2. OIDC client (REQUIRED for production)
+
+Create on `sso.redhat.com/auth/realms/redhat-external`:
+- Client protocol: `openid-connect`, access type: `confidential`
+- Redirect URI: `https://<route>/api/auth/sso/callback`
+- Scopes: `openid`, `email`, `profile`
+
+### 3. Secrets
+
+```bash
+oc create secret generic ambient-ui-config \
+  --from-literal=sso-client-id=<client-id> \
+  --from-literal=sso-client-secret=<client-secret> \
+  --from-literal=session-secret="$(openssl rand -base64 32)"
+```
+
+### 4. Route + TLS
+
+OpenShift Route with TLS edge termination, targeting the ambient-ui Service on port 3000.
+
+## Adding ambient-ui to a New Overlay
+
+1. Include base: `resources: [../../base]` (ambient-ui-deployment.yaml is in base/core)
+2. Add image entries for `quay.io/ambient_code/vteam_ambient_ui`
+3. Apply environment patches (auth mode, API URL, SSO config)
+4. If auth: create OIDC client and secrets per Prerequisites
+5. If OpenShift with HTTPS to ambient-api-server: trust the service-ca bundle.
+   The API server TLS cert is signed by OpenShift service-ca, not the default
+   SA CA. Create a ConfigMap with inject-cabundle annotation, mount it into the
+   ambient-ui container, and set NODE_EXTRA_CA_CERTS=/etc/ssl/service-ca/service-ca.crt
+6. Add a Route if external access is needed
+7. Verify: `kustomize build overlays/<target> | grep -A5 "name: ambient-ui"`
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| `Cannot find module '/app/server.js'` | Copy from `.next/standalone/app/` |
+| `Can't resolve 'ambient-sdk'` | Build SDK dist in Dockerfile deps stage |
+| Liveness probe 401 | Use `/api/healthz`, not `/` |
+| `Client sent HTTP request to HTTPS server` | Use `https://` in API_SERVER_URL |
+| 401 `text/plain` from API server | Token format mismatch — ensure JWT, not opaque token |
+| Turbopack build fails | Use `next build --webpack` |
+
+## Verification
+
+- [ ] `kustomize build overlays/<target>` valid YAML
+- [ ] Image references consistent across kustomization, CI, Makefile
+- [ ] Pod starts with 0 restarts
+- [ ] `/api/healthz` returns 200
+- [ ] API proxy returns data

@@ -31,6 +31,15 @@ You are an expert in deploying the Ambient Code Platform to OpenShift clusters. 
 
 Runner pods (`vteam_claude_runner`, `vteam_state_sync`) are spawned dynamically by the operator — they are not standing deployments.
 
+Credential sidecar containers are injected into session pods when the corresponding credential type is configured:
+
+ < /dev/null |  Sidecar Container | Image | Port | Provider |
+|-------------------|-------|------|----------|
+| `credential-github` | `quay.io/ambient_code/vteam_credential_github` | 8091 | GitHub PAT / App |
+| `credential-jira` | `quay.io/ambient_code/vteam_credential_jira` | 8092 | Jira / Atlassian |
+| `credential-k8s` | `quay.io/ambient_code/vteam_credential_k8s` | 8093 | Kubeconfig |
+| `credential-google` | `quay.io/ambient_code/vteam_credential_google` | 8094 | Google Workspace |
+
 ---
 
 ## Prerequisites
@@ -152,6 +161,12 @@ kustomize edit set image \
   quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:$IMAGE_TAG
 
 oc apply -k . -n $NAMESPACE
+
+oc set env deployment/ambient-control-plane -n $NAMESPACE \
+  GITHUB_MCP_IMAGE=quay.io/ambient_code/vteam_credential_github:$IMAGE_TAG \
+  JIRA_MCP_IMAGE=quay.io/ambient_code/vteam_credential_jira:$IMAGE_TAG \
+  K8S_MCP_IMAGE=quay.io/ambient_code/vteam_credential_k8s:$IMAGE_TAG \
+  GOOGLE_MCP_IMAGE=quay.io/ambient_code/vteam_credential_google:$IMAGE_TAG
 popd
 rm -rf "$TMPDIR"
 ```

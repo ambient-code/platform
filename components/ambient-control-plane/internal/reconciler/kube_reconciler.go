@@ -310,9 +310,11 @@ func (r *SimpleKubeReconciler) ensureNamespaceExists(ctx context.Context, namesp
 
 func (r *SimpleKubeReconciler) ensureAPIServerNetworkPolicy(ctx context.Context, namespace string) error {
 	name := "allow-ambient-api-server"
+	myNS := r.cfg.CPRuntimeNamespace
 
-	if _, err := r.nsKube().GetNetworkPolicy(ctx, namespace, name); err == nil {
-		return nil
+	existing, err := r.nsKube().GetNetworkPolicy(ctx, namespace, name)
+	if err == nil {
+		return r.reconcileAPIServerNetworkPolicy(ctx, existing, myNS)
 	}
 
 	np := &unstructured.Unstructured{
@@ -335,7 +337,7 @@ func (r *SimpleKubeReconciler) ensureAPIServerNetworkPolicy(ctx context.Context,
 							map[string]interface{}{
 								"namespaceSelector": map[string]interface{}{
 									"matchLabels": map[string]interface{}{
-										"kubernetes.io/metadata.name": r.cfg.CPRuntimeNamespace,
+										"kubernetes.io/metadata.name": myNS,
 									},
 								},
 							},
@@ -358,6 +360,58 @@ func (r *SimpleKubeReconciler) ensureAPIServerNetworkPolicy(ctx context.Context,
 	}
 
 	r.logger.Debug().Str("namespace", namespace).Str("policy", name).Msg("api-server network policy created")
+	return nil
+}
+
+func (r *SimpleKubeReconciler) reconcileAPIServerNetworkPolicy(ctx context.Context, np *unstructured.Unstructured, cpNamespace string) error {
+	ingress, _, _ := unstructured.NestedSlice(np.Object, "spec", "ingress")
+	if len(ingress) == 0 {
+		return nil
+	}
+
+	rule, ok := ingress[0].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	fromList, _, _ := unstructured.NestedSlice(rule, "from")
+
+	for _, entry := range fromList {
+		entryMap, ok := entry.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		nsSelector, _, _ := unstructured.NestedStringMap(entryMap, "namespaceSelector", "matchLabels")
+		if nsSelector["kubernetes.io/metadata.name"] == cpNamespace {
+			return nil
+		}
+	}
+
+	fromList = append(fromList, map[string]interface{}{
+		"namespaceSelector": map[string]interface{}{
+			"matchLabels": map[string]interface{}{
+				"kubernetes.io/metadata.name": cpNamespace,
+			},
+		},
+	})
+
+	if err := unstructured.SetNestedSlice(rule, fromList, "from"); err != nil {
+		return fmt.Errorf("setting ingress from list: %w", err)
+	}
+	ingress[0] = rule
+	if err := unstructured.SetNestedSlice(np.Object, ingress, "spec", "ingress"); err != nil {
+		return fmt.Errorf("setting ingress spec: %w", err)
+	}
+
+	if _, err := r.nsKube().UpdateNetworkPolicy(ctx, np); err != nil {
+		return fmt.Errorf("updating network policy %s in %s: %w", np.GetName(), np.GetNamespace(), err)
+	}
+
+	r.logger.Info().
+		Str("namespace", np.GetNamespace()).
+		Str("policy", np.GetName()).
+		Str("added_cp_namespace", cpNamespace).
+		Msg("api-server network policy updated with additional CP namespace")
 	return nil
 }
 

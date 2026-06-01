@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -176,6 +177,18 @@ type DeleteInboxMsg struct {
 type SessionMessagesMsg struct {
 	Messages []sdktypes.SessionMessage
 	Err      error
+}
+
+// SSEEventMsg carries a single parsed AG-UI event from the SSE stream.
+type SSEEventMsg struct {
+	EventType string
+	Payload   string
+	Err       error
+}
+
+// SSEStreamDoneMsg signals the SSE stream has ended (server closed or error).
+type SSEStreamDoneMsg struct {
+	Err error
 }
 
 // ---------------------------------------------------------------------------
@@ -1035,5 +1048,92 @@ func (tc *TUIClient) FetchSessionMessages(projectID, sessionID string, afterSeq 
 			return SessionMessagesMsg{Err: err}
 		}
 		return SessionMessagesMsg{Messages: msgs}
+	}
+}
+
+// OpenSSEStream opens an SSE connection to GET /sessions/{id}/events and
+// starts a background goroutine that parses AG-UI events and sends them to the
+// returned channel. The caller reads from the channel via waitForSSEEvent().
+// Cancel the context to tear down the stream.
+func (tc *TUIClient) OpenSSEStream(ctx context.Context, projectID, sessionID string) (<-chan tea.Msg, error) {
+	client, err := tc.factory.ForProject(projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	stream, err := client.Sessions().StreamEvents(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	ch := make(chan tea.Msg, 64)
+
+	go func() {
+		defer stream.Close()
+		defer close(ch)
+
+		scanner := bufio.NewScanner(stream)
+		scanner.Buffer(make([]byte, 1<<20), 1<<20)
+
+		var dataBuf strings.Builder
+
+		for scanner.Scan() {
+			if ctx.Err() != nil {
+				return
+			}
+
+			line := scanner.Text()
+
+			switch {
+			case strings.HasPrefix(line, "data: "):
+				if dataBuf.Len() > 0 {
+					dataBuf.WriteByte('\n')
+				}
+				dataBuf.WriteString(line[6:])
+
+			case line == "":
+				if dataBuf.Len() == 0 {
+					continue
+				}
+				data := dataBuf.String()
+				dataBuf.Reset()
+
+				var evt struct {
+					Type string `json:"type"`
+				}
+				if json.Unmarshal([]byte(data), &evt) != nil || evt.Type == "" {
+					continue
+				}
+
+				select {
+				case ch <- SSEEventMsg{EventType: evt.Type, Payload: data}:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+
+		if ctx.Err() != nil {
+			return
+		}
+		select {
+		case ch <- SSEStreamDoneMsg{Err: scanner.Err()}:
+		case <-ctx.Done():
+		}
+	}()
+
+	return ch, nil
+}
+
+// waitForSSEEvent returns a tea.Cmd that blocks until the next event arrives
+// on the SSE channel. This is the Bubbletea-idiomatic way to pump a background
+// stream: each received message triggers the next wait in the Update loop.
+func waitForSSEEvent(ch <-chan tea.Msg) tea.Cmd {
+	return func() tea.Msg {
+		msg, ok := <-ch
+		if !ok {
+			return SSEStreamDoneMsg{}
+		}
+		return msg
 	}
 }
