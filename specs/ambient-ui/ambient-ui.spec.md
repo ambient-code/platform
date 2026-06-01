@@ -712,16 +712,90 @@ Every list view SHALL display a meaningful empty state when no data exists, incl
 
 All destructive or state-changing actions (session stop/delete, credential delete/rotate, schedule enable/disable, feature flag toggle) SHALL require explicit confirmation before executing.
 
-### Requirement: Cluster Health Indicator
+### Requirement: Status Bar
 
-The top bar SHALL display a cluster connection status indicator that reflects the ambient-api-server's reachability.
+The Ambient UI SHALL display a persistent status bar fixed to the bottom of the viewport. The status bar SHALL be compact (single line) and always visible regardless of scroll position or active view.
+
+The status bar SHALL display:
+- **Connection context**: The ambient-api-server URL currently targeted by the BFF
+- **Connection status indicator**: A colored dot and label reflecting the ambient-api-server's reachability (moved from the top bar)
+
+#### Scenario: Status bar rendering
+
+- GIVEN the Ambient UI is loaded
+- WHEN any view renders
+- THEN a compact status bar is visible at the bottom of the viewport
+- AND it displays the API server URL (e.g., `https://ambient-api-server:8000`)
+- AND it displays a connection status indicator (green dot + "Connected" or red dot + "Disconnected")
+
+#### Scenario: Cluster connected
+
+- GIVEN the ambient-api-server is reachable
+- WHEN the status bar renders
+- THEN the connection indicator displays a green dot with "Connected" label
 
 #### Scenario: Cluster disconnected
 
 - GIVEN the ambient-api-server becomes unreachable
 - WHEN the UI detects connection failure
-- THEN the cluster indicator changes to red with "Disconnected" label
+- THEN the connection indicator changes to a red dot with "Disconnected" label
 - AND a pulsing animation draws attention to the status change
+
+### Requirement: Connection Context Switching
+
+The status bar SHALL support switching between the default SSO-authenticated connection and a custom connection with a user-provided URL and bearer token.
+
+The default connection uses the BFF's configured API server URL and the JWT from the user's SSO session (native-sso mode). A custom connection overrides both the URL and the authentication token.
+
+#### Scenario: Default SSO context
+
+- GIVEN the user has authenticated via SSO
+- WHEN no custom context is active
+- THEN the BFF proxies API requests to the configured API server URL
+- AND uses the JWT from the SSO session as the Authorization header
+- AND the status bar displays the configured URL with no override indicator
+
+#### Scenario: Enter custom context
+
+- GIVEN the status bar displays the default API server URL
+- WHEN the user clicks the URL
+- THEN the status bar expands to show two editable fields: URL and Token
+- AND the URL field is pre-populated with the current URL
+- AND the Token field is empty with placeholder text (e.g., "Bearer token")
+- AND pressing Enter on either field confirms the change
+- AND pressing Escape cancels and collapses back to the default view
+
+#### Scenario: Custom context applied
+
+- GIVEN the user enters a custom URL and token and confirms
+- WHEN the custom context is active
+- THEN the BFF proxies all API requests to the custom URL
+- AND uses the user-provided token as the Authorization header (instead of the SSO JWT)
+- AND the status bar displays the custom URL with a visual override indicator
+- AND a "Reset" control is visible to revert to the default context
+
+#### Scenario: Reset to default context
+
+- GIVEN a custom context is active
+- WHEN the user clicks the "Reset" control
+- THEN the custom URL and token are cleared
+- AND the BFF reverts to using the configured API server URL and SSO JWT
+- AND the status bar returns to its default appearance
+
+#### Scenario: Custom context with URL only (no token)
+
+- GIVEN the user enters only a custom URL without a token
+- WHEN the custom context is applied
+- THEN the BFF proxies to the custom URL
+- AND uses the SSO session JWT as the Authorization header (if available)
+- AND falls back to no Authorization header if no SSO session exists
+
+#### Scenario: Custom context persistence
+
+- GIVEN the user has set a custom context
+- WHEN the page is refreshed
+- THEN the custom context persists (stored server-side in the BFF session)
+- AND the user does not need to re-enter the URL and token
 
 ---
 
