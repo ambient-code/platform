@@ -14,6 +14,7 @@
       "secret": "dev-secret-do-not-use-in-prod",
       "redirectUris": [
         "http://localhost/*",
+        "http://127.0.0.1/*",
         "http://frontend-service:3000/*",
         "http://frontend-service.ambient-code.svc.cluster.local:3000/*"
       ],
@@ -175,6 +176,21 @@
     }
   ],
   "clientScopes": [
+    {
+      "name": "openid",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true" }
+    },
+    {
+      "name": "email",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true" }
+    },
+    {
+      "name": "profile",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true" }
+    },
     {
       "name": "groups",
       "protocol": "openid-connect",
