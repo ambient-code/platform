@@ -552,6 +552,14 @@ spec:
           value: "${REGISTRY}/vteam_claude_runner:${IMAGE_TAG}"
         - name: MCP_IMAGE
           value: "${REGISTRY}/vteam_mcp:${IMAGE_TAG}"
+        - name: GITHUB_MCP_IMAGE
+          value: "${REGISTRY}/vteam_credential_github:${IMAGE_TAG}"
+        - name: JIRA_MCP_IMAGE
+          value: "${REGISTRY}/vteam_credential_jira:${IMAGE_TAG}"
+        - name: K8S_MCP_IMAGE
+          value: "${REGISTRY}/vteam_credential_k8s:${IMAGE_TAG}"
+        - name: GOOGLE_MCP_IMAGE
+          value: "${REGISTRY}/vteam_credential_google:${IMAGE_TAG}"
         - name: MCP_API_SERVER_URL
           value: "http://ambient-api-server.${NAMESPACE}.svc:8000"
         - name: CP_TOKEN_URL

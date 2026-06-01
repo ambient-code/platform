@@ -266,6 +266,35 @@ func parseTokensResponse(body []byte) (*tokenResult, error) {
 	}, nil
 }
 
+func runClientCredentialsFlow(issuerURL, clientID, clientSecret string) (*tokenResult, error) {
+	issuerURL = strings.TrimRight(issuerURL, "/")
+	tokenURL := issuerURL + "/protocol/openid-connect/token"
+
+	params := url.Values{
+		"grant_type":    {"client_credentials"},
+		"client_id":     {clientID},
+		"client_secret": {clientSecret},
+	}
+
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	resp, err := httpClient.PostForm(tokenURL, params)
+	if err != nil {
+		return nil, fmt.Errorf("POST to token endpoint: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read token response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, tokenEndpointError(resp.StatusCode, body)
+	}
+
+	return parseTokensResponse(body)
+}
+
 func openBrowser(target string) error {
 	var cmd string
 	var cmdArgs []string
