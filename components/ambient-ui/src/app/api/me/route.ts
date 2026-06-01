@@ -3,40 +3,62 @@ import { getSession } from "@/lib/session"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
+function computeInitials(name: string | undefined, username: string | undefined): string {
+  if (name) {
+    const parts = name.trim().split(/\s+/)
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+    }
+    if (parts.length === 1 && parts[0].length > 0) {
+      return parts[0][0].toUpperCase()
+    }
+  }
+  if (username && username.length > 0) {
+    return username[0].toUpperCase()
+  }
+  return "?"
+}
+
 export async function GET() {
   try {
     const session = await getSession()
-    const hasToken = !!session.accessToken
-    const expiresAt = session.expiresAt
-      ? new Date(session.expiresAt * 1000).toISOString()
-      : null
 
-    let claims: Record<string, unknown> | null = null
-    if (session.accessToken) {
-      try {
-        const parts = session.accessToken.split(".")
-        if (parts.length === 3) {
-          const payload = JSON.parse(
-            Buffer.from(parts[1], "base64url").toString()
-          )
-          claims = {
-            sub: payload.sub,
-            preferred_username: payload.preferred_username,
-            given_name: payload.given_name,
-            family_name: payload.family_name,
-            email: payload.email,
-            name: payload.name,
-          }
-        }
-      } catch {
-        // Not a JWT or malformed
-      }
+    if (!session.accessToken) {
+      return Response.json({ authenticated: false })
     }
 
+    let username = "unknown"
+    let name = ""
+    let email = ""
+
+    try {
+      const parts = session.accessToken.split(".")
+      if (parts.length === 3) {
+        const payload: Record<string, unknown> = JSON.parse(
+          Buffer.from(parts[1], "base64url").toString()
+        )
+        username = typeof payload.preferred_username === "string"
+          ? payload.preferred_username
+          : "unknown"
+        name = typeof payload.name === "string"
+          ? payload.name
+          : [payload.given_name, payload.family_name]
+              .filter(v => typeof v === "string")
+              .join(" ")
+        email = typeof payload.email === "string" ? payload.email : ""
+      }
+    } catch {
+      // Not a JWT or malformed — use defaults
+    }
+
+    const initials = computeInitials(name, username)
+
     return Response.json({
-      authenticated: hasToken,
-      expiresAt,
-      claims,
+      authenticated: true,
+      username,
+      name,
+      email,
+      initials,
     })
   } catch (err) {
     return Response.json({

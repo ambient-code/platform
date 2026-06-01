@@ -16,14 +16,14 @@ const devSessionSecret = randomBytes(32).toString("hex")
 function getSessionOptions(): SessionOptions {
   const secret = env.SESSION_SECRET
   if (!secret) {
-    if (env.AUTH_MODE === "native-sso") {
-      throw new Error("SESSION_SECRET must be set when AUTH_MODE=native-sso")
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("SESSION_SECRET must be set in production")
     }
     return {
       password: devSessionSecret,
       cookieName: "ambient-ui-session",
       cookieOptions: {
-        secure: process.env.NODE_ENV === "production",
+        secure: false,
         httpOnly: true,
         sameSite: "lax" as const,
         path: "/",
