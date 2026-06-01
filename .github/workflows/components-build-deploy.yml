@@ -15,6 +15,7 @@ on:
       - 'components/ambient-control-plane/**'
       - 'components/ambient-mcp/**'
       - 'components/ambient-ui/**'
+      - 'components/credential-sidecars/**'
   pull_request:
     branches: [main, alpha]
     paths:
@@ -29,10 +30,11 @@ on:
       - 'components/ambient-control-plane/**'
       - 'components/ambient-mcp/**'
       - 'components/ambient-ui/**'
+      - 'components/credential-sidecars/**'
   workflow_dispatch:
     inputs:
       components:
-        description: 'Components to build (comma-separated: frontend,backend,operator,ambient-runner,state-sync,public-api,ambient-api-server,ambient-control-plane,ambient-mcp,ambient-ui) - leave empty for all'
+        description: 'Components to build (comma-separated: frontend,backend,operator,ambient-runner,state-sync,public-api,ambient-api-server,ambient-control-plane,ambient-mcp,ambient-ui,credential-github,credential-jira,credential-k8s,credential-google) - leave empty for all'
         required: false
         type: string
         default: ''
@@ -63,7 +65,11 @@ jobs:
             {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/vteam_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"},
             {"name":"ambient-control-plane","context":"./components","image":"quay.io/ambient_code/vteam_control_plane","dockerfile":"./components/ambient-control-plane/Dockerfile"},
             {"name":"ambient-mcp","context":"./components/ambient-mcp","image":"quay.io/ambient_code/vteam_mcp","dockerfile":"./components/ambient-mcp/Dockerfile"},
-            {"name":"ambient-ui","context":"./components","image":"quay.io/ambient_code/vteam_ambient_ui","dockerfile":"./components/ambient-ui/Dockerfile"}
+            {"name":"ambient-ui","context":"./components","image":"quay.io/ambient_code/vteam_ambient_ui","dockerfile":"./components/ambient-ui/Dockerfile"},
+            {"name":"credential-github","context":"./components","image":"quay.io/ambient_code/vteam_credential_github","dockerfile":"./components/credential-sidecars/github/Dockerfile"},
+            {"name":"credential-jira","context":"./components","image":"quay.io/ambient_code/vteam_credential_jira","dockerfile":"./components/credential-sidecars/jira/Dockerfile"},
+            {"name":"credential-k8s","context":"./components","image":"quay.io/ambient_code/vteam_credential_k8s","dockerfile":"./components/credential-sidecars/k8s/Dockerfile"},
+            {"name":"credential-google","context":"./components","image":"quay.io/ambient_code/vteam_credential_google","dockerfile":"./components/credential-sidecars/google/Dockerfile"}
           ]'
 
           SELECTED="${{ github.event.inputs.components }}"
@@ -413,6 +419,14 @@ jobs:
             AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}" \
             STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ github.sha }}"
 
+      - name: Update credential sidecar image tags on control plane
+        run: |
+          oc set env deployment/ambient-control-plane -n ambient-code \
+            GITHUB_MCP_IMAGE="quay.io/ambient_code/vteam_credential_github:${{ github.sha }}" \
+            JIRA_MCP_IMAGE="quay.io/ambient_code/vteam_credential_jira:${{ github.sha }}" \
+            K8S_MCP_IMAGE="quay.io/ambient_code/vteam_credential_k8s:${{ github.sha }}" \
+            GOOGLE_MCP_IMAGE="quay.io/ambient_code/vteam_credential_google:${{ github.sha }}"
+
       - name: Pin OPERATOR_IMAGE in operator-config ConfigMap
         run: |
           oc patch configmap operator-config -n ambient-code --type=merge \
@@ -491,6 +505,14 @@ jobs:
           oc set env deployment/agentic-operator -n ambient-code -c agentic-operator \
             AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}" \
             STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ github.sha }}"
+
+      - name: Update credential sidecar image tags on control plane
+        run: |
+          oc set env deployment/ambient-control-plane -n ambient-code \
+            GITHUB_MCP_IMAGE="quay.io/ambient_code/vteam_credential_github:${{ github.sha }}" \
+            JIRA_MCP_IMAGE="quay.io/ambient_code/vteam_credential_jira:${{ github.sha }}" \
+            K8S_MCP_IMAGE="quay.io/ambient_code/vteam_credential_k8s:${{ github.sha }}" \
+            GOOGLE_MCP_IMAGE="quay.io/ambient_code/vteam_credential_google:${{ github.sha }}"
 
       - name: Pin OPERATOR_IMAGE in operator-config ConfigMap
         run: |

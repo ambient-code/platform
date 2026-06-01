@@ -18,7 +18,7 @@ on:
         type: boolean
         default: true
       components:
-        description: 'Components to build (comma-separated: frontend,backend,operator,ambient-runner,state-sync,public-api,ambient-api-server,ambient-control-plane,ambient-mcp,ambient-ui) - leave empty for all'
+        description: 'Components to build (comma-separated: frontend,backend,operator,ambient-runner,state-sync,public-api,ambient-api-server,ambient-control-plane,ambient-mcp,ambient-ui,credential-github,credential-jira,credential-k8s,credential-google) - leave empty for all'
         required: false
         type: string
         default: ''
@@ -239,7 +239,11 @@ jobs:
             {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/vteam_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"},
             {"name":"ambient-control-plane","context":"./components","image":"quay.io/ambient_code/vteam_control_plane","dockerfile":"./components/ambient-control-plane/Dockerfile"},
             {"name":"ambient-mcp","context":"./components/ambient-mcp","image":"quay.io/ambient_code/vteam_mcp","dockerfile":"./components/ambient-mcp/Dockerfile"},
-            {"name":"ambient-ui","context":"./components","image":"quay.io/ambient_code/vteam_ambient_ui","dockerfile":"./components/ambient-ui/Dockerfile"}
+            {"name":"ambient-ui","context":"./components","image":"quay.io/ambient_code/vteam_ambient_ui","dockerfile":"./components/ambient-ui/Dockerfile"},
+            {"name":"credential-github","context":"./components","image":"quay.io/ambient_code/vteam_credential_github","dockerfile":"./components/credential-sidecars/github/Dockerfile"},
+            {"name":"credential-jira","context":"./components","image":"quay.io/ambient_code/vteam_credential_jira","dockerfile":"./components/credential-sidecars/jira/Dockerfile"},
+            {"name":"credential-k8s","context":"./components","image":"quay.io/ambient_code/vteam_credential_k8s","dockerfile":"./components/credential-sidecars/k8s/Dockerfile"},
+            {"name":"credential-google","context":"./components","image":"quay.io/ambient_code/vteam_credential_google","dockerfile":"./components/credential-sidecars/google/Dockerfile"}
           ]'
 
           FORCE_ALL="${{ github.event.inputs.force_build_all }}"
@@ -708,6 +712,28 @@ jobs:
           fi
           if [ -n "$ARGS" ]; then
             oc set env deployment/agentic-operator -n ambient-code -c agentic-operator $ARGS
+          fi
+
+
+      - name: Update credential sidecar image tags on control plane
+        run: |
+          RELEASE_TAG="${{ needs.release.outputs.new_tag }}"
+          BUILT="${{ steps.built.outputs.names }}"
+          ARGS=""
+          if echo ",$BUILT," | grep -q ",credential-github,"; then
+            ARGS="$ARGS GITHUB_MCP_IMAGE=quay.io/ambient_code/vteam_credential_github:${RELEASE_TAG}"
+          fi
+          if echo ",$BUILT," | grep -q ",credential-jira,"; then
+            ARGS="$ARGS JIRA_MCP_IMAGE=quay.io/ambient_code/vteam_credential_jira:${RELEASE_TAG}"
+          fi
+          if echo ",$BUILT," | grep -q ",credential-k8s,"; then
+            ARGS="$ARGS K8S_MCP_IMAGE=quay.io/ambient_code/vteam_credential_k8s:${RELEASE_TAG}"
+          fi
+          if echo ",$BUILT," | grep -q ",credential-google,"; then
+            ARGS="$ARGS GOOGLE_MCP_IMAGE=quay.io/ambient_code/vteam_credential_google:${RELEASE_TAG}"
+          fi
+          if [ -n "$ARGS" ]; then
+            oc set env deployment/ambient-control-plane -n ambient-code $ARGS
           fi
 
       - name: Pin OPERATOR_IMAGE in operator-config ConfigMap
