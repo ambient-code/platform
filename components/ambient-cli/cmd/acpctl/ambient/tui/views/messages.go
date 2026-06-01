@@ -61,6 +61,75 @@ var (
 	msgSepStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("236"))
 )
 
+func IsConversationEvent(eventType string) bool {
+	switch eventType {
+	case "user", "assistant", "system", "error":
+		return true
+	case "MESSAGES_SNAPSHOT":
+		return true
+	default:
+		return false
+	}
+}
+
+func ExtractAssistantFromSnapshot(payload string, baseSeq int, ts time.Time) []MessageEntry {
+	var raw string
+	if err := json.Unmarshal([]byte(payload), &raw); err == nil {
+		payload = raw
+	}
+
+	var msgs []struct {
+		Role    string          `json:"role"`
+		Content json.RawMessage `json:"content"`
+	}
+	if err := json.Unmarshal([]byte(payload), &msgs); err != nil {
+		return nil
+	}
+
+	var entries []MessageEntry
+	for _, msg := range msgs {
+		if msg.Role != "assistant" || len(msg.Content) == 0 {
+			continue
+		}
+		var contentStr string
+		if err := json.Unmarshal(msg.Content, &contentStr); err == nil {
+			if t := strings.TrimSpace(contentStr); t != "" {
+				entries = append(entries, MessageEntry{
+					Seq:       baseSeq,
+					EventType: "assistant",
+					Payload:   t,
+					Timestamp: ts,
+				})
+			}
+			continue
+		}
+		var blocks []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal(msg.Content, &blocks); err != nil {
+			continue
+		}
+		var textParts []string
+		for _, b := range blocks {
+			if b.Type == "text" {
+				if t := strings.TrimSpace(b.Text); t != "" {
+					textParts = append(textParts, t)
+				}
+			}
+		}
+		if len(textParts) > 0 {
+			entries = append(entries, MessageEntry{
+				Seq:       baseSeq,
+				EventType: "assistant",
+				Payload:   strings.Join(textParts, "\n\n"),
+				Timestamp: ts,
+			})
+		}
+	}
+	return entries
+}
+
 // eventColor returns the lipgloss color for a semantic event type.
 // This duplicates the 6-entry mapping from the parent tui.EventColor to avoid
 // a circular import.
@@ -91,6 +160,10 @@ func eventColor(eventType string) lipgloss.Color {
 		return msgColorDim
 	case "STEP_STARTED", "STEP_FINISHED":
 		return msgColorYellow
+	case "text":
+		return msgColorBlue
+	case "tool_args":
+		return msgColorCyan
 	default:
 		return msgColorDim
 	}
@@ -390,7 +463,7 @@ const defaultMaxMessages = 2000
 // It renders messages in conversation or raw mode, supports scrolling,
 // autoscroll, compose input, and search.
 //
-// Messages arrive via 1-second REST polling of /messages.
+// Messages arrive via live SSE streaming of /events with REST polling fallback.
 type MessageStream struct {
 	sessionID string
 	agentName string
@@ -435,6 +508,12 @@ type MessageStream struct {
 	searchInput   textinput.Model
 	searchPattern *regexp.Regexp
 
+	// Split mode: when true, only conversation events are shown (activity
+	// events go to the companion ActivityPane rendered below).
+	splitMode    bool
+	activityPane ActivityPane
+	focusTop     bool // true = conversation pane focused, false = activity pane
+
 	// Dimensions
 	width, height int
 }
@@ -460,6 +539,9 @@ func NewMessageStream(sessionID, agentName, phase string) MessageStream {
 		autoScroll:   true,
 		composeInput: ci,
 		searchInput:  si,
+		splitMode:    true,
+		activityPane: NewActivityPane(),
+		focusTop:     true,
 	}
 }
 
@@ -494,6 +576,37 @@ func (ms *MessageStream) AddMessage(entry MessageEntry) {
 	if ms.autoScroll {
 		ms.scrollToBottom()
 	}
+}
+
+// AddSSEMessage appends a conversation message from the SSE stream without
+// updating lastSeq. SSE events use synthetic seq values (10000+) that would
+// corrupt the REST poll dedup counter if tracked.
+func (ms *MessageStream) AddSSEMessage(entry MessageEntry) {
+	ms.messages = append(ms.messages, entry)
+	if len(ms.messages) > ms.maxMessages {
+		excess := len(ms.messages) - ms.maxMessages
+		if ms.glamourCache != nil {
+			for _, evicted := range ms.messages[:excess] {
+				delete(ms.glamourCache, evicted.Seq)
+			}
+		}
+		ms.messages = ms.messages[excess:]
+	}
+	ms.cachedDirty = true
+	if ms.autoScroll {
+		ms.scrollToBottom()
+	}
+}
+
+// AddActivityEvent routes an event to the activity pane without updating
+// lastSeq (SSE events use synthetic seq values).
+func (ms *MessageStream) AddActivityEvent(entry MessageEntry) {
+	ms.activityPane.AddMessage(entry)
+}
+
+// ActivityPane returns a pointer to the embedded activity pane.
+func (ms *MessageStream) ActivityPane() *ActivityPane {
+	return &ms.activityPane
 }
 
 // LastSeq returns the highest seq in the buffer. Used by the polling path
@@ -593,10 +706,18 @@ func (ms *MessageStream) Update(msg tea.Msg) (MessageStream, tea.Cmd) {
 	case tea.MouseMsg:
 		switch msg.Button {
 		case tea.MouseButtonWheelUp:
-			ms.scrollUp(3)
+			if ms.splitMode && !ms.focusTop {
+				ms.activityPane.ScrollUp(3)
+			} else {
+				ms.scrollUp(3)
+			}
 			return *ms, nil
 		case tea.MouseButtonWheelDown:
-			ms.scrollDown(3)
+			if ms.splitMode && !ms.focusTop {
+				ms.activityPane.ScrollDown(3)
+			} else {
+				ms.scrollDown(3)
+			}
 			return *ms, nil
 		}
 	}
@@ -607,30 +728,52 @@ func (ms *MessageStream) Update(msg tea.Msg) (MessageStream, tea.Cmd) {
 func (ms *MessageStream) updateNormal(msg tea.KeyMsg) (MessageStream, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
-		// If search filter is active, clear it first instead of backing out.
 		if ms.searchPattern != nil {
 			ms.searchPattern = nil
 			return *ms, nil
 		}
 		return *ms, func() tea.Msg { return MsgStreamBackMsg{} }
 
+	case tea.KeyTab:
+		if ms.splitMode {
+			ms.focusTop = !ms.focusTop
+			ms.activityPane.SetFocused(!ms.focusTop)
+		}
+		return *ms, nil
+
 	case tea.KeyEnter:
 		ms.enterComposeMode()
 		return *ms, nil
 
 	case tea.KeyUp:
+		if ms.splitMode && !ms.focusTop {
+			ms.activityPane.ScrollUp(1)
+			return *ms, nil
+		}
 		ms.scrollUp(1)
 		return *ms, nil
 
 	case tea.KeyDown:
+		if ms.splitMode && !ms.focusTop {
+			ms.activityPane.ScrollDown(1)
+			return *ms, nil
+		}
 		ms.scrollDown(1)
 		return *ms, nil
 
 	case tea.KeyPgUp:
+		if ms.splitMode && !ms.focusTop {
+			ms.activityPane.ScrollUp(ms.activityPane.ContentHeight())
+			return *ms, nil
+		}
 		ms.scrollUp(ms.contentHeight())
 		return *ms, nil
 
 	case tea.KeyPgDown:
+		if ms.splitMode && !ms.focusTop {
+			ms.activityPane.ScrollDown(ms.activityPane.ContentHeight())
+			return *ms, nil
+		}
 		ms.scrollDown(ms.contentHeight())
 		return *ms, nil
 
@@ -661,17 +804,33 @@ func (ms *MessageStream) updateNormal(msg tea.KeyMsg) (MessageStream, tea.Cmd) {
 			ms.enterComposeMode()
 			return *ms, nil
 		case "G":
+			if ms.splitMode && !ms.focusTop {
+				ms.activityPane.ScrollToBottom()
+				return *ms, nil
+			}
 			ms.scrollToBottom()
 			ms.autoScroll = true
 			return *ms, nil
 		case "g":
+			if ms.splitMode && !ms.focusTop {
+				ms.activityPane.ScrollUp(len(ms.activityPane.messages) * 10)
+				return *ms, nil
+			}
 			ms.scrollOffset = 0
 			ms.autoScroll = false
 			return *ms, nil
 		case "j":
+			if ms.splitMode && !ms.focusTop {
+				ms.activityPane.ScrollDown(1)
+				return *ms, nil
+			}
 			ms.scrollDown(1)
 			return *ms, nil
 		case "k":
+			if ms.splitMode && !ms.focusTop {
+				ms.activityPane.ScrollUp(1)
+				return *ms, nil
+			}
 			ms.scrollUp(1)
 			return *ms, nil
 		case "c":
@@ -889,13 +1048,59 @@ func (ms *MessageStream) View() string {
 	}
 
 	// -- Content area --
-	// 3 = header bar + header line + header separator
-	topLines := 3
-	contentH := max(ms.height-topLines-len(bottomLines), 1)
+	// 3 = header bar + indicator line + header separator
+	topChrome := 3
+	totalAvailable := max(ms.height-topChrome-len(bottomLines), 1)
+
+	if ms.splitMode {
+		focusBorderColor := lipgloss.Color("240")
+		if ms.focusTop {
+			focusBorderColor = lipgloss.Color("69")
+		}
+		convBorderStyle := lipgloss.NewStyle().Foreground(focusBorderColor)
+		_ = convBorderStyle
+
+		activityH := totalAvailable / 2
+		convH := totalAvailable - activityH
+
+		convLines := ms.renderContent(convH)
+		rendered := make([]string, convH)
+		convBorder := borderStyle
+		if ms.focusTop {
+			convBorder = lipgloss.NewStyle().Foreground(lipgloss.Color("69"))
+		}
+		for i := range convH {
+			line := ""
+			if i < len(convLines) {
+				line = convLines[i]
+			}
+			rendered[i] = convBorder.Render("│") +
+				padToWidth(" "+line, ms.width-2) +
+				convBorder.Render("│")
+		}
+
+		ms.activityPane.SetSize(ms.width, activityH)
+		activityView := ms.activityPane.View()
+
+		var sb strings.Builder
+		sb.WriteString(titleBar)
+		sb.WriteByte('\n')
+		sb.WriteString(indicatorLine)
+		sb.WriteByte('\n')
+		sb.WriteString(headerSep)
+		sb.WriteByte('\n')
+		sb.WriteString(strings.Join(rendered, "\n"))
+		sb.WriteByte('\n')
+		sb.WriteString(activityView)
+		sb.WriteByte('\n')
+		sb.WriteString(strings.Join(bottomLines, "\n"))
+		return sb.String()
+	}
+
+	contentH := totalAvailable
 
 	contentLines := ms.renderContent(contentH)
 
-	// Pad/truncate content to fill the viewport.
 	rendered := make([]string, contentH)
 	for i := range contentH {
 		line := ""
@@ -907,7 +1112,6 @@ func (ms *MessageStream) View() string {
 			borderStyle.Render("│")
 	}
 
-	// Assemble.
 	var sb strings.Builder
 	sb.WriteString(titleBar)
 	sb.WriteByte('\n')
@@ -980,6 +1184,9 @@ func (ms *MessageStream) buildDisplayLines() []string {
 
 	prevWasUserOrAssistant := false
 	for _, entry := range ms.messages {
+		if ms.splitMode && !IsConversationEvent(entry.EventType) {
+			continue
+		}
 		entryLines := ms.renderEntry(entry, maxLineWidth, now)
 		if len(entryLines) == 0 {
 			continue
@@ -1212,14 +1419,16 @@ func (ms *MessageStream) scrollToBottom() {
 // contentHeight returns the usable content height given the current dimensions.
 // This must match the calculation in View() to avoid scroll/display mismatches.
 func (ms *MessageStream) contentHeight() int {
-	// Top: title bar + indicator line + header separator = 3 lines.
 	topLines := 3
-	// Bottom: bottom border = 1 line.
 	bottomLines := 1
 	if ms.composeMode {
-		bottomLines += 2 // compose separator + compose line
+		bottomLines += 2
 	}
 	h := ms.height - topLines - bottomLines
+	if ms.splitMode {
+		activityH := h / 2
+		h = h - activityH
+	}
 	if h < 1 {
 		h = 1
 	}
