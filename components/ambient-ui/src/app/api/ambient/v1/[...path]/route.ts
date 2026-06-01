@@ -1,5 +1,5 @@
 import { resolveAccessToken, buildProxyHeaders } from "@/lib/auth"
-import { API_SERVER_URL } from "@/lib/config"
+import { getRuntimeConfig } from "@/lib/runtime-config"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -14,11 +14,22 @@ async function proxyRequest(
   if (path.some(s => s === ".." || s === ".")) {
     return Response.json({ error: "invalid_path" }, { status: 400 })
   }
+
+  const config = await getRuntimeConfig()
+  const apiServerUrl = config.apiServerUrl
+
   const pathStr = path.map(s => encodeURIComponent(s)).join("/")
-  const url = new URL(`/api/ambient/v1/${pathStr}`, API_SERVER_URL)
+  const url = new URL(`/api/ambient/v1/${pathStr}`, apiServerUrl)
   url.search = new URL(request.url).search
 
-  const accessToken = await resolveAccessToken(request)
+  // Auth priority: custom token > SSO/oauth token > dev-mode token
+  let accessToken: string | undefined
+  if (config.customToken) {
+    accessToken = config.customToken
+  } else {
+    accessToken = await resolveAccessToken(request)
+  }
+
   if (!accessToken) {
     return Response.json({ error: "Unauthorized" }, { status: 401 })
   }
@@ -28,7 +39,7 @@ async function proxyRequest(
   // oauth-proxy provides an OpenShift OAuth token (different auth system).
   // Strip the Authorization header until auth systems are unified — the
   // BFF's oauth-proxy already authenticates the user.
-  if (accessToken.startsWith("sha256~")) {
+  if (!config.customToken && accessToken.startsWith("sha256~")) {
     delete headers["Authorization"]
   }
 
