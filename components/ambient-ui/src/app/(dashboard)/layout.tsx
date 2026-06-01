@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation'
 import { AppSidebar } from '@/components/app-sidebar'
 import { NavHeader } from '@/components/nav-header'
+import { StatusBar } from '@/components/status-bar'
 import { useProject } from '@/queries/use-projects'
 import {
   SidebarInset,
@@ -38,7 +39,8 @@ export default function DashboardLayout({
           projectName={project?.name ?? null}
           pageName={pageName}
         />
-        <div className="flex-1 p-6">{children}</div>
+        <div className="flex-1 p-6 pb-10">{children}</div>
+        <StatusBar />
       </SidebarInset>
     </SidebarProvider>
   )
