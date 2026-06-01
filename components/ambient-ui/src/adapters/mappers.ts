@@ -1,5 +1,5 @@
 import type { Session, Project } from 'ambient-sdk'
-import type { DomainSession, DomainProject, SessionPhase } from '@/domain/types'
+import type { DomainSession, DomainProject, DomainSessionMessage, SessionPhase } from '@/domain/types'
 
 const VALID_PHASES: ReadonlySet<string> = new Set<string>([
   'Pending',
@@ -67,5 +67,25 @@ export function mapSdkProjectToDomain(sdk: Project): DomainProject {
     status: emptyToNull(sdk.status),
     createdAt: sdk.created_at ?? '',
     updatedAt: sdk.updated_at ?? '',
+  }
+}
+
+export type SdkSessionMessageShape = {
+  id: string
+  session_id: string
+  event_type: string
+  payload: string
+  seq: number
+  created_at: string | null
+}
+
+export function mapSessionMessageToDomain(sdk: SdkSessionMessageShape): DomainSessionMessage {
+  return {
+    id: sdk.id,
+    sessionId: sdk.session_id,
+    eventType: sdk.event_type,
+    payload: sdk.payload,
+    seq: sdk.seq,
+    createdAt: sdk.created_at ?? '',
   }
 }

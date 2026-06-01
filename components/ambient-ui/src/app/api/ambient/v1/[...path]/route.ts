@@ -15,8 +15,7 @@ async function proxyRequest(
     return Response.json({ error: "invalid_path" }, { status: 400 })
   }
   const pathStr = path.map(s => encodeURIComponent(s)).join("/")
-  // SDK uses /api/ambient/v1, server uses /api/adp/v1
-  const url = new URL(`/api/adp/v1/${pathStr}`, API_SERVER_URL)
+  const url = new URL(`/api/ambient/v1/${pathStr}`, API_SERVER_URL)
   url.search = new URL(request.url).search
 
   const accessToken = await resolveAccessToken(request)
@@ -25,6 +24,13 @@ async function proxyRequest(
   }
 
   const headers: Record<string, string> = buildProxyHeaders(accessToken)
+  // The ambient-api-server validates JWTs against Red Hat SSO, but the
+  // oauth-proxy provides an OpenShift OAuth token (different auth system).
+  // Strip the Authorization header until auth systems are unified — the
+  // BFF's oauth-proxy already authenticates the user.
+  if (accessToken.startsWith("sha256~")) {
+    delete headers["Authorization"]
+  }
 
   const accept = request.headers.get("accept")
   if (accept) {

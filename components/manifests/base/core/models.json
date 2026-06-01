@@ -157,6 +157,30 @@
       "provider": "google",
       "available": false,
       "featureGated": true
+    },
+    {
+      "id": "claude-opus-4-8",
+      "label": "Claude Opus 4.8",
+      "vertexId": "claude-opus-4-8@default",
+      "provider": "anthropic",
+      "available": false,
+      "featureGated": true
+    },
+    {
+      "id": "gemini-3-pro-image",
+      "label": "Gemini 3 Pro Image",
+      "vertexId": "gemini-3-pro-image@default",
+      "provider": "google",
+      "available": false,
+      "featureGated": true
+    },
+    {
+      "id": "gemini-3.1-flash-image",
+      "label": "Gemini 3.1 Flash Image",
+      "vertexId": "gemini-3.1-flash-image@default",
+      "provider": "google",
+      "available": false,
+      "featureGated": true
     }
   ]
 }

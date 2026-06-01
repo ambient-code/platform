@@ -9,7 +9,9 @@ spec:
       - name: ambient-ui
         env:
         - name: API_SERVER_URL
-          value: "http://ambient-api-server:8000"
+          value: "https://ambient-api-server:8000"
+        - name: NODE_TLS_REJECT_UNAUTHORIZED
+          value: "0"
         - name: NODE_ENV
           value: "production"
         - name: AUTH_MODE
@@ -28,7 +30,7 @@ spec:
         - --https-address=
         - --provider=openshift
         - --upstream=http://localhost:3000
-        - --client-id=ambient-ui
+        - --client-id=ambient-frontend
         - --client-secret-file=/etc/oauth/config/client-secret
         - --cookie-secret-file=/etc/oauth/config/cookie_secret
         - --cookie-expire=23h0m0s
@@ -39,18 +41,18 @@ spec:
         - --skip-auth-regex=^/metrics
         ports:
         - containerPort: 8443
-          name: ambient-ui-proxy
+          name: oauthproxy
         livenessProbe:
           httpGet:
             path: /oauth/healthz
-            port: ambient-ui-proxy
+            port: oauthproxy
             scheme: HTTP
           initialDelaySeconds: 30
           periodSeconds: 5
         readinessProbe:
           httpGet:
             path: /oauth/healthz
-            port: ambient-ui-proxy
+            port: oauthproxy
             scheme: HTTP
           initialDelaySeconds: 5
           periodSeconds: 5
@@ -61,6 +63,12 @@ spec:
           limits:
             memory: 512Mi
             cpu: 200m
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: true
         volumeMounts:
         - mountPath: /etc/oauth/config
           name: ambient-ui-oauth-config
