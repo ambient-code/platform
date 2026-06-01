@@ -7,7 +7,11 @@ export type SessionData = {
   accessToken: string
   refreshToken: string
   expiresAt: number
+  customApiServerUrl?: string
+  customToken?: string
 }
+
+const devSessionSecret = randomBytes(32).toString("hex")
 
 function getSessionOptions(): SessionOptions {
   const secret = env.SESSION_SECRET
@@ -16,7 +20,7 @@ function getSessionOptions(): SessionOptions {
       throw new Error("SESSION_SECRET must be set when AUTH_MODE=native-sso")
     }
     return {
-      password: randomBytes(32).toString("hex"),
+      password: devSessionSecret,
       cookieName: "ambient-ui-session",
       cookieOptions: {
         secure: process.env.NODE_ENV === "production",
