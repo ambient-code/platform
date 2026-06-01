@@ -10,27 +10,19 @@ import { formatRelativeTime } from '@/lib/format-timestamp'
 import { cn } from '@/lib/utils'
 import { EventTypeBadge } from './event-type-badge'
 
-const ALL_EVENT_TYPES: SessionEventType[] = [
-  'user',
-  'assistant',
-  'text',
+const OPERATIONAL_EVENT_TYPES: SessionEventType[] = [
   'tool_use',
   'tool_result',
   'error',
   'lifecycle',
-  'user_feedback',
   'system',
 ]
 
-const EVENT_TYPE_LABELS: Record<SessionEventType, string> = {
-  user: 'User',
-  assistant: 'Assistant',
-  text: 'Text',
+const EVENT_TYPE_LABELS: Record<string, string> = {
   tool_use: 'Tool Call',
   tool_result: 'Tool Result',
   error: 'Error',
   lifecycle: 'Lifecycle',
-  user_feedback: 'Feedback',
   system: 'System',
 }
 
@@ -90,7 +82,7 @@ function EventRow({ message }: { message: DomainSessionMessage }) {
 
 export function LogsTab({ session }: { session: DomainSession }) {
   const [activeFilters, setActiveFilters] = useState<Set<SessionEventType>>(
-    new Set(ALL_EVENT_TYPES),
+    new Set(OPERATIONAL_EVENT_TYPES),
   )
 
   const { data, isLoading, error } = useSessionMessages(session.id)
@@ -126,7 +118,7 @@ export function LogsTab({ session }: { session: DomainSession }) {
     <div className="space-y-4 pt-4">
       {/* Filter bar */}
       <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by event type">
-        {ALL_EVENT_TYPES.map(eventType => {
+        {OPERATIONAL_EVENT_TYPES.map(eventType => {
           const isActive = activeFilters.has(eventType)
           return (
             <Button
