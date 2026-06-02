@@ -29,7 +29,7 @@ RUN pip3 install --break-system-packages --no-cache-dir uv==${UV_VERSION} pre-co
 
 # Pre-install MCP stdio servers so uvx doesn't download them at runtime
 # (uvx downloads + installs into a temp venv which spikes memory to ~9GB)
-RUN uv tool install mcp-server-fetch
+RUN uv tool install mcp-server-fetch==2025.4.7
 
 # Create working directory
 WORKDIR /app
