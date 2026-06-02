@@ -9,10 +9,8 @@
       "url": "https://mcp.deepwiki.com/mcp"
     },
     "webfetch": {
-      "command": "uvx",
-      "args": [
-        "mcp-server-fetch"
-      ]
+      "command": "/root/.local/share/uv/tools/mcp-server-fetch/bin/mcp-server-fetch",
+      "args": []
     }
   }
 }

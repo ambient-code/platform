@@ -1,5 +1,3 @@
-type AuthMode = 'native-sso' | 'oauth-proxy' | 'none'
-
 function getEnv(key: string, defaultValue: string): string {
   return process.env[key] || defaultValue
 }
@@ -10,7 +8,6 @@ function getOptionalEnv(key: string): string | undefined {
 
 export const env = {
   API_SERVER_URL: getEnv('API_SERVER_URL', 'http://localhost:8000'),
-  AUTH_MODE: getEnv('AUTH_MODE', 'none') as AuthMode,
   SSO_ISSUER_URL: getOptionalEnv('SSO_ISSUER_URL'),
   SSO_CLIENT_ID: getOptionalEnv('SSO_CLIENT_ID'),
   SSO_CLIENT_SECRET: getOptionalEnv('SSO_CLIENT_SECRET'),

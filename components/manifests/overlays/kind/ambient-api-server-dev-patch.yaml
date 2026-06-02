@@ -25,6 +25,11 @@ spec:
           env:
             - name: AMBIENT_ENV
               value: development
+            - name: AMBIENT_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  key: token
+                  name: ambient-control-plane-token
           command:
             - /usr/local/bin/ambient-api-server
             - serve

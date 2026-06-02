@@ -1,28 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
-function getAuthMode(): "native-sso" | "oauth-proxy" | "none" {
-  return (process.env.AUTH_MODE || "none") as "native-sso" | "oauth-proxy" | "none"
-}
-
 export function proxy(request: NextRequest) {
-  const authMode = getAuthMode()
-
-  if (authMode === "none") {
-    return NextResponse.next()
-  }
-
-  if (authMode === "oauth-proxy") {
-    const forwardedUser = request.headers.get("x-forwarded-user")
-    if (!forwardedUser) {
-      return NextResponse.json(
-        { error: "Unauthorized: missing X-Forwarded-User header" },
-        { status: 401 },
-      )
-    }
-    return NextResponse.next()
-  }
-
-  // native-sso: check for session cookie
+  // Check for session cookie
   const sessionCookie = request.cookies.get("ambient-ui-session")
   if (sessionCookie) {
     return NextResponse.next()
