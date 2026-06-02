@@ -32,15 +32,17 @@ _AGUI_TO_EVENT_TYPE = {
 }
 
 # TOOL_CALL_START and TOOL_CALL_ARGS are accumulated, pushed on TOOL_CALL_END.
-_SKIP_TYPES = frozenset({
-    "TOOL_CALL_START",
-    "TOOL_CALL_ARGS",
-    "TEXT_MESSAGE_START",
-    "TEXT_MESSAGE_CONTENT",
-    "TEXT_MESSAGE_END",
-    "STATE_SNAPSHOT",
-    "MESSAGES_SNAPSHOT",
-})
+_SKIP_TYPES = frozenset(
+    {
+        "TOOL_CALL_START",
+        "TOOL_CALL_ARGS",
+        "TEXT_MESSAGE_START",
+        "TEXT_MESSAGE_CONTENT",
+        "TEXT_MESSAGE_END",
+        "STATE_SNAPSHOT",
+        "MESSAGES_SNAPSHOT",
+    }
+)
 
 
 def _event_type_str(event: BaseEvent) -> Optional[str]:
@@ -92,7 +94,9 @@ def _build_payload(
         payload = {"custom_event": name}
         if value is not None:
             try:
-                payload["value"] = json.loads(value) if isinstance(value, str) else value
+                payload["value"] = (
+                    json.loads(value) if isinstance(value, str) else value
+                )
             except (json.JSONDecodeError, TypeError):
                 payload["value"] = str(value)
         return json.dumps(payload)

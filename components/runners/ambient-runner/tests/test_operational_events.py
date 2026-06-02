@@ -239,7 +239,9 @@ class TestOperationalEventWriter:
         assert len(grpc_client.session_messages.calls) == 0
 
     def test_tool_call_args_accumulates_no_push(self, writer, grpc_client):
-        event = FakeEvent(type=FakeEventType.TOOL_CALL_ARGS, tool_call_id="tc-orphan", delta="data")
+        event = FakeEvent(
+            type=FakeEventType.TOOL_CALL_ARGS, tool_call_id="tc-orphan", delta="data"
+        )
         asyncio.get_event_loop().run_until_complete(writer.consume(event))
         assert len(grpc_client.session_messages.calls) == 0
 
