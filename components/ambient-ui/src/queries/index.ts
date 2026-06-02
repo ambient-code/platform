@@ -1,5 +1,6 @@
 export { queryKeys } from './query-keys'
-export { useSessions, useSession, useStopSession, useStartSession } from './use-sessions'
+export { useSessions, useSession, useStopSession, useStartSession, useDeleteSession } from './use-sessions'
 export { useProjects, useProject } from './use-projects'
 export { useSendFeedback } from './use-send-feedback'
 export { useSessionMessages } from './use-session-messages'
+export { useSendMessage } from './use-send-message'

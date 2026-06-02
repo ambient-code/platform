@@ -51,6 +51,10 @@ function createSdkSessionsAdapter(api: SessionAPI): SessionsPort {
       const session = await api.start(sessionId)
       return mapSdkSessionToDomain(session)
     },
+
+    async delete(sessionId: string): Promise<void> {
+      await api.delete(sessionId)
+    },
   }
 }
 

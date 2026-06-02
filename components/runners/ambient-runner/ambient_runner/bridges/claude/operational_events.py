@@ -24,22 +24,23 @@ logger = logging.getLogger(__name__)
 # ag_ui.core.EventType.TOOL_CALL_RESULT is emitted by handlers.py:199
 # (ToolCallResultEvent after ToolCallEndEvent). See test_operational_events.py.
 _AGUI_TO_EVENT_TYPE = {
-    "TOOL_CALL_START": "tool_use",
+    "TOOL_CALL_END": "tool_use",
     "TOOL_CALL_RESULT": "tool_result",
     "RUN_STARTED": "lifecycle",
     "RUN_FINISHED": "lifecycle",
     "RUN_ERROR": "error",
 }
 
-_SKIP_TYPES = frozenset({
-    "TOOL_CALL_ARGS",
-    "TOOL_CALL_END",
-    "TEXT_MESSAGE_START",
-    "TEXT_MESSAGE_CONTENT",
-    "TEXT_MESSAGE_END",
-    "STATE_SNAPSHOT",
-    "MESSAGES_SNAPSHOT",
-})
+# TOOL_CALL_START and TOOL_CALL_ARGS are handled by explicit early returns in consume().
+_SKIP_TYPES = frozenset(
+    {
+        "TEXT_MESSAGE_START",
+        "TEXT_MESSAGE_CONTENT",
+        "TEXT_MESSAGE_END",
+        "STATE_SNAPSHOT",
+        "MESSAGES_SNAPSHOT",
+    }
+)
 
 
 def _event_type_str(event: BaseEvent) -> Optional[str]:
@@ -49,11 +50,26 @@ def _event_type_str(event: BaseEvent) -> Optional[str]:
     return raw.value if hasattr(raw, "value") else str(raw)
 
 
-def _build_payload(event_type_str: str, event: BaseEvent) -> str:
-    if event_type_str == "TOOL_CALL_START":
-        name = getattr(event, "tool_call_name", None) or "unknown"
+def _build_payload(
+    event_type_str: str,
+    event: BaseEvent,
+    pending_tools: Optional[dict] = None,
+) -> str:
+    if event_type_str == "TOOL_CALL_END":
         tool_id = getattr(event, "tool_call_id", None) or ""
-        return json.dumps({"tool": name, "tool_call_id": tool_id})
+        info = (pending_tools or {}).get(tool_id, {})
+        name = info.get("name", "unknown")
+        args = info.get("args", "")
+        payload: dict = {"tool": name, "tool_call_id": tool_id}
+        if args:
+            try:
+                parsed = json.loads(args)
+                payload["input"] = (
+                    parsed if isinstance(parsed, dict) else {"value": parsed}
+                )
+            except (json.JSONDecodeError, TypeError):
+                payload["input"] = {"raw": args}
+        return json.dumps(payload)
 
     if event_type_str == "TOOL_CALL_RESULT":
         tool_id = getattr(event, "tool_call_id", None) or ""
@@ -79,7 +95,9 @@ def _build_payload(event_type_str: str, event: BaseEvent) -> str:
         payload = {"custom_event": name}
         if value is not None:
             try:
-                payload["value"] = json.loads(value) if isinstance(value, str) else value
+                payload["value"] = (
+                    json.loads(value) if isinstance(value, str) else value
+                )
             except (json.JSONDecodeError, TypeError):
                 payload["value"] = str(value)
         return json.dumps(payload)
@@ -97,10 +115,25 @@ class OperationalEventWriter:
     ) -> None:
         self._session_id = session_id
         self._grpc_client = grpc_client
+        self._pending_tools: dict[str, dict[str, str]] = {}
 
     async def consume(self, event: BaseEvent) -> None:
         event_type_str = _event_type_str(event)
         if event_type_str is None:
+            return
+
+        # Accumulate tool call info for TOOL_CALL_END
+        if event_type_str == "TOOL_CALL_START":
+            tool_id = getattr(event, "tool_call_id", None) or ""
+            name = getattr(event, "tool_call_name", None) or "unknown"
+            self._pending_tools[tool_id] = {"name": name, "args": ""}
+            return
+
+        if event_type_str == "TOOL_CALL_ARGS":
+            tool_id = getattr(event, "tool_call_id", None) or ""
+            delta = getattr(event, "delta", None) or ""
+            if tool_id in self._pending_tools:
+                self._pending_tools[tool_id]["args"] += delta
             return
 
         if event_type_str in _SKIP_TYPES:
@@ -121,7 +154,10 @@ class OperationalEventWriter:
         if self._grpc_client is None:
             return
 
-        payload = _build_payload(event_type_str, event)
+        payload = _build_payload(event_type_str, event, self._pending_tools)
+        if event_type_str == "TOOL_CALL_END":
+            tool_id = getattr(event, "tool_call_id", None) or ""
+            self._pending_tools.pop(tool_id, None)
         client = self._grpc_client
         session_id = self._session_id
 

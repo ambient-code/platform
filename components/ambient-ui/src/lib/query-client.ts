@@ -14,11 +14,36 @@ const queryConfig: DefaultOptions = {
   },
 }
 
+function isAuthError(error: unknown): boolean {
+  if (error instanceof Error && error.message.includes('401')) return true
+  if (typeof error === 'object' && error !== null && 'status' in error) {
+    return (error as { status: number }).status === 401
+  }
+  return false
+}
+
+let redirecting = false
+
+function handleAuthError() {
+  if (redirecting || typeof window === 'undefined') return
+  redirecting = true
+  const returnTo = encodeURIComponent(window.location.pathname + window.location.search)
+  window.location.href = `/api/auth/sso/login?returnTo=${returnTo}`
+}
+
 export function makeQueryClient() {
   return new QueryClient({
     defaultOptions: queryConfig,
-    queryCache: new QueryCache(),
-    mutationCache: new MutationCache(),
+    queryCache: new QueryCache({
+      onError: (error) => {
+        if (isAuthError(error)) handleAuthError()
+      },
+    }),
+    mutationCache: new MutationCache({
+      onError: (error) => {
+        if (isAuthError(error)) handleAuthError()
+      },
+    }),
   })
 }
 
