@@ -1,84 +1,25 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { DomainSession, DomainSessionMessage, SessionEventType } from '@/domain/types'
+import type { DomainSession, SessionEventType } from '@/domain/types'
 import { useSessionMessages } from '@/queries/use-session-messages'
-import { formatRelativeTime } from '@/lib/format-timestamp'
 import { cn } from '@/lib/utils'
-import { EventTypeBadge } from './event-type-badge'
+import { EventRow } from './event-row'
+import { EVENT_BADGE_CONFIG } from './event-type-badge'
+import { EventSummaryBanner, computeEventCounts } from './event-summary-banner'
+import { useLiveTail, LiveIndicator, JumpToLatestPill } from './live-tail-indicator'
+import { EventAnnouncer } from './event-announcer'
 
-const OPERATIONAL_EVENT_TYPES: SessionEventType[] = [
+const OPERATIONAL_EVENT_TYPES: readonly SessionEventType[] = [
   'tool_use',
   'tool_result',
   'error',
   'lifecycle',
   'system',
-]
-
-const EVENT_TYPE_LABELS: Record<string, string> = {
-  tool_use: 'Tool Call',
-  tool_result: 'Tool Result',
-  error: 'Error',
-  lifecycle: 'Lifecycle',
-  system: 'System',
-}
-
-const MAX_CONTENT_LENGTH = 300
-
-function truncateContent(content: string): { text: string; truncated: boolean } {
-  if (content.length <= MAX_CONTENT_LENGTH) {
-    return { text: content, truncated: false }
-  }
-  return {
-    text: content.slice(0, MAX_CONTENT_LENGTH),
-    truncated: true,
-  }
-}
-
-function EventRow({ message }: { message: DomainSessionMessage }) {
-  const [expanded, setExpanded] = useState(false)
-  const isError = message.eventType === 'error'
-  const { text, truncated } = truncateContent(message.payload)
-
-  const toggleExpanded = useCallback(() => {
-    setExpanded(prev => !prev)
-  }, [])
-
-  return (
-    <div
-      className={cn(
-        'flex gap-3 px-3 py-2 text-sm',
-        isError && 'border-l-2 border-l-[#f0561d] bg-[#ffe3d9]/20',
-      )}
-    >
-      <span className="shrink-0 font-mono text-xs text-muted-foreground pt-0.5 min-w-[100px]">
-        {message.createdAt ? formatRelativeTime(message.createdAt) : '--'}
-      </span>
-      <span className="shrink-0 pt-0.5">
-        <EventTypeBadge eventType={message.eventType} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground">
-          {expanded ? message.payload : text}
-          {truncated && !expanded && '...'}
-        </pre>
-        {truncated && (
-          <Button
-            variant="link"
-            size="sm"
-            className="h-auto p-0 text-xs text-muted-foreground"
-            onClick={toggleExpanded}
-          >
-            {expanded ? 'Show less' : 'Show more'}
-          </Button>
-        )}
-      </div>
-    </div>
-  )
-}
+] as const
 
 export function LogsTab({ session }: { session: DomainSession }) {
   const [activeFilters, setActiveFilters] = useState<Set<SessionEventType>>(
@@ -101,8 +42,18 @@ export function LogsTab({ session }: { session: DomainSession }) {
 
   const messages = data?.items ?? []
   const filteredMessages = messages.filter(m =>
-    activeFilters.has(m.eventType as SessionEventType),
+    activeFilters.has(m.eventType),
   )
+
+  const eventCounts = useMemo(
+    () => computeEventCounts(messages, OPERATIONAL_EVENT_TYPES),
+    [messages],
+  )
+
+  const isFiltered = activeFilters.size !== OPERATIONAL_EVENT_TYPES.length
+
+  const { scrollRef, sentinelRef, isAtBottom, newEventCount, scrollToBottom } =
+    useLiveTail(filteredMessages.length)
 
   if (error) {
     return (
@@ -116,27 +67,70 @@ export function LogsTab({ session }: { session: DomainSession }) {
 
   return (
     <div className="space-y-4 pt-4">
-      {/* Filter bar */}
+      {/* Fix 7: aria-live announcer for screen readers */}
+      <EventAnnouncer
+        totalCount={messages.length}
+        errorCount={eventCounts.error}
+      />
+
+      {/* Fix 1 + Fix 9: Summary banner with error highlighting and event counts */}
+      {!isLoading && messages.length > 0 && (
+        <EventSummaryBanner
+          totalCount={messages.length}
+          filteredCount={filteredMessages.length}
+          errorCount={eventCounts.error}
+          isFiltered={isFiltered}
+        />
+      )}
+
+      {/* Fix 3: Filter bar with count badges */}
       <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by event type">
         {OPERATIONAL_EVENT_TYPES.map(eventType => {
           const isActive = activeFilters.has(eventType)
+          const count = eventCounts[eventType]
+          const isErrorType = eventType === 'error'
+          const hasErrors = isErrorType && count > 0
           return (
             <Button
               key={eventType}
               variant={isActive ? 'default' : 'outline'}
               size="sm"
-              className="h-7 text-xs"
+              className={cn(
+                'h-7 text-xs gap-1.5',
+                hasErrors && !isActive && 'border-[#f0561d] text-[#f0561d]',
+              )}
               onClick={() => toggleFilter(eventType)}
               aria-pressed={isActive}
             >
-              {EVENT_TYPE_LABELS[eventType]}
+              {EVENT_BADGE_CONFIG[eventType].label}
+              {count > 0 && (
+                <span
+                  className={cn(
+                    'inline-flex items-center justify-center rounded-full px-1.5 min-w-[1.25rem] h-4 text-[10px] font-medium',
+                    isActive
+                      ? 'bg-primary-foreground/20 text-primary-foreground'
+                      : 'bg-muted text-muted-foreground',
+                    hasErrors && !isActive && 'bg-[#ffe3d9] text-[#f0561d]',
+                    hasErrors && isActive && 'bg-[#f0561d]/30 text-primary-foreground',
+                  )}
+                >
+                  {count}
+                </span>
+              )}
             </Button>
           )
         })}
       </div>
 
-      {/* Event list */}
-      <Card>
+      {/* Event list card */}
+      <Card className="relative">
+        {/* Fix 2: Live indicator */}
+        {isAtBottom && filteredMessages.length > 0 && (
+          <div className="absolute top-2 right-3 z-10">
+            <LiveIndicator />
+          </div>
+        )}
+
         <CardContent className="p-0">
           {isLoading ? (
             <div className="space-y-2 p-4">
@@ -151,10 +145,36 @@ export function LogsTab({ session }: { session: DomainSession }) {
                 : 'No events match the selected filters.'}
             </p>
           ) : (
-            <div className="divide-y">
-              {filteredMessages.map(message => (
-                <EventRow key={message.id} message={message} />
-              ))}
+            <div
+              ref={scrollRef}
+              className="max-h-[600px] overflow-y-auto relative"
+              role="log"
+              aria-label="Session events"
+            >
+              <div className="divide-y">
+                {filteredMessages.map((message, index) => {
+                  const prev = index > 0 ? filteredMessages[index - 1] : null
+                  const isToolResultFollowingToolUse =
+                    message.eventType === 'tool_result' &&
+                    prev?.eventType === 'tool_use'
+
+                  return (
+                    <EventRow
+                      key={message.id}
+                      message={message}
+                      isToolResultFollowingToolUse={isToolResultFollowingToolUse}
+                    />
+                  )
+                })}
+              </div>
+              {/* Sentinel for IntersectionObserver */}
+              <div ref={sentinelRef} className="h-1" aria-hidden="true" />
+
+              {/* Fix 2: Jump to latest pill */}
+              <JumpToLatestPill
+                newEventCount={newEventCount}
+                onClick={scrollToBottom}
+              />
             </div>
           )}
         </CardContent>

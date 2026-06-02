@@ -31,6 +31,7 @@ export async function GET() {
     let name = ""
     let email = ""
 
+    // Token was verified at OIDC callback; safe to decode without re-verification.
     try {
       const parts = session.accessToken.split(".")
       if (parts.length === 3) {

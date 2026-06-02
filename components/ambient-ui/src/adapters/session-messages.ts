@@ -83,6 +83,9 @@ function createSessionMessagesAdapter(fetchFn: FetchFn): SessionMessagesPort {
       }
 
       const data = raw as SessionMessageListResponse
+      if (!data.items || !Array.isArray(data.items)) {
+        return { items: [], total: 0, page, size, hasMore: false }
+      }
       const items = data.items.map(mapSessionMessageToDomain)
       return {
         items,

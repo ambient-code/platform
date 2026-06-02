@@ -60,7 +60,7 @@ export type SessionEventType =
 export type DomainSessionMessage = {
   id: string
   sessionId: string
-  eventType: string
+  eventType: SessionEventType
   payload: string
   seq: number
   createdAt: string

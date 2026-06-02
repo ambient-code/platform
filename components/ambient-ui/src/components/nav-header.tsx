@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { LogOut } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -39,13 +40,14 @@ function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 rounded-full text-xs font-medium"
           aria-label="User menu"
         >
           {user.initials}
-        </button>
+        </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="font-normal">

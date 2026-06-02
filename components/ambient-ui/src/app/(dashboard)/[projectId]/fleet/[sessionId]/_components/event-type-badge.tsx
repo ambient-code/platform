@@ -7,7 +7,7 @@ type EventBadgeConfig = {
   className: string
 }
 
-const EVENT_BADGE_CONFIG: Record<SessionEventType, EventBadgeConfig> = {
+export const EVENT_BADGE_CONFIG: Record<SessionEventType, EventBadgeConfig> = {
   user: {
     label: 'User',
     className: 'bg-[#e0f0ff] text-[#003366] border-[#b9dafc]',
@@ -42,7 +42,7 @@ const EVENT_BADGE_CONFIG: Record<SessionEventType, EventBadgeConfig> = {
   },
   system: {
     label: 'System',
-    className: 'bg-[#f2f2f2] text-[#707070] border-[#e0e0e0]',
+    className: 'bg-[#f2f2f2] text-[#4d4d4d] border-[#e0e0e0]',
   },
 }
 
@@ -62,7 +62,7 @@ export function EventTypeBadge({ eventType }: { eventType: string }) {
   return (
     <Badge
       variant="outline"
-      className={cn('text-[10px] font-medium uppercase tracking-wider', config.className)}
+      className={cn('text-[11px] font-medium uppercase tracking-wider', config.className)}
     >
       {config.label}
     </Badge>
