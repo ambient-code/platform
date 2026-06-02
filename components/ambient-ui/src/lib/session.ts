@@ -8,6 +8,9 @@ export type SessionData = {
   refreshToken: string
   expiresAt: number
   customApiServerUrl?: string
+}
+
+export type ContextSessionData = {
   customToken?: string
 }
 
@@ -16,14 +19,14 @@ const devSessionSecret = randomBytes(32).toString("hex")
 function getSessionOptions(): SessionOptions {
   const secret = env.SESSION_SECRET
   if (!secret) {
-    if (env.AUTH_MODE === "native-sso") {
-      throw new Error("SESSION_SECRET must be set when AUTH_MODE=native-sso")
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("SESSION_SECRET must be set in production")
     }
     return {
       password: devSessionSecret,
       cookieName: "ambient-ui-session",
       cookieOptions: {
-        secure: process.env.NODE_ENV === "production",
+        secure: false,
         httpOnly: true,
         sameSite: "lax" as const,
         path: "/",
@@ -45,6 +48,14 @@ function getSessionOptions(): SessionOptions {
 
 export async function getSession() {
   return getIronSession<SessionData>(await cookies(), getSessionOptions())
+}
+
+export async function getContextSession() {
+  const opts = getSessionOptions()
+  return getIronSession<ContextSessionData>(await cookies(), {
+    ...opts,
+    cookieName: `${opts.cookieName}-ctx`,
+  })
 }
 
 export async function getAccessToken(): Promise<string | undefined> {

@@ -1,5 +1,5 @@
 import { env } from './env'
-import { getSession } from './session'
+import { getSession, getContextSession } from './session'
 
 export type RuntimeConfig = {
   apiServerUrl: string
@@ -12,8 +12,9 @@ export async function getRuntimeConfig(): Promise<RuntimeConfig> {
   const defaultUrl = env.API_SERVER_URL
   try {
     const session = await getSession()
+    const ctxSession = await getContextSession()
     const apiServerUrl = session.customApiServerUrl || defaultUrl
-    const customToken = session.customToken || null
+    const customToken = ctxSession.customToken ?? null
     return {
       apiServerUrl,
       customToken,
@@ -32,18 +33,22 @@ export async function getRuntimeConfig(): Promise<RuntimeConfig> {
 
 export async function setCustomContext(url?: string, token?: string | null): Promise<void> {
   const session = await getSession()
+  const ctxSession = await getContextSession()
   if (url) session.customApiServerUrl = url
   if (token === null || token === '') {
-    session.customToken = undefined
+    ctxSession.customToken = undefined
   } else if (token) {
-    session.customToken = token
+    ctxSession.customToken = token
   }
   await session.save()
+  await ctxSession.save()
 }
 
 export async function resetContext(): Promise<void> {
   const session = await getSession()
+  const ctxSession = await getContextSession()
   session.customApiServerUrl = undefined
-  session.customToken = undefined
+  ctxSession.customToken = undefined
   await session.save()
+  await ctxSession.save()
 }

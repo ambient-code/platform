@@ -46,10 +46,21 @@ export type ListParams = {
   orderBy?: string
 }
 
+export type SessionEventType =
+  | 'user'
+  | 'assistant'
+  | 'text'
+  | 'tool_use'
+  | 'tool_result'
+  | 'error'
+  | 'lifecycle'
+  | 'user_feedback'
+  | 'system'
+
 export type DomainSessionMessage = {
   id: string
   sessionId: string
-  eventType: string
+  eventType: SessionEventType
   payload: string
   seq: number
   createdAt: string

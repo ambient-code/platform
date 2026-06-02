@@ -18,16 +18,20 @@ const (
 )
 
 type PodStatusSyncer struct {
-	factory *SDKClientFactory
-	kube    *kubeclient.KubeClient
-	logger  zerolog.Logger
+	factory            *SDKClientFactory
+	kube               *kubeclient.KubeClient
+	platformMode       string
+	mppConfigNamespace string
+	logger             zerolog.Logger
 }
 
-func NewPodStatusSyncer(factory *SDKClientFactory, kube *kubeclient.KubeClient, logger zerolog.Logger) *PodStatusSyncer {
+func NewPodStatusSyncer(factory *SDKClientFactory, kube *kubeclient.KubeClient, platformMode, mppConfigNamespace string, logger zerolog.Logger) *PodStatusSyncer {
 	return &PodStatusSyncer{
-		factory: factory,
-		kube:    kube,
-		logger:  logger.With().Str("component", "pod-status-syncer").Logger(),
+		factory:            factory,
+		kube:               kube,
+		platformMode:       platformMode,
+		mppConfigNamespace: mppConfigNamespace,
+		logger:             logger.With().Str("component", "pod-status-syncer").Logger(),
 	}
 }
 
@@ -60,6 +64,9 @@ func (s *PodStatusSyncer) syncOnce(ctx context.Context) {
 }
 
 func (s *PodStatusSyncer) listManagedNamespaces(ctx context.Context) ([]string, error) {
+	if s.platformMode == "mpp" {
+		return s.listMPPManagedNamespaces(ctx)
+	}
 	nsList, err := s.kube.ListNamespacesByLabel(ctx, managedLabelFilter)
 	if err != nil {
 		return nil, fmt.Errorf("listing managed namespaces: %w", err)
@@ -68,6 +75,19 @@ func (s *PodStatusSyncer) listManagedNamespaces(ctx context.Context) ([]string, 
 	var names []string
 	for _, ns := range nsList.Items {
 		names = append(names, ns.GetName())
+	}
+	return names, nil
+}
+
+func (s *PodStatusSyncer) listMPPManagedNamespaces(ctx context.Context) ([]string, error) {
+	tnList, err := s.kube.ListTenantNamespaces(ctx, s.mppConfigNamespace, managedLabelFilter)
+	if err != nil {
+		return nil, fmt.Errorf("listing managed TenantNamespaces in %s: %w", s.mppConfigNamespace, err)
+	}
+
+	var names []string
+	for _, tn := range tnList.Items {
+		names = append(names, "ambient-code--"+tn.GetName())
 	}
 	return names, nil
 }
@@ -165,6 +185,14 @@ func (s *PodStatusSyncer) hasContainerCrashLoop(pod *unstructured.Unstructured) 
 		if found {
 			reason, _, _ := unstructured.NestedString(waiting, "reason")
 			if reason == "CrashLoopBackOff" || reason == "ImagePullBackOff" || reason == "ErrImagePull" {
+				return true
+			}
+		}
+		name, _, _ := unstructured.NestedString(csMap, "name")
+		terminated, found, _ := unstructured.NestedMap(csMap, "state", "terminated")
+		if found && name == "ambient-code-runner" {
+			reason, _, _ := unstructured.NestedString(terminated, "reason")
+			if reason == "OOMKilled" || reason == "Error" {
 				return true
 			}
 		}

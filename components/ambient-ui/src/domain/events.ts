@@ -1,3 +1,3 @@
 export const SESSION_MESSAGE_EVENTS = {
-  userFeedback: 'user_feedback',
+  userFeedback: 'user',
 } as const

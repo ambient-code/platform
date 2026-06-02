@@ -72,6 +72,8 @@ type KubeReconcilerConfig struct {
 	HTTPSProxy            string
 	NoProxy               string
 	ImagePullSecret       string
+	PlatformMode          string
+	MPPConfigNamespace    string
 }
 
 type SimpleKubeReconciler struct {
@@ -513,7 +515,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 			"resources": map[string]interface{}{
 				"requests": map[string]interface{}{
 					"cpu":    "500m",
-					"memory": "512Mi",
+					"memory": "1Gi",
 				},
 				"limits": map[string]interface{}{
 					"cpu":    "2000m",
@@ -1007,6 +1009,12 @@ func (r *SimpleKubeReconciler) buildCredentialSidecars(sessionID string, namespa
 		}
 		if r.cfg.NoProxy != "" {
 			env = append(env, envVar("NO_PROXY", r.cfg.NoProxy))
+		}
+		if r.cfg.PlatformMode != "" {
+			env = append(env, envVar("PLATFORM_MODE", r.cfg.PlatformMode))
+		}
+		if r.cfg.MPPConfigNamespace != "" {
+			env = append(env, envVar("MPP_CONFIG_NAMESPACE", r.cfg.MPPConfigNamespace))
 		}
 
 		sidecar := map[string]interface{}{

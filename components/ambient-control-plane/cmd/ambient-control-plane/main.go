@@ -156,6 +156,8 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		HTTPSProxy:            cfg.HTTPSProxy,
 		NoProxy:               cfg.NoProxy,
 		ImagePullSecret:       cfg.ImagePullSecret,
+		PlatformMode:          cfg.PlatformMode,
+		MPPConfigNamespace:    cfg.MPPConfigNamespace,
 	}
 
 	conn, err := grpc.NewClient(cfg.GRPCServerAddr, grpc.WithTransportCredentials(grpcCredentials(cfg.GRPCUseTLS)))
@@ -196,7 +198,7 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		inf.RegisterHandler("sessions", sessionRec.Reconcile)
 	}
 
-	podSyncer := reconciler.NewPodStatusSyncer(factory, provisionerKube, log.Logger)
+	podSyncer := reconciler.NewPodStatusSyncer(factory, provisionerKube, cfg.PlatformMode, cfg.MPPConfigNamespace, log.Logger)
 
 	tsErrCh := make(chan error, 1)
 	go func() {

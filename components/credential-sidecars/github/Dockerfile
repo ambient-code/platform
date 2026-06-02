@@ -4,8 +4,8 @@ FROM registry.access.redhat.com/ubi9/go-toolset:1.24 AS builder
 
 USER 0
 WORKDIR /build
-COPY components/credential-sidecars/entrypoint/ ./entrypoint/
-COPY components/ambient-mcp/ ./ambient-mcp/
+COPY credential-sidecars/entrypoint/ ./entrypoint/
+COPY ambient-mcp/ ./ambient-mcp/
 
 WORKDIR /build/entrypoint
 RUN go mod edit -replace github.com/ambient-code/platform/components/ambient-mcp=../ambient-mcp && \
@@ -27,5 +27,5 @@ USER 1001
 
 EXPOSE 8091
 
-ENTRYPOINT ["credential-entrypoint", "mcp-proxy", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN", "--port", "8091", "--"]
+ENTRYPOINT ["credential-entrypoint", "mcp-proxy", "--pass-environment", "--port", "8091", "--"]
 CMD ["github-mcp-server", "stdio"]
