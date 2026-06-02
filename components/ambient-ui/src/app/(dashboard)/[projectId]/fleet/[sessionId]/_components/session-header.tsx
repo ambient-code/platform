@@ -6,7 +6,6 @@ import { ExternalLink, Square, RotateCcw, Download, Trash2, MoreVertical } from 
 import type { DomainSession } from '@/domain/types'
 import { getPreviewAnnotations } from '@/domain/annotations'
 import { useStopSession, useStartSession, useDeleteSession } from '@/queries/use-sessions'
-import { useSessionMessages } from '@/queries/use-session-messages'
 import { useSendFeedback } from '@/queries/use-send-feedback'
 import { PhaseBadge } from '../../_components/phase-badge'
 import { formatDuration, formatRelativeTime } from '@/lib/format-timestamp'
@@ -45,7 +44,6 @@ export function SessionHeader({ session }: { session: DomainSession }) {
   const startSession = useStartSession()
   const deleteSession = useDeleteSession()
   const sendFeedback = useSendFeedback()
-  const { data: messages } = useSessionMessages(session.id)
 
   const preview = getPreviewAnnotations(session.annotations)
   const canStop = STOPPABLE_PHASES.has(session.phase)
@@ -65,7 +63,11 @@ export function SessionHeader({ session }: { session: DomainSession }) {
     setDeleteDialogOpen(false)
   }, [deleteSession, session.id, router, projectId])
 
-  const handleExport = useCallback(() => {
+  const handleExport = useCallback(async () => {
+    const { createSessionMessagesAdapterWithFetch } = await import('@/adapters/session-messages')
+    const adapter = createSessionMessagesAdapterWithFetch()
+    const result = await adapter.list(session.id, { size: 1000 })
+
     const exportData = {
       session: {
         id: session.id,
@@ -77,7 +79,7 @@ export function SessionHeader({ session }: { session: DomainSession }) {
         startTime: session.startTime,
         completionTime: session.completionTime,
       },
-      messages: messages ?? [],
+      messages: result.items,
       exportedAt: new Date().toISOString(),
     }
 
@@ -92,7 +94,7 @@ export function SessionHeader({ session }: { session: DomainSession }) {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
-  }, [session, messages])
+  }, [session])
 
   return (
     <>

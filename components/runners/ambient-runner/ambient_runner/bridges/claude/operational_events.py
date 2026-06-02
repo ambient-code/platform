@@ -31,11 +31,9 @@ _AGUI_TO_EVENT_TYPE = {
     "RUN_ERROR": "error",
 }
 
-# TOOL_CALL_START and TOOL_CALL_ARGS are accumulated, pushed on TOOL_CALL_END.
+# TOOL_CALL_START and TOOL_CALL_ARGS are handled by explicit early returns in consume().
 _SKIP_TYPES = frozenset(
     {
-        "TOOL_CALL_START",
-        "TOOL_CALL_ARGS",
         "TEXT_MESSAGE_START",
         "TEXT_MESSAGE_CONTENT",
         "TEXT_MESSAGE_END",

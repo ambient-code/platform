@@ -120,6 +120,9 @@ export function enrichMessages(messages: DomainSessionMessage[]): DomainSessionM
           }
         }
       }
+      // Empty assistant messages with no extractable text are dropped — the
+      // runner sometimes pushes an empty "assistant" record alongside a system
+      // event that contains the actual response in last_assistant_message.
       continue
     }
     enriched.push(msg)
@@ -166,12 +169,7 @@ export function groupChatItems(messages: DomainSessionMessage[]): ChatItem[] {
       if (toolCallId && pendingToolUses.has(toolCallId)) {
         pendingToolUses.get(toolCallId)!.toolResult = msg
       } else {
-        const lastPending = Array.from(pendingToolUses.values()).pop()
-        if (lastPending && !lastPending.toolResult) {
-          lastPending.toolResult = msg
-        } else {
-          items.push({ kind: 'message', message: msg })
-        }
+        items.push({ kind: 'message', message: msg })
       }
     } else {
       items.push({ kind: 'message', message: msg })

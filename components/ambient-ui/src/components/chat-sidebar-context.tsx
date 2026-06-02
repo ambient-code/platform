@@ -5,11 +5,9 @@ import {
   useContext,
   useState,
   useCallback,
-  useEffect,
   useMemo,
   type ReactNode,
 } from 'react'
-import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 
 type ChatSidebarState = {
   openSessionId: string | null
@@ -19,6 +17,11 @@ type ChatSidebarState = {
 }
 
 const ChatSidebarContext = createContext<ChatSidebarState | null>(null)
+
+function readChatParam(): string | null {
+  if (typeof window === 'undefined') return null
+  return new URL(window.location.href).searchParams.get('chat')
+}
 
 function updateChatParam(sessionId: string | null) {
   const url = new URL(window.location.href)
@@ -31,9 +34,7 @@ function updateChatParam(sessionId: string | null) {
 }
 
 export function ChatSidebarProvider({ children }: { children: ReactNode }) {
-  const searchParams = useSearchParams()
-  const initialChat = searchParams.get('chat')
-  const [openSessionId, setOpenSessionId] = useState<string | null>(initialChat)
+  const [openSessionId, setOpenSessionId] = useState<string | null>(readChatParam)
 
   const openSidebar = useCallback((sessionId: string) => {
     setOpenSessionId(sessionId)
