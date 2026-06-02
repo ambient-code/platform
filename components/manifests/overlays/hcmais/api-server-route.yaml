@@ -1,17 +1,14 @@
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: frontend-route
-  labels:
-    app: frontend
+  name: ambient-api-server
 spec:
+  host: ambient-api-server-ambient-api.apps.rosa.hcmais01ue1.s9m2.p3.openshiftapps.com
   to:
     kind: Service
-    name: frontend-service
-    weight: 100
+    name: ambient-api-server
   port:
-    targetPort: http
+    targetPort: api
   tls:
     termination: edge
     insecureEdgeTerminationPolicy: Redirect
-  wildcardPolicy: None

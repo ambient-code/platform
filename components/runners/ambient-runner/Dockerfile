@@ -27,6 +27,10 @@ RUN ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
 # Install uv (provides uvx for package execution) and pre-commit (for repo hooks)
 RUN pip3 install --break-system-packages --no-cache-dir uv==${UV_VERSION} pre-commit==${PRE_COMMIT_VERSION}
 
+# Pre-install MCP stdio servers so uvx doesn't download them at runtime
+# (uvx downloads + installs into a temp venv which spikes memory to ~9GB)
+RUN uv tool install mcp-server-fetch==2025.4.7
+
 # Create working directory
 WORKDIR /app
 

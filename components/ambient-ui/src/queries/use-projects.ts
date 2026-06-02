@@ -24,6 +24,7 @@ export function useProjects(
     queryKey: queryKeys.projects.list(params),
     queryFn: () => adapter.list(params),
     staleTime: 30_000,
+    refetchInterval: 30_000,
   })
 }
 
@@ -37,5 +38,6 @@ export function useProject(
     queryFn: () => adapter.get(projectId),
     enabled: !!projectId,
     staleTime: 30_000,
+    refetchInterval: 30_000,
   })
 }

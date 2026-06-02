@@ -75,4 +75,42 @@ describe('domainProbe', () => {
       )
     })
   })
+
+  describe('feedbackSent', () => {
+    it('logs domain event name and payload', () => {
+      const event = {
+        sessionId: 'sess-001',
+        itemCount: 3,
+        previewUrl: 'https://app.example.com',
+      }
+
+      domainProbe.feedbackSent(event)
+
+      expect(infoSpy).toHaveBeenCalledOnce()
+      expect(infoSpy).toHaveBeenCalledWith(
+        '[domain-probe] feedback.sent',
+        event,
+      )
+    })
+  })
+
+  describe('feedbackDeliveryFailed', () => {
+    it('logs domain event name and payload to console.error', () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const event = {
+        sessionId: 'sess-001',
+        error: 'Network timeout',
+      }
+
+      domainProbe.feedbackDeliveryFailed(event)
+
+      expect(errorSpy).toHaveBeenCalledOnce()
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[domain-probe] feedback.deliveryFailed',
+        event,
+      )
+
+      errorSpy.mockRestore()
+    })
+  })
 })

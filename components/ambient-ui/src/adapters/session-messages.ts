@@ -66,10 +66,27 @@ function createSessionMessagesAdapter(fetchFn: FetchFn): SessionMessagesPort {
       if (!response.ok) {
         throw new Error(`Failed to list session messages: ${response.status}`)
       }
-      const data = (await response.json()) as SessionMessageListResponse
-      const items = data.items.map(mapSessionMessageToDomain)
+      const raw: unknown = await response.json()
       const page = params?.page ?? 1
       const size = params?.size ?? 20
+
+      // The API may return a plain array or a paginated response object
+      if (Array.isArray(raw)) {
+        const items = (raw as SessionMessageResponse[]).map(mapSessionMessageToDomain)
+        return {
+          items,
+          total: items.length,
+          page,
+          size,
+          hasMore: false,
+        }
+      }
+
+      const data = raw as SessionMessageListResponse
+      if (!data.items || !Array.isArray(data.items)) {
+        return { items: [], total: 0, page, size, hasMore: false }
+      }
+      const items = data.items.map(mapSessionMessageToDomain)
       return {
         items,
         total: data.total,
