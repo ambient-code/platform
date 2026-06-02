@@ -113,3 +113,15 @@ export function useStartSession(port?: SessionsPort) {
     },
   })
 }
+
+export function useDeleteSession(port?: SessionsPort) {
+  const queryClient = useQueryClient()
+  const adapter = port ?? getDefaultPort()
+
+  return useMutation({
+    mutationFn: (sessionId: string) => adapter.delete(sessionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all })
+    },
+  })
+}
