@@ -24,5 +24,5 @@ USER 1001
 
 EXPOSE 8094
 
-ENTRYPOINT ["credential-entrypoint", "mcp-proxy", "-e", "GOOGLE_ACCESS_TOKEN", "--port", "8094", "--"]
+ENTRYPOINT ["credential-entrypoint", "mcp-proxy", "--pass-environment", "--port", "8094", "--"]
 CMD ["python", "-m", "workspace_mcp", "--permissions", "gmail:send", "drive:full"]

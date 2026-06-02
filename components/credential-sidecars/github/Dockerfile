@@ -27,5 +27,5 @@ USER 1001
 
 EXPOSE 8091
 
-ENTRYPOINT ["credential-entrypoint", "mcp-proxy", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN", "--port", "8091", "--"]
+ENTRYPOINT ["credential-entrypoint", "mcp-proxy", "--pass-environment", "--port", "8091", "--"]
 CMD ["github-mcp-server", "stdio"]
