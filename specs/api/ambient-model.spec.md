@@ -338,7 +338,7 @@ All four are assembled into the start context in that order. Pokes roll downhill
 
 SessionMessages provide a **concise, human-readable** view of the conversation. This is the Messages API — prompts, replies, and high-level tool invocations summarized for human consumption.
 
-`seq` is monotonically increasing within a session. `event_type` uses **simplified legacy types** (distinct from AG-UI event types used in SessionEvent):
+`seq` is monotonically increasing within a session, using an **independent counter** from `SessionEvent.seq` (the two tables serve different APIs at different granularities and must not share a sequence). `event_type` uses **simplified legacy types** (distinct from AG-UI event types used in SessionEvent):
 
 **Messages API Event Types** (6 types):
 - `user` — User prompt or message
@@ -376,7 +376,7 @@ rpc WatchSessionMessages(WatchSessionMessagesRequest) returns (stream SessionMes
 
 SessionEvents provide the **complete, granular** AG-UI event stream emitted during session execution. This is the Events API — every tool call, every thinking token, every content delta, every state transition.
 
-`seq` is monotonically increasing within a session (gaps allowed after compression). `event_type` follows the full AG-UI protocol with 33 event types.
+`seq` is monotonically increasing within a session (gaps allowed after compression), using an **independent counter** from `SessionMessage.seq`. The two tables serve different APIs at different granularities and compress at different rates — sharing a counter would create false ordering dependencies. `event_type` follows the full AG-UI protocol with 33 event types.
 
 SessionEvents are never deleted or edited. They are the canonical **audit trail** of everything that happened during a session — ideal for debugging, replays, analytics, and compliance.
 
@@ -479,9 +479,13 @@ Events are compressed **before persistence** by the runner's gRPC client. Compre
 | `TOOL_CALL_START` | **Boundary** — starts new tool call context |
 | `TOOL_CALL_ARGS` | **Accumulate** — append `args` fragment to buffer within current tool context |
 | `TOOL_CALL_END` | **Boundary** — flushes accumulated args; ends tool context |
+| `TEXT_MESSAGE_CHUNK` | **Pass-through** — complete message in one event (no START/END wrapper); stored as-is |
+| `TOOL_CALL_CHUNK` | **Pass-through** — complete tool call in one event (no START/END wrapper); stored as-is |
 | `THINKING_TEXT_MESSAGE_CONTENT` | **Accumulate** — within thinking message context |
 | `REASONING_MESSAGE_CONTENT` | **Accumulate** — within reasoning message context |
 | All `_START`, `_END`, `_RESULT`, run/step lifecycle | **Never compressed** — stored as individual events |
+
+**Accumulation Assumption:** `_CONTENT` and `_ARGS` fragments are raw character slices of a single value, not semantically complete units. The compressor concatenates them verbatim. For `TOOL_CALL_ARGS`, the accumulated result MUST be valid JSON — the compressor SHOULD validate the accumulated string before flushing and reject malformed payloads rather than persisting silently invalid data.
 
 **Context Definition:**
 - Text messages: `(message_id, role)`
@@ -543,7 +547,10 @@ CREATE TABLE session_events (
 CREATE INDEX idx_session_events_session_id ON session_events(session_id);
 CREATE INDEX idx_session_events_event_type ON session_events(event_type);
 CREATE INDEX idx_session_events_created_at ON session_events(created_at);
+CREATE INDEX idx_session_events_completed_at ON session_events(completed_at);
 ```
+
+The `completed_at` index supports time-range queries that filter on the end-timestamp of compressed groups (e.g., "all events active during window T1–T2" requires `WHERE created_at <= T2 AND completed_at >= T1`).
 
 #### Migration from Current State
 
@@ -567,6 +574,7 @@ CREATE INDEX idx_session_events_created_at ON session_events(created_at);
    CREATE INDEX idx_session_events_session_id ON session_events(session_id);
    CREATE INDEX idx_session_events_event_type ON session_events(event_type);
    CREATE INDEX idx_session_events_created_at ON session_events(created_at);
+   CREATE INDEX idx_session_events_completed_at ON session_events(completed_at);
    ```
 
 2. No schema changes required for `session_messages` table (Messages API unchanged).
