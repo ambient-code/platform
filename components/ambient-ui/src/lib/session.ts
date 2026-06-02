@@ -9,6 +9,9 @@ export type SessionData = {
   expiresAt: number
   customApiServerUrl?: string
   customTokenId?: string
+}
+
+export type ContextSessionData = {
   customToken?: string
 }
 
@@ -46,6 +49,14 @@ function getSessionOptions(): SessionOptions {
 
 export async function getSession() {
   return getIronSession<SessionData>(await cookies(), getSessionOptions())
+}
+
+export async function getContextSession() {
+  const opts = getSessionOptions()
+  return getIronSession<ContextSessionData>(await cookies(), {
+    ...opts,
+    cookieName: `${opts.cookieName}-ctx`,
+  })
 }
 
 export async function getAccessToken(): Promise<string | undefined> {
