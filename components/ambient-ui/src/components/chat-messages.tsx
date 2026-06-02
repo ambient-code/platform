@@ -90,7 +90,7 @@ export function tryFormatJson(payload: string): string {
 
 // ---- Message Enrichment ----
 
-function extractLastAssistantMessage(payload: string): string | null {
+export function extractLastAssistantMessage(payload: string): string | null {
   try {
     const parsed: unknown = JSON.parse(payload)
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
