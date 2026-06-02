@@ -5,4 +5,5 @@ export type SessionsPort = {
   get: (sessionId: string) => Promise<DomainSession>
   stop: (sessionId: string) => Promise<void>
   start: (sessionId: string) => Promise<DomainSession>
+  delete: (sessionId: string) => Promise<void>
 }
