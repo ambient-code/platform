@@ -63,7 +63,11 @@ func main() {
 	exchanger.StartBackgroundRefresh()
 	defer exchanger.Stop()
 
-	runSubprocess(os.Args[1:])
+	args := os.Args[1:]
+	if os.Getenv("PLATFORM_MODE") == "mpp" && provider == "kubeconfig" {
+		args = injectMPPConfig(args)
+	}
+	runSubprocess(args)
 }
 
 func fetchAndSetCredential(bearerToken, apiURL, provider string) error {
@@ -193,6 +197,22 @@ func isValidCredentialID(id string) bool {
 		}
 	}
 	return len(id) > 0
+}
+
+func injectMPPConfig(args []string) []string {
+	const mppConfig = `
+[[denied_resources]]
+group = ""
+version = "v1"
+kind = "Namespace"
+`
+	configPath := "/tmp/mcp-mpp-config.toml"
+	if err := os.WriteFile(configPath, []byte(mppConfig), 0600); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to write MPP MCP config: %v\n", err)
+		return args
+	}
+	fmt.Fprintf(os.Stderr, "MPP mode: injecting kubernetes-mcp-server config to deny cluster-scoped Namespace access\n")
+	return append([]string{args[0], "--config", configPath}, args[1:]...)
 }
 
 func runSubprocess(args []string) {
