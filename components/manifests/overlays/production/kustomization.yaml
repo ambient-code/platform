@@ -56,7 +56,37 @@ patches:
     kind: PersistentVolumeClaim
     name: minio-data
     version: v1
-- path: ambient-ui-delete-patch.yaml
+- patch: |
+    $patch: delete
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: ambient-ui
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-ui
+- patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: ambient-ui
+  target:
+    version: v1
+    kind: ServiceAccount
+    name: ambient-ui
+- patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: ambient-ui-service
+  target:
+    version: v1
+    kind: Service
+    name: ambient-ui-service
 
 # Production images
 images:
