@@ -37,6 +37,7 @@ class FakeEvent:
     code: str = ""
     name: str = ""
     value: Optional[str] = None
+    delta: str = ""
 
 
 @dataclass
@@ -68,15 +69,20 @@ class TestEventTypeStr:
 
 
 class TestBuildPayload:
-    def test_tool_call_start(self):
-        event = FakeEvent(
-            type=FakeEventType.TOOL_CALL_START,
-            tool_call_name="Read",
-            tool_call_id="tc-123",
-        )
-        payload = json.loads(_build_payload("TOOL_CALL_START", event))
+    def test_tool_call_end_with_accumulated_args(self):
+        event = FakeEvent(type=FakeEventType.TOOL_CALL_END, tool_call_id="tc-123")
+        pending = {"tc-123": {"name": "Read", "args": '{"file_path": "/app/main.py"}'}}
+        payload = json.loads(_build_payload("TOOL_CALL_END", event, pending))
         assert payload["tool"] == "Read"
         assert payload["tool_call_id"] == "tc-123"
+        assert payload["input"] == {"file_path": "/app/main.py"}
+
+    def test_tool_call_end_without_args(self):
+        event = FakeEvent(type=FakeEventType.TOOL_CALL_END, tool_call_id="tc-456")
+        pending = {"tc-456": {"name": "Bash", "args": ""}}
+        payload = json.loads(_build_payload("TOOL_CALL_END", event, pending))
+        assert payload["tool"] == "Bash"
+        assert "input" not in payload
 
     def test_tool_call_result(self):
         event = FakeEvent(
@@ -151,17 +157,41 @@ class TestOperationalEventWriter:
             grpc_client=grpc_client,
         )
 
-    def test_tool_call_start_pushes_tool_use(self, writer, grpc_client):
+    def test_tool_call_start_accumulates_no_push(self, writer, grpc_client):
         event = FakeEvent(
             type=FakeEventType.TOOL_CALL_START,
             tool_call_name="Bash",
             tool_call_id="tc-1",
         )
         asyncio.get_event_loop().run_until_complete(writer.consume(event))
+        assert len(grpc_client.session_messages.calls) == 0
+
+    def test_full_tool_call_flow_pushes_with_args(self, writer, grpc_client):
+        start = FakeEvent(
+            type=FakeEventType.TOOL_CALL_START,
+            tool_call_name="Read",
+            tool_call_id="tc-1",
+        )
+        args = FakeEvent(
+            type=FakeEventType.TOOL_CALL_ARGS,
+            tool_call_id="tc-1",
+            delta='{"file_path": "/app/main.py"}',
+        )
+        end = FakeEvent(
+            type=FakeEventType.TOOL_CALL_END,
+            tool_call_id="tc-1",
+        )
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(writer.consume(start))
+        loop.run_until_complete(writer.consume(args))
+        loop.run_until_complete(writer.consume(end))
         assert len(grpc_client.session_messages.calls) == 1
         call = grpc_client.session_messages.calls[0]
         assert call["session_id"] == "sess-001"
         assert call["event_type"] == "tool_use"
+        payload = json.loads(call["payload"])
+        assert payload["tool"] == "Read"
+        assert payload["input"] == {"file_path": "/app/main.py"}
 
     def test_tool_call_result_pushes_tool_result(self, writer, grpc_client):
         event = FakeEvent(
@@ -208,8 +238,10 @@ class TestOperationalEventWriter:
         asyncio.get_event_loop().run_until_complete(writer.consume(event))
         assert len(grpc_client.session_messages.calls) == 0
 
-    def test_tool_call_args_skipped(self, writer, grpc_client):
-        event = FakeEvent(type=FakeEventType.TOOL_CALL_ARGS)
+    def test_tool_call_args_accumulates_no_push(self, writer, grpc_client):
+        event = FakeEvent(
+            type=FakeEventType.TOOL_CALL_ARGS, tool_call_id="tc-orphan", delta="data"
+        )
         asyncio.get_event_loop().run_until_complete(writer.consume(event))
         assert len(grpc_client.session_messages.calls) == 0
 
