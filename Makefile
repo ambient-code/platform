@@ -857,21 +857,24 @@ dev: ## Local dev: preflight, cluster, dev-env, port-forwards; COMPONENT=fronten
 		trap 'kill $$GO_PID $$NPM_PID 2>/dev/null; cleanup' INT TERM; \
 		wait $$GO_PID $$NPM_PID; \
 	elif [ "$$HAS_AUI" -eq 1 ]; then \
-		echo "$(COLOR_BLUE)▶$(COLOR_RESET) ambient-ui dev: port-forwarding API server + Keycloak..."; \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) ambient-ui dev: setting up API server + Keycloak..."; \
 		pkill -f "port-forward.*ambient-api-server-service" 2>/dev/null || true; \
 		pkill -f "port-forward.*keycloak-service" 2>/dev/null || true; \
+		WANT_KC="http://localhost:$(KIND_FWD_KEYCLOAK_PORT)"; \
+		CUR_KC=$$(kubectl get deployment keycloak -n $(NAMESPACE) -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="KC_HOSTNAME")].value}' 2>/dev/null); \
+		if [ "$$CUR_KC" != "$$WANT_KC" ]; then \
+			echo "$(COLOR_BLUE)▶$(COLOR_RESET) Patching Keycloak hostname: $$CUR_KC → $$WANT_KC"; \
+			kubectl set env deployment/keycloak -n $(NAMESPACE) KC_HOSTNAME="$$WANT_KC" >/dev/null 2>&1; \
+			kubectl rollout status deployment/keycloak -n $(NAMESPACE) --timeout=120s >/dev/null 2>&1 || true; \
+			echo "$(COLOR_GREEN)✓$(COLOR_RESET) Keycloak hostname patched"; \
+		else \
+			echo "$(COLOR_GREEN)✓$(COLOR_RESET) Keycloak hostname already correct"; \
+		fi; \
 		kubectl port-forward -n $(NAMESPACE) svc/ambient-api-server-service $(KIND_FWD_API_SERVER_PORT):8000 >/tmp/acp-dev-pf-api.log 2>&1 & PF_PIDS="$$PF_PIDS $$!"; \
 		kubectl port-forward -n $(NAMESPACE) svc/keycloak-service $(KIND_FWD_KEYCLOAK_PORT):8080 >/tmp/acp-dev-pf-keycloak.log 2>&1 & PF_PIDS="$$PF_PIDS $$!"; \
 		sleep 2; \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) API server  → http://localhost:$(KIND_FWD_API_SERVER_PORT)"; \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Keycloak    → http://localhost:$(KIND_FWD_KEYCLOAK_PORT)"; \
-		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Patching Keycloak hostname for local dev..."; \
-		kubectl set env deployment/keycloak -n $(NAMESPACE) KC_HOSTNAME="http://localhost:$(KIND_FWD_KEYCLOAK_PORT)" >/dev/null 2>&1; \
-		kubectl rollout status deployment/keycloak -n $(NAMESPACE) --timeout=120s >/dev/null 2>&1 || true; \
-		pkill -f "port-forward.*keycloak-service" 2>/dev/null || true; \
-		kubectl port-forward -n $(NAMESPACE) svc/keycloak-service $(KIND_FWD_KEYCLOAK_PORT):8080 >/tmp/acp-dev-pf-keycloak.log 2>&1 & PF_PIDS="$$PF_PIDS $$!"; \
-		sleep 1; \
-		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Keycloak hostname set to http://localhost:$(KIND_FWD_KEYCLOAK_PORT)"; \
 		$(MAKE) --no-print-directory dev-env-ambient-ui; \
 		echo ""; \
 		echo "$(COLOR_BOLD)Access:$(COLOR_RESET)"; \
