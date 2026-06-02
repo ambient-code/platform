@@ -62,9 +62,7 @@ export async function GET() {
       initials,
     })
   } catch (err) {
-    return Response.json({
-      authenticated: false,
-      error: err instanceof Error ? err.message : "Session read failed",
-    })
+    console.error("[/api/me] session read failed:", err)
+    return Response.json({ authenticated: false })
   }
 }

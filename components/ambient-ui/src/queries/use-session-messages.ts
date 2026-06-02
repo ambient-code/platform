@@ -21,7 +21,7 @@ export function useSessionMessages(
   const adapter = port ?? getDefaultPort()
   return useQuery({
     queryKey: queryKeys.messages.list(sessionId),
-    queryFn: () => adapter.list(sessionId, { size: 100 }),
+    queryFn: () => adapter.list(sessionId, { size: 1000 }),
     enabled: !!sessionId,
     refetchInterval: 3000,
   })

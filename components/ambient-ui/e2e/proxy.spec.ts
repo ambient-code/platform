@@ -1,17 +1,15 @@
 import { test, expect } from '@playwright/test'
 
 test.describe('BFF proxy endpoint', () => {
-  test('GET /api/ambient/v1/sessions without auth passes through to backend', async ({
+  test('GET /api/ambient/v1/sessions without auth returns 401 or 502', async ({
     request,
   }) => {
-    // Without a running backend, the proxy should attempt to forward
-    // and return an error (connection refused or 500), not crash
     const response = await request.get('/api/ambient/v1/sessions', {
       failOnStatusCode: false,
     })
 
-    // The proxy should respond (not hang or crash)
-    // Status depends on whether backend is running - we just verify the proxy works
-    expect(response.status()).toBeGreaterThanOrEqual(200)
+    // Without auth: 401 (no token). Without backend: 502 (upstream unreachable).
+    // 404/405 would indicate a broken route — reject those.
+    expect([401, 502]).toContain(response.status())
   })
 })

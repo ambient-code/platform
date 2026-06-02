@@ -133,7 +133,7 @@ class OperationalEventWriter:
         try:
             await asyncio.get_running_loop().run_in_executor(None, _do_push)
         except Exception as exc:
-            logger.debug(
+            logger.warning(
                 "[OPS EVENTS] Push failed: session=%s type=%s error=%s",
                 self._session_id,
                 mapped_type,

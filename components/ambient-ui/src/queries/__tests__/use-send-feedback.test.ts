@@ -74,7 +74,7 @@ describe('useSendFeedback', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(capture.calls).toHaveLength(1)
     expect(capture.calls[0].sessionId).toBe('sess-001')
-    expect(capture.calls[0].message.eventType).toBe('user_feedback')
+    expect(capture.calls[0].message.eventType).toBe('user')
   })
 
   it('formats payload with element feedback', async () => {

@@ -67,13 +67,11 @@ export function LogsTab({ session }: { session: DomainSession }) {
 
   return (
     <div className="space-y-4 pt-4">
-      {/* Fix 7: aria-live announcer for screen readers */}
       <EventAnnouncer
         totalCount={messages.length}
         errorCount={eventCounts.error}
       />
 
-      {/* Fix 1 + Fix 9: Summary banner with error highlighting and event counts */}
       {!isLoading && messages.length > 0 && (
         <EventSummaryBanner
           totalCount={messages.length}
@@ -83,7 +81,6 @@ export function LogsTab({ session }: { session: DomainSession }) {
         />
       )}
 
-      {/* Fix 3: Filter bar with count badges */}
       <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by event type">
         {OPERATIONAL_EVENT_TYPES.map(eventType => {
           const isActive = activeFilters.has(eventType)
@@ -124,7 +121,6 @@ export function LogsTab({ session }: { session: DomainSession }) {
 
       {/* Event list card */}
       <Card className="relative">
-        {/* Fix 2: Live indicator */}
         {isAtBottom && filteredMessages.length > 0 && (
           <div className="absolute top-2 right-3 z-10">
             <LiveIndicator />
@@ -170,7 +166,6 @@ export function LogsTab({ session }: { session: DomainSession }) {
               {/* Sentinel for IntersectionObserver */}
               <div ref={sentinelRef} className="h-1" aria-hidden="true" />
 
-              {/* Fix 2: Jump to latest pill */}
               <JumpToLatestPill
                 newEventCount={newEventCount}
                 onClick={scrollToBottom}

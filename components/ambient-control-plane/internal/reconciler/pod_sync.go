@@ -188,8 +188,9 @@ func (s *PodStatusSyncer) hasContainerCrashLoop(pod *unstructured.Unstructured) 
 				return true
 			}
 		}
+		name, _, _ := unstructured.NestedString(csMap, "name")
 		terminated, found, _ := unstructured.NestedMap(csMap, "state", "terminated")
-		if found {
+		if found && name == "ambient-code-runner" {
 			reason, _, _ := unstructured.NestedString(terminated, "reason")
 			if reason == "OOMKilled" || reason == "Error" {
 				return true

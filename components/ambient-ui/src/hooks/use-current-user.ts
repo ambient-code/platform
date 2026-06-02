@@ -17,7 +17,9 @@ type MeResponse = {
 
 async function fetchCurrentUser(): Promise<CurrentUser | null> {
   const res = await fetch("/api/me")
-  if (!res.ok) return null
+  if (!res.ok) {
+    throw new Error(`/api/me returned ${res.status}`)
+  }
 
   const data: MeResponse = await res.json()
   if (!data.authenticated) return null

@@ -47,14 +47,15 @@ export function EventAnnouncer({ totalCount, errorCount }: EventAnnouncerProps) 
       pendingRef.current = { newEvents: 0, newErrors: 0 }
       timerRef.current = null
     }, 10_000)
+  }, [totalCount, errorCount])
 
+  useEffect(() => {
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current)
-        timerRef.current = null
       }
     }
-  }, [totalCount, errorCount])
+  }, [])
 
   return (
     <div
