@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# ag_ui.core.EventType.TOOL_CALL_RESULT is emitted by handlers.py:199
+# (ToolCallResultEvent after ToolCallEndEvent). See test_operational_events.py.
 _AGUI_TO_EVENT_TYPE = {
     "TOOL_CALL_START": "tool_use",
     "TOOL_CALL_RESULT": "tool_result",

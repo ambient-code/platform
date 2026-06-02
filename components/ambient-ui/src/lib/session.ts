@@ -8,7 +8,6 @@ export type SessionData = {
   refreshToken: string
   expiresAt: number
   customApiServerUrl?: string
-  customTokenId?: string
 }
 
 export type ContextSessionData = {
