@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import type { DomainSession } from '@/domain/types'
 import { fleetColumns } from './fleet-columns'
 
@@ -38,6 +39,7 @@ export function FleetTable({
   })
 
   return (
+    <TooltipProvider>
     <div className="rounded-md border">
       <Table>
         <TableHeader>
@@ -78,5 +80,6 @@ export function FleetTable({
         </TableBody>
       </Table>
     </div>
+    </TooltipProvider>
   )
 }

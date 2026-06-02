@@ -1,10 +1,47 @@
 import { createColumnHelper } from '@tanstack/react-table'
+import { MessageSquare } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import type { DomainSession } from '@/domain/types'
 import { formatRelativeTime, formatDuration } from '@/lib/format-timestamp'
+import { useChatSidebar } from '@/components/chat-sidebar-context'
 import { PhaseBadge } from './phase-badge'
 
 const COST_ANNOTATION = 'ambient-code.io/cost/estimate'
 const col = createColumnHelper<DomainSession>()
+
+function ChatColumnButton({ sessionId }: { sessionId: string }) {
+  const { openSidebar, openSessionId } = useChatSidebar()
+  const isActive = openSessionId === sessionId
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={(e) => {
+            e.stopPropagation()
+            openSidebar(sessionId)
+          }}
+          aria-label="Open chat sidebar"
+        >
+          <MessageSquare
+            className={`h-4 w-4 ${isActive ? 'text-primary' : 'text-muted-foreground'}`}
+          />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        {isActive ? 'Chat sidebar is open' : 'Open chat in sidebar'}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
 
 export const fleetColumns = [
   col.accessor('phase', {
@@ -71,5 +108,11 @@ export const fleetColumns = [
       )
     },
     size: 80,
+  }),
+  col.display({
+    id: 'chat',
+    header: '',
+    cell: ({ row }) => <ChatColumnButton sessionId={row.original.id} />,
+    size: 48,
   }),
 ]
