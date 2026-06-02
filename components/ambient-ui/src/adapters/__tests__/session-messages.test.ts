@@ -23,8 +23,8 @@ function makeSdkMessage(overrides: Partial<SdkMessageResponse> = {}): SdkMessage
     created_at: '2026-01-15T10:00:00Z',
     updated_at: '2026-01-15T10:00:00Z',
     session_id: 'sess-001',
-    event_type: 'ui.feedback',
-    payload: '{"type":"approve"}',
+    event_type: 'tool_use',
+    payload: '{"tool":"Read","path":"/app/main.py"}',
     seq: 1,
     ...overrides,
   }
@@ -73,7 +73,7 @@ describe('session-messages adapter', () => {
       const fakeFetch = createFakeFetch({ response: responseMessage, captured })
       const adapter: SessionMessagesPort = createSessionMessagesAdapterWithFetch(fakeFetch)
 
-      await adapter.send('sess-001', { eventType: 'ui.feedback', payload: '{"type":"approve"}' })
+      await adapter.send('sess-001', { eventType: 'tool_use', payload: '{"tool":"Read","path":"/app/main.py"}' })
 
       expect(captured).toHaveLength(1)
       expect(captured[0].url).toBe('/api/ambient/v1/sessions/sess-001/messages')
@@ -87,11 +87,11 @@ describe('session-messages adapter', () => {
       const fakeFetch = createFakeFetch({ response: responseMessage, captured })
       const adapter: SessionMessagesPort = createSessionMessagesAdapterWithFetch(fakeFetch)
 
-      await adapter.send('sess-001', { eventType: 'ui.feedback', payload: '{"type":"approve"}' })
+      await adapter.send('sess-001', { eventType: 'tool_use', payload: '{"tool":"Read","path":"/app/main.py"}' })
 
       expect(captured[0].body).toEqual({
-        event_type: 'ui.feedback',
-        payload: '{"type":"approve"}',
+        event_type: 'tool_use',
+        payload: '{"tool":"Read","path":"/app/main.py"}',
       })
     })
 
@@ -99,8 +99,8 @@ describe('session-messages adapter', () => {
       const responseMessage = makeSdkMessage({
         id: 'msg-abc',
         session_id: 'sess-xyz',
-        event_type: 'ui.preview',
-        payload: '{"url":"http://example.com"}',
+        event_type: 'tool_result',
+        payload: '{"result":"file contents here"}',
         seq: 5,
         created_at: '2026-05-28T12:00:00Z',
       })
@@ -108,14 +108,14 @@ describe('session-messages adapter', () => {
       const adapter: SessionMessagesPort = createSessionMessagesAdapterWithFetch(fakeFetch)
 
       const result = await adapter.send('sess-xyz', {
-        eventType: 'ui.preview',
-        payload: '{"url":"http://example.com"}',
+        eventType: 'tool_result',
+        payload: '{"result":"file contents here"}',
       })
 
       expect(result.id).toBe('msg-abc')
       expect(result.sessionId).toBe('sess-xyz')
-      expect(result.eventType).toBe('ui.preview')
-      expect(result.payload).toBe('{"url":"http://example.com"}')
+      expect(result.eventType).toBe('tool_result')
+      expect(result.payload).toBe('{"result":"file contents here"}')
       expect(result.seq).toBe(5)
       expect(result.createdAt).toBe('2026-05-28T12:00:00Z')
     })
@@ -135,7 +135,7 @@ describe('session-messages adapter', () => {
       const fakeFetch = createFakeFetch({ response: responseMessage, captured })
       const adapter: SessionMessagesPort = createSessionMessagesAdapterWithFetch(fakeFetch)
 
-      await adapter.send('sess/special&id', { eventType: 'test', payload: '{}' })
+      await adapter.send('sess/special&id', { eventType: 'system', payload: '{}' })
 
       expect(captured[0].url).toBe(
         '/api/ambient/v1/sessions/sess%2Fspecial%26id/messages',
@@ -248,8 +248,8 @@ describe('session-messages adapter', () => {
           makeSdkMessage({
             id: 'msg-mapped',
             session_id: 'sess-mapped',
-            event_type: 'ui.feedback.response',
-            payload: '{"decision":"reject","reason":"too complex"}',
+            event_type: 'error',
+            payload: '{"error":"tool execution failed","code":"TOOL_ERROR"}',
             seq: 42,
             created_at: '2026-05-28T15:30:00Z',
           }),
@@ -263,8 +263,8 @@ describe('session-messages adapter', () => {
 
       expect(msg.id).toBe('msg-mapped')
       expect(msg.sessionId).toBe('sess-mapped')
-      expect(msg.eventType).toBe('ui.feedback.response')
-      expect(msg.payload).toBe('{"decision":"reject","reason":"too complex"}')
+      expect(msg.eventType).toBe('error')
+      expect(msg.payload).toBe('{"error":"tool execution failed","code":"TOOL_ERROR"}')
       expect(msg.seq).toBe(42)
       expect(msg.createdAt).toBe('2026-05-28T15:30:00Z')
     })

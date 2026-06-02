@@ -1,0 +1,14 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-ui
+spec:
+  template:
+    spec:
+      containers:
+        - name: ambient-ui
+          env:
+            - name: SSO_REDIRECT_URI
+              value: "https://ambient-ui-ambient-api.apps.rosa.hcmais01ue1.s9m2.p3.openshiftapps.com/api/auth/sso/callback"
+            - name: NEXT_PUBLIC_PREVIEW_ALLOWED_HOSTS
+              value: "*.apps.rosa.hcmais01ue1.s9m2.p3.openshiftapps.com,*.openshiftapps.com"

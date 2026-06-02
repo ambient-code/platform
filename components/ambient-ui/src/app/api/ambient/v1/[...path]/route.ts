@@ -35,13 +35,6 @@ async function proxyRequest(
   }
 
   const headers: Record<string, string> = buildProxyHeaders(accessToken)
-  // The ambient-api-server validates JWTs against Red Hat SSO, but the
-  // oauth-proxy provides an OpenShift OAuth token (different auth system).
-  // Strip the Authorization header until auth systems are unified — the
-  // BFF's oauth-proxy already authenticates the user.
-  if (!config.customToken && accessToken.startsWith("sha256~")) {
-    delete headers["Authorization"]
-  }
 
   const accept = request.headers.get("accept")
   if (accept) {
