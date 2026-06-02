@@ -4,6 +4,8 @@ import { usePathname } from 'next/navigation'
 import { AppSidebar } from '@/components/app-sidebar'
 import { NavHeader } from '@/components/nav-header'
 import { StatusBar } from '@/components/status-bar'
+import { ChatSidebar } from '@/components/chat-sidebar'
+import { ChatSidebarProvider } from '@/components/chat-sidebar-context'
 import { useProject } from '@/queries/use-projects'
 import {
   SidebarInset,
@@ -31,17 +33,20 @@ export default function DashboardLayout({
   const { data: project } = useProject(projectId ?? '')
 
   return (
-    <SidebarProvider>
-      <AppSidebar projectId={projectId} />
-      <SidebarInset>
-        <NavHeader
-          projectId={projectId}
-          projectName={project?.name ?? null}
-          pageName={pageName}
-        />
-        <div className="flex-1 p-6 pb-10">{children}</div>
-        <StatusBar />
-      </SidebarInset>
-    </SidebarProvider>
+    <ChatSidebarProvider>
+      <SidebarProvider>
+        <AppSidebar projectId={projectId} />
+        <SidebarInset className="min-w-0 flex-1 overflow-x-clip">
+          <NavHeader
+            projectId={projectId}
+            projectName={project?.name ?? null}
+            pageName={pageName}
+          />
+          <div className="flex-1 p-6 pb-10">{children}</div>
+          <StatusBar />
+        </SidebarInset>
+        <ChatSidebar />
+      </SidebarProvider>
+    </ChatSidebarProvider>
   )
 }
