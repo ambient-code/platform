@@ -96,7 +96,7 @@ export function SessionHeader({ session }: { session: DomainSession }) {
 
   return (
     <>
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pb-4 -mx-1 px-1">
+      <div className="sticky top-0 z-[5] bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pb-4 -mx-1 px-1">
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
