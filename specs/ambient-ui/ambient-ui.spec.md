@@ -12,12 +12,7 @@ The Ambient UI interacts exclusively with the ambient-api-server API via the gen
 
 The Ambient UI SHALL be a Next.js application acting as a Backend-for-Frontend (BFF). The BFF SHALL handle OIDC authentication as a confidential client, manage server-side sessions, and relay JWTs to the ambient-api-server. The browser SHALL never receive a raw JWT.
 
-The BFF SHALL support two authentication modes:
-
-- **Native SSO**: OIDC Authorization Code Flow against a Keycloak or Red Hat SSO issuer. The BFF is the confidential client.
-- **OAuth-proxy sidecar**: When deployed with an oauth-proxy sidecar, the BFF SHALL accept the `X-Forwarded-User` and `X-Forwarded-Email` headers set by the proxy and use them to establish identity. The BFF SHALL only trust these headers when a positive trust check confirms the request originates from the configured proxy (e.g., network policy isolation, trusted source IP, or mutual TLS). The BFF SHALL reject forwarded identity headers when the trust check is absent or fails (fail-closed).
-
-The active mode SHALL be determined by deployment configuration, not runtime detection.
+The BFF SHALL authenticate via Native SSO: OIDC Authorization Code Flow against a Keycloak or Red Hat SSO issuer. The BFF is the confidential client. Dev environments use a local Keycloak deployed in the Kind cluster.
 
 #### Scenario: SSO login flow
 
@@ -34,20 +29,40 @@ The active mode SHALL be determined by deployment configuration, not runtime det
 - THEN the BFF extracts the JWT from the server-side session
 - AND forwards it as `Authorization: Bearer <jwt>`
 
-#### Scenario: OAuth-proxy mode
+### Requirement: User Identity Endpoint
 
-- GIVEN the Ambient UI is deployed with an oauth-proxy sidecar
-- WHEN a request arrives with `X-Forwarded-User` and `X-Forwarded-Email` headers
-- AND the request passes the trusted-proxy check
-- THEN the BFF uses those headers to establish user identity
-- AND proxies requests to the ambient-api-server with appropriate authentication
+The BFF SHALL expose a `/api/me` endpoint that returns the authenticated user's identity extracted from JWT claims in the SSO session. The response SHALL include `username`, `name`, `email`, and `initials` (computed from the user's name).
 
-#### Scenario: Untrusted forwarded headers rejected
+#### Scenario: Authenticated user identity
 
-- GIVEN the Ambient UI is deployed without an oauth-proxy sidecar (or the trust check fails)
-- WHEN a request arrives with `X-Forwarded-User` and `X-Forwarded-Email` headers
-- THEN the BFF ignores the forwarded identity headers
-- AND falls back to requiring OIDC session authentication
+- GIVEN a user authenticated via SSO
+- WHEN the client fetches `/api/me`
+- THEN the response includes `authenticated: true`, `username`, `name`, `email`, and `initials`
+- AND the claims are extracted from the JWT stored in the server-side session
+
+#### Scenario: Unauthenticated user identity
+
+- GIVEN a user without a valid session
+- WHEN the client fetches `/api/me`
+- THEN the response includes `authenticated: false`
+
+### Requirement: User Menu
+
+The nav header SHALL display a user avatar/menu in the top-right corner showing the user's initials. Clicking the avatar SHALL open a dropdown menu displaying the user's full name, email, and a "Sign out" action that redirects to `/api/auth/sso/logout`.
+
+#### Scenario: User menu rendering
+
+- GIVEN an authenticated user with name "Dev User"
+- WHEN the nav header renders
+- THEN a circular avatar with initials "DU" appears in the top-right corner
+- AND clicking it opens a dropdown with the user's name, email, and "Sign out" option
+
+#### Scenario: Sign out
+
+- GIVEN the user menu is open
+- WHEN the user clicks "Sign out"
+- THEN the browser navigates to `/api/auth/sso/logout`
+- AND the SSO session is destroyed
 
 ### Requirement: Port/Adapter API Layer
 

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { mapSdkSessionToDomain, mapSdkProjectToDomain } from '../mappers'
+import { mapSdkSessionToDomain, mapSdkProjectToDomain, mapSessionMessageToDomain } from '../mappers'
+import type { SdkSessionMessageShape } from '../mappers'
 import type { Session, Project } from 'ambient-sdk'
 
 function makeSdkSession(overrides: Partial<Session> = {}): Session {
@@ -204,5 +205,44 @@ describe('mapSdkProjectToDomain', () => {
     const domain = mapSdkProjectToDomain(sdk)
     expect(domain.createdAt).toBe('')
     expect(domain.updatedAt).toBe('')
+  })
+})
+
+function makeSdkMessage(overrides: Partial<SdkSessionMessageShape> = {}): SdkSessionMessageShape {
+  return {
+    id: 'msg-001',
+    session_id: 'sess-001',
+    event_type: 'tool_use',
+    payload: 'git status',
+    seq: 1,
+    created_at: '2026-01-15T10:00:00Z',
+    ...overrides,
+  }
+}
+
+describe('mapSessionMessageToDomain', () => {
+  it('maps snake_case fields to camelCase', () => {
+    const sdk = makeSdkMessage()
+    const domain = mapSessionMessageToDomain(sdk)
+
+    expect(domain.id).toBe('msg-001')
+    expect(domain.sessionId).toBe('sess-001')
+    expect(domain.eventType).toBe('tool_use')
+    expect(domain.payload).toBe('git status')
+    expect(domain.seq).toBe(1)
+    expect(domain.createdAt).toBe('2026-01-15T10:00:00Z')
+  })
+
+  it('handles null created_at by mapping to empty string', () => {
+    const sdk = makeSdkMessage({ created_at: null })
+    const domain = mapSessionMessageToDomain(sdk)
+    expect(domain.createdAt).toBe('')
+  })
+
+  it('preserves payload content exactly', () => {
+    const complexPayload = '{"tool":"bash","args":{"command":"ls -la"}}'
+    const sdk = makeSdkMessage({ payload: complexPayload })
+    const domain = mapSessionMessageToDomain(sdk)
+    expect(domain.payload).toBe(complexPayload)
   })
 })
