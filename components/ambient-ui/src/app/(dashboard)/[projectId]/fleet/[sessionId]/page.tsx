@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useSession } from '@/queries/use-sessions'
 import { SessionHeader } from './_components/session-header'
 import { PhaseTab } from './_components/phase-tab'
+import { LogsTab } from './_components/logs-tab'
 
 export default function SessionDetailPage() {
   const { sessionId } = useParams<{ projectId: string; sessionId: string }>()
@@ -34,13 +35,16 @@ export default function SessionDetailPage() {
       <Tabs defaultValue="phase">
         <TabsList className="w-full *:flex-1">
           <TabsTrigger value="phase">Phase</TabsTrigger>
-          <TabsTrigger value="logs" disabled>Logs</TabsTrigger>
+          <TabsTrigger value="logs">Logs</TabsTrigger>
           <TabsTrigger value="resources" disabled>Resources</TabsTrigger>
           <TabsTrigger value="details" disabled>Details</TabsTrigger>
           <TabsTrigger value="chat" disabled>Chat</TabsTrigger>
         </TabsList>
         <TabsContent value="phase">
           <PhaseTab session={session} />
+        </TabsContent>
+        <TabsContent value="logs">
+          <LogsTab session={session} />
         </TabsContent>
       </Tabs>
     </div>

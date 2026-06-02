@@ -25,6 +25,8 @@ import grpc
 
 from ag_ui.core import BaseEvent
 
+from .operational_events import OperationalEventWriter
+
 if TYPE_CHECKING:
     from ambient_runner._grpc_client import AmbientGRPCClient
     from ambient_runner.bridge import PlatformBridge
@@ -286,6 +288,10 @@ class GRPCSessionListener:
             run_id=run_id,
             grpc_client=self._grpc_client,
         )
+        ops_writer = OperationalEventWriter(
+            session_id=self._session_id,
+            grpc_client=self._grpc_client,
+        )
 
         logger.info(
             "[GRPC LISTENER] bridge.run() starting: session=%s thread=%s run=%s",
@@ -311,6 +317,7 @@ class GRPCSessionListener:
                             thread_id,
                         )
                 await writer.consume(event)
+                await ops_writer.consume(event)
 
         try:
             await _run_once()
@@ -336,6 +343,10 @@ class GRPCSessionListener:
                 writer = GRPCMessageWriter(
                     session_id=self._session_id,
                     run_id=run_id,
+                    grpc_client=self._grpc_client,
+                )
+                ops_writer = OperationalEventWriter(
+                    session_id=self._session_id,
                     grpc_client=self._grpc_client,
                 )
                 await _run_once()

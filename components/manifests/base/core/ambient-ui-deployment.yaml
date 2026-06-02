@@ -26,8 +26,26 @@ spec:
           value: "http://ambient-api-server:8000"
         - name: NODE_ENV
           value: "production"
-        - name: AUTH_MODE
-          value: "none"
+        - name: SSO_ISSUER_URL
+          valueFrom:
+            secretKeyRef:
+              name: sso-credentials
+              key: SSO_ISSUER_URL
+        - name: SSO_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: sso-credentials
+              key: SSO_CLIENT_ID
+        - name: SSO_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: sso-credentials
+              key: SSO_CLIENT_SECRET
+        - name: SESSION_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: sso-credentials
+              key: SESSION_SECRET
         resources:
           requests:
             cpu: 100m
