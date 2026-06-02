@@ -352,7 +352,7 @@ export function ChatInput({ sessionId, phase, disabled }: ChatInputProps) {
 
   const handleSend = useCallback(() => {
     const trimmed = input.trim()
-    if (!trimmed || !isRunning || sendMessage.isPending) return
+    if (!trimmed || !isRunning || disabled || sendMessage.isPending) return
     sendMessage.mutate(trimmed, {
       onSuccess: () => {
         setInput('')

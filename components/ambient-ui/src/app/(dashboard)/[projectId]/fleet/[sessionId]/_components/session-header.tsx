@@ -50,17 +50,19 @@ export function SessionHeader({ session }: { session: DomainSession }) {
   const canRestart = RESTARTABLE_PHASES.has(session.phase)
 
   const handleConfirmStop = useCallback(() => {
-    stopSession.mutate(session.id)
-    setStopDialogOpen(false)
+    stopSession.mutate(session.id, {
+      onSettled: () => setStopDialogOpen(false),
+    })
   }, [stopSession, session.id])
 
   const handleConfirmDelete = useCallback(() => {
     deleteSession.mutate(session.id, {
       onSuccess: () => {
+        setDeleteDialogOpen(false)
         router.push(`/${projectId}/fleet`)
       },
+      onError: () => setDeleteDialogOpen(false),
     })
-    setDeleteDialogOpen(false)
   }, [deleteSession, session.id, router, projectId])
 
   const handleExport = useCallback(async () => {

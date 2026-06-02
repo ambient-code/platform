@@ -73,10 +73,28 @@ export function ChatSidebar() {
     hasScrolledOnLoad.current = false
   }, [openSessionId])
 
-  // Drag-to-resize handler
+  // Drag-to-resize handler with cleanup refs
+  const dragListenersRef = useRef<{ move: (e: MouseEvent) => void; up: () => void } | null>(null)
+
+  const cleanupDrag = useCallback(() => {
+    if (dragListenersRef.current) {
+      document.removeEventListener('mousemove', dragListenersRef.current.move)
+      document.removeEventListener('mouseup', dragListenersRef.current.up)
+      dragListenersRef.current = null
+    }
+    isDragging.current = false
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }, [])
+
+  useEffect(() => {
+    return cleanupDrag
+  }, [cleanupDrag])
+
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault()
+      cleanupDrag()
       isDragging.current = true
       startX.current = e.clientX
       startWidth.current = width
@@ -90,18 +108,13 @@ export function ChatSidebar() {
         setWidth(newWidth)
       }
 
-      const handleMouseUp = () => {
-        isDragging.current = false
-        document.body.style.cursor = ''
-        document.body.style.userSelect = ''
-        document.removeEventListener('mousemove', handleMouseMove)
-        document.removeEventListener('mouseup', handleMouseUp)
-      }
+      const handleMouseUp = () => cleanupDrag()
 
+      dragListenersRef.current = { move: handleMouseMove, up: handleMouseUp }
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
     },
-    [width],
+    [width, cleanupDrag],
   )
 
   // Handle Escape key to close

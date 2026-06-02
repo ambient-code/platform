@@ -63,9 +63,12 @@ def _build_payload(
         payload: dict = {"tool": name, "tool_call_id": tool_id}
         if args:
             try:
-                payload["input"] = json.loads(args)
+                parsed = json.loads(args)
+                payload["input"] = (
+                    parsed if isinstance(parsed, dict) else {"value": parsed}
+                )
             except (json.JSONDecodeError, TypeError):
-                payload["input"] = args
+                payload["input"] = {"raw": args}
         return json.dumps(payload)
 
     if event_type_str == "TOOL_CALL_RESULT":

@@ -5,6 +5,7 @@ import {
   useContext,
   useState,
   useCallback,
+  useEffect,
   useMemo,
   type ReactNode,
 } from 'react'
@@ -44,6 +45,12 @@ export function ChatSidebarProvider({ children }: { children: ReactNode }) {
   const closeSidebar = useCallback(() => {
     setOpenSessionId(null)
     updateChatParam(null)
+  }, [])
+
+  useEffect(() => {
+    const handlePopState = () => setOpenSessionId(readChatParam())
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
   }, [])
 
   const value = useMemo<ChatSidebarState>(
