@@ -1,5 +1,6 @@
 import { env } from './env'
 import { getSession } from './session'
+import { storeToken, getToken, deleteToken } from './token-store'
 
 export type RuntimeConfig = {
   apiServerUrl: string
@@ -13,7 +14,7 @@ export async function getRuntimeConfig(): Promise<RuntimeConfig> {
   try {
     const session = await getSession()
     const apiServerUrl = session.customApiServerUrl || defaultUrl
-    const customToken = session.customToken || null
+    const customToken = session.customTokenId ? (getToken(session.customTokenId) ?? null) : null
     return {
       apiServerUrl,
       customToken,
@@ -34,16 +35,25 @@ export async function setCustomContext(url?: string, token?: string | null): Pro
   const session = await getSession()
   if (url) session.customApiServerUrl = url
   if (token === null || token === '') {
-    session.customToken = undefined
+    if (session.customTokenId) {
+      deleteToken(session.customTokenId)
+      session.customTokenId = undefined
+    }
   } else if (token) {
-    session.customToken = token
+    if (session.customTokenId) {
+      deleteToken(session.customTokenId)
+    }
+    session.customTokenId = storeToken(token)
   }
   await session.save()
 }
 
 export async function resetContext(): Promise<void> {
   const session = await getSession()
+  if (session.customTokenId) {
+    deleteToken(session.customTokenId)
+  }
   session.customApiServerUrl = undefined
-  session.customToken = undefined
+  session.customTokenId = undefined
   await session.save()
 }

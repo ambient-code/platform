@@ -8,7 +8,7 @@ export type SessionData = {
   refreshToken: string
   expiresAt: number
   customApiServerUrl?: string
-  customToken?: string
+  customTokenId?: string
 }
 
 const devSessionSecret = randomBytes(32).toString("hex")
