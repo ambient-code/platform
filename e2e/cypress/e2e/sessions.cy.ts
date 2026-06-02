@@ -1243,11 +1243,10 @@ describe('Ambient Session Management Tests', () => {
           cy.contains('Runner API Keys').click({ force: true })
           cy.wait(500)
 
-          // Find any input fields and type
           cy.get('body').then(($inner) => {
-            const inputs = $inner.find('input[type="text"], input[type="password"]')
-            if (inputs.length) {
-              cy.wrap(inputs.first()).clear({ force: true }).type('test-api-key-value', { force: true })
+            if ($inner.find('input[type="text"], input[type="password"]').length) {
+              cy.get('input[type="text"], input[type="password"]').first().clear({ force: true })
+              cy.get('input[type="text"], input[type="password"]').first().type('test-api-key-value', { force: true })
               cy.wait(200)
             }
           })
@@ -1268,15 +1267,12 @@ describe('Ambient Session Management Tests', () => {
           cy.contains('button', 'Add Environment Variable').click({ force: true })
           cy.wait(500)
 
-          // Look for key/value inputs that appear after clicking Add
           cy.get('body').then(($inner) => {
-            const keyInputs = $inner.find('input[placeholder*="key"], input[placeholder*="KEY"], input[placeholder*="name"]')
-            if (keyInputs.length) {
-              cy.wrap(keyInputs.last()).type('E2E_TEST_VAR', { force: true })
+            if ($inner.find('input[placeholder*="key"], input[placeholder*="KEY"], input[placeholder*="name"]').length) {
+              cy.get('input[placeholder*="key"], input[placeholder*="KEY"], input[placeholder*="name"]').last().type('E2E_TEST_VAR', { force: true })
             }
-            const valInputs = $inner.find('input[placeholder*="value"], input[placeholder*="VALUE"]')
-            if (valInputs.length) {
-              cy.wrap(valInputs.last()).type('test-value-123', { force: true })
+            if ($inner.find('input[placeholder*="value"], input[placeholder*="VALUE"]').length) {
+              cy.get('input[placeholder*="value"], input[placeholder*="VALUE"]').last().type('test-value-123', { force: true })
             }
           })
         }
