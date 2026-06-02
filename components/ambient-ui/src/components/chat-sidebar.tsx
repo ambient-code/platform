@@ -151,7 +151,7 @@ export function ChatSidebar() {
 
   return (
     <aside
-      className="flex-shrink-0 border-l bg-background flex flex-col relative h-screen sticky top-0"
+      className="flex-shrink-0 border-l bg-background flex flex-col relative h-screen sticky top-0 z-20 max-md:!w-screen max-md:fixed max-md:inset-0 max-md:border-l-0"
       style={{ width }}
       aria-label={`Chat sidebar for session ${sessionName}`}
       role="complementary"

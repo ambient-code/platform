@@ -36,7 +36,7 @@ export default function DashboardLayout({
     <ChatSidebarProvider>
       <SidebarProvider>
         <AppSidebar projectId={projectId} />
-        <SidebarInset className="min-w-0 flex-1">
+        <SidebarInset className="min-w-0 flex-1 overflow-x-clip">
           <NavHeader
             projectId={projectId}
             projectName={project?.name ?? null}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useSession } from '@/queries/use-sessions'
@@ -11,7 +11,15 @@ import { ChatTab } from './_components/chat-tab'
 
 export default function SessionDetailPage() {
   const { sessionId } = useParams<{ projectId: string; sessionId: string }>()
+  const searchParams = useSearchParams()
+  const activeTab = searchParams.get('tab') ?? 'phase'
   const { data: session, isLoading, error } = useSession(sessionId)
+
+  const handleTabChange = (value: string) => {
+    const url = new URL(window.location.href)
+    url.searchParams.set('tab', value)
+    window.history.replaceState({}, '', url.toString())
+  }
 
   if (error) {
     return (
@@ -33,7 +41,7 @@ export default function SessionDetailPage() {
   return (
     <div className="space-y-6">
       <SessionHeader session={session} />
-      <Tabs defaultValue="phase">
+      <Tabs defaultValue={activeTab} onValueChange={handleTabChange}>
         <TabsList className="w-full *:flex-1">
           <TabsTrigger value="phase">Phase</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
