@@ -318,10 +318,65 @@ Condition colors SHALL reflect semantic health, not literal True/False values. "
 
 - GIVEN a Running session
 - WHEN the Chat tab renders
-- THEN it displays a full AG-UI chat interface with streaming messages
-- AND user messages, agent responses, tool calls (with name, arguments, duration, success/fail), and reasoning blocks are rendered
-- AND the user can send messages via an input field
-- AND the agent's current status is displayed near the input
+- THEN it displays a full AG-UI chat interface with messages
+- AND user messages are styled distinctly from assistant messages
+- AND assistant messages render as Markdown (headings, lists, code blocks, tables, links)
+- AND tool calls render as collapsible blocks showing tool name, arguments (when available), and result
+- AND the user can send messages via an input field (Enter to send, Shift+Enter for newline)
+- AND the agent's current status is displayed as a phase badge near the input
+- AND the input is disabled when the session is not in Running phase
+
+Note: the runner currently persists one `assistant` message per turn (final text only). Intermediate assistant text and individual tool call arguments are not yet persisted as separate messages — they arrive via the operational event writer with tool name and result only. Full streaming with intermediate text requires the SSE-Driven Updates requirement.
+
+### Requirement: Persistent Chat Sidebar
+
+The Ambient UI SHALL support popping a session's chat into a persistent sidebar panel that remains visible across page navigation. The sidebar allows the user to monitor and interact with an agent while performing other tasks in the UI.
+
+Any view that displays a session (fleet table row, session detail header, chat tab) SHALL offer a control to open the chat sidebar for that session. Only one chat sidebar MAY be open at a time; opening a different session's chat SHALL replace the current one.
+
+#### Scenario: Open chat sidebar from Chat tab
+
+- GIVEN the user is viewing a session's Chat tab
+- WHEN the user clicks the "Pop out" button
+- THEN the chat panel moves from the tab content area into a right-edge sidebar
+- AND the Chat tab displays a message indicating the chat is open in the sidebar
+- AND the sidebar shows the session name and phase badge
+
+#### Scenario: Open chat sidebar from fleet table
+
+- GIVEN the user is viewing the fleet table
+- WHEN the user clicks the chat icon on a session row
+- THEN the chat sidebar opens for that session
+- AND the fleet table remains visible alongside the sidebar
+
+#### Scenario: Sidebar persists across navigation
+
+- GIVEN the chat sidebar is open for session A
+- WHEN the user navigates to a different page (fleet list, another session, settings)
+- THEN the sidebar remains open and continues displaying session A's chat
+- AND new messages continue to appear via polling or SSE
+
+#### Scenario: Replace sidebar session
+
+- GIVEN the chat sidebar is open for session A
+- WHEN the user opens the chat sidebar for session B
+- THEN the sidebar switches to session B's chat
+- AND session A's chat is no longer displayed
+
+#### Scenario: Close sidebar
+
+- GIVEN the chat sidebar is open
+- WHEN the user clicks the close button on the sidebar
+- THEN the sidebar dismisses
+- AND if the user navigates back to the session's Chat tab, it renders inline again
+
+#### Scenario: Sidebar layout
+
+- GIVEN the chat sidebar is open
+- THEN it docks to the right edge of the viewport
+- AND it is resizable by dragging the left edge
+- AND it is collapsible to a narrow strip showing the session name
+- AND the main content area shrinks to accommodate the sidebar
 
 ### Requirement: Timestamp Toggle
 
@@ -839,4 +894,5 @@ This section documents API endpoints and capabilities that this spec depends on 
 | Tool metrics computed client-side | The API stores raw SessionMessages. Aggregating tool call stats is a UI concern, not an API concern. |
 | SSE for sessions, polling for rest | Sessions have real-time SSE streams. Credentials, schedules, and agents change infrequently — polling is sufficient and simpler. |
 | Single interaction pattern per entity | Agent rows: sidebar only (no expand + sidebar). Fleet rows: detail view only. Reduces cognitive load per Krug's "Don't Make Me Think." |
+| Chat sidebar is app-level, not tab-level | The sidebar lives in the root layout, not the session detail page. This enables cross-page persistence. State is managed via React context at the dashboard layout level. |
 | Feedback delivery is context-dependent | Running session → session message (immediate). Stopped session → agent inbox (queued). Matches the platform's existing message model. |
