@@ -517,7 +517,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 				},
 				"limits": map[string]interface{}{
 					"cpu":    "2000m",
-					"memory": "8Gi",
+					"memory": "4Gi",
 				},
 			},
 			"securityContext": map[string]interface{}{
