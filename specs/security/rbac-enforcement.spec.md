@@ -142,6 +142,13 @@ authenticating with the platform service token SHALL NOT trigger user auto-provi
 - THEN no duplicate User record is created
 - AND the existing record is used
 
+#### Scenario: Concurrent first-time requests are idempotent
+
+- GIVEN a user authenticates for the first time
+- WHEN two requests arrive simultaneously before either commits a User record
+- THEN exactly one User record is created (upsert semantics)
+- AND both requests proceed normally
+
 #### Scenario: Service caller does not trigger auto-provisioning
 
 - GIVEN a request authenticates with the platform service token
@@ -187,7 +194,7 @@ access by creating a project.
 - GIVEN a new user with zero bindings
 - WHEN the user calls `GET /sessions` or `GET /projects/other-project`
 - THEN the sessions list is empty
-- AND the project get returns 403
+- AND the project get returns 404 (existence not disclosed)
 
 ### Requirement: Credential Self-Service Bootstrap
 
@@ -206,6 +213,13 @@ bound AND `project:owner` on the target project.
 - WHEN the user calls `POST /credentials` with a valid payload
 - THEN the credential is created
 - AND a RoleBinding is created: `role=credential:owner`, `scope=credential`, `credential_id=<new-id>`, `user_id=<caller>`
+
+#### Scenario: Credential owner binding is atomic with creation
+
+- GIVEN a user calls `POST /credentials`
+- WHEN the credential is persisted
+- THEN the `credential:owner` RoleBinding is created in the same database transaction
+- AND if the RoleBinding creation fails, the credential creation is rolled back
 
 #### Scenario: Credential owner binds to their project
 
@@ -279,6 +293,11 @@ The role hierarchy for escalation checks (higher number = lower privilege):
 | 2 | `project:editor`, `agent:operator`, `credential:viewer` |
 | 3 | `project:viewer`, `agent:observer` |
 
+For credential-scoped role bindings (`scope=credential`), the caller SHALL hold
+`credential:owner` on the target credential in addition to satisfying the level
+hierarchy check. This prevents users with unrelated project ownership from granting
+credential access on credentials they do not own.
+
 Platform-internal roles (`agent:runner`, `credential:token-reader`) SHALL NOT be
 grantable via `POST /role_bindings`. These roles are managed exclusively by the
 platform (e.g., the operator grants `agent:runner` to session service accounts at
@@ -318,6 +337,13 @@ a platform-internal role via the API SHALL return 403 Forbidden.
 - WHEN user A calls `POST /role_bindings` with `role=project:owner`, `scope=project`, `project_id=proj-1`
 - THEN the request returns 403 Forbidden
 - AND editors cannot escalate to owner
+
+#### Scenario: Non-credential-owner cannot grant credential-scoped roles
+
+- GIVEN user B holds `project:owner` on proj-1 but does NOT hold `credential:owner` on credential C
+- WHEN user B calls `POST /role_bindings` with `role=credential:viewer`, `credential_id=C`, `user_id=X`
+- THEN the request returns 403 Forbidden
+- AND project ownership does not substitute for credential ownership
 
 #### Scenario: Granting platform-internal role rejected
 
@@ -413,6 +439,11 @@ reconcile state on behalf of the platform, not on behalf of any individual user.
 
 The service caller bypass SHALL apply to both HTTP and gRPC request paths.
 
+The service token endpoint SHALL only be reachable from within the cluster.
+Exfiltration of the service token MUST NOT grant external access. See
+[Security Specification — Proxy Authentication](security.spec.md#requirement-proxy-authentication)
+for cluster-internal caller validation requirements.
+
 #### Scenario: Control plane updates session status
 
 - GIVEN the control plane authenticates with the service token
@@ -425,6 +456,13 @@ The service caller bypass SHALL apply to both HTTP and gRPC request paths.
 - WHEN the caller's request is evaluated
 - THEN the caller is not identified as a service caller
 - AND RBAC is enforced normally
+
+#### Scenario: Service token rejected from outside the cluster
+
+- GIVEN an external caller who has obtained the service token
+- WHEN the caller sends a request with the service token from outside the cluster
+- THEN the request is rejected
+- AND the service token bypass does not apply to non-cluster-internal traffic
 
 ### Requirement: Integration Test Coverage
 
@@ -462,12 +500,26 @@ environment SHALL explicitly disable enforcement initially, then enable it after
 
 The rollout SHALL NOT require downtime.
 
+The `project:owner` and `credential:owner` RoleBindings SHALL be created on
+`POST /projects` and `POST /credentials` regardless of whether RBAC enforcement
+is enabled. Binding creation is not gated by the enforcement flag — only
+authorization evaluation is. This prevents projects and credentials created during
+the rollout window from becoming orphaned when enforcement is enabled.
+
 #### Scenario: Enforcement disabled — all authenticated requests pass
 
 - GIVEN enforcement is disabled via configuration
 - WHEN an authenticated user calls any endpoint
 - THEN RBAC is not evaluated
 - AND the request proceeds
+
+#### Scenario: Bindings created even when enforcement is disabled
+
+- GIVEN enforcement is disabled via configuration
+- WHEN a user calls `POST /projects` with `{"name": "new-proj"}`
+- THEN the project is created
+- AND a `project:owner` RoleBinding is created for the caller
+- AND when enforcement is later enabled, the project has an owner
 
 #### Scenario: Enforcement enabled
 
@@ -480,13 +532,27 @@ The rollout SHALL NOT require downtime.
 ### Requirement: Error Response Opacity
 
 The authorization middleware SHALL NOT disclose which permissions are missing or which
-bindings were evaluated. Authorization failures SHALL return a generic 403 response.
-This prevents authorization probing attacks.
+bindings were evaluated. This prevents authorization probing attacks.
 
-#### Scenario: Forbidden response is opaque
+For singleton resource endpoints (`GET /projects/{id}`, `GET /sessions/{id}`, etc.),
+the middleware SHALL return 404 when the caller has no binding that covers the
+requested resource — regardless of whether the resource actually exists. Returning
+403 on a singleton GET leaks resource existence and enables ID enumeration.
 
-- GIVEN user A lacks permission to access a resource
-- WHEN user A calls any endpoint requiring authorization
+For list endpoints, the middleware SHALL return 200 with an empty items array when
+the caller has no matching resources.
+
+#### Scenario: Singleton GET returns 404, not 403
+
+- GIVEN user A has no binding covering proj-1
+- WHEN user A calls `GET /projects/proj-1`
+- THEN the response is 404
+- AND no information about whether proj-1 exists is disclosed
+
+#### Scenario: Forbidden response on mutation is opaque
+
+- GIVEN user A lacks permission to mutate a resource they can see
+- WHEN user A calls `PATCH /projects/proj-1` or `DELETE /projects/proj-1`
 - THEN the response is 403 with a generic error body
 - AND no details about required permissions or existing bindings are included
 
@@ -513,6 +579,11 @@ This prevents authorization probing attacks.
 | Strictly-below escalation with platform:admin exception | Users can only grant roles strictly below their own level. This prevents peer-minting (an owner creating another owner). `platform:admin` is the sole exception — since there is no higher role, admins must be able to grant admin to others. |
 | Platform-internal roles not user-grantable | `agent:runner` and `credential:token-reader` are managed by the platform (operator grants them at session start). Allowing users to grant these roles would bypass the intended runtime-only access model and create security gaps. |
 | Idle gRPC watch streams are closed by the server | An unauthenticated or unauthorized caller could open unlimited idle watch streams to exhaust server connections. The server closes streams that have been idle beyond a timeout to bound resource usage. |
+| 404 on unauthorized singleton GETs, not 403 | Returning 403 on `GET /projects/{id}` confirms the resource exists to an unauthorized caller. Returning 404 prevents ID enumeration — the caller learns nothing about whether the resource exists. List endpoints correctly return 200+empty, which is safe because they don't confirm specific IDs. |
+| Credential-scoped grants require credential:owner | Without this check, any Level 1+ user (e.g., a project:owner) could grant credential:viewer on credentials they don't own. The level hierarchy alone is insufficient — credential-scoped grants must also verify ownership of the target credential. |
+| Owner bindings created regardless of enforcement flag | Projects and credentials created during the enforcement-disabled rollout window would become orphaned the moment enforcement is enabled. Creating bindings unconditionally means every resource has an owner from day one. |
+| User auto-provisioning is idempotent (upsert) | Two concurrent first-time requests from the same user could race to create the User record. Upsert semantics (keyed on identity claim) prevent duplicate records and unhandled constraint violations. |
+| Service token restricted to cluster-internal traffic | A stolen service token grants full RBAC bypass. Restricting acceptance to cluster-internal callers limits the blast radius of token exfiltration. |
 | gRPC uses same evaluation as HTTP | One authorization model, not two. The gRPC interceptor uses the same evaluation logic as the HTTP middleware. Prevents divergence and bypass via protocol switching. |
 | Tests exercise real RBAC | Disabling the middleware in tests means RBAC bugs ship to production undetected. Tests should create bindings explicitly and verify enforcement. The test helper should make this ergonomic, not skip it. |
 | Configuration flag for rollout | Gradual enablement. Operators can seed admins and verify behavior in staging before enabling in production. No big-bang cutover. |
