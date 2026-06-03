@@ -108,9 +108,9 @@ export default function AgentDetailPage() {
   const hasTestSession = testSessionId !== null
 
   return (
-    <ResizablePanelGroup orientation="horizontal">
+    <ResizablePanelGroup orientation="horizontal" className={hasTestSession ? 'h-screen !overflow-hidden sticky top-0' : ''}>
       <ResizablePanel defaultSize={hasTestSession ? 55 : 100} minSize={30}>
-        <div className="space-y-6 pr-1">
+        <div className={`space-y-6 pr-1 ${hasTestSession ? 'h-full overflow-y-auto' : ''}`}>
           <AgentHeader agent={agent} lifecycle={lifecycle} onRunTest={handleRunTest} />
           <Tabs value={activeTab} onValueChange={handleTabChange}>
             <TabsList className="w-full *:flex-1">

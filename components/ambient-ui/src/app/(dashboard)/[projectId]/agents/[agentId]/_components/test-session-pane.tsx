@@ -156,7 +156,7 @@ export function TestSessionPane({
   const visibleHistory = history.slice(0, MAX_HISTORY)
 
   return (
-    <div className="flex flex-col border-l h-screen sticky top-0">
+    <div className="flex flex-col border-l h-full">
       {/* Header */}
       <div className="flex items-center justify-between border-b px-3 py-2 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
