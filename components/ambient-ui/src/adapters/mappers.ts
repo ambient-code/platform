@@ -1,5 +1,8 @@
 import type { Session, Project } from 'ambient-sdk'
-import type { DomainSession, DomainProject, DomainSessionMessage, SessionPhase, SessionEventType } from '@/domain/types'
+import type {
+  DomainSession, DomainProject, DomainSessionMessage, SessionPhase, SessionEventType,
+  DomainRepo, DomainReconciledRepo, DomainCondition, ReconciledRepoStatus, ConditionStatus,
+} from '@/domain/types'
 
 const VALID_PHASES: ReadonlySet<string> = new Set<string>([
   'Pending',
@@ -37,8 +40,92 @@ function parseAnnotations(raw: string): Record<string, string> {
   }
 }
 
+function parseJsonArray(raw: string): unknown[] {
+  if (!raw) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function parseJsonObject(raw: string): Record<string, string> {
+  if (!raw) return {}
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      const result: Record<string, string> = {}
+      for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+        result[key] = String(value)
+      }
+      return result
+    }
+    return {}
+  } catch {
+    return {}
+  }
+}
+
+const VALID_REPO_STATUSES: ReadonlySet<string> = new Set(['Cloning', 'Ready', 'Failed'])
+const VALID_CONDITION_STATUSES: ReadonlySet<string> = new Set(['True', 'False', 'Unknown'])
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+}
+
+function parseRepos(raw: string): DomainRepo[] {
+  return parseJsonArray(raw)
+    .filter(isRecord)
+    .map((r) => ({
+      url: String(r.url ?? ''),
+      branch: r.branch ? String(r.branch) : null,
+      name: r.name ? String(r.name) : null,
+      autoPush: Boolean(r.autoPush),
+    }))
+}
+
+function parseReconciledRepos(raw: string): DomainReconciledRepo[] {
+  return parseJsonArray(raw)
+    .filter(isRecord)
+    .map((r) => {
+      const status = String(r.status ?? '')
+      return {
+        url: String(r.url ?? ''),
+        name: r.name ? String(r.name) : null,
+        status: VALID_REPO_STATUSES.has(status) ? (status as ReconciledRepoStatus) : null,
+        currentActiveBranch: r.currentActiveBranch ? String(r.currentActiveBranch) : null,
+        defaultBranch: r.defaultBranch ? String(r.defaultBranch) : null,
+        clonedAt: r.clonedAt ? String(r.clonedAt) : null,
+      }
+    })
+}
+
+function parseConditions(raw: string): DomainCondition[] {
+  return parseJsonArray(raw)
+    .filter(isRecord)
+    .map((c) => {
+      const status = String(c.status ?? 'Unknown')
+      return {
+        type: String(c.type ?? ''),
+        status: VALID_CONDITION_STATUSES.has(status) ? (status as ConditionStatus) : 'Unknown',
+        reason: c.reason ? String(c.reason) : null,
+        message: c.message ? String(c.message) : null,
+        lastTransitionTime: c.lastTransitionTime ? String(c.lastTransitionTime) : null,
+      }
+    })
+}
+
 function emptyToNull(value: string): string | null {
   return value || null
+}
+
+function numberOrNull(value: number | null | undefined): number | null {
+  return value === undefined || value === null ? null : value
+}
+
+function positiveNumberOrNull(value: number | null | undefined): number | null {
+  return value === undefined || value === null || value === 0 ? null : value
 }
 
 export function mapSdkSessionToDomain(sdk: Session): DomainSession {
@@ -51,11 +138,22 @@ export function mapSdkSessionToDomain(sdk: Session): DomainSession {
     agentName: annotations['agent_name'] ?? null,
     projectId: emptyToNull(sdk.project_id),
     model: emptyToNull(sdk.llm_model),
+    temperature: numberOrNull(sdk.llm_temperature),
+    maxTokens: positiveNumberOrNull(sdk.llm_max_tokens),
+    timeout: positiveNumberOrNull(sdk.timeout),
+    workflowId: emptyToNull(sdk.workflow_id),
+    prompt: emptyToNull(sdk.prompt),
+    sdkRestartCount: sdk.sdk_restart_count ?? 0,
     startTime: emptyToNull(sdk.start_time),
     completionTime: emptyToNull(sdk.completion_time),
     createdAt: sdk.created_at ?? '',
     updatedAt: sdk.updated_at ?? '',
     annotations,
+    labels: parseJsonObject(sdk.labels),
+    environmentVariables: parseJsonObject(sdk.environment_variables),
+    repos: parseRepos(sdk.repos),
+    reconciledRepos: parseReconciledRepos(sdk.reconciled_repos),
+    conditions: parseConditions(sdk.conditions),
   }
 }
 

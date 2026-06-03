@@ -14,7 +14,7 @@ import {
 } from '@/components/chat-messages'
 import { useSession } from '@/queries/use-sessions'
 import { useSessionMessages } from '@/queries/use-session-messages'
-import { useLiveTail, LiveIndicator } from '@/app/(dashboard)/[projectId]/fleet/[sessionId]/_components/live-tail-indicator'
+import { useLiveTail, LiveIndicator } from '@/app/(dashboard)/[projectId]/sessions/[sessionId]/_components/live-tail-indicator'
 
 const MIN_WIDTH = 320
 const MAX_WIDTH = 800
@@ -196,7 +196,7 @@ export function ChatSidebar() {
           onClick={() => {
             const projectId = session?.projectId
             if (projectId && openSessionId) {
-              router.push(`/${projectId}/fleet/${openSessionId}`)
+              router.push(`/${projectId}/sessions/${openSessionId}`)
             }
           }}
           title="Go to session detail"
