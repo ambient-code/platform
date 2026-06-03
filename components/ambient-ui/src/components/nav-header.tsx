@@ -30,6 +30,12 @@ type NavHeaderProps = {
   sessionName?: string | null
 }
 
+const BREADCRUMB_LABEL_MAP: Record<string, string> = {}
+
+function displayLabel(raw: string): string {
+  return BREADCRUMB_LABEL_MAP[raw] ?? raw
+}
+
 function UserMenu() {
   const { user, isLoading } = useCurrentUser()
 
@@ -69,17 +75,19 @@ function UserMenu() {
 }
 
 export function NavHeader({ projectId, projectName, pageName, sessionName }: NavHeaderProps) {
+  const mappedPageName = pageName ? displayLabel(pageName) : null
+
   return (
     <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b bg-background px-4">
       <SidebarTrigger />
-      <Separator orientation="vertical" className="mx-1 h-5" />
+      <Separator orientation="vertical" className="mx-2 h-5" />
 
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
             <BreadcrumbLink asChild>
               <Link href="/">
-                <span className="font-semibold">Ambient</span>
+                <span>Ambient</span>
               </Link>
             </BreadcrumbLink>
           </BreadcrumbItem>
@@ -89,22 +97,22 @@ export function NavHeader({ projectId, projectName, pageName, sessionName }: Nav
               <BreadcrumbSeparator />
               <BreadcrumbItem>
                 <BreadcrumbLink asChild>
-                  <Link href={`/${projectId}/fleet`}>{projectName ?? projectId}</Link>
+                  <Link href={`/${projectId}/sessions`}>{projectName ?? projectId}</Link>
                 </BreadcrumbLink>
               </BreadcrumbItem>
             </>
           )}
 
-          {pageName && (
+          {mappedPageName && (
             <>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
                 {sessionName ? (
                   <BreadcrumbLink asChild>
-                    <Link href={`/${projectId}/fleet`}>{pageName}</Link>
+                    <Link href={`/${projectId}/sessions`}>{mappedPageName}</Link>
                   </BreadcrumbLink>
                 ) : (
-                  <BreadcrumbPage>{pageName}</BreadcrumbPage>
+                  <BreadcrumbPage>{mappedPageName}</BreadcrumbPage>
                 )}
               </BreadcrumbItem>
             </>

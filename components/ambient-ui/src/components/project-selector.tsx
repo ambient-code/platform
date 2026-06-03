@@ -31,7 +31,7 @@ export function ProjectSelector({ projectId }: ProjectSelectorProps) {
       value={projectId ?? undefined}
       onValueChange={(value) => {
         domainProbe.projectSelected({ projectId: value })
-        router.push(`/${value}/fleet`)
+        router.push(`/${value}/sessions`)
       }}
     >
       <SelectTrigger className="w-full">

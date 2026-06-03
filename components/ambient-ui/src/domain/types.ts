@@ -7,6 +7,34 @@ export type SessionPhase =
   | 'Failed'
   | 'Stopped'
 
+export type DomainRepo = {
+  url: string
+  branch: string | null
+  name: string | null
+  autoPush: boolean
+}
+
+export type ReconciledRepoStatus = 'Cloning' | 'Ready' | 'Failed'
+
+export type DomainReconciledRepo = {
+  url: string
+  name: string | null
+  status: ReconciledRepoStatus | null
+  currentActiveBranch: string | null
+  defaultBranch: string | null
+  clonedAt: string | null
+}
+
+export type ConditionStatus = 'True' | 'False' | 'Unknown'
+
+export type DomainCondition = {
+  type: string
+  status: ConditionStatus
+  reason: string | null
+  message: string | null
+  lastTransitionTime: string | null
+}
+
 export type DomainSession = {
   id: string
   name: string
@@ -15,11 +43,22 @@ export type DomainSession = {
   agentName: string | null
   projectId: string | null
   model: string | null
+  temperature: number | null
+  maxTokens: number | null
+  timeout: number | null
+  workflowId: string | null
+  prompt: string | null
+  sdkRestartCount: number
   startTime: string | null
   completionTime: string | null
   createdAt: string
   updatedAt: string
   annotations: Record<string, string>
+  labels: Record<string, string>
+  environmentVariables: Record<string, string>
+  repos: DomainRepo[]
+  reconciledRepos: DomainReconciledRepo[]
+  conditions: DomainCondition[]
 }
 
 export type DomainProject = {
