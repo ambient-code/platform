@@ -1,36 +1,38 @@
-import type { AgentAPI } from 'ambient-sdk'
+import { AgentAPI } from 'ambient-sdk'
 import type { AgentsPort } from '@/ports/agents'
 import type { DomainAgent, ListParams, PaginatedResult } from '@/domain/types'
 import { mapSdkAgentToDomain } from './mappers'
-import { getAgentAPI } from './sdk-client'
+import { getConfig } from './sdk-client'
 
 function sanitizeSearch(value: string): string {
   return value.replace(/['"%;\\]/g, '')
 }
 
-function buildSdkListOptions(projectId: string, params?: ListParams) {
-  const search = params?.search
-    ? `project_id = '${sanitizeSearch(projectId)}' and name like '%${sanitizeSearch(params.search)}%'`
-    : `project_id = '${sanitizeSearch(projectId)}'`
+function getProjectScopedAPI(projectId: string): AgentAPI {
+  return new AgentAPI({ ...getConfig(), project: projectId })
+}
 
+function buildSdkListOptions(params?: ListParams) {
   return {
     page: params?.page ?? 1,
     size: params?.size ?? 20,
-    search,
+    search: params?.search
+      ? `name like '%${sanitizeSearch(params.search)}%'`
+      : undefined,
     orderBy: params?.orderBy,
   }
 }
 
-function createSdkAgentsAdapter(api: AgentAPI): AgentsPort {
+export function createAgentsAdapter(): AgentsPort {
   return {
     async list(projectId: string, params?: ListParams): Promise<PaginatedResult<DomainAgent>> {
-      const opts = buildSdkListOptions(projectId, params)
+      const api = getProjectScopedAPI(projectId)
+      const opts = buildSdkListOptions(params)
       const result = await api.list(opts)
-      const items = result.items.map(mapSdkAgentToDomain)
       const page = opts.page
       const size = opts.size
       return {
-        items,
+        items: result.items.map(mapSdkAgentToDomain),
         total: result.total,
         page,
         size,
@@ -39,12 +41,9 @@ function createSdkAgentsAdapter(api: AgentAPI): AgentsPort {
     },
 
     async get(agentId: string): Promise<DomainAgent> {
+      const api = new AgentAPI({ ...getConfig(), project: '_' })
       const agent = await api.get(agentId)
       return mapSdkAgentToDomain(agent)
     },
   }
-}
-
-export function createAgentsAdapter(api?: AgentAPI): AgentsPort {
-  return createSdkAgentsAdapter(api ?? getAgentAPI())
 }
