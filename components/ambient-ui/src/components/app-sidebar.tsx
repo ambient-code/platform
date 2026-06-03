@@ -28,10 +28,66 @@ type AppSidebarProps = {
   projectId: string | null
 }
 
-const projectNavItems = [
+type NavItem = { readonly label: string; readonly icon: typeof Monitor; readonly href: string }
+
+const operateNavItems: readonly NavItem[] = [
   { label: 'Sessions', icon: Monitor, href: 'sessions' },
+]
+
+const buildNavItems: readonly NavItem[] = [
   { label: 'Agents', icon: Bot, href: 'agents' },
-] as const
+]
+
+function NavGroup({
+  label,
+  items,
+  projectId,
+  pathname,
+}: {
+  label: string
+  items: readonly NavItem[]
+  projectId: string | null
+  pathname: string
+}) {
+  const isDisabled = !projectId
+
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel>{label}</SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {items.map((item) => {
+            const href = projectId ? `/${projectId}/${item.href}` : '#'
+            const isActive = pathname === href || pathname.startsWith(href + '/')
+
+            return (
+              <SidebarMenuItem key={item.label}>
+                <SidebarMenuButton
+                  asChild={!isDisabled}
+                  isActive={isActive}
+                  disabled={isDisabled}
+                  tooltip={item.label}
+                >
+                  {isDisabled ? (
+                    <>
+                      <item.icon />
+                      <span>{item.label}</span>
+                    </>
+                  ) : (
+                    <Link href={href}>
+                      <item.icon />
+                      <span>{item.label}</span>
+                    </Link>
+                  )}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )
+          })}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  )
+}
 
 export function AppSidebar({ projectId }: AppSidebarProps) {
   const pathname = usePathname()
@@ -48,41 +104,8 @@ export function AppSidebar({ projectId }: AppSidebarProps) {
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Project</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {projectNavItems.map((item) => {
-                const href = projectId ? `/${projectId}/${item.href}` : '#'
-                const isActive = pathname === href || pathname.startsWith(href + '/')
-                const isDisabled = !projectId
-
-                return (
-                  <SidebarMenuItem key={item.label}>
-                    <SidebarMenuButton
-                      asChild={!isDisabled}
-                      isActive={isActive}
-                      disabled={isDisabled}
-                      tooltip={item.label}
-                    >
-                      {isDisabled ? (
-                        <>
-                          <item.icon />
-                          <span>{item.label}</span>
-                        </>
-                      ) : (
-                        <Link href={href}>
-                          <item.icon />
-                          <span>{item.label}</span>
-                        </Link>
-                      )}
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <NavGroup label="Operate" items={operateNavItems} projectId={projectId} pathname={pathname} />
+        <NavGroup label="Build" items={buildNavItems} projectId={projectId} pathname={pathname} />
       </SidebarContent>
 
       <SidebarFooter>
