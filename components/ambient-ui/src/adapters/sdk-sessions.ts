@@ -1,6 +1,6 @@
-import type { SessionAPI } from 'ambient-sdk'
+import type { SessionAPI, SessionCreateRequest } from 'ambient-sdk'
 import type { SessionsPort } from '@/ports/sessions'
-import type { DomainSession, ListParams, PaginatedResult } from '@/domain/types'
+import type { DomainSession, DomainSessionCreateRequest, ListParams, PaginatedResult } from '@/domain/types'
 import { mapSdkSessionToDomain } from './mappers'
 import { getSessionAPI } from './sdk-client'
 
@@ -19,6 +19,20 @@ function buildSdkListOptions(projectId: string, params?: ListParams) {
     search,
     orderBy: params?.orderBy,
   }
+}
+
+function mapDomainCreateToSdk(request: DomainSessionCreateRequest): SessionCreateRequest {
+  const sdkReq: SessionCreateRequest = {
+    name: request.name,
+    project_id: request.projectId,
+  }
+  if (request.agentId) sdkReq.agent_id = request.agentId
+  if (request.prompt) sdkReq.prompt = request.prompt
+  if (request.model) sdkReq.llm_model = request.model
+  if (request.temperature !== undefined) sdkReq.llm_temperature = request.temperature
+  if (request.maxTokens !== undefined) sdkReq.llm_max_tokens = request.maxTokens
+  if (request.timeout !== undefined) sdkReq.timeout = request.timeout
+  return sdkReq
 }
 
 function createSdkSessionsAdapter(api: SessionAPI): SessionsPort {
@@ -40,6 +54,12 @@ function createSdkSessionsAdapter(api: SessionAPI): SessionsPort {
 
     async get(sessionId: string): Promise<DomainSession> {
       const session = await api.get(sessionId)
+      return mapSdkSessionToDomain(session)
+    },
+
+    async create(request: DomainSessionCreateRequest): Promise<DomainSession> {
+      const sdkReq = mapDomainCreateToSdk(request)
+      const session = await api.create(sdkReq)
       return mapSdkSessionToDomain(session)
     },
 

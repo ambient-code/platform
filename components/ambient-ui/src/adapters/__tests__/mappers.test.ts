@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { mapSdkSessionToDomain, mapSdkProjectToDomain, mapSessionMessageToDomain } from '../mappers'
+import { mapSdkSessionToDomain, mapSdkProjectToDomain, mapSessionMessageToDomain, mapSdkAgentToDomain } from '../mappers'
 import type { SdkSessionMessageShape } from '../mappers'
-import type { Session, Project } from 'ambient-sdk'
+import type { Session, Project, Agent } from 'ambient-sdk'
 
 function makeSdkSession(overrides: Partial<Session> = {}): Session {
   return {
@@ -452,5 +452,120 @@ describe('mapSessionMessageToDomain', () => {
     const sdk = makeSdkMessage({ payload: complexPayload })
     const domain = mapSessionMessageToDomain(sdk)
     expect(domain.payload).toBe(complexPayload)
+  })
+})
+
+function makeSdkAgent(overrides: Partial<Agent> = {}): Agent {
+  return {
+    id: 'agent-001',
+    kind: 'Agent',
+    href: '/api/ambient/v1/agents/agent-001',
+    created_at: '2026-02-01T09:00:00Z',
+    updated_at: '2026-02-01T10:00:00Z',
+    annotations: '{}',
+    bot_account_name: '',
+    current_session_id: '',
+    description: 'A test agent',
+    display_name: 'Test Agent',
+    environment_variables: '',
+    labels: '',
+    llm_max_tokens: 4096,
+    llm_model: 'claude-sonnet-4-20250514',
+    llm_temperature: 0.7,
+    name: 'test-agent',
+    owner_user_id: 'user-42',
+    parent_agent_id: '',
+    project_id: 'proj-123',
+    prompt: 'You are a helpful agent.',
+    repo_url: 'https://github.com/org/repo',
+    resource_overrides: '',
+    workflow_id: 'wf-1',
+    ...overrides,
+  }
+}
+
+describe('mapSdkAgentToDomain', () => {
+  it('maps snake_case fields to camelCase', () => {
+    const sdk = makeSdkAgent()
+    const domain = mapSdkAgentToDomain(sdk)
+
+    expect(domain.id).toBe('agent-001')
+    expect(domain.name).toBe('test-agent')
+    expect(domain.displayName).toBe('Test Agent')
+    expect(domain.description).toBe('A test agent')
+    expect(domain.model).toBe('claude-sonnet-4-20250514')
+    expect(domain.ownerUserId).toBe('user-42')
+    expect(domain.projectId).toBe('proj-123')
+    expect(domain.prompt).toBe('You are a helpful agent.')
+    expect(domain.repoUrl).toBe('https://github.com/org/repo')
+    expect(domain.workflowId).toBe('wf-1')
+    expect(domain.createdAt).toBe('2026-02-01T09:00:00Z')
+    expect(domain.updatedAt).toBe('2026-02-01T10:00:00Z')
+  })
+
+  it('maps empty string fields to null', () => {
+    const sdk = makeSdkAgent({
+      display_name: '',
+      description: '',
+      llm_model: '',
+      owner_user_id: '',
+      current_session_id: '',
+      project_id: '',
+      prompt: '',
+      repo_url: '',
+      workflow_id: '',
+    })
+    const domain = mapSdkAgentToDomain(sdk)
+
+    expect(domain.displayName).toBeNull()
+    expect(domain.description).toBeNull()
+    expect(domain.model).toBeNull()
+    expect(domain.ownerUserId).toBeNull()
+    expect(domain.currentSessionId).toBeNull()
+    expect(domain.projectId).toBeNull()
+    expect(domain.prompt).toBeNull()
+    expect(domain.repoUrl).toBeNull()
+    expect(domain.workflowId).toBeNull()
+  })
+
+  it('parses valid annotations JSON to Record', () => {
+    const annotations = JSON.stringify({ team: 'platform', tier: 'production' })
+    const sdk = makeSdkAgent({ annotations })
+    const domain = mapSdkAgentToDomain(sdk)
+
+    expect(domain.annotations).toEqual({ team: 'platform', tier: 'production' })
+  })
+
+  it('returns empty Record for invalid annotations', () => {
+    const sdk = makeSdkAgent({ annotations: 'broken{' })
+    const domain = mapSdkAgentToDomain(sdk)
+    expect(domain.annotations).toEqual({})
+  })
+
+  it('parses valid labels JSON to Record', () => {
+    const labels = JSON.stringify({ env: 'dev', app: 'backend' })
+    const sdk = makeSdkAgent({ labels })
+    const domain = mapSdkAgentToDomain(sdk)
+
+    expect(domain.labels).toEqual({ env: 'dev', app: 'backend' })
+  })
+
+  it('returns empty Record for invalid labels', () => {
+    const sdk = makeSdkAgent({ labels: '["a"]' })
+    const domain = mapSdkAgentToDomain(sdk)
+    expect(domain.labels).toEqual({})
+  })
+
+  it('handles null created_at and updated_at', () => {
+    const sdk = makeSdkAgent({ created_at: null, updated_at: null })
+    const domain = mapSdkAgentToDomain(sdk)
+    expect(domain.createdAt).toBe('')
+    expect(domain.updatedAt).toBe('')
+  })
+
+  it('maps current_session_id when present', () => {
+    const sdk = makeSdkAgent({ current_session_id: 'sess-abc' })
+    const domain = mapSdkAgentToDomain(sdk)
+    expect(domain.currentSessionId).toBe('sess-abc')
   })
 })
