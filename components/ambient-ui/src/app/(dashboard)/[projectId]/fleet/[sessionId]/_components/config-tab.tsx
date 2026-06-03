@@ -12,7 +12,6 @@ import {
 } from '@/components/ui/table'
 import type { DomainSession } from '@/domain/types'
 import { getRegisteredAnnotation } from '@/domain/annotations'
-import { cn } from '@/lib/utils'
 import type { LucideIcon } from 'lucide-react'
 import {
   Pin,
@@ -75,7 +74,7 @@ function SecretValue({ value }: { value: string }) {
   )
 }
 
-export function DetailsTab({ session }: { session: DomainSession }) {
+export function ConfigTab({ session }: { session: DomainSession }) {
   const [promptExpanded, setPromptExpanded] = useState(false)
 
   const envEntries = Object.entries(session.environmentVariables)

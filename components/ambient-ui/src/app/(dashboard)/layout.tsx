@@ -16,7 +16,8 @@ function extractNavContext(pathname: string) {
   const segments = pathname.split('/').filter(Boolean)
   const projectId = segments.length >= 1 ? segments[0] : null
   const pageName = segments.length >= 2 ? capitalize(segments[1]) : null
-  return { projectId, pageName }
+  const sessionName = segments.length >= 3 && segments[1] === 'fleet' ? segments[2] : null
+  return { projectId, pageName, sessionName }
 }
 
 function capitalize(s: string): string {
@@ -29,7 +30,7 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
-  const { projectId, pageName } = extractNavContext(pathname)
+  const { projectId, pageName, sessionName } = extractNavContext(pathname)
   const { data: project } = useProject(projectId ?? '')
 
   return (
@@ -41,6 +42,7 @@ export default function DashboardLayout({
             projectId={projectId}
             projectName={project?.name ?? null}
             pageName={pageName}
+            sessionName={sessionName}
           />
           <div className="flex-1 p-6 pb-10">{children}</div>
           <StatusBar />

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { DetailsTab } from '../details-tab'
+import { ConfigTab } from '../config-tab'
 import type { DomainSession } from '@/domain/types'
 
 function makeSession(overrides: Partial<DomainSession> = {}): DomainSession {
@@ -32,9 +32,9 @@ function makeSession(overrides: Partial<DomainSession> = {}): DomainSession {
   }
 }
 
-describe('DetailsTab', () => {
+describe('ConfigTab', () => {
   it('renders configuration metadata', () => {
-    render(<DetailsTab session={makeSession()} />)
+    render(<ConfigTab session={makeSession()} />)
     expect(screen.getByText('Configuration')).toBeTruthy()
     expect(screen.getByText('claude-sonnet-4-20250514')).toBeTruthy()
     expect(screen.getByText('0.7')).toBeTruthy()
@@ -44,7 +44,7 @@ describe('DetailsTab', () => {
 
   it('shows dashes for null config values', () => {
     render(
-      <DetailsTab
+      <ConfigTab
         session={makeSession({ model: null, temperature: null, maxTokens: null, timeout: null })}
       />,
     )
@@ -54,7 +54,7 @@ describe('DetailsTab', () => {
 
   it('renders environment variables table with count', () => {
     render(
-      <DetailsTab
+      <ConfigTab
         session={makeSession({ environmentVariables: { NODE_ENV: 'production', DEBUG: 'true' } })}
       />,
     )
@@ -65,13 +65,13 @@ describe('DetailsTab', () => {
   })
 
   it('hides environment variables section when empty', () => {
-    render(<DetailsTab session={makeSession()} />)
+    render(<ConfigTab session={makeSession()} />)
     expect(screen.queryByText(/Environment Variables/)).toBeNull()
   })
 
   it('renders annotations with friendly labels for registered keys', () => {
     render(
-      <DetailsTab
+      <ConfigTab
         session={makeSession({
           annotations: {
             'ambient-code.io/jira/issue': 'HYPERFLEET-234',
@@ -91,7 +91,7 @@ describe('DetailsTab', () => {
 
   it('renders raw annotation keys when not registered', () => {
     render(
-      <DetailsTab
+      <ConfigTab
         session={makeSession({
           annotations: { 'custom-key': 'custom-val' },
         })}
@@ -103,13 +103,13 @@ describe('DetailsTab', () => {
   })
 
   it('hides annotations section when no annotations exist', () => {
-    render(<DetailsTab session={makeSession()} />)
+    render(<ConfigTab session={makeSession()} />)
     expect(screen.queryByText(/Annotations/)).toBeNull()
   })
 
   it('renders labels table with count', () => {
     render(
-      <DetailsTab
+      <ConfigTab
         session={makeSession({ labels: { team: 'platform', tier: 'production' } })}
       />,
     )
@@ -119,34 +119,34 @@ describe('DetailsTab', () => {
   })
 
   it('hides labels section when empty', () => {
-    render(<DetailsTab session={makeSession()} />)
+    render(<ConfigTab session={makeSession()} />)
     expect(screen.queryByText(/Labels/)).toBeNull()
   })
 
   it('renders prompt with truncation and char count', () => {
     const longPrompt = 'x'.repeat(300)
-    render(<DetailsTab session={makeSession({ prompt: longPrompt })} />)
+    render(<ConfigTab session={makeSession({ prompt: longPrompt })} />)
     expect(screen.getByText('Prompt')).toBeTruthy()
     expect(screen.getByText('Show more (300 chars)')).toBeTruthy()
   })
 
   it('expands truncated prompt on click', () => {
     const longPrompt = 'A'.repeat(100) + 'B'.repeat(200)
-    render(<DetailsTab session={makeSession({ prompt: longPrompt })} />)
+    render(<ConfigTab session={makeSession({ prompt: longPrompt })} />)
     fireEvent.click(screen.getByText('Show more (300 chars)'))
     expect(screen.getByText('Show less')).toBeTruthy()
     expect(screen.getByText(longPrompt)).toBeTruthy()
   })
 
   it('renders short prompt without truncation', () => {
-    render(<DetailsTab session={makeSession({ prompt: 'Fix the auth bug' })} />)
+    render(<ConfigTab session={makeSession({ prompt: 'Fix the auth bug' })} />)
     expect(screen.getByText('Fix the auth bug')).toBeTruthy()
     expect(screen.queryByText(/Show more/)).toBeNull()
   })
 
   it('renders clickable URL annotation values as links', () => {
     render(
-      <DetailsTab
+      <ConfigTab
         session={makeSession({
           annotations: { 'ambient-code.io/ui/preview-url': 'https://app.example.com' },
         })}
@@ -160,7 +160,7 @@ describe('DetailsTab', () => {
 
   it('masks secret-looking env var values', () => {
     render(
-      <DetailsTab
+      <ConfigTab
         session={makeSession({
           environmentVariables: { API_KEY: 'super-secret-123', NODE_ENV: 'production' },
         })}
@@ -175,7 +175,7 @@ describe('DetailsTab', () => {
 
   it('reveals secret value on toggle click', () => {
     render(
-      <DetailsTab
+      <ConfigTab
         session={makeSession({
           environmentVariables: { SECRET_TOKEN: 'my-token-value' },
         })}
@@ -188,18 +188,18 @@ describe('DetailsTab', () => {
   })
 
   it('hides Agent Restarts when sdkRestartCount is 0', () => {
-    render(<DetailsTab session={makeSession({ sdkRestartCount: 0 })} />)
+    render(<ConfigTab session={makeSession({ sdkRestartCount: 0 })} />)
     expect(screen.queryByText('Agent Restarts')).toBeNull()
   })
 
   it('shows Agent Restarts when sdkRestartCount > 0', () => {
-    render(<DetailsTab session={makeSession({ sdkRestartCount: 3 })} />)
+    render(<ConfigTab session={makeSession({ sdkRestartCount: 3 })} />)
     expect(screen.getByText('Agent Restarts')).toBeTruthy()
     expect(screen.getByText('3')).toBeTruthy()
   })
 
   it('renders Workflow ID with mono styling and tooltip', () => {
-    render(<DetailsTab session={makeSession({ workflowId: 'wf-abc-123' })} />)
+    render(<ConfigTab session={makeSession({ workflowId: 'wf-abc-123' })} />)
     const wfElement = screen.getByText('wf-abc-123')
     expect(wfElement).toBeTruthy()
     expect(wfElement.getAttribute('title')).toBe('Workflow ID')

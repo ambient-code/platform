@@ -17,13 +17,13 @@ import { OverviewTab } from './_components/overview-tab'
 import { LogsTab } from './_components/logs-tab'
 import { ChatTab } from './_components/chat-tab'
 import { ResourcesTab } from './_components/resources-tab'
-import { DetailsTab } from './_components/details-tab'
+import { ConfigTab } from './_components/config-tab'
 
 export default function SessionDetailPage() {
   const { sessionId } = useParams<{ projectId: string; sessionId: string }>()
   const [activeTab, setActiveTab] = useState(() => {
-    if (typeof window === 'undefined') return 'logs'
-    return new URL(window.location.href).searchParams.get('tab') ?? 'logs'
+    if (typeof window === 'undefined') return 'overview'
+    return new URL(window.location.href).searchParams.get('tab') ?? 'overview'
   })
   const { data: session, isLoading, error } = useSession(sessionId)
 
@@ -57,19 +57,19 @@ export default function SessionDetailPage() {
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="w-full *:flex-1">
           <TabsTrigger value="overview">
-            <LayoutDashboard className="size-4" /> Overview
+            <LayoutDashboard className="size-4 mr-1.5" /> Overview
           </TabsTrigger>
           <TabsTrigger value="logs">
-            <ScrollText className="size-4" /> Logs
+            <ScrollText className="size-4 mr-1.5" /> Logs
           </TabsTrigger>
           <TabsTrigger value="resources">
-            <FolderGit2 className="size-4" /> Resources
+            <FolderGit2 className="size-4 mr-1.5" /> Resources
           </TabsTrigger>
           <TabsTrigger value="config">
-            <Settings className="size-4" /> Config
+            <Settings className="size-4 mr-1.5" /> Config
           </TabsTrigger>
           <TabsTrigger value="chat">
-            <MessageSquare className="size-4" /> Chat
+            <MessageSquare className="size-4 mr-1.5" /> Chat
           </TabsTrigger>
         </TabsList>
         <TabsContent value="overview">
@@ -82,7 +82,7 @@ export default function SessionDetailPage() {
           <ResourcesTab session={session} />
         </TabsContent>
         <TabsContent value="config">
-          <DetailsTab session={session} />
+          <ConfigTab session={session} />
         </TabsContent>
         <TabsContent value="chat">
           <ChatTab session={session} />
