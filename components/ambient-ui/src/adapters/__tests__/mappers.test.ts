@@ -333,11 +333,11 @@ describe('mapSdkSessionToDomain', () => {
       expect(domain.timeout).toBe(7200)
     })
 
-    it('returns null for zero temperature, maxTokens, timeout', () => {
+    it('preserves zero temperature but nulls zero maxTokens and timeout', () => {
       const sdk = makeSdkSession({ llm_temperature: 0, llm_max_tokens: 0, timeout: 0 })
       const domain = mapSdkSessionToDomain(sdk)
 
-      expect(domain.temperature).toBeNull()
+      expect(domain.temperature).toBe(0)
       expect(domain.maxTokens).toBeNull()
       expect(domain.timeout).toBeNull()
     })

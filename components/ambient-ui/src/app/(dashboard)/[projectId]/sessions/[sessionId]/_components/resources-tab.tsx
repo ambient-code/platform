@@ -29,20 +29,25 @@ type MergedRepo = {
   clonedAt: string | null
 }
 
+function normalizeUrl(url: string): string {
+  return url.replace(/\.git$/, '').replace(/\/$/, '')
+}
+
 function mergeRepos(
   repos: DomainRepo[],
   reconciledRepos: DomainReconciledRepo[],
 ): MergedRepo[] {
   const reconciledByUrl = new Map(
-    reconciledRepos.map(r => [r.url, r]),
+    reconciledRepos.map(r => [normalizeUrl(r.url), r]),
   )
 
   const seen = new Set<string>()
   const result: MergedRepo[] = []
 
   for (const repo of repos) {
-    seen.add(repo.url)
-    const reconciled = reconciledByUrl.get(repo.url)
+    const key = normalizeUrl(repo.url)
+    seen.add(key)
+    const reconciled = reconciledByUrl.get(key)
     result.push({
       url: repo.url,
       name: reconciled?.name ?? repo.name ?? baseNameFromUrl(repo.url),
@@ -53,7 +58,7 @@ function mergeRepos(
   }
 
   for (const reconciled of reconciledRepos) {
-    if (!seen.has(reconciled.url)) {
+    if (!seen.has(normalizeUrl(reconciled.url))) {
       result.push({
         url: reconciled.url,
         name: reconciled.name ?? baseNameFromUrl(reconciled.url),
@@ -68,7 +73,7 @@ function mergeRepos(
 }
 
 function baseNameFromUrl(url: string): string {
-  const segments = url.replace(/\.git$/, '').split('/')
+  const segments = normalizeUrl(url).split('/').filter(Boolean)
   return segments[segments.length - 1] || url
 }
 
