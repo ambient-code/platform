@@ -197,7 +197,8 @@ credential creation, the system SHALL automatically create a `credential:owner`
 RoleBinding for the authenticated user, scoped to the new credential.
 
 Binding a credential to a project (`POST /role_bindings` with `scope=credential`)
-SHALL require the caller to hold `project:owner` on the target project.
+SHALL require the caller to hold **both** `credential:owner` on the credential being
+bound AND `project:owner` on the target project.
 
 #### Scenario: User creates a credential
 
@@ -213,9 +214,15 @@ SHALL require the caller to hold `project:owner` on the target project.
 - THEN the binding is created
 - AND runners in proj-1 can access credential C
 
-#### Scenario: Non-owner cannot bind credential to project
+#### Scenario: Non-project-owner cannot bind credential to project
 
 - GIVEN user B does NOT hold `project:owner` on proj-1
+- WHEN user B calls `POST /role_bindings` with `scope=credential`, `credential_id=C`, `project_id=proj-1`
+- THEN the request returns 403 Forbidden
+
+#### Scenario: Non-credential-owner cannot bind credential to project
+
+- GIVEN user B holds `project:owner` on proj-1 but does NOT hold `credential:owner` on credential C
 - WHEN user B calls `POST /role_bindings` with `scope=credential`, `credential_id=C`, `project_id=proj-1`
 - THEN the request returns 403 Forbidden
 
