@@ -1,14 +1,14 @@
 'use client'
 
-import { GitBranch, Pencil } from 'lucide-react'
+import { GitBranch, CircleDashed } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 
 const MANAGED_BY_KEY = 'ambient-code.io/managed-by'
 
-export type AgentLifecycle = 'draft' | 'gitops'
+export type AgentLifecycle = 'unmanaged' | 'gitops'
 
 export function getAgentLifecycle(annotations: Record<string, string>): AgentLifecycle {
-  return annotations[MANAGED_BY_KEY] === 'gitops' ? 'gitops' : 'draft'
+  return annotations[MANAGED_BY_KEY] === 'gitops' ? 'gitops' : 'unmanaged'
 }
 
 export function LifecycleBadge({ lifecycle }: { lifecycle: AgentLifecycle }) {
@@ -23,8 +23,8 @@ export function LifecycleBadge({ lifecycle }: { lifecycle: AgentLifecycle }) {
 
   return (
     <Badge variant="outline" className="gap-1">
-      <Pencil className="size-3" />
-      Draft
+      <CircleDashed className="size-3" />
+      Unmanaged
     </Badge>
   )
 }

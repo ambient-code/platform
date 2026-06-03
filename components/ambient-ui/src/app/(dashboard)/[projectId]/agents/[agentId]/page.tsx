@@ -2,19 +2,18 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-import { LayoutDashboard, ScrollText, Settings } from 'lucide-react'
+import { ScrollText, FileCode } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAgent } from '@/queries/use-agents'
 import { getAgentLifecycle } from '../_components/lifecycle-badge'
 import { AgentHeader } from './_components/agent-header'
-import { AgentOverviewTab } from './_components/agent-overview-tab'
+import { AgentManifestTab } from './_components/agent-manifest-tab'
 import { AgentSessionsTab } from './_components/agent-sessions-tab'
-import { AgentConfigTab } from './_components/agent-config-tab'
 
 export default function AgentDetailPage() {
   const { projectId, agentId } = useParams<{ projectId: string; agentId: string }>()
-  const [activeTab, setActiveTab] = useState('overview')
+  const [activeTab, setActiveTab] = useState('manifest')
   const { data: agent, isLoading, error } = useAgent(projectId, agentId)
 
   useEffect(() => {
@@ -53,24 +52,18 @@ export default function AgentDetailPage() {
       <AgentHeader agent={agent} lifecycle={lifecycle} />
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="w-full *:flex-1">
-          <TabsTrigger value="overview">
-            <LayoutDashboard className="size-4 mr-1.5" /> Overview
+          <TabsTrigger value="manifest">
+            <FileCode className="size-4 mr-1.5" /> Manifest
           </TabsTrigger>
           <TabsTrigger value="sessions">
             <ScrollText className="size-4 mr-1.5" /> Sessions
           </TabsTrigger>
-          <TabsTrigger value="config">
-            <Settings className="size-4 mr-1.5" /> Config
-          </TabsTrigger>
         </TabsList>
-        <TabsContent value="overview">
-          <AgentOverviewTab agent={agent} lifecycle={lifecycle} />
+        <TabsContent value="manifest">
+          <AgentManifestTab agent={agent} lifecycle={lifecycle} />
         </TabsContent>
         <TabsContent value="sessions">
           <AgentSessionsTab agentId={agentId} projectId={projectId} />
-        </TabsContent>
-        <TabsContent value="config">
-          <AgentConfigTab agent={agent} />
         </TabsContent>
       </Tabs>
     </div>

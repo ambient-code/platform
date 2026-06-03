@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import {
   useReactTable,
@@ -47,29 +47,43 @@ function buildColumns(projectId: string) {
         </Link>
       ),
     }),
-    col.display({
-      id: 'duration',
-      header: 'Duration',
-      cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">
-          {row.original.startTime
-            ? formatDuration(row.original.startTime, row.original.completionTime)
-            : '—'}
-        </span>
-      ),
-    }),
-    col.display({
-      id: 'cost',
-      header: 'Cost',
-      cell: ({ row }) => {
-        const cost = row.original.annotations[COST_KEY]
-        return (
-          <span className="text-sm text-muted-foreground">
-            {cost ?? '—'}
-          </span>
-        )
+    col.accessor(
+      (row) => {
+        if (!row.startTime) return -1
+        const end = row.completionTime ? new Date(row.completionTime).getTime() : Date.now()
+        return end - new Date(row.startTime).getTime()
       },
-    }),
+      {
+        id: 'duration',
+        header: 'Duration',
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {row.original.startTime
+              ? formatDuration(row.original.startTime, row.original.completionTime)
+              : '—'}
+          </span>
+        ),
+      },
+    ),
+    col.accessor(
+      (row) => {
+        const raw = row.annotations[COST_KEY]
+        if (!raw) return -1
+        return parseFloat(raw.replace(/[^0-9.]/g, '')) || 0
+      },
+      {
+        id: 'cost',
+        header: 'Cost',
+        cell: ({ row }) => {
+          const cost = row.original.annotations[COST_KEY]
+          return (
+            <span className="text-sm text-muted-foreground">
+              {cost ?? '—'}
+            </span>
+          )
+        },
+      },
+    ),
     col.accessor('createdAt', {
       header: 'Created',
       cell: (info) => (
@@ -93,11 +107,12 @@ export function AgentSessionsTab({
     { id: 'createdAt', desc: true },
   ])
 
-  const agentSessions = (data?.items ?? []).filter(
-    (session) => session.agentId === agentId
+  const agentSessions = useMemo(
+    () => (data?.items ?? []).filter((session) => session.agentId === agentId),
+    [data?.items, agentId],
   )
 
-  const columns = buildColumns(projectId)
+  const columns = useMemo(() => buildColumns(projectId), [projectId])
 
   const table = useReactTable({
     data: agentSessions,
