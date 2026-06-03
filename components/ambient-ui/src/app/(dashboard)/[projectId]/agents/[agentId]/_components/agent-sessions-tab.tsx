@@ -43,16 +43,9 @@ function buildColumns(
         const session = info.row.original
         return (
           <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onSelectSession?.(session.id, session.name)
-              }}
-              className="text-xs font-medium text-link underline-offset-4 hover:underline truncate max-w-[200px]"
-            >
+            <span className="text-xs font-medium truncate max-w-[200px]">
               {info.getValue()}
-            </button>
+            </span>
             <Link
               href={`/${projectId}/sessions/${session.id}`}
               onClick={(e) => e.stopPropagation()}
