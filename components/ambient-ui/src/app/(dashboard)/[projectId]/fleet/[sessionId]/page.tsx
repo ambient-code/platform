@@ -9,6 +9,8 @@ import { SessionHeader } from './_components/session-header'
 import { PhaseTab } from './_components/phase-tab'
 import { LogsTab } from './_components/logs-tab'
 import { ChatTab } from './_components/chat-tab'
+import { ResourcesTab } from './_components/resources-tab'
+import { DetailsTab } from './_components/details-tab'
 
 export default function SessionDetailPage() {
   const { sessionId } = useParams<{ projectId: string; sessionId: string }>()
@@ -49,8 +51,8 @@ export default function SessionDetailPage() {
         <TabsList className="w-full *:flex-1">
           <TabsTrigger value="phase">Phase</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
-          <TabsTrigger value="resources" disabled>Resources</TabsTrigger>
-          <TabsTrigger value="details" disabled>Details</TabsTrigger>
+          <TabsTrigger value="resources">Resources</TabsTrigger>
+          <TabsTrigger value="details">Details</TabsTrigger>
           <TabsTrigger value="chat">Chat</TabsTrigger>
         </TabsList>
         <TabsContent value="phase">
@@ -58,6 +60,12 @@ export default function SessionDetailPage() {
         </TabsContent>
         <TabsContent value="logs">
           <LogsTab session={session} />
+        </TabsContent>
+        <TabsContent value="resources">
+          <ResourcesTab session={session} />
+        </TabsContent>
+        <TabsContent value="details">
+          <DetailsTab session={session} />
         </TabsContent>
         <TabsContent value="chat">
           <ChatTab session={session} />
