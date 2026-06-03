@@ -162,28 +162,28 @@ describe('ConfigTab', () => {
     render(
       <ConfigTab
         session={makeSession({
-          environmentVariables: { API_KEY: 'super-secret-123', NODE_ENV: 'production' },
+          environmentVariables: { CREDENTIAL_ID: 'masked-val', NODE_ENV: 'production' },
         })}
       />,
     )
     expect(screen.getByText('NODE_ENV')).toBeTruthy()
     expect(screen.getByText('production')).toBeTruthy()
-    expect(screen.getByText('API_KEY')).toBeTruthy()
+    expect(screen.getByText('CREDENTIAL_ID')).toBeTruthy()
     expect(screen.getByText('••••••••')).toBeTruthy()
-    expect(screen.queryByText('super-secret-123')).toBeNull()
+    expect(screen.queryByText('masked-val')).toBeNull()
   })
 
   it('reveals secret value on toggle click', () => {
     render(
       <ConfigTab
         session={makeSession({
-          environmentVariables: { SECRET_TOKEN: 'my-token-value' },
+          environmentVariables: { SENSITIVE_CREDENTIAL: 'revealed-val' },
         })}
       />,
     )
     expect(screen.getByText('••••••••')).toBeTruthy()
     fireEvent.click(screen.getByLabelText('Reveal secret value'))
-    expect(screen.getByText('my-token-value')).toBeTruthy()
+    expect(screen.getByText('revealed-val')).toBeTruthy()
     expect(screen.queryByText('••••••••')).toBeNull()
   })
 
