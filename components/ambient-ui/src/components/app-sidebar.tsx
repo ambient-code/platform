@@ -6,10 +6,6 @@ import { useTheme } from 'next-themes'
 import {
   Monitor,
   Bot,
-  Calendar,
-  AlertCircle,
-  Settings,
-  Key,
   Moon,
   Sun,
 } from 'lucide-react'
@@ -19,35 +15,21 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
+  SidebarHeader,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarSeparator,
 } from '@/components/ui/sidebar'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 
 type AppSidebarProps = {
   projectId: string | null
 }
 
 const projectNavItems = [
-  { label: 'Fleet', icon: Monitor, href: 'fleet', disabled: false },
-  { label: 'Agents', icon: Bot, href: 'agents', disabled: true, tooltip: 'Coming soon' },
-  { label: 'Schedules', icon: Calendar, href: 'schedules', disabled: true, tooltip: 'Coming soon' },
-  { label: 'Issues', icon: AlertCircle, href: 'issues', disabled: true, tooltip: 'Coming soon' },
-  { label: 'Settings', icon: Settings, href: 'settings', disabled: true, tooltip: 'Coming soon' },
-] as const
-
-const globalNavItems = [
-  { label: 'Credentials', icon: Key, href: '/credentials', disabled: true, tooltip: 'Coming soon' },
+  { label: 'Sessions', icon: Monitor, href: 'sessions' },
 ] as const
 
 export function AppSidebar({ projectId }: AppSidebarProps) {
@@ -57,6 +39,10 @@ export function AppSidebar({ projectId }: AppSidebarProps) {
   return (
     <Sidebar>
       <SidebarHeader>
+        <div className="flex items-center gap-2 px-2 py-1.5">
+          <Bot className="size-5 text-primary" />
+          <span className="text-sm font-semibold tracking-tight">Ambient</span>
+        </div>
         <ProjectSelector projectId={projectId} />
       </SidebarHeader>
 
@@ -67,10 +53,10 @@ export function AppSidebar({ projectId }: AppSidebarProps) {
             <SidebarMenu>
               {projectNavItems.map((item) => {
                 const href = projectId ? `/${projectId}/${item.href}` : '#'
-                const isActive = pathname === href
-                const isDisabled = item.disabled || !projectId
+                const isActive = pathname === href || pathname.startsWith(href + '/')
+                const isDisabled = !projectId
 
-                const menuButton = (
+                return (
                   <SidebarMenuItem key={item.label}>
                     <SidebarMenuButton
                       asChild={!isDisabled}
@@ -92,62 +78,26 @@ export function AppSidebar({ projectId }: AppSidebarProps) {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 )
-
-                if (isDisabled && 'tooltip' in item && item.tooltip) {
-                  return (
-                    <Tooltip key={item.label}>
-                      <TooltipTrigger asChild>
-                        {menuButton}
-                      </TooltipTrigger>
-                      <TooltipContent side="right">
-                        {item.tooltip}
-                      </TooltipContent>
-                    </Tooltip>
-                  )
-                }
-
-                return menuButton
               })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarSeparator />
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Global</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {globalNavItems.map((item) => (
-                <Tooltip key={item.label}>
-                  <TooltipTrigger asChild>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton disabled tooltip={item.label}>
-                        <item.icon />
-                        <span>{item.label}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    {item.tooltip}
-                  </TooltipContent>
-                </Tooltip>
-              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          aria-label="Toggle theme"
-        >
-          <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-          <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-        </Button>
+        <div className="flex items-center justify-between px-2 py-1">
+          <span className="text-xs text-muted-foreground">Theme</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            aria-label="Toggle theme"
+          >
+            <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+            <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+          </Button>
+        </div>
       </SidebarFooter>
     </Sidebar>
   )

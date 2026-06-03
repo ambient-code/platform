@@ -59,7 +59,7 @@ export function SessionHeader({ session }: { session: DomainSession }) {
     deleteSession.mutate(session.id, {
       onSuccess: () => {
         setDeleteDialogOpen(false)
-        router.push(`/${projectId}/fleet`)
+        router.push(`/${projectId}/sessions`)
       },
       onError: () => setDeleteDialogOpen(false),
     })
@@ -100,11 +100,11 @@ export function SessionHeader({ session }: { session: DomainSession }) {
 
   return (
     <>
-      <div className="sticky top-0 z-[5] bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pb-4 -mx-1 px-1">
+      <div className="sticky top-14 z-[5] bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pb-4 -mx-1 px-1">
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold">{session.name}</h1>
+              <h1 className="text-lg font-semibold">{session.name}</h1>
               <PhaseBadge phase={session.phase} />
             </div>
 
@@ -116,7 +116,7 @@ export function SessionHeader({ session }: { session: DomainSession }) {
                   onClick={() => setPreviewOpen(true)}
                   aria-label="Open preview"
                 >
-                  <ExternalLink className="h-4 w-4" />
+                  <ExternalLink className="size-4" />
                   Preview
                 </Button>
               )}
@@ -129,7 +129,7 @@ export function SessionHeader({ session }: { session: DomainSession }) {
                   disabled={stopSession.isPending}
                   aria-label="Stop session"
                 >
-                  <Square className="h-4 w-4" />
+                  <Square className="size-4" />
                   Stop
                 </Button>
               )}
@@ -142,20 +142,20 @@ export function SessionHeader({ session }: { session: DomainSession }) {
                   disabled={startSession.isPending}
                   aria-label="Restart session"
                 >
-                  <RotateCcw className="h-4 w-4" />
+                  <RotateCcw className="size-4" />
                   Restart
                 </Button>
               )}
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="More actions">
-                    <MoreVertical className="h-4 w-4" />
+                  <Button variant="ghost" size="icon" className="size-8" aria-label="More actions">
+                    <MoreVertical className="size-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={handleExport}>
-                    <Download className="h-4 w-4 mr-2" />
+                    <Download className="size-4 mr-2" />
                     Export
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
@@ -164,7 +164,7 @@ export function SessionHeader({ session }: { session: DomainSession }) {
                     disabled={deleteSession.isPending}
                     className="text-destructive focus:text-destructive"
                   >
-                    <Trash2 className="h-4 w-4 mr-2" />
+                    <Trash2 className="size-4 mr-2" />
                     Delete
                   </DropdownMenuItem>
                 </DropdownMenuContent>
