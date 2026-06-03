@@ -1,18 +1,59 @@
 import { createColumnHelper } from '@tanstack/react-table'
 import type { SortingFn } from '@tanstack/react-table'
-import { MessageSquare } from 'lucide-react'
+import {
+  MessageSquare,
+  Ticket,
+  GitPullRequest,
+  ExternalLink,
+  Clock,
+  CalendarClock,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import type { DomainSession, SessionPhase } from '@/domain/types'
-import { formatRelativeTime, formatPreciseDuration } from '@/lib/format-timestamp'
+import { formatRelativeTime, formatAbsoluteTime, formatPreciseDuration } from '@/lib/format-timestamp'
 import { useChatSidebar } from '@/components/chat-sidebar-context'
 import { PhaseBadge } from './phase-badge'
 
 const COST_ANNOTATION = 'ambient-code.io/cost/estimate'
+
+/** Annotation keys for work item integrations, in priority order */
+const WORK_ITEM_ANNOTATIONS = [
+  { key: 'ambient-code.io/jira/issue', label: 'Jira', Icon: Ticket },
+  { key: 'ambient-code.io/github/pr', label: 'PR', Icon: GitPullRequest },
+  { key: 'ambient-code.io/gitlab/mr', label: 'MR', Icon: GitPullRequest },
+  { key: 'ambient-code.io/gerrit/change', label: 'Gerrit', Icon: ExternalLink },
+] as const
+
+const REVIEW_STATUS_ANNOTATION = 'ambient-code.io/review/status'
+
+type ReviewStatus = 'needs-review' | 'approved' | 'changes-requested'
+
+const REVIEW_STATUS_CONFIG: Record<ReviewStatus, { label: string; className: string }> = {
+  'needs-review': {
+    label: 'Needs Review',
+    className: 'bg-status-warning text-status-warning-foreground border-status-warning-border',
+  },
+  approved: {
+    label: 'Approved',
+    className: 'bg-status-success text-status-success-foreground border-status-success-border',
+  },
+  'changes-requested': {
+    label: 'Changes Requested',
+    className: 'bg-status-error text-status-error-foreground border-status-error-border',
+  },
+}
+
+function isReviewStatus(value: string): value is ReviewStatus {
+  return value in REVIEW_STATUS_CONFIG
+}
+
 const col = createColumnHelper<DomainSession>()
 
 const RUNNING_PHASES: ReadonlySet<SessionPhase> = new Set(['Running', 'Creating', 'Pending', 'Stopping'])
@@ -33,6 +74,12 @@ const phaseSortingFn: SortingFn<DomainSession> = (rowA, rowB) => {
   const a = PHASE_SORT_PRIORITY[rowA.original.phase] ?? 99
   const b = PHASE_SORT_PRIORITY[rowB.original.phase] ?? 99
   return a - b
+}
+
+export type FleetTableMeta = {
+  agentNames?: Map<string, string>
+  useAbsoluteTime?: boolean
+  onToggleTimeFormat?: () => void
 }
 
 function ChatColumnButton({ sessionId, phase }: { sessionId: string; phase: SessionPhase }) {
@@ -70,6 +117,30 @@ function ChatColumnButton({ sessionId, phase }: { sessionId: string; phase: Sess
 }
 
 export const fleetColumns = [
+  col.display({
+    id: 'select',
+    header: ({ table }) => (
+      <Checkbox
+        checked={
+          table.getIsAllPageRowsSelected() ||
+          (table.getIsSomePageRowsSelected() && 'indeterminate')
+        }
+        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+        aria-label="Select all"
+        onClick={(e) => e.stopPropagation()}
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(value) => row.toggleSelected(!!value)}
+        aria-label="Select row"
+        onClick={(e) => e.stopPropagation()}
+      />
+    ),
+    size: 40,
+    enableSorting: false,
+  }),
   col.accessor('phase', {
     header: 'Phase',
     cell: info => <PhaseBadge phase={info.getValue()} />,
@@ -83,12 +154,33 @@ export const fleetColumns = [
       <span className="font-medium">{info.getValue()}</span>
     ),
   }),
+  col.display({
+    id: 'workItem',
+    header: 'Work Item',
+    cell: ({ row }) => {
+      const annotations = row.original.annotations
+      for (const { key, label, Icon } of WORK_ITEM_ANNOTATIONS) {
+        const value = annotations[key]
+        if (value) {
+          return (
+            <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+              <Icon className="size-3 shrink-0" />
+              <span className="truncate max-w-[120px]">{value}</span>
+            </span>
+          )
+        }
+      }
+      return <span className="text-muted-foreground">—</span>
+    },
+    enableSorting: false,
+    size: 160,
+  }),
   col.accessor('agentId', {
     header: 'Agent',
     cell: info => {
       const agentId = info.getValue()
       const annotationName = info.row.original.agentName
-      const agentNames = (info.table.options.meta as { agentNames?: Map<string, string> } | undefined)?.agentNames
+      const agentNames = (info.table.options.meta as FleetTableMeta | undefined)?.agentNames
       const resolvedName = annotationName ?? (agentId ? agentNames?.get(agentId) : null) ?? null
       if (!resolvedName) return <span className="text-muted-foreground">—</span>
       return (
@@ -97,6 +189,24 @@ export const fleetColumns = [
         </span>
       )
     },
+  }),
+  col.display({
+    id: 'review',
+    header: 'Review',
+    cell: ({ row }) => {
+      const raw = row.original.annotations[REVIEW_STATUS_ANNOTATION]
+      if (!raw || !isReviewStatus(raw)) {
+        return <span className="text-muted-foreground">—</span>
+      }
+      const config = REVIEW_STATUS_CONFIG[raw]
+      return (
+        <Badge variant="outline" className={config.className}>
+          {config.label}
+        </Badge>
+      )
+    },
+    enableSorting: false,
+    size: 140,
   }),
   col.display({
     id: 'duration',
@@ -136,7 +246,40 @@ export const fleetColumns = [
   }),
   col.display({
     id: 'lastActivity',
-    header: 'Last Activity',
+    header: ({ table }) => {
+      const meta = table.options.meta as FleetTableMeta | undefined
+      const isAbsolute = meta?.useAbsoluteTime ?? false
+      const toggle = meta?.onToggleTimeFormat
+      return (
+        <div className="flex items-center gap-1">
+          <span>Last Activity</span>
+          {toggle && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center rounded-sm p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggle()
+                  }}
+                  aria-label={isAbsolute ? 'Switch to relative time' : 'Switch to absolute time'}
+                >
+                  {isAbsolute ? (
+                    <Clock className="size-3.5" />
+                  ) : (
+                    <CalendarClock className="size-3.5" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {isAbsolute ? 'Show relative time' : 'Show absolute time'}
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+      )
+    },
     enableSorting: true,
     sortingFn: (rowA, rowB) => {
       const getTime = (row: typeof rowA) => {
@@ -146,8 +289,10 @@ export const fleetColumns = [
       }
       return getTime(rowA) - getTime(rowB)
     },
-    cell: ({ row }) => {
+    cell: ({ row, table }) => {
       const { phase, completionTime, updatedAt } = row.original
+      const meta = table.options.meta as FleetTableMeta | undefined
+      const useAbsolute = meta?.useAbsoluteTime ?? false
 
       if (phase === 'Running') {
         return (
@@ -176,7 +321,7 @@ export const fleetColumns = [
       const activityTime = completionTime ?? updatedAt
       return (
         <span className="text-muted-foreground text-xs">
-          {formatRelativeTime(activityTime)}
+          {useAbsolute ? formatAbsoluteTime(activityTime) : formatRelativeTime(activityTime)}
         </span>
       )
     },
