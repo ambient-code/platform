@@ -7,6 +7,7 @@ import { StatusBar } from '@/components/status-bar'
 import { ChatSidebar } from '@/components/chat-sidebar'
 import { ChatSidebarProvider } from '@/components/chat-sidebar-context'
 import { useProject } from '@/queries/use-projects'
+import { useSession } from '@/queries/use-sessions'
 import {
   SidebarInset,
   SidebarProvider,
@@ -16,7 +17,8 @@ function extractNavContext(pathname: string) {
   const segments = pathname.split('/').filter(Boolean)
   const projectId = segments.length >= 1 ? segments[0] : null
   const pageName = segments.length >= 2 ? capitalize(segments[1]) : null
-  return { projectId, pageName }
+  const sessionId = segments.length >= 3 && segments[1] === 'sessions' ? segments[2] : null
+  return { projectId, pageName, sessionId }
 }
 
 function capitalize(s: string): string {
@@ -29,8 +31,9 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
-  const { projectId, pageName } = extractNavContext(pathname)
+  const { projectId, pageName, sessionId } = extractNavContext(pathname)
   const { data: project } = useProject(projectId ?? '')
+  const { data: session } = useSession(sessionId ?? '', undefined)
 
   return (
     <ChatSidebarProvider>
@@ -41,6 +44,7 @@ export default function DashboardLayout({
             projectId={projectId}
             projectName={project?.name ?? null}
             pageName={pageName}
+            sessionName={sessionId ? (session?.name ?? sessionId) : null}
           />
           <div className="flex-1 p-6 pb-10">{children}</div>
           <StatusBar />

@@ -17,12 +17,12 @@ export function PhaseBadge({ phase }: { phase: SessionPhase }) {
   return (
     <Badge
       variant="outline"
-      className={cn('gap-1.5 font-medium', VARIANT_CLASSES[style.variant])}
+      className={cn('gap-1.5 font-semibold', VARIANT_CLASSES[style.variant])}
     >
       {style.pulse && (
-        <span className="relative flex h-2 w-2">
+        <span className="relative flex h-2.5 w-2.5">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-75" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-current" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-current" />
         </span>
       )}
       {style.label}

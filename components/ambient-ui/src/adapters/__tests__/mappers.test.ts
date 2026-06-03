@@ -170,6 +170,214 @@ describe('mapSdkSessionToDomain', () => {
     expect(domain.createdAt).toBe('')
     expect(domain.updatedAt).toBe('')
   })
+
+  describe('new session fields', () => {
+    it('parses repos from valid JSON string', () => {
+      const repos = JSON.stringify([
+        { url: 'https://github.com/org/repo1', branch: 'main', name: 'repo1', autoPush: true },
+        { url: 'https://github.com/org/repo2', branch: null, name: null, autoPush: false },
+      ])
+      const sdk = makeSdkSession({ repos })
+      const domain = mapSdkSessionToDomain(sdk)
+
+      expect(domain.repos).toHaveLength(2)
+      expect(domain.repos[0]).toEqual({
+        url: 'https://github.com/org/repo1',
+        branch: 'main',
+        name: 'repo1',
+        autoPush: true,
+      })
+      expect(domain.repos[1]).toEqual({
+        url: 'https://github.com/org/repo2',
+        branch: null,
+        name: null,
+        autoPush: false,
+      })
+    })
+
+    it('returns empty repos for empty string', () => {
+      const sdk = makeSdkSession({ repos: '' })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.repos).toEqual([])
+    })
+
+    it('returns empty repos for invalid JSON', () => {
+      const sdk = makeSdkSession({ repos: 'not valid json' })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.repos).toEqual([])
+    })
+
+    it('parses reconciled repos with all status variants', () => {
+      const reconciledRepos = JSON.stringify([
+        { url: 'https://github.com/org/repo1', name: 'repo1', status: 'Cloning', currentActiveBranch: 'feat-1', defaultBranch: 'main', clonedAt: '2026-01-15T10:00:00Z' },
+        { url: 'https://github.com/org/repo2', name: 'repo2', status: 'Ready', currentActiveBranch: 'main', defaultBranch: 'main', clonedAt: '2026-01-15T10:01:00Z' },
+        { url: 'https://github.com/org/repo3', name: 'repo3', status: 'Failed', currentActiveBranch: null, defaultBranch: null, clonedAt: null },
+      ])
+      const sdk = makeSdkSession({ reconciled_repos: reconciledRepos })
+      const domain = mapSdkSessionToDomain(sdk)
+
+      expect(domain.reconciledRepos).toHaveLength(3)
+      expect(domain.reconciledRepos[0]).toEqual({
+        url: 'https://github.com/org/repo1',
+        name: 'repo1',
+        status: 'Cloning',
+        currentActiveBranch: 'feat-1',
+        defaultBranch: 'main',
+        clonedAt: '2026-01-15T10:00:00Z',
+      })
+      expect(domain.reconciledRepos[1]!.status).toBe('Ready')
+      expect(domain.reconciledRepos[2]!.status).toBe('Failed')
+      expect(domain.reconciledRepos[2]!.currentActiveBranch).toBeNull()
+      expect(domain.reconciledRepos[2]!.clonedAt).toBeNull()
+    })
+
+    it('returns null status for invalid reconciled repo status', () => {
+      const reconciledRepos = JSON.stringify([
+        { url: 'https://github.com/org/repo1', name: 'repo1', status: 'SomeBogusStatus' },
+      ])
+      const sdk = makeSdkSession({ reconciled_repos: reconciledRepos })
+      const domain = mapSdkSessionToDomain(sdk)
+
+      expect(domain.reconciledRepos).toHaveLength(1)
+      expect(domain.reconciledRepos[0]!.status).toBeNull()
+    })
+
+    it('parses conditions array', () => {
+      const conditions = JSON.stringify([
+        { type: 'Ready', status: 'True', reason: 'AllGood', message: 'Session is ready', lastTransitionTime: '2026-01-15T10:05:00Z' },
+        { type: 'Progressing', status: 'False', reason: null, message: null, lastTransitionTime: null },
+      ])
+      const sdk = makeSdkSession({ conditions })
+      const domain = mapSdkSessionToDomain(sdk)
+
+      expect(domain.conditions).toHaveLength(2)
+      expect(domain.conditions[0]).toEqual({
+        type: 'Ready',
+        status: 'True',
+        reason: 'AllGood',
+        message: 'Session is ready',
+        lastTransitionTime: '2026-01-15T10:05:00Z',
+      })
+      expect(domain.conditions[1]).toEqual({
+        type: 'Progressing',
+        status: 'False',
+        reason: null,
+        message: null,
+        lastTransitionTime: null,
+      })
+    })
+
+    it('returns Unknown for invalid condition status', () => {
+      const conditions = JSON.stringify([
+        { type: 'Ready', status: 'Maybe' },
+      ])
+      const sdk = makeSdkSession({ conditions })
+      const domain = mapSdkSessionToDomain(sdk)
+
+      expect(domain.conditions).toHaveLength(1)
+      expect(domain.conditions[0]!.status).toBe('Unknown')
+    })
+
+    it('parses environment variables from JSON string', () => {
+      const envVars = JSON.stringify({ NODE_ENV: 'production', API_URL: 'https://api.example.com' })
+      const sdk = makeSdkSession({ environment_variables: envVars })
+      const domain = mapSdkSessionToDomain(sdk)
+
+      expect(domain.environmentVariables).toEqual({
+        NODE_ENV: 'production',
+        API_URL: 'https://api.example.com',
+      })
+    })
+
+    it('parses labels from JSON string', () => {
+      const labels = JSON.stringify({ team: 'platform', tier: 'production' })
+      const sdk = makeSdkSession({ labels })
+      const domain = mapSdkSessionToDomain(sdk)
+
+      expect(domain.labels).toEqual({
+        team: 'platform',
+        tier: 'production',
+      })
+    })
+
+    it('returns empty object for invalid env vars JSON', () => {
+      const sdk = makeSdkSession({ environment_variables: '{broken' })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.environmentVariables).toEqual({})
+    })
+
+    it('returns empty object for invalid labels JSON', () => {
+      const sdk = makeSdkSession({ labels: 'not-json' })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.labels).toEqual({})
+    })
+
+    it('returns empty object for array-shaped env vars', () => {
+      const sdk = makeSdkSession({ environment_variables: '["a","b"]' })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.environmentVariables).toEqual({})
+    })
+
+    it('returns empty object for array-shaped labels', () => {
+      const sdk = makeSdkSession({ labels: '["x"]' })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.labels).toEqual({})
+    })
+
+    it('maps temperature, maxTokens, timeout from SDK numbers', () => {
+      const sdk = makeSdkSession({ llm_temperature: 0.5, llm_max_tokens: 8192, timeout: 7200 })
+      const domain = mapSdkSessionToDomain(sdk)
+
+      expect(domain.temperature).toBe(0.5)
+      expect(domain.maxTokens).toBe(8192)
+      expect(domain.timeout).toBe(7200)
+    })
+
+    it('returns null for zero temperature, maxTokens, timeout', () => {
+      const sdk = makeSdkSession({ llm_temperature: 0, llm_max_tokens: 0, timeout: 0 })
+      const domain = mapSdkSessionToDomain(sdk)
+
+      expect(domain.temperature).toBeNull()
+      expect(domain.maxTokens).toBeNull()
+      expect(domain.timeout).toBeNull()
+    })
+
+    it('maps workflowId from workflow_id', () => {
+      const sdk = makeSdkSession({ workflow_id: 'wf-42' })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.workflowId).toBe('wf-42')
+    })
+
+    it('maps workflowId to null for empty string', () => {
+      const sdk = makeSdkSession({ workflow_id: '' })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.workflowId).toBeNull()
+    })
+
+    it('maps prompt from SDK', () => {
+      const sdk = makeSdkSession({ prompt: 'Fix the bug in auth.ts' })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.prompt).toBe('Fix the bug in auth.ts')
+    })
+
+    it('maps prompt to null for empty string', () => {
+      const sdk = makeSdkSession({ prompt: '' })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.prompt).toBeNull()
+    })
+
+    it('maps sdkRestartCount from sdk_restart_count', () => {
+      const sdk = makeSdkSession({ sdk_restart_count: 3 })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.sdkRestartCount).toBe(3)
+    })
+
+    it('defaults sdkRestartCount to 0 when sdk_restart_count is 0', () => {
+      const sdk = makeSdkSession({ sdk_restart_count: 0 })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.sdkRestartCount).toBe(0)
+    })
+  })
 })
 
 describe('mapSdkProjectToDomain', () => {
