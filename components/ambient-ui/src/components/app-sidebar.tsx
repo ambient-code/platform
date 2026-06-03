@@ -146,6 +146,13 @@ export function AppSidebar({ projectId }: AppSidebarProps) {
             <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
           </Button>
         </div>
+        {process.env.NEXT_PUBLIC_GIT_COMMIT && process.env.NEXT_PUBLIC_GIT_COMMIT !== 'unknown' && (
+          <div className="px-2 pb-1">
+            <span className="text-[0.65rem] text-muted-foreground/60">
+              {process.env.NEXT_PUBLIC_GIT_COMMIT.slice(0, 8)}
+            </span>
+          </div>
+        )}
       </SidebarFooter>
     </Sidebar>
   )
