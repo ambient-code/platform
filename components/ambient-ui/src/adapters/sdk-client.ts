@@ -13,7 +13,6 @@ const bffConfig: AmbientClientConfig = {
 
 let sessions: SessionAPI | null = null
 let projects: ProjectAPI | null = null
-
 export function getSessionAPI(): SessionAPI {
   if (!sessions) {
     sessions = new SessionAPI(bffConfig)
