@@ -83,9 +83,9 @@ export type FleetTableMeta = {
   onToggleTimeFormat?: () => void
 }
 
-function ChatColumnButton({ sessionId, phase }: { sessionId: string; phase: SessionPhase }) {
-  const { openSidebar, openSessionId } = useChatSidebar()
-  const isActive = openSessionId === sessionId
+function ChatColumnButton({ sessionId, sessionName, phase }: { sessionId: string; sessionName: string; phase: SessionPhase }) {
+  const { openSidebar, activeSessionId } = useChatSidebar()
+  const isActive = activeSessionId === sessionId
   const isTerminal = TERMINAL_PHASES.has(phase)
 
   return (
@@ -97,7 +97,7 @@ function ChatColumnButton({ sessionId, phase }: { sessionId: string; phase: Sess
           className="h-7 w-7"
           onClick={(e) => {
             e.stopPropagation()
-            openSidebar(sessionId)
+            openSidebar(sessionId, sessionName)
           }}
           aria-label={isTerminal ? 'View chat history' : 'Open chat sidebar'}
         >
@@ -368,7 +368,7 @@ export const fleetColumns = [
   col.display({
     id: 'chat',
     header: '',
-    cell: ({ row }) => <ChatColumnButton sessionId={row.original.id} phase={row.original.phase} />,
+    cell: ({ row }) => <ChatColumnButton sessionId={row.original.id} sessionName={row.original.name} phase={row.original.phase} />,
     size: 48,
     enableSorting: false,
   }),

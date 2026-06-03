@@ -24,14 +24,12 @@ import { EmptyState } from '@/components/empty-state'
 import { PhaseBadge } from '../../../sessions/_components/phase-badge'
 import { formatRelativeTime, formatDuration } from '@/lib/format-timestamp'
 import { useSessions } from '@/queries/use-sessions'
+import { useChatSidebar } from '@/components/chat-sidebar-context'
 import type { DomainSession } from '@/domain/types'
 
 const col = createColumnHelper<DomainSession>()
 
-function buildColumns(
-  projectId: string,
-  onSelectSession?: (sessionId: string, name: string) => void,
-) {
+function buildColumns(projectId: string) {
   return [
     col.accessor('phase', {
       header: 'Phase',
@@ -90,13 +88,12 @@ function buildColumns(
 export function AgentSessionsTab({
   agentId,
   projectId,
-  onSelectSession,
 }: {
   agentId: string
   projectId: string
-  onSelectSession?: (sessionId: string, name: string) => void
 }) {
   const { data, isLoading, error } = useSessions(projectId, { size: 100 })
+  const { openSidebar } = useChatSidebar()
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'createdAt', desc: true },
   ])
@@ -107,8 +104,8 @@ export function AgentSessionsTab({
   )
 
   const columns = useMemo(
-    () => buildColumns(projectId, onSelectSession),
-    [projectId, onSelectSession],
+    () => buildColumns(projectId),
+    [projectId],
   )
 
   const table = useReactTable({
@@ -182,7 +179,7 @@ export function AgentSessionsTab({
             <TableRow
               key={row.id}
               className="cursor-pointer hover:bg-muted/50"
-              onClick={() => onSelectSession?.(row.original.id, row.original.name)}
+              onClick={() => openSidebar(row.original.id, row.original.name)}
             >
               {row.getVisibleCells().map((cell) => (
                 <TableCell key={cell.id} className="py-1.5">

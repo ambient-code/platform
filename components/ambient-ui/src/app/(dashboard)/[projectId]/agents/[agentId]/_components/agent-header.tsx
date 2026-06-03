@@ -27,6 +27,7 @@ import type { AgentLifecycle } from '../../_components/lifecycle-badge'
 import { useDeleteAgent } from '@/queries/use-agents'
 import { formatRelativeTime } from '@/lib/format-timestamp'
 import { TestSessionPopover } from './test-session-popover'
+import { useChatSidebar } from '@/components/chat-sidebar-context'
 
 function agentToYaml(agent: DomainAgent): string {
   const lines: string[] = [
@@ -62,16 +63,26 @@ function agentToYaml(agent: DomainAgent): string {
 export function AgentHeader({
   agent,
   lifecycle,
-  onRunTest,
 }: {
   agent: DomainAgent
   lifecycle: AgentLifecycle
-  onRunTest: (sessionId: string, sessionName: string) => void
 }) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const router = useRouter()
   const { projectId } = useParams<{ projectId: string }>()
   const deleteAgent = useDeleteAgent()
+  const { openTestSidebar } = useChatSidebar()
+
+  const handleRunTest = useCallback((sessionId: string, sessionName: string) => {
+    openTestSidebar({
+      sessionId,
+      sessionName,
+      agentId: agent.id,
+      agentName: agent.name,
+      agentPrompt: agent.prompt,
+      agentModel: agent.model,
+    })
+  }, [openTestSidebar, agent])
 
   const handleConfirmDelete = useCallback(() => {
     deleteAgent.mutate({ projectId, agentId: agent.id }, {
@@ -109,7 +120,7 @@ export function AgentHeader({
             </div>
 
             <div className="flex items-center gap-2">
-              <TestSessionPopover agent={agent} onRunTest={onRunTest} />
+              <TestSessionPopover agent={agent} onRunTest={handleRunTest} />
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
