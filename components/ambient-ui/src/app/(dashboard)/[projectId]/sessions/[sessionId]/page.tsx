@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -21,11 +21,13 @@ import { ConfigTab } from './_components/config-tab'
 
 export default function SessionDetailPage() {
   const { sessionId } = useParams<{ projectId: string; sessionId: string }>()
-  const [activeTab, setActiveTab] = useState(() => {
-    if (typeof window === 'undefined') return 'overview'
-    return new URL(window.location.href).searchParams.get('tab') ?? 'overview'
-  })
+  const [activeTab, setActiveTab] = useState('overview')
   const { data: session, isLoading, error } = useSession(sessionId)
+
+  useEffect(() => {
+    const tab = new URL(window.location.href).searchParams.get('tab')
+    if (tab) setActiveTab(tab)
+  }, [])
 
   const handleTabChange = (value: string) => {
     setActiveTab(value)
