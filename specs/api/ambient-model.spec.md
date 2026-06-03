@@ -2,7 +2,8 @@
 
 **Date:** 2026-03-20
 **Status:** Active
-**Last Updated:** 2026-05-12 — migrate Credentials from project-scoped to global routes (`/credentials`); remove `project_id` from model, OpenAPI, and SDK; add drop-column migration; update coverage matrix
+**Last Updated:** 2026-06-03 — added Application (GitOps continuous sync for agent fleets)
+**Previous:** 2026-05-12 — migrate Credentials from project-scoped to global routes (`/credentials`); remove `project_id` from model, OpenAPI, and SDK; add drop-column migration; update coverage matrix
 **Workflow:** `../../workflows/sessions/ambient-model.workflow.md` — implementation waves, gap table, build commands, run log
 **Design:** `credentials-session.md` — full Credential Kind design spec and rationale
 
@@ -19,6 +20,7 @@ The Ambient API server provides a coordination layer for orchestrating fleets of
 - **Inbox** — a persistent message queue on an Agent. Messages survive across sessions and are drained into the start context at the next run.
 - **Credential** — a global secret. Stores a Personal Access Token or equivalent for an external provider (GitHub, GitLab, Jira, Google, Vertex AI, Kubeconfig). Consumed by runners at session start. Bound to Projects via RoleBindings — a single Credential can be shared across multiple Projects without duplication.
 - **RoleBinding** — binds a Role to a subject (user or project) at a given scope. Ownership and access for all Kinds is expressed through RoleBindings. The subject and scope are each represented as typed nullable FKs — exactly one FK is non-null, determined by `scope`.
+- **Application** — a GitOps binding that continuously syncs agent fleet definitions from a git repository to an Ambient instance. The Ambient equivalent of an Argo CD Application.
 
 The stable address of an agent is `{project_name}/{agent_name}`. It holds the inbox and links to the active session.
 
@@ -224,6 +226,36 @@ erDiagram
         time   deleted_at
     }
 
+    %% ── Application (GitOps sync — Argo CD for Ambient) ──────────────
+
+    Application {
+        string ID PK "KSUID"
+        string name "unique; human-readable"
+        string source_repo_url "git repository URL"
+        string source_target_revision "branch, tag, or commit SHA"
+        string source_path "path within repo to kustomize overlay"
+        string destination_ambient_url "nullable — target Ambient API URL; null = local"
+        string destination_project "target project name; created if CreateProject=true"
+        bool   auto_sync "enable automated sync on git change"
+        bool   auto_prune "delete resources removed from git"
+        bool   self_heal "re-sync when live state drifts"
+        string sync_options "comma-separated: CreateProject=true, etc."
+        int    retry_limit "max sync retries on failure"
+        string sync_status "Synced | OutOfSync | Unknown"
+        string health_status "Healthy | Degraded | Progressing | Unknown"
+        string sync_revision "last successfully synced git commit SHA"
+        string operation_phase "Succeeded | Failed | Running | idle"
+        string operation_message "human-readable sync result summary"
+        jsonb  resource_status "per-resource sync/health detail"
+        jsonb  conditions "error conditions array"
+        jsonb  labels
+        jsonb  annotations
+        time   last_synced_at "timestamp of last successful sync"
+        time   created_at
+        time   updated_at
+        time   deleted_at
+    }
+
     %% ── Relationships ────────────────────────────────────────────────────────
 
     Project         ||--o{ ProjectSettings  : "has"
@@ -244,10 +276,141 @@ erDiagram
 
     Inbox           }o--o| Agent            : "sent_from"
 
+    Application }o--o| Project        : "syncs_to"
+
     Session         ||--o{ SessionMessage   : "streams"
 
     Role            ||--o{ RoleBinding      : "granted_by"
 ```
+
+---
+
+## Application — GitOps Continuous Sync
+
+Application is the Ambient equivalent of an [Argo CD Application](https://argo-cd.readthedocs.io/en/stable/core_concepts/). It binds a git repository source (containing kustomize-based agent fleet definitions) to a destination Ambient instance and project, then continuously reconciles the desired state from git against the live state in the platform.
+
+### Core Concepts (Argo CD Mapping)
+
+| Argo CD Concept | Ambient Equivalent | Description |
+|---|---|---|
+| Application | **Application** | Declarative binding of source → destination |
+| Source (repo + path + revision) | `source_repo_url` + `source_path` + `source_target_revision` | Git repo containing kustomize overlays of Projects, Agents, Credentials, RoleBindings |
+| Application Source Type | Always **Kustomize** | The CLI's built-in kustomize engine renders the manifests |
+| Destination (cluster + namespace) | `destination_ambient_url` + `destination_project` | Target Ambient instance + project name |
+| Target State | Rendered kustomize output | The desired set of Projects, Agents, Credentials, RoleBindings, and Inbox seeds from git |
+| Live State | Current API server state | What actually exists in the destination Ambient's project |
+| Sync Status | `sync_status` | Whether live state matches target state: `Synced`, `OutOfSync`, `Unknown` |
+| Sync Operation | `/sync` sub-resource | The act of applying target state to live state |
+| Refresh | `/refresh` sub-resource | Fetch latest from git, render kustomize, diff against live state |
+| Health | `health_status` | Are all synced agents healthy? `Healthy`, `Degraded`, `Progressing`, `Unknown` |
+| Self-Heal | `self_heal` flag | Re-sync when live state drifts (agent modified via UI, deleted manually) |
+| Prune | `auto_prune` flag | Delete agents/resources from Ambient that no longer exist in git |
+
+### What Gets Synced
+
+An Application syncs **project-scoped fleet definitions** — the same resource kinds that `acpctl apply -k` handles:
+
+| Kind | Sync Behavior |
+|---|---|
+| `Project` | Created if `CreateProject=true` in `sync_options`; patched (description, prompt, labels, annotations) on subsequent syncs |
+| `Agent` | Created or patched within the destination project; prompt, labels, annotations updated |
+| `Credential` | Created if not present; idempotent by name |
+| `RoleBinding` | Created if not present; idempotent by user+role+scope key |
+| `Inbox` (seed messages) | Idempotent delivery — only new messages (by `from_name` + `body` dedup) are posted |
+
+### What Does NOT Get Synced
+
+| Kind | Why |
+|---|---|
+| `Session` | Ephemeral run artifact. Created via agent start, not via GitOps. |
+| `SessionMessage` | Append-only event stream. |
+| `ScheduledSession` | Project-scoped trigger config; future sync candidate. |
+| `User` | Identity record. |
+| `Role` | RBAC definition (platform-scoped, not project-scoped). |
+
+### Field Reference
+
+| Field | Notes |
+|---|---|
+| `name` | Unique, human-readable. The stable address of this sync binding. |
+| `source_repo_url` | Git repository URL. HTTPS or SSH. |
+| `source_target_revision` | Branch name, tag, or commit SHA. Default: `main`. |
+| `source_path` | Relative path within the repo to a kustomize directory (must contain `kustomization.yaml`). |
+| `destination_ambient_url` | Nullable. The Ambient API server URL to sync to. Null = local Ambient (this API server). |
+| `destination_project` | Target project name. The project is created on first sync if `CreateProject=true` is in `sync_options`. |
+| `auto_sync` | If true, the controller polls the git repo and syncs automatically when changes are detected. If false, sync is manual via `POST /sync`. |
+| `auto_prune` | If true, resources in the live state that are absent from the target state are deleted. If false, orphaned resources are left in place. |
+| `self_heal` | If true, the controller re-syncs when live state drifts from target state (e.g., an agent's prompt is changed via the UI). If false, drift is allowed. |
+| `sync_options` | Comma-separated option flags. Initial options: `CreateProject=true`. |
+| `retry_limit` | Max number of automatic retries on sync failure. Default: 3. |
+| `sync_status` | Computed on refresh. `Synced` = live matches target. `OutOfSync` = differences detected. `Unknown` = not yet refreshed. |
+| `health_status` | Computed from synced resources. `Healthy` = all agents exist and have expected state. `Degraded` = one or more agents missing or misconfigured. `Progressing` = sync in progress. `Unknown` = not yet assessed. |
+| `sync_revision` | The git commit SHA of the last successful sync. |
+| `operation_phase` | State of the last sync operation: `Succeeded`, `Failed`, `Running`, or empty if never synced. |
+| `operation_message` | Human-readable summary, e.g. `"3 created, 1 configured, 0 pruned"`. |
+| `resource_status` | JSONB array of per-resource sync results: `[{"kind": "Agent", "name": "lead", "status": "Synced", "health": "Healthy", "message": "configured"}]`. |
+| `conditions` | JSONB array of error conditions: `[{"type": "SyncError", "message": "...", "lastTransitionTime": "..."}]`. |
+| `last_synced_at` | Timestamp of the last successful sync completion. |
+
+### Sync Lifecycle
+
+```
+1. Refresh: clone/fetch repo at source_target_revision
+2. Render:  build kustomize at source_path → flat manifest stream
+3. Diff:    compare rendered manifests against live state in destination project
+4. Sync:    apply creates/patches/deletes to reconcile live → target
+5. Status:  update sync_status, health_status, resource_status, operation_*
+```
+
+For automated sync (`auto_sync=true`), this lifecycle runs on a configurable polling interval (default: 3 minutes). For manual sync, it runs on `POST /applications/{id}/sync`.
+
+### Destination Resolution
+
+```
+Application.destination_ambient_url set?
+  |── null  ──> local Ambient (this API server's own service layer)
+  |── set   ──> remote Ambient (SDK client pointed at the URL)
+              ──> authentication via forwarded token or service credential
+```
+
+When targeting a remote Ambient, the sync engine acts as an API client to the remote Ambient's REST API. This is different from how Sessions use kubeconfig for direct K8s provisioning — the Application works entirely at the Ambient API layer.
+
+### Multi-Environment Promotion
+
+Promotion across environments is expressed as **multiple Applications**, each pointing to a different overlay and destination:
+
+```yaml
+# Dev — auto-sync from main, auto-prune
+kind: Application
+name: my-fleet-dev
+source:
+  repo_url: https://gitlab.cee.redhat.com/ambient-code/ambient-code-gitops.git
+  target_revision: main
+  path: ambient/overlays/dev
+destination:
+  ambient_url: null   # local
+  project: my-fleet
+auto_sync: true
+auto_prune: true
+self_heal: true
+
+---
+# Staging — manual sync from release branch, no prune
+kind: Application
+name: my-fleet-staging
+source:
+  repo_url: https://gitlab.cee.redhat.com/ambient-code/ambient-code-gitops.git
+  target_revision: release/v1.2
+  path: ambient/overlays/staging
+destination:
+  ambient_url: https://ambient-staging.apps.example.com
+  project: my-fleet
+auto_sync: false
+auto_prune: false
+self_heal: false
+```
+
+Promotion is a git operation: merge the dev overlay changes into the release branch, then sync the staging Application.
 
 ---
 
@@ -450,6 +613,19 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | `GET /sessions/{id}/tasks` | `acpctl session tasks <id>` | 🔲 planned |
 | `POST /sessions/{id}/tasks/{task_id}/stop` | `acpctl session tasks stop <id> <task-id>` | 🔲 planned |
 | `GET /sessions/{id}/tasks/{task_id}/output` | `acpctl session tasks output <id> <task-id>` | 🔲 planned |
+
+#### Applications (GitOps)
+
+| REST API | `acpctl` Command | Status |
+|---|---|---|
+| `GET /applications` | `acpctl get applications` | 🔲 planned |
+| `GET /applications/{id}` | `acpctl get application <name>` | 🔲 planned |
+| `POST /applications` | `acpctl create application --name <n> --repo <url> --path <p> [--revision <r>] [--project <p>] [--ambient-url <u>]` | 🔲 planned |
+| `PATCH /applications/{id}` | `acpctl update application <name> [--repo <url>] [--path <p>] [--auto-sync] [--auto-prune] [--self-heal]` | 🔲 planned |
+| `DELETE /applications/{id}` | `acpctl delete application <name> --confirm` | 🔲 planned |
+| `POST /applications/{id}/sync` | `acpctl sync application <name> [--prune] [--revision <r>]` | 🔲 planned |
+| `POST /applications/{id}/refresh` | `acpctl refresh application <name>` | 🔲 planned |
+| `GET /applications/{id}/status` | `acpctl get application <name> -o wide` | 🔲 planned |
 
 #### Credentials (Global)
 
@@ -736,6 +912,54 @@ Response shape:
 
 Used by the control plane at session restart to resolve the maximum `seq` for `RESUME_AFTER_SEQ`.
 
+### Applications (GitOps)
+
+```
+GET    /api/ambient/v1/applications                  list all applications
+POST   /api/ambient/v1/applications                  create application
+GET    /api/ambient/v1/applications/{id}              read application (includes status)
+PATCH  /api/ambient/v1/applications/{id}              update application
+DELETE /api/ambient/v1/applications/{id}              delete application
+
+POST   /api/ambient/v1/applications/{id}/sync         trigger sync (apply target state to live state)
+POST   /api/ambient/v1/applications/{id}/refresh      refresh (fetch git, diff against live, update sync_status)
+GET    /api/ambient/v1/applications/{id}/status       read sync/health status and per-resource detail
+```
+
+#### Sync Request
+
+`POST /applications/{id}/sync` accepts an optional body:
+
+```json
+{
+  "prune": true,
+  "revision": "abc123"
+}
+```
+
+`prune` overrides the application-level `auto_prune` for this sync only. `revision` overrides `source_target_revision` for a one-time sync at a specific commit.
+
+#### Status Response
+
+`GET /applications/{id}/status` returns the sync and health detail:
+
+```json
+{
+  "sync_status": "Synced",
+  "health_status": "Healthy",
+  "sync_revision": "abc123def456",
+  "last_synced_at": "2026-06-03T12:05:00Z",
+  "operation_phase": "Succeeded",
+  "operation_message": "3 created, 1 configured, 0 pruned",
+  "resource_status": [
+    {"kind": "Project", "name": "my-fleet", "status": "Synced", "health": "Healthy", "message": "created"},
+    {"kind": "Agent", "name": "lead", "status": "Synced", "health": "Healthy", "message": "configured"},
+    {"kind": "Agent", "name": "engineer", "status": "Synced", "health": "Healthy", "message": "unchanged"}
+  ],
+  "conditions": []
+}
+```
+
 #### Workspace Files
 
 Read and write files in a running session's workspace. Session must be in `Running` phase.
@@ -912,23 +1136,27 @@ See [Security Spec — Credential Access via RoleBindings](../security/security.
 | `credential:owner` | Full CRUD on credentials the user created. Bind credentials to projects the user has `project:owner` on. |
 | `credential:viewer` | Read metadata (not token) on credentials bound to projects the user has access to. |
 | `credential:token-reader` | Fetch the raw token via `GET /credentials/{cred_id}/token`. Granted only to runner service accounts at session start. Human users do not hold this role. |
+| `gitops:admin` | Full CRUD on Applications; trigger sync/refresh |
+| `gitops:viewer` | Read-only on Applications and their status |
 
 ### Permission Matrix
 
-| Role | Projects | Agents | Sessions | Inbox | Credentials | Home | RBAC |
-|---|---|---|---|---|---|---|---|
-| `platform:admin` | full | full | full | full | full | full | full |
-| `platform:viewer` | read/list | read/list | read/list | — | read/list | read | read/list |
-| `project:owner` | full | full | full | full | manage bindings | read | project+agent bindings |
-| `project:editor` | read | create/update/ignite | read/list | send/read | — | read | — |
-| `project:viewer` | read | read/list | read/list | — | — | read | — |
-| `agent:operator` | — | update/ignite | read/list | send/read | — | — | — |
-| `agent:editor` | — | update | — | — | — | — | — |
-| `agent:observer` | — | read | read/list | — | — | — | — |
-| `agent:runner` | — | read | read | send | — | — | — |
-| `credential:owner` | — | — | — | — | create/update/delete + bind | — | — |
-| `credential:viewer` | — | — | — | — | read/list (metadata only) | — | — |
-| `credential:token-reader` | — | — | — | — | token: read | — | — |
+| Role | Projects | Agents | Sessions | Inbox | Credentials | Apps | Home | RBAC |
+|---|---|---|---|---|---|---|---|---|
+| `platform:admin` | full | full | full | full | full | full | full | full |
+| `platform:viewer` | read/list | read/list | read/list | — | read/list | read/list | read | read/list |
+| `project:owner` | full | full | full | full | manage bindings | — | read | project+agent bindings |
+| `project:editor` | read | create/update/ignite | read/list | send/read | — | — | read | — |
+| `project:viewer` | read | read/list | read/list | — | — | — | read | — |
+| `gitops:admin` | — | — | — | — | — | full | — | — |
+| `gitops:viewer` | — | — | — | — | — | read/list | — | — |
+| `agent:operator` | — | update/ignite | read/list | send/read | — | — | — | — |
+| `agent:editor` | — | update | — | — | — | — | — | — |
+| `agent:observer` | — | read | read/list | — | — | — | — | — |
+| `agent:runner` | — | read | read | send | — | — | — | — |
+| `credential:owner` | — | — | — | — | create/update/delete + bind | — | — | — |
+| `credential:viewer` | — | — | — | — | read/list (metadata only) | — | — | — |
+| `credential:token-reader` | — | — | — | — | token: read | — | — | — |
 
 ### RBAC Endpoints
 
@@ -1062,7 +1290,7 @@ Every first-class Kind carries two JSONB columns:
 | `labels` | Queryable key/value tags. Use for filtering, grouping, and selection. | `{"env": "prod", "team": "platform", "tier": "critical"}` |
 | `annotations` | Freeform key/value metadata. Use for tooling notes, human remarks, external references. | `{"last-reviewed": "2026-03-21", "jira": "PLAT-123", "owner-slack": "@mturansk"}` |
 
-**Kinds with `labels` + `annotations`:** User, Project, Agent, Session, Credential (global)
+**Kinds with `labels` + `annotations`:** User, Project, Agent, Session, Credential (global), Application
 
 **Kinds without:** Inbox (ephemeral message queue), SessionMessage (append-only event stream), Role, RoleBinding (RBAC internals — structured by design)
 
@@ -1198,6 +1426,12 @@ This structure means you can define and compose bespoke agent suites — entire 
 | This document is the spec | A reconciler will compare the spec (this doc) against code status and surface gaps |
 | `labels` / `annotations` are JSONB, not strings | Enables GIN-indexed key/value queries (`@>` operator) without joins; every row carries its own metadata without a separate EAV table. `labels` = queryable tags; `annotations` = freeform notes. Applied to first-class Kinds: User, Project, Agent, Session. Not applied to Inbox, SessionMessage, Role/RoleBinding. |
 | Credential is global, not project-scoped | Eliminates duplication when the same PAT is used across multiple Projects. Access controlled via RoleBindings with `credential` scope. A single Credential can be shared across Projects without creating copies. |
+| Application syncs fleet definitions, not infrastructure | Application syncs Projects, Agents, Credentials, RoleBindings, and Inbox seeds. Sessions, Users, and Roles are not synced. |
+| Application targets Ambient API, not K8s API | Unlike Sessions (which use kubeconfig for direct K8s provisioning), Application works at the Ambient REST API layer. Remote sync uses the SDK client pointed at `destination_ambient_url`. |
+| Promotion via multiple Applications | Each environment gets its own Application pointing to a different git overlay and destination Ambient URL. Promotion = merge changes between overlay branches. |
+| Kustomize engine shared between CLI and API server | The sync engine reuses the same kustomize rendering logic as `acpctl apply -k`. |
+| Git polling, not webhooks (v1) | Simplicity. Webhook-triggered refresh is a v2 optimization. |
+| Self-heal is opt-in | Default `false`. When enabled, the controller detects and reverts drift — useful for production fleets where UI-based changes should not persist. |
 
 Security and credential design decisions (RBAC scoping, write-only tokens, role catalog rationale) are in the [Security Spec — Design Decisions](../security/security.spec.md#design-decisions).
 
@@ -1305,6 +1539,9 @@ _Last updated: 2026-04-28. Use this as the authoritative index — click into co
 | **Declarative apply** | n/a | uses SDK | ✅ `apply -f`, `apply -k` | Upsert semantics; supports inbox seeding |
 | **Declarative apply — Credential kind** | n/a | uses SDK | ✅ `apply -f credential.yaml` | Global resource; token sourced from env var in YAML |
 | **Declarative apply — ScheduledSession kind** | n/a | 🔲 | 🔲 | Planned; schedule and agent reference in YAML |
+| **Applications — CRUD** | 🔲 planned | 🔲 planned | 🔲 planned | GitOps sync binding |
+| **Applications — sync/refresh** | 🔲 planned | 🔲 planned | 🔲 planned | Trigger sync or refresh operations |
+| **Applications — status** | 🔲 planned | 🔲 planned | 🔲 planned | Per-resource sync/health detail |
 
 ### Labels/Annotations — SDK Ergonomics Gap
 
