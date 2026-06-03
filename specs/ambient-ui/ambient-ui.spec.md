@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The Ambient UI is the platform's operations console for monitoring and managing agent workloads. It treats agents as execution engines — not chat partners — and provides project-scoped observability, credential management, schedule monitoring, and annotation-driven extensibility. It replaces the existing frontend over time but coexists functionally as a separate component during migration.
+The Ambient UI is the platform's agentic SDLC operations dashboard. It serves two primary workflows: **operations monitoring** (high-frequency, low-duration — "what needs my attention?") and **agent authoring** (low-frequency, high-duration — building, testing, and iterating on agent definitions before codifying them for GitOps). The UI is organized around work outcomes (Jira tickets, PRs, reviews, incidents) rather than infrastructure primitives. Sessions and agents are the execution layer — accessible but secondary to the work they produce. It replaces the existing frontend over time but coexists functionally as a separate component during migration.
 
 The Ambient UI interacts exclusively with the ambient-api-server API via the generated TypeScript SDK. It has no dependency on the legacy backend.
 
@@ -125,7 +125,7 @@ The Ambient UI SHALL scope all operational views to a single active project. The
 #### Scenario: Project-scoped views
 
 - GIVEN a user selects project "platform"
-- WHEN they navigate to Fleet, Agents, Schedules, Issues, or Settings
+- WHEN they navigate to Sessions, Agents, Schedules, Work, or Settings
 - THEN all data displayed is scoped to the "platform" project
 - AND the active project name is visible in a breadcrumb on every view
 
@@ -138,23 +138,28 @@ The Ambient UI SHALL scope all operational views to a single active project. The
 
 ### Requirement: Sidebar Navigation
 
-The Ambient UI sidebar SHALL contain two sections separated by a visual divider:
+The Ambient UI sidebar SHALL contain three groups separated by visual dividers and group labels:
 
-**Project-scoped** (requires active project):
-- Fleet (session monitoring)
-- Agents (agent registry)
+**Operate** (project-scoped, high-frequency monitoring):
+- Dashboard (attention queue + active work + recent completions — default landing page)
+- Work (aggregated SDLC artifacts: PRs, tickets, MRs, incidents)
+- Sessions (session monitoring, route: `/sessions`)
 - Schedules (cron management)
-- Issues (aggregated integration references)
+
+**Build** (project-scoped, agent authoring and configuration):
+- Agents (agent registry, authoring workbench, test sessions)
+
+**Configure** (cross-cutting):
+- Credentials (credential management and project/agent binding)
 - Settings (project configuration, permissions, API keys, feature flags)
 
-**Global**:
-- Credentials (credential management and project/agent binding)
+The Dashboard sidebar item SHALL display a badge count of items requiring human attention. The group labels ("Operate", "Build", "Configure") SHALL be rendered as muted section headers, not clickable items.
 
 #### Scenario: Navigation breadcrumbs
 
 - GIVEN a user is viewing a session detail in the "platform" project
 - WHEN the breadcrumb renders
-- THEN it displays: `platform > Fleet > session-name`
+- THEN it displays: `platform > Sessions > session-name`
 - AND each segment is clickable to navigate to that level
 
 ### Requirement: Keyboard Navigation
@@ -163,7 +168,7 @@ The Ambient UI SHALL support keyboard-first navigation for power users.
 
 #### Scenario: Table navigation
 
-- GIVEN a user is viewing the Fleet table
+- GIVEN a user is viewing the Sessions table
 - WHEN they press `j` or `k`
 - THEN the selection moves down or up through table rows
 - AND `Enter` opens the selected session's detail view
@@ -185,29 +190,120 @@ Global search SHALL be implemented client-side by querying multiple API endpoint
 
 ---
 
-## Fleet View (Session Monitoring)
+## Dashboard (Default Landing Page)
 
-### Requirement: Session Fleet Table
+### Requirement: Attention-First Landing
 
-The Fleet view SHALL display a table of all sessions in the active project. Each row SHALL show operational data answering: "Does this session need my attention?"
+The Dashboard SHALL be the default landing page when a user selects a project. It SHALL answer three questions in priority order: "What needs my attention?", "What is actively being worked on?", and "What completed recently?"
 
-The table SHALL display: Phase (with activity indicator), Session Name, Agent, Duration, Model, Last Activity, and Cost.
+#### Scenario: Attention banner
+
+- GIVEN sessions exist with `phase: Failed` or annotations `ambient-code.io/review/status: "needs-review"` or `ambient-code.io/agent/needs-input`
+- WHEN the Dashboard renders
+- THEN an attention banner appears at the top showing counts of items requiring human action
+- AND each item is a clickable link to the relevant session or work item
+- AND the sidebar "Dashboard" item displays a badge with the total attention count
+
+#### Scenario: Nothing needs attention
+
+- GIVEN no sessions are failed, no reviews are pending, no agents need input
+- WHEN the Dashboard renders
+- THEN the attention banner is hidden
+- AND the sidebar badge is not displayed
+
+#### Scenario: Active work section
+
+- GIVEN sessions with integration annotations (`ambient-code.io/jira/issue`, `ambient-code.io/github/pr`)
+- WHEN the Dashboard renders
+- THEN it displays active work items as cards, grouped by integration reference
+- AND each card shows the work item identifier (Jira key, PR number) as the primary heading
+- AND session/agent information appears as secondary metadata within the card
+
+#### Scenario: Sessions without integration annotations
+
+- GIVEN sessions with no integration annotations
+- WHEN the Dashboard renders
+- THEN they appear as session cards with the session name as the primary identifier
+- AND they are visually distinct from work-item-linked cards (lighter weight, no colored border)
+
+#### Scenario: Recent activity feed
+
+- GIVEN completed sessions exist
+- WHEN the Dashboard renders
+- THEN a compact timeline shows the last N completed work items with reference, outcome, duration, and cost
+
+### Requirement: Needs-Input Annotation
+
+Agents SHALL be able to signal that they are blocked on human input by writing the annotation `ambient-code.io/agent/needs-input`. The value SHALL describe the type of input needed (e.g., `"approval"`, `"clarification"`, `"credentials"`, `"review"`).
+
+Sessions with this annotation SHALL surface in the Dashboard attention banner and SHALL display a distinct, non-muted badge in the Sessions table — at least as prominent as the Phase badge.
+
+#### Scenario: Agent flags need for input
+
+- GIVEN a Running session where the agent writes `ambient-code.io/agent/needs-input: "approval"`
+- WHEN the Dashboard renders
+- THEN the attention banner includes this session with label "Waiting for approval"
+- AND the Sessions table shows an amber "Needs Input" badge on this session's row
+
+---
+
+## Work View (SDLC Artifacts)
+
+### Requirement: Aggregated Work Items
+
+The Work view SHALL aggregate all registered integration annotations (`ambient-code.io/jira/issue`, `ambient-code.io/github/pr`, `ambient-code.io/gitlab/mr`, `ambient-code.io/oncall/incident`) across sessions in the active project.
+
+The view SHALL display work items as first-class objects, with sessions shown as subordinate detail. It SHALL support tabs for each artifact type (Pull Requests, Tickets, Merge Requests, Incidents), with counts on each tab.
+
+#### Scenario: Work view rendering
+
+- GIVEN sessions in a project with various integration annotations
+- WHEN the Work view renders
+- THEN it displays tabbed tables: Pull Requests, Tickets, Merge Requests, Incidents
+- AND each tab label includes a count of items
+- AND each row shows the reference, enriched details (if available), linked sessions, agent, and status
+
+#### Scenario: Work item attention grouping
+
+- GIVEN work items in various states
+- WHEN the Work view renders
+- THEN items are grouped within each tab: "Needs Attention" (needs-review, failed, changes-requested) at top, "In Progress" (linked to running sessions) in middle, "Done" (completed, merged) at bottom — collapsed by default
+
+#### Scenario: Work item status filtering
+
+- GIVEN the Work view with items in various statuses
+- WHEN the user selects a status filter
+- THEN only matching items are displayed
+
+Status filtering requires enrichment data. When enrichment is unavailable, the status filter SHALL be hidden.
+
+---
+
+## Sessions View (Session Monitoring)
+
+### Requirement: Session Table
+
+The Sessions view SHALL display a table of all sessions in the active project. Each row SHALL show operational data answering: "Does this session need my attention?"
+
+The table SHALL display: Phase (with activity indicator), Work Item (primary integration annotation as chip), Review Status (from `ambient-code.io/review/status`), Session Name, Agent, Duration, Last Activity, Cost, and Chat action.
+
+The Work Item column SHALL show the first matching integration annotation in priority order: Jira issue, then GitHub PR, then GitLab MR, then Gerrit change. Sessions without integration annotations display "—". The Review Status column SHALL render as a colored badge: `needs-review` = amber, `approved` = green, `changes-requested` = red.
 
 Phase SHALL be the single status indicator. There SHALL NOT be a separate "Status" column. When a session is Running and the agent is actively working, the Phase badge SHALL display a pulsing indicator.
 
 Cost is annotation-driven: the UI reads the `ambient-code.io/cost/estimate` annotation value. Sessions without this annotation display "—" in the Cost column.
 
-#### Scenario: Fleet table rendering
+#### Scenario: Sessions table rendering
 
 - GIVEN a project with 15 sessions in various phases
-- WHEN the Fleet view renders
+- WHEN the Sessions view renders
 - THEN each session appears as a single-line row
 - AND the Phase badge shows: Running (green), Completed (blue), Failed (red), Stopped (gray), Pending (amber)
 - AND Running sessions with active agents show a pulsing dot on the Phase badge
 
-#### Scenario: Fleet filtering
+#### Scenario: Sessions filtering
 
-- GIVEN the Fleet table is displayed
+- GIVEN the Sessions table is displayed
 - WHEN the user types in the search field or selects a phase filter
 - THEN the table filters to matching sessions
 - AND summary stats update to reflect the filtered set
@@ -215,28 +311,28 @@ Cost is annotation-driven: the UI reads the `ambient-code.io/cost/estimate` anno
 #### Scenario: Empty fleet
 
 - GIVEN a project with no sessions
-- WHEN the Fleet view renders
+- WHEN the Sessions view renders
 - THEN a centered empty state is displayed with an explanation and suggested action
 
 ### Requirement: Registered Annotation Indicators
 
-Sessions with registered annotations SHALL display compact visual indicators in the Fleet table. Indicators SHALL appear as small, muted icons to the right of the session name — never as inline chips that break the table's horizontal scan line.
+Sessions with registered annotations SHALL display compact visual indicators in the Sessions table. Indicators SHALL appear as small, muted icons to the right of the session name — never as inline chips that break the table's horizontal scan line.
 
-Only annotations with registered keys SHALL produce indicators. Unregistered annotations SHALL NOT produce any visual element in the Fleet table or any other operational view.
+Only annotations with registered keys SHALL produce indicators. Unregistered annotations SHALL NOT produce any visual element in the Sessions table or any other operational view.
 
 Full annotation details SHALL be available on hover (as a popover) or in the session detail view.
 
 #### Scenario: Annotation indicators in fleet
 
 - GIVEN a session with annotations `ambient-code.io/jira/issue: "HYPERFLEET-234"` and `ambient-code.io/github/pr: "org/repo#1847"`
-- WHEN the Fleet table renders
+- WHEN the Sessions table renders
 - THEN the session row shows small muted icons (Jira icon, PR icon) next to the session name
 - AND hovering over the session name reveals a popover with full annotation details
 
 #### Scenario: Unregistered annotation ignored
 
 - GIVEN a session with annotation `ambient-code.io/desired-phase: "Running"`
-- WHEN the session appears in the Fleet table or any operational view
+- WHEN the session appears in the Sessions table or any operational view
 - THEN no visual element is produced for that annotation
 
 ### Requirement: Virtual Folder Tree (ambient-code.io/ui/path)
@@ -250,11 +346,11 @@ The annotation value is a forward-slash-delimited string (e.g., `"backend/auth"`
 - GIVEN sessions with `ambient-code.io/ui/path` annotations like `"backend/auth"`, `"backend/testing"`, `"infra/networking"`
 - WHEN the user toggles the folder tree
 - THEN a tree panel appears showing the parsed hierarchy with session counts per node
-- AND clicking a folder filters the Fleet table to sessions with that path prefix
+- AND clicking a folder filters the Sessions table to sessions with that path prefix
 
 ### Requirement: Bulk Session Operations
 
-The Fleet table SHALL support selecting multiple sessions and performing bulk operations.
+The Sessions table SHALL support selecting multiple sessions and performing bulk operations.
 
 #### Scenario: Bulk stop
 
@@ -265,7 +361,7 @@ The Fleet table SHALL support selecting multiple sessions and performing bulk op
 
 ### Requirement: Session Detail (Workload Inspector)
 
-Clicking a session in the Fleet table SHALL open a detail view with tabbed content. The detail view SHALL include a sticky action bar with session lifecycle controls.
+Clicking a session in the Sessions table SHALL open a detail view with tabbed content. The detail view SHALL include a sticky action bar with session lifecycle controls.
 
 **Action bar:** Stop (when Running), Restart (when terminal), Clone, Export, Delete. Destructive actions (Stop, Delete) SHALL require confirmation.
 
@@ -380,38 +476,132 @@ Any view that displays a session (fleet table row, session detail header, chat t
 
 ### Requirement: Timestamp Toggle
 
-The Fleet table's "Last Activity" column SHALL support toggling between relative time ("12s ago") and absolute time ("10:42:18 AM EST").
+The Sessions table's "Last Activity" column SHALL support toggling between relative time ("12s ago") and absolute time ("10:42:18 AM EST").
 
 #### Scenario: Timestamp format toggle
 
-- GIVEN the Fleet table displays relative timestamps
+- GIVEN the Sessions table displays relative timestamps
 - WHEN the user clicks the toggle on the column header
 - THEN all timestamps switch to absolute format with explicit timezone
 - AND the preference persists for the session
 
 ---
 
-## Agents View
+## Agents View (Authoring Workbench)
+
+The Agents view serves two personas: operators who need a quick registry glance, and agent authors who build, test, and iterate on agent definitions before codifying them for GitOps management via `acpctl apply`.
 
 ### Requirement: Agent Registry Table
 
-The Agents view SHALL display a table of agents in the active project. Clicking an agent row SHALL open a right-side detail panel.
+The Agents view SHALL display a table of agents in the active project. The table SHALL display: Name, Source (prototype/production badge), Model, Owner, Current Session (clickable), Last Active.
 
-The table SHALL display: Name, Model, Owner, Current Session (clickable), Inbox (unread count), Last Active.
+Clicking an agent row SHALL navigate to the agent detail page.
 
-There SHALL be only ONE interaction pattern for agent rows: clicking anywhere on the row opens the sidebar panel.
+The page SHALL include a "+ New Agent" button for creating agents directly in the UI.
 
-#### Scenario: Agent sidebar panel
+#### Scenario: Agent table rendering
 
-- GIVEN the user clicks an agent row
-- WHEN the sidebar panel slides in from the right
-- THEN it displays: Quick Info (model, owner, current session link, last active), Annotations (registered annotations only), Inbox messages (last 3-5 with sender, preview, timestamp), Recent Sessions (clickable, navigate to workload inspector), Prompt Preview (truncated, expandable), Chat section (collapsible, for direct agent interaction)
+- GIVEN a project with 5 agents
+- WHEN the Agents view renders
+- THEN each agent appears as a row with name, source badge, model, owner, current session link, and last active timestamp
+- AND prototype agents display a "Draft" badge
+- AND production agents (managed via GitOps) display a "GitOps" badge
 
-#### Scenario: Agent session navigation
+#### Scenario: Empty agents state
 
-- GIVEN the agent sidebar shows "Current Session: pr-review-auth-42"
-- WHEN the user clicks the session name
-- THEN the view navigates to the Workload Inspector for that session
+- GIVEN a project with no agents
+- WHEN the Agents view renders
+- THEN an empty state is displayed with a "Create Agent" action button
+
+### Requirement: Agent Detail Page
+
+Clicking an agent in the registry table SHALL navigate to a dedicated agent detail page at `/{projectId}/agents/{agentId}`. The detail page SHALL use a tabbed layout with three tabs: Overview, Sessions, Config.
+
+The page header SHALL display the agent name, lifecycle badge (Draft/GitOps), and action buttons: "Run Test Session" and "Export YAML".
+
+#### Scenario: Overview tab (authoring surface)
+
+- GIVEN an agent detail page for a Draft agent
+- WHEN the Overview tab renders
+- THEN it displays editable fields: prompt (textarea), model (select), repository URL, description
+- AND a "Save Changes" action persists edits via the API
+- AND registered annotations render with icons and labels
+
+#### Scenario: Overview tab (GitOps-managed agent)
+
+- GIVEN an agent detail page for a GitOps-managed agent
+- WHEN the Overview tab renders
+- THEN fields are read-only with a banner: "This agent is managed via GitOps. Edits here will not persist."
+- AND the "Run Test Session" action remains available
+
+#### Scenario: Sessions tab (test history)
+
+- GIVEN an agent with 10 past sessions
+- WHEN the Sessions tab renders
+- THEN it displays a session table filtered to sessions for this agent
+- AND each row shows phase, name, duration, cost, and created timestamp
+- AND clicking a session navigates to the session detail page
+
+#### Scenario: Config tab (YAML export)
+
+- GIVEN an agent detail page
+- WHEN the Config tab renders
+- THEN it displays a YAML preview of the agent definition (the format consumed by `acpctl apply`)
+- AND "Copy to Clipboard" and "Download YAML" actions are available
+
+#### Scenario: Run Test Session
+
+- GIVEN the user clicks "Run Test Session" on an agent detail page
+- WHEN the create session sheet opens
+- THEN the agent is pre-selected and the form is pre-filled with the agent's model, prompt, and repos
+- AND the user can override any field before submitting
+- AND on success, the new session appears in the agent's Sessions tab
+
+### Requirement: Agent Lifecycle Badge
+
+Agents SHALL display a lifecycle badge indicating whether they are managed in the UI (prototype/draft) or via GitOps (production). The badge SHALL be derived from the `ambient-code.io/managed-by` annotation:
+
+- `ambient-code.io/managed-by: "gitops"` → "GitOps" badge (muted, with git-branch icon)
+- No annotation or any other value → "Draft" badge (default)
+
+#### Scenario: Prototype agent
+
+- GIVEN an agent without `ambient-code.io/managed-by` annotation
+- WHEN it appears in the registry table or detail page
+- THEN it displays a "Draft" badge
+- AND all fields are editable in the Overview tab
+
+#### Scenario: Production agent
+
+- GIVEN an agent with `ambient-code.io/managed-by: "gitops"`
+- WHEN it appears in the registry table or detail page
+- THEN it displays a "GitOps" badge
+- AND fields are read-only in the Overview tab
+
+### Requirement: Agent CRUD
+
+The Agents view SHALL support creating, editing, and deleting agents.
+
+#### Scenario: Create agent
+
+- GIVEN the user clicks "+ New Agent"
+- WHEN the creation form opens
+- THEN it displays fields: name (required), display name, model, prompt, repository URL, description
+- AND submitting creates the agent via the API
+
+#### Scenario: Edit agent
+
+- GIVEN the user edits fields on a Draft agent's Overview tab
+- WHEN they click "Save Changes"
+- THEN the agent is updated via the API
+- AND a success notification confirms the save
+
+#### Scenario: Delete agent
+
+- GIVEN the user clicks "Delete" on an agent
+- WHEN confirmation is provided
+- THEN the agent is deleted via the API
+- AND the user is navigated back to the agents list
 
 ---
 
@@ -526,7 +716,7 @@ All registered annotation keys SHALL use the `ambient-code.io/` namespace prefix
 
 | Key | Example Value | UI Behavior |
 |-----|---------------|-------------|
-| `ambient-code.io/ui/path` | `"backend/auth"` | Virtual folder tree grouping in Fleet view |
+| `ambient-code.io/ui/path` | `"backend/auth"` | Virtual folder tree grouping in Sessions view |
 | `ambient-code.io/ui/pinned` | `"true"` | Pin icon next to session name; sorts to top |
 | `ambient-code.io/ui/priority` | `"high"` | Colored priority icon (red/amber/gray) left of session name |
 | `ambient-code.io/ui/tag` | `"docs"` | Muted tag chip in annotation popover |
@@ -542,9 +732,11 @@ All registered annotation keys SHALL use the `ambient-code.io/` namespace prefix
 | `ambient-code.io/review/status` | `"needs-review"` | Status badge (amber/green/red). This is external review metadata, distinct from session phase. |
 | `ambient-code.io/review/reviewer` | `"@mchen"` | Reviewer reference |
 | `ambient-code.io/triggered-by` | `"schedule/nightly"` | Provenance indicator with contextual icon |
-| `ambient-code.io/cost/estimate` | `"$4.12"` | Muted cost display in Fleet table |
+| `ambient-code.io/cost/estimate` | `"$4.12"` | Muted cost display in Sessions table |
 | `ambient-code.io/oncall/incident` | `"INC-003"` | Red incident chip with alert icon |
 | `ambient-code.io/parent-agent` | `"orchestrator"` | Agent delegation reference |
+| `ambient-code.io/agent/needs-input` | `"approval"` | Amber attention badge; surfaces in Dashboard attention queue. Values: `approval`, `clarification`, `credentials`, `review` |
+| `ambient-code.io/managed-by` | `"gitops"` | Agent lifecycle badge: "GitOps" (managed externally) vs "Draft" (UI-managed prototype) |
 
 #### Scenario: Registered annotation rendered
 
@@ -556,7 +748,7 @@ All registered annotation keys SHALL use the `ambient-code.io/` namespace prefix
 #### Scenario: Unregistered annotation not rendered
 
 - GIVEN a session with annotation `ambient-code.io/desired-phase: "Running"`
-- WHEN the session appears in the Fleet table or any operational view
+- WHEN the session appears in the Sessions table or any operational view
 - THEN no visual element is produced for that annotation
 - AND the annotation is visible ONLY in the raw annotations table in the Details tab
 
@@ -595,26 +787,7 @@ The enrichment endpoint specification is out of scope for this document and SHAL
 
 ## Issues View
 
-### Requirement: Aggregated Integration References
-
-The Issues view SHALL aggregate all registered integration annotations (`ambient-code.io/jira/issue`, `ambient-code.io/github/pr`, `ambient-code.io/gitlab/mr`) across sessions in the active project into dedicated tables.
-
-The view SHALL support search and status filtering.
-
-#### Scenario: Issues view rendering
-
-- GIVEN sessions in a project with various integration annotations
-- WHEN the Issues view renders
-- THEN it displays separate tables for Jira Issues, Pull Requests, and Merge Requests
-- AND each row shows the reference, enriched details (if available), linked sessions, and agent
-
-#### Scenario: Issue status filtering
-
-- GIVEN the Issues view with Jira issues in various statuses
-- WHEN the user selects "In Progress" from the status filter
-- THEN only Jira issues with "In Progress" status are displayed
-
-Status filtering requires enrichment data. When enrichment is unavailable, the status filter SHALL be hidden.
+**Note:** The Issues view has been superseded by the Work View (see "Work View (SDLC Artifacts)" section above). The Work view provides the same aggregated integration references with richer grouping by attention-need and tabbed artifact types. The sidebar label is "Work" rather than "Issues" to reflect the broader scope (all SDLC artifacts, not just bug-tracking items).
 
 ---
 
@@ -732,12 +905,12 @@ The Ambient UI SHALL use Server-Sent Events as the primary mechanism for real-ti
 - THEN the UI receives them via `GET /api/ambient/v1/sessions/{id}/events` SSE stream
 - AND renders them in real-time without polling
 
-#### Scenario: Fleet table polling
+#### Scenario: Sessions table polling
 
-- GIVEN a user is viewing the Fleet table
+- GIVEN a user is viewing the Sessions table
 - WHEN a session's phase changes
 - THEN the UI detects the change via periodic polling of `GET /api/ambient/v1/sessions` (5s interval)
-- AND the Fleet table row updates on the next poll cycle
+- AND the Sessions table row updates on the next poll cycle
 
 No list-watch endpoint exists for sessions today. Polling is the interim mechanism.
 
@@ -869,6 +1042,44 @@ The default connection uses the BFF's configured API server URL and the JWT from
 
 ---
 
+## Migration
+
+### URL Routes
+
+All existing routes SHALL remain stable. The sidebar label changes do NOT imply URL path changes:
+
+| Sidebar Label | Route Path | Status |
+|---------------|-----------|--------|
+| Dashboard | `/{projectId}` (root project route) | New — becomes default landing |
+| Work | `/{projectId}/work` | New |
+| Sessions | `/{projectId}/sessions` | Existing — unchanged |
+| Agents | `/{projectId}/agents` | Existing — unchanged |
+| Agents Detail | `/{projectId}/agents/{agentId}` | New — replaces Sheet with page |
+| Schedules | `/{projectId}/schedules` | New |
+| Credentials | `/credentials` | New (global) |
+| Settings | `/{projectId}/settings` | New |
+
+When the Dashboard page ships, the project picker and project selector SHALL navigate to `/{projectId}` instead of `/{projectId}/sessions`. Direct navigation to `/{projectId}/sessions` SHALL continue to work.
+
+### Session Detail Tabs
+
+Tab URL param values SHALL remain stable: `?tab=overview`, `?tab=logs`, `?tab=resources`, `?tab=config`, `?tab=chat`. These names match the current implementation and SHALL NOT change.
+
+### Agent Detail: Sheet to Page Migration
+
+The existing `AgentDetailPanel` Sheet component SHALL be replaced by a full page at `/{projectId}/agents/{agentId}`. The Sheet component MAY be retained as a lightweight preview when clicking agent names in the Sessions table, but the primary agent detail surface is the page.
+
+### Phased Rollout
+
+New sidebar items SHALL be added incrementally as their pages are implemented. Items SHALL NOT appear in the sidebar until their page exists (no disabled "Coming soon" stubs). Recommended order:
+
+1. Dashboard page + sidebar restructure (Operate/Build/Configure groups)
+2. Agent detail page (replaces Sheet)
+3. Work view
+4. Schedules, Credentials, Settings
+
+---
+
 ## API Dependencies
 
 This section documents API endpoints and capabilities that this spec depends on but which do not yet exist. These are not requirements of this spec — they are requirements on other specs.
@@ -878,7 +1089,7 @@ This section documents API endpoints and capabilities that this spec depends on 
 | Annotation enrichment endpoint (resolve `ambient-code.io/jira/issue` etc. against bound credentials) | Annotation enrichment, Issues view status filtering | Not yet specified | Render raw annotation values as clickable chips |
 | `GET /credentials/{cred_id}/role_bindings` (scoped query) | Credential binding display | Planned, not implemented | Use generic `GET /role_bindings` filtered by `credential_id` |
 | Cross-resource search endpoint | Global search | Not planned | Client-side aggregation across multiple list endpoints |
-| Session list-watch endpoint (`GET /sessions?watch=true`) | Fleet real-time phase updates | Not available | Poll `GET /sessions` at 5s interval |
+| Session list-watch endpoint (`GET /sessions?watch=true`) | Sessions real-time phase updates | Not available | Poll `GET /sessions` at 5s interval |
 | SSE availability guarantee (runner reachability) | Logs/Chat real-time streaming | Runner returns 502 when unreachable | Fall back to polling `GET /sessions/{id}/messages` |
 
 ## Design Decisions
@@ -893,6 +1104,11 @@ This section documents API endpoints and capabilities that this spec depends on 
 | Cost as annotation, not API field | Cost is agent-computed and written as `ambient-code.io/cost/estimate`. No API-level cost computation. |
 | Tool metrics computed client-side | The API stores raw SessionMessages. Aggregating tool call stats is a UI concern, not an API concern. |
 | SSE for sessions, polling for rest | Sessions have real-time SSE streams. Credentials, schedules, and agents change infrequently — polling is sufficient and simpler. |
-| Single interaction pattern per entity | Agent rows: sidebar only (no expand + sidebar). Fleet rows: detail view only. Reduces cognitive load per Krug's "Don't Make Me Think." |
+| Single interaction pattern per entity | Agent rows: navigate to detail page. Session rows: navigate to detail page. Reduces cognitive load per Krug's "Don't Make Me Think." |
 | Chat sidebar is app-level, not tab-level | The sidebar lives in the root layout, not the session detail page. This enables cross-page persistence. State is managed via React context at the dashboard layout level. |
 | Feedback delivery is context-dependent | Running session → session message (immediate). Stopped session → agent inbox (queued). Matches the platform's existing message model. |
+| Work-centric IA, not infrastructure-centric | The UI is organized around work outcomes (PRs, tickets, reviews) rather than infrastructure primitives (sessions, agents). Sessions and agents are accessible but secondary. Sidebar groups: Operate (Dashboard, Work, Sessions, Schedules), Build (Agents), Configure (Credentials, Settings). |
+| Agent detail is a page, not a sheet | The authoring workflow requires editing prompts, comparing test runs, and exporting YAML. A slide-out sheet is too narrow for sustained work. Agent detail mirrors the session detail tabbed-page pattern. |
+| Agents as authoring playground | The UI serves as a prototyping workbench for agent definitions. Teams experiment in the UI, then export to YAML for GitOps management via `acpctl apply`. Draft vs GitOps lifecycle badges distinguish prototype from production agents. |
+| Progressive disclosure, not mode switching | The operator and agent author share one navigation structure at different depths of engagement. No modal "Operations Mode" vs "Authoring Mode". Group labels (Operate/Build) provide wayfinding without mode complexity. |
+| Dashboard as default landing | The most frequent question ("what needs my attention?") should be answered without clicking anything. The Dashboard is the project-level entry point, replacing the session list as the default. |
