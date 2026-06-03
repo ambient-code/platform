@@ -11,7 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import type { DomainSession } from '@/domain/types'
-import { getRegisteredAnnotations } from '@/domain/annotations'
+import { getRegisteredAnnotation } from '@/domain/annotations'
 import { cn } from '@/lib/utils'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -30,7 +30,10 @@ import {
   Siren,
   Bot,
   AlertTriangle,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
+import { MetaRow, NoValue } from './meta-row'
 
 const ICON_MAP: Record<string, LucideIcon> = {
   pin: Pin, tag: Tag, ticket: Ticket, layers: Layers, play: Play, bot: Bot,
@@ -42,8 +45,34 @@ const ICON_MAP: Record<string, LucideIcon> = {
 
 const PROMPT_TRUNCATE_LENGTH = 200
 
+const SECRET_PATTERNS = /SECRET|TOKEN|PASSWORD|KEY|API|CREDENTIAL/i
+
+function isSecretKey(key: string): boolean {
+  return SECRET_PATTERNS.test(key)
+}
+
 function isClickableValue(value: string): boolean {
   return /^https?:\/\//.test(value)
+}
+
+function SecretValue({ value }: { value: string }) {
+  const [revealed, setRevealed] = useState(false)
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="font-mono text-xs">
+        {revealed ? value : '••••••••'}
+      </span>
+      <button
+        type="button"
+        className="inline-flex items-center text-muted-foreground hover:text-foreground"
+        onClick={() => setRevealed((prev) => !prev)}
+        aria-label={revealed ? 'Hide secret value' : 'Reveal secret value'}
+      >
+        {revealed ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+      </button>
+    </span>
+  )
 }
 
 export function DetailsTab({ session }: { session: DomainSession }) {
@@ -52,7 +81,6 @@ export function DetailsTab({ session }: { session: DomainSession }) {
   const envEntries = Object.entries(session.environmentVariables)
   const annotationEntries = Object.entries(session.annotations)
   const labelEntries = Object.entries(session.labels)
-  const registered = getRegisteredAnnotations(session.annotations)
 
   const promptNeedsTruncation =
     session.prompt != null && session.prompt.length > PROMPT_TRUNCATE_LENGTH
@@ -70,13 +98,22 @@ export function DetailsTab({ session }: { session: DomainSession }) {
           <CardTitle className="text-base">Configuration</CardTitle>
         </CardHeader>
         <CardContent>
-          <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-            <MetaRow label="Model" value={session.model ?? '—'} />
-            <MetaRow label="Temperature" value={session.temperature != null ? String(session.temperature) : '—'} />
-            <MetaRow label="Max Tokens" value={session.maxTokens != null ? String(session.maxTokens) : '—'} />
-            <MetaRow label="Timeout" value={session.timeout != null ? `${session.timeout}s` : '—'} />
-            <MetaRow label="Workflow ID" value={session.workflowId ?? '—'} mono />
-            <MetaRow label="SDK Restart Count" value={String(session.sdkRestartCount)} />
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-sm">
+            <MetaRow label="Model" value={session.model ?? <NoValue />} />
+            <MetaRow label="Temperature" value={session.temperature != null ? String(session.temperature) : <NoValue />} />
+            <MetaRow label="Max Tokens" value={session.maxTokens != null ? String(session.maxTokens) : <NoValue />} />
+            <MetaRow label="Timeout" value={session.timeout != null ? `${session.timeout}s` : <NoValue />} />
+            <MetaRow
+              label="Workflow ID"
+              value={
+                session.workflowId
+                  ? <span title="Workflow ID" className="font-mono text-xs">{session.workflowId}</span>
+                  : <NoValue />
+              }
+            />
+            {session.sdkRestartCount > 0 && (
+              <MetaRow label="Agent Restarts" value={String(session.sdkRestartCount)} />
+            )}
           </dl>
         </CardContent>
       </Card>
@@ -87,16 +124,16 @@ export function DetailsTab({ session }: { session: DomainSession }) {
             <CardTitle className="text-base">Prompt</CardTitle>
           </CardHeader>
           <CardContent>
-            <pre className="whitespace-pre-wrap text-sm font-mono">
-              {displayPrompt}
-            </pre>
+            <pre className="whitespace-pre-wrap text-sm font-mono">{displayPrompt}</pre>
             {promptNeedsTruncation && (
               <button
                 type="button"
-                className="mt-2 text-xs text-muted-foreground underline hover:text-foreground"
+                className="mt-2 py-1 text-sm text-muted-foreground underline hover:text-foreground"
                 onClick={() => setPromptExpanded((prev) => !prev)}
               >
-                {promptExpanded ? 'Show less' : 'Show more'}
+                {promptExpanded
+                  ? 'Show less'
+                  : `Show more (${session.prompt!.length.toLocaleString()} chars)`}
               </button>
             )}
           </CardContent>
@@ -104,89 +141,113 @@ export function DetailsTab({ session }: { session: DomainSession }) {
       )}
 
       {envEntries.length > 0 && (
-        <KeyValueCard title="Environment Variables" entries={envEntries} />
-      )}
-
-      {registered.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Registered Annotations</CardTitle>
+            <CardTitle className="text-base">
+              Environment Variables ({envEntries.length})
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {registered.map(({ annotation, value }) => {
-                const Icon = annotation.icon ? ICON_MAP[annotation.icon] : null
-                const clickable = isClickableValue(value)
-                return (
-                  <div key={annotation.key} className="flex items-center gap-3 text-sm">
-                    {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" />}
-                    <span className="text-muted-foreground shrink-0">
-                      {annotation.label}
-                    </span>
-                    {clickable ? (
-                      <a
-                        href={value}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="truncate text-blue-500 underline hover:text-blue-400"
-                      >
-                        {value}
-                      </a>
-                    ) : (
-                      <span className="truncate">{value}</span>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Key</TableHead>
+                  <TableHead>Value</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {envEntries.map(([key, value]) => (
+                  <TableRow key={key}>
+                    <TableCell className="font-mono text-xs">{key}</TableCell>
+                    <TableCell className="text-sm">
+                      {isSecretKey(key) ? <SecretValue value={value} /> : value}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       )}
 
       {annotationEntries.length > 0 && (
-        <KeyValueCard title="Raw Annotations" entries={annotationEntries} />
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              Annotations ({annotationEntries.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Key</TableHead>
+                  <TableHead>Value</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {annotationEntries.map(([key, value]) => {
+                  const registered = getRegisteredAnnotation(key)
+                  const Icon = registered?.icon ? ICON_MAP[registered.icon] : null
+                  const clickable = isClickableValue(value)
+                  return (
+                    <TableRow key={key}>
+                      <TableCell className="font-mono text-xs">
+                        <span className="inline-flex items-center gap-1.5">
+                          {Icon && <Icon className="size-3.5 shrink-0 text-muted-foreground" />}
+                          {registered ? registered.label : key}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {clickable ? (
+                          <a
+                            href={value}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="truncate text-link underline hover:text-link-hover"
+                          >
+                            {value}
+                          </a>
+                        ) : (
+                          value
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
 
       {labelEntries.length > 0 && (
-        <KeyValueCard title="Labels" entries={labelEntries} />
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              Labels ({labelEntries.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Key</TableHead>
+                  <TableHead>Value</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {labelEntries.map(([key, value]) => (
+                  <TableRow key={key}>
+                    <TableCell className="font-mono text-xs">{key}</TableCell>
+                    <TableCell className="text-sm">{value}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
     </div>
-  )
-}
-
-function MetaRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div>
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className={cn('mt-0.5', mono && 'font-mono text-xs')}>{value}</dd>
-    </div>
-  )
-}
-
-function KeyValueCard({ title, entries }: { title: string; entries: [string, string][] }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Key</TableHead>
-              <TableHead>Value</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {entries.map(([key, value]) => (
-              <TableRow key={key}>
-                <TableCell className="font-mono text-xs">{key}</TableCell>
-                <TableCell className="text-sm">{value}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
   )
 }

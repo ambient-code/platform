@@ -5,8 +5,15 @@ import { useParams } from 'next/navigation'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useSession } from '@/queries/use-sessions'
+import {
+  LayoutDashboard,
+  ScrollText,
+  FolderGit2,
+  Settings,
+  MessageSquare,
+} from 'lucide-react'
 import { SessionHeader } from './_components/session-header'
-import { PhaseTab } from './_components/phase-tab'
+import { OverviewTab } from './_components/overview-tab'
 import { LogsTab } from './_components/logs-tab'
 import { ChatTab } from './_components/chat-tab'
 import { ResourcesTab } from './_components/resources-tab'
@@ -15,8 +22,8 @@ import { DetailsTab } from './_components/details-tab'
 export default function SessionDetailPage() {
   const { sessionId } = useParams<{ projectId: string; sessionId: string }>()
   const [activeTab, setActiveTab] = useState(() => {
-    if (typeof window === 'undefined') return 'phase'
-    return new URL(window.location.href).searchParams.get('tab') ?? 'phase'
+    if (typeof window === 'undefined') return 'logs'
+    return new URL(window.location.href).searchParams.get('tab') ?? 'logs'
   })
   const { data: session, isLoading, error } = useSession(sessionId)
 
@@ -49,14 +56,24 @@ export default function SessionDetailPage() {
       <SessionHeader session={session} />
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="w-full *:flex-1">
-          <TabsTrigger value="phase">Phase</TabsTrigger>
-          <TabsTrigger value="logs">Logs</TabsTrigger>
-          <TabsTrigger value="resources">Resources</TabsTrigger>
-          <TabsTrigger value="details">Details</TabsTrigger>
-          <TabsTrigger value="chat">Chat</TabsTrigger>
+          <TabsTrigger value="overview">
+            <LayoutDashboard className="size-4" /> Overview
+          </TabsTrigger>
+          <TabsTrigger value="logs">
+            <ScrollText className="size-4" /> Logs
+          </TabsTrigger>
+          <TabsTrigger value="resources">
+            <FolderGit2 className="size-4" /> Resources
+          </TabsTrigger>
+          <TabsTrigger value="config">
+            <Settings className="size-4" /> Config
+          </TabsTrigger>
+          <TabsTrigger value="chat">
+            <MessageSquare className="size-4" /> Chat
+          </TabsTrigger>
         </TabsList>
-        <TabsContent value="phase">
-          <PhaseTab session={session} />
+        <TabsContent value="overview">
+          <OverviewTab session={session} />
         </TabsContent>
         <TabsContent value="logs">
           <LogsTab session={session} />
@@ -64,7 +81,7 @@ export default function SessionDetailPage() {
         <TabsContent value="resources">
           <ResourcesTab session={session} />
         </TabsContent>
-        <TabsContent value="details">
+        <TabsContent value="config">
           <DetailsTab session={session} />
         </TabsContent>
         <TabsContent value="chat">

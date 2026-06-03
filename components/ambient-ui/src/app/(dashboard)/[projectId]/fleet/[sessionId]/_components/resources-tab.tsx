@@ -12,7 +12,8 @@ import { EmptyState } from '@/components/empty-state'
 import type { DomainSession, DomainRepo, DomainReconciledRepo, ReconciledRepoStatus } from '@/domain/types'
 import { formatAbsoluteTime } from '@/lib/format-timestamp'
 import { cn } from '@/lib/utils'
-import { FolderGit2, Server } from 'lucide-react'
+import { FolderGit2 } from 'lucide-react'
+import { NoValue } from './meta-row'
 
 const STATUS_CLASSES: Record<ReconciledRepoStatus, string> = {
   Ready: 'bg-status-success text-status-success-foreground border-status-success-border',
@@ -81,7 +82,7 @@ export function ResourcesTab({ session }: { session: DomainSession }) {
         <EmptyState
           icon={FolderGit2}
           title="No resources attached"
-          description="This session has no repositories or MCP servers configured."
+          description="This session has no repositories configured."
         />
       </div>
     )
@@ -93,7 +94,7 @@ export function ResourcesTab({ session }: { session: DomainSession }) {
         <CardHeader>
           <CardTitle className="text-base">
             <FolderGit2 className="mr-2 inline-block size-4" />
-            Repositories
+            Repositories ({merged.length})
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -112,10 +113,18 @@ export function ResourcesTab({ session }: { session: DomainSession }) {
                 <TableRow key={repo.url}>
                   <TableCell className="font-medium">{repo.name}</TableCell>
                   <TableCell className="max-w-[300px] truncate font-mono text-xs">
-                    {repo.url}
+                    <a
+                      href={repo.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={repo.url}
+                      className="text-link hover:text-link-hover"
+                    >
+                      {repo.url}
+                    </a>
                   </TableCell>
                   <TableCell className="text-sm">
-                    {repo.branch ?? '—'}
+                    {repo.branch ?? <NoValue />}
                   </TableCell>
                   <TableCell>
                     {repo.status ? (
@@ -126,30 +135,16 @@ export function ResourcesTab({ session }: { session: DomainSession }) {
                         {repo.status}
                       </Badge>
                     ) : (
-                      '—'
+                      <NoValue />
                     )}
                   </TableCell>
                   <TableCell className="text-sm">
-                    {repo.clonedAt ? formatAbsoluteTime(repo.clonedAt) : '—'}
+                    {repo.clonedAt ? formatAbsoluteTime(repo.clonedAt) : <NoValue />}
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            <Server className="mr-2 inline-block size-4" />
-            MCP Servers
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            MCP server configuration is not yet available through the API.
-          </p>
         </CardContent>
       </Card>
     </div>

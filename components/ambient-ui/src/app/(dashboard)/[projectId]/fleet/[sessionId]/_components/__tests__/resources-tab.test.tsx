@@ -52,6 +52,7 @@ describe('ResourcesTab', () => {
   it('shows empty state when no repos', () => {
     render(<ResourcesTab session={makeSession()} />)
     expect(screen.getByText('No resources attached')).toBeTruthy()
+    expect(screen.getByText('This session has no repositories configured.')).toBeTruthy()
   })
 
   it('renders repo table with merged data', () => {
@@ -61,7 +62,10 @@ describe('ResourcesTab', () => {
       />,
     )
     expect(screen.getByText('platform')).toBeTruthy()
-    expect(screen.getByText('https://github.com/org/platform.git')).toBeTruthy()
+    const link = screen.getByRole('link', { name: 'https://github.com/org/platform.git' })
+    expect(link).toBeTruthy()
+    expect(link.getAttribute('href')).toBe('https://github.com/org/platform.git')
+    expect(link.getAttribute('target')).toBe('_blank')
     expect(screen.getByText('feat/new-feature')).toBeTruthy()
     expect(screen.getByText('Ready')).toBeTruthy()
   })
@@ -103,12 +107,19 @@ describe('ResourcesTab', () => {
     expect(statusCell.textContent).toBe('—')
   })
 
-  it('shows MCP servers section', () => {
+  it('shows repository count in card title', () => {
     render(
       <ResourcesTab session={makeSession({ repos: [REPO] })} />,
     )
-    expect(screen.getByText('MCP Servers')).toBeTruthy()
-    expect(screen.getByText(/not yet available/)).toBeTruthy()
+    expect(screen.getByText(/Repositories \(1\)/)).toBeTruthy()
+  })
+
+  it('renders repo URLs as clickable links with title tooltips', () => {
+    render(
+      <ResourcesTab session={makeSession({ repos: [REPO] })} />,
+    )
+    const link = screen.getByRole('link', { name: 'https://github.com/org/platform.git' })
+    expect(link.getAttribute('title')).toBe('https://github.com/org/platform.git')
   })
 
   it('derives name from URL basename when no name provided', () => {
