@@ -63,14 +63,14 @@ function TabStrip({
   onSwitch,
   onClose,
   getPhase,
-  onNewSession,
+  projectId,
 }: {
   sessions: SidebarSession[]
   activeId: string | null
   onSwitch: (id: string) => void
   onClose: (id: string) => void
   getPhase: (id: string) => string
-  onNewSession: () => void
+  projectId: string
 }) {
   return (
     <div
@@ -108,21 +108,7 @@ function TabStrip({
           </button>
         )
       })}
-      <TooltipProvider delayDuration={300}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              className="shrink-0 px-2 py-1 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-              onClick={onNewSession}
-              aria-label="New session"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>New session</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      {projectId && <NewSessionButton projectId={projectId} />}
     </div>
   )
 }
@@ -221,15 +207,8 @@ function TestToolbar({ session, activeSession }: { session: { phase: string; id:
   )
 }
 
-function NewSessionPopover({
-  open,
-  onOpenChange,
-  projectId,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  projectId: string
-}) {
+function NewSessionButton({ projectId }: { projectId: string }) {
+  const [open, setOpen] = useState(false)
   const { data: agentsData } = useAgents(projectId)
   const createSession = useCreateSession()
   const { openSidebar } = useChatSidebar()
@@ -242,16 +221,24 @@ function NewSessionPopover({
       {
         onSuccess: (session) => {
           openSidebar(session.id, session.name)
-          onOpenChange(false)
+          setOpen(false)
         },
       },
     )
-  }, [createSession, projectId, openSidebar, onOpenChange])
+  }, [createSession, projectId, openSidebar])
 
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild><span /></PopoverTrigger>
-      <PopoverContent className="w-56 p-1" align="start" side="bottom">
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="shrink-0 px-2 py-1 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+          aria-label="New session"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-1" align="end" side="bottom">
         <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
           Select an agent
         </div>
@@ -285,7 +272,6 @@ export function ChatSidebar() {
   const [collapsed, setCollapsed] = useState(false)
   const [width, setWidth] = useState(DEFAULT_WIDTH)
   const [showScrollToTop, setShowScrollToTop] = useState(false)
-  const [newSessionOpen, setNewSessionOpen] = useState(false)
   const isDragging = useRef(false)
   const startX = useRef(0)
   const startWidth = useRef(DEFAULT_WIDTH)
@@ -447,7 +433,7 @@ export function ChatSidebar() {
       </div>
 
       {/* Tab strip */}
-      <TabStrip sessions={sessions} activeId={activeSessionId} onSwitch={switchSession} onClose={closeSession} getPhase={getPhase} onNewSession={() => setNewSessionOpen(true)} />
+      <TabStrip sessions={sessions} activeId={activeSessionId} onSwitch={switchSession} onClose={closeSession} getPhase={getPhase} projectId={projectId} />
 
       {/* Header */}
       <div className="flex items-center gap-2 border-b px-3 py-2 min-h-[48px]">
@@ -529,10 +515,6 @@ export function ChatSidebar() {
       {/* Input area */}
       <ChatInput sessionId={activeSessionId} phase={sessionPhase} disabled={messagesLoading} />
 
-      {/* New session popover */}
-      {projectId && (
-        <NewSessionPopover open={newSessionOpen} onOpenChange={setNewSessionOpen} projectId={projectId} />
-      )}
     </aside>
   )
 }

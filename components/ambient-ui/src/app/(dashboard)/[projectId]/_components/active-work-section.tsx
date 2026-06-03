@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { Ticket, GitPullRequest, Monitor } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { PhaseBadge } from '../sessions/_components/phase-badge'
+import { PhaseBadge, PhaseDotOnly } from '../sessions/_components/phase-badge'
 import type { DomainSession } from '@/domain/types'
 import type { WorkItemGroup } from './dashboard-helpers'
 
@@ -46,15 +46,14 @@ function WorkItemCard({
                 href={`/${projectId}/sessions/${session.id}`}
                 className="flex min-w-0 items-center gap-2 text-sm"
               >
-                <PhaseBadge phase={session.phase} />
+                <span className="hidden @md:inline"><PhaseBadge phase={session.phase} /></span>
+                <span className="@md:hidden"><PhaseDotOnly phase={session.phase} /></span>
                 <span className="truncate text-link hover:text-link-hover">
                   {session.name}
                 </span>
-                {session.agentName && (
-                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                    {session.agentName}
-                  </span>
-                )}
+                <span className="ml-auto shrink-0 hidden @md:inline text-xs text-muted-foreground">
+                  {session.agentName}
+                </span>
               </Link>
             </li>
           ))}
@@ -81,12 +80,8 @@ function SessionCard({
         >
           {session.name}
         </Link>
-        <PhaseBadge phase={session.phase} />
-        {session.agentName && (
-          <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-            {session.agentName}
-          </span>
-        )}
+        <span className="ml-auto shrink-0 hidden @md:block"><PhaseBadge phase={session.phase} /></span>
+        <span className="ml-auto shrink-0 @md:hidden"><PhaseDotOnly phase={session.phase} /></span>
       </CardContent>
     </Card>
   )

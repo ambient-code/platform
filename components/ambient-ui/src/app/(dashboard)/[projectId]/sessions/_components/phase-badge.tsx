@@ -11,6 +11,23 @@ const VARIANT_CLASSES = {
   default: 'bg-muted text-muted-foreground border-border',
 } as const
 
+export function PhaseDotOnly({ phase }: { phase: SessionPhase }) {
+  const style = getPhaseStyle(phase)
+  const dotColor: Record<string, string> = {
+    success: 'bg-green-500',
+    error: 'bg-red-500',
+    warning: 'bg-amber-500',
+    info: 'bg-blue-500',
+    default: 'bg-muted-foreground',
+  }
+  return (
+    <span
+      className={cn('inline-block h-2.5 w-2.5 rounded-full shrink-0', dotColor[style.variant] ?? dotColor.default)}
+      title={style.label}
+    />
+  )
+}
+
 export function PhaseBadge({ phase }: { phase: SessionPhase }) {
   const style = getPhaseStyle(phase)
 
