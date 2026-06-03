@@ -6,13 +6,15 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import type { DomainSession } from '@/domain/types'
+import type { DomainSession, SessionPhase } from '@/domain/types'
 import { formatRelativeTime, formatDuration } from '@/lib/format-timestamp'
 import { useChatSidebar } from '@/components/chat-sidebar-context'
 import { PhaseBadge } from './phase-badge'
 
 const COST_ANNOTATION = 'ambient-code.io/cost/estimate'
 const col = createColumnHelper<DomainSession>()
+
+const RUNNING_PHASES: ReadonlySet<SessionPhase> = new Set(['Running', 'Creating', 'Pending', 'Stopping'])
 
 function ChatColumnButton({ sessionId }: { sessionId: string }) {
   const { openSidebar, openSessionId } = useChatSidebar()
@@ -55,14 +57,17 @@ export const fleetColumns = [
       <span className="font-medium">{info.getValue()}</span>
     ),
   }),
-  col.accessor('agentName', {
+  col.accessor('agentId', {
     header: 'Agent',
     cell: info => {
-      const name = info.getValue()
-      const agentId = info.row.original.agentId
+      const agentId = info.getValue()
+      const annotationName = info.row.original.agentName
+      const agentNames = (info.table.options.meta as { agentNames?: Map<string, string> } | undefined)?.agentNames
+      const resolvedName = annotationName ?? (agentId ? agentNames?.get(agentId) : null) ?? null
+      if (!resolvedName) return <span className="text-muted-foreground">—</span>
       return (
-        <span className="text-muted-foreground">
-          {name ?? agentId ?? '—'}
+        <span className="font-medium text-foreground">
+          {resolvedName}
         </span>
       )
     },
@@ -71,11 +76,15 @@ export const fleetColumns = [
     id: 'duration',
     header: 'Duration',
     cell: ({ row }) => {
-      const { startTime, completionTime } = row.original
+      const { startTime, completionTime, phase } = row.original
       if (!startTime) return <span className="text-muted-foreground">—</span>
+      const isActive = RUNNING_PHASES.has(phase)
+      const endTime = isActive ? null
+        : (completionTime && new Date(completionTime) > new Date(startTime)) ? completionTime
+        : null
       return (
         <span className="text-muted-foreground font-mono text-xs">
-          {formatDuration(startTime, completionTime)}
+          {formatDuration(startTime, endTime)}
         </span>
       )
     },
@@ -88,13 +97,25 @@ export const fleetColumns = [
       </span>
     ),
   }),
-  col.accessor('updatedAt', {
+  col.display({
+    id: 'lastActivity',
     header: 'Last Activity',
-    cell: info => (
-      <span className="text-muted-foreground text-xs">
-        {formatRelativeTime(info.getValue())}
-      </span>
-    ),
+    cell: ({ row }) => {
+      const { phase, completionTime, updatedAt } = row.original
+      if (RUNNING_PHASES.has(phase)) {
+        return (
+          <span className="text-xs font-medium text-green-600 dark:text-green-400">
+            Active now
+          </span>
+        )
+      }
+      const activityTime = completionTime ?? updatedAt
+      return (
+        <span className="text-muted-foreground text-xs">
+          {formatRelativeTime(activityTime)}
+        </span>
+      )
+    },
   }),
   col.display({
     id: 'cost',

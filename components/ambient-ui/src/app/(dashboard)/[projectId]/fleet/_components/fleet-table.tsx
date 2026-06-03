@@ -22,9 +22,11 @@ import { fleetColumns } from './fleet-columns'
 export function FleetTable({
   sessions,
   searchFilter,
+  agentNames,
 }: {
   sessions: DomainSession[]
   searchFilter: string
+  agentNames?: Map<string, string>
 }) {
   const router = useRouter()
   const { projectId } = useParams<{ projectId: string }>()
@@ -36,6 +38,7 @@ export function FleetTable({
     getFilteredRowModel: getFilteredRowModel(),
     globalFilterFn: 'includesString',
     state: { globalFilter: searchFilter },
+    meta: { agentNames },
   })
 
   return (

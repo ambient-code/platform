@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/empty-state'
 import { useSessions } from '@/queries/use-sessions'
+import { useAgentNames } from '@/queries/use-agents'
 import { FleetTable } from './_components/fleet-table'
 import { FleetSummary } from './_components/fleet-summary'
 
@@ -14,6 +15,7 @@ export default function FleetPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const [search, setSearch] = useState('')
   const { data, isLoading, error } = useSessions(projectId)
+  const { data: agentNames } = useAgentNames(projectId)
 
   if (error) {
     return (
@@ -65,7 +67,7 @@ export default function FleetPage() {
         />
       </div>
       <FleetSummary sessions={sessions} />
-      <FleetTable sessions={sessions} searchFilter={search} />
+      <FleetTable sessions={sessions} searchFilter={search} agentNames={agentNames} />
     </div>
   )
 }
