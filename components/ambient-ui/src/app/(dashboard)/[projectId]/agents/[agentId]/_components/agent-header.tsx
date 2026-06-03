@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { Play, Download, Trash2, MoreVertical } from 'lucide-react'
+import { Download, Trash2, MoreVertical } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -22,10 +22,11 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import type { DomainAgent } from '@/domain/types'
-import { LifecycleBadge, getAgentLifecycle } from '../../_components/lifecycle-badge'
+import { LifecycleBadge } from '../../_components/lifecycle-badge'
 import type { AgentLifecycle } from '../../_components/lifecycle-badge'
 import { useDeleteAgent } from '@/queries/use-agents'
 import { formatRelativeTime } from '@/lib/format-timestamp'
+import { TestSessionPopover } from './test-session-popover'
 
 function agentToYaml(agent: DomainAgent): string {
   const lines: string[] = [
@@ -61,9 +62,11 @@ function agentToYaml(agent: DomainAgent): string {
 export function AgentHeader({
   agent,
   lifecycle,
+  onRunTest,
 }: {
   agent: DomainAgent
   lifecycle: AgentLifecycle
+  onRunTest: (sessionId: string, sessionName: string) => void
 }) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const router = useRouter()
@@ -93,10 +96,6 @@ export function AgentHeader({
     URL.revokeObjectURL(url)
   }, [agent])
 
-  const handleRunTestSession = useCallback(() => {
-    router.push(`/${projectId}/sessions?create=true&agentId=${agent.id}`)
-  }, [router, projectId, agent.id])
-
   return (
     <>
       <div className="sticky top-14 z-[5] bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pb-4 -mx-1 px-1">
@@ -110,15 +109,7 @@ export function AgentHeader({
             </div>
 
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRunTestSession}
-                aria-label="Run test session"
-              >
-                <Play className="size-4" />
-                Run Test Session
-              </Button>
+              <TestSessionPopover agent={agent} onRunTest={onRunTest} />
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
