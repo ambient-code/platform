@@ -105,6 +105,35 @@ export type DomainSessionMessage = {
   createdAt: string
 }
 
+export type DomainAgent = {
+  id: string
+  name: string
+  displayName: string | null
+  description: string | null
+  model: string | null
+  ownerUserId: string | null
+  currentSessionId: string | null
+  projectId: string | null
+  prompt: string | null
+  repoUrl: string | null
+  workflowId: string | null
+  annotations: Record<string, string>
+  labels: Record<string, string>
+  createdAt: string
+  updatedAt: string
+}
+
+export type DomainSessionCreateRequest = {
+  name: string
+  projectId: string
+  agentId?: string
+  prompt?: string
+  model?: string
+  temperature?: number
+  maxTokens?: number
+  timeout?: number
+}
+
 export type FeedbackItem = {
   id: string
   type: 'element' | 'region'

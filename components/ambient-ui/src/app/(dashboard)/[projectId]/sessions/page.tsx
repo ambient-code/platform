@@ -2,8 +2,9 @@
 
 import { useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { Monitor } from 'lucide-react'
+import { Monitor, Plus } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/empty-state'
 import { useSessions } from '@/queries/use-sessions'
@@ -11,12 +12,14 @@ import { useAgentNames } from '@/queries/use-agents'
 import type { SessionPhase } from '@/domain/types'
 import { FleetTable } from './_components/fleet-table'
 import { FleetSummary } from './_components/fleet-summary'
+import { CreateSessionSheet } from './_components/create-session-sheet'
 
 export default function FleetPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const [search, setSearch] = useState('')
   const [phaseFilter, setPhaseFilter] = useState<SessionPhase | null>(null)
   const [filteredCount, setFilteredCount] = useState<number | undefined>(undefined)
+  const [createOpen, setCreateOpen] = useState(false)
   const { data, isLoading, error } = useSessions(projectId)
   const { data: agentNames } = useAgentNames(projectId)
 
@@ -57,7 +60,14 @@ export default function FleetPage() {
           icon={Monitor}
           title="No sessions"
           description="This project has no agentic sessions yet. Create one to get started."
+          action={
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="mr-1.5 size-4" />
+              New Session
+            </Button>
+          }
         />
+        <CreateSessionSheet open={createOpen} onOpenChange={setCreateOpen} />
       </div>
     )
   }
@@ -66,12 +76,18 @@ export default function FleetPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Sessions</h1>
-        <Input
-          placeholder="Filter by name, agent, or model..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="max-w-xs"
-        />
+        <div className="flex items-center gap-2">
+          <Input
+            placeholder="Filter by name, agent, or model..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="max-w-xs"
+          />
+          <Button onClick={() => setCreateOpen(true)} size="sm">
+            <Plus className="mr-1.5 size-4" />
+            New Session
+          </Button>
+        </div>
       </div>
       <FleetSummary
         sessions={sessions}
@@ -86,6 +102,7 @@ export default function FleetPage() {
         phaseFilter={phaseFilter}
         onFilteredCountChange={handleFilteredCountChange}
       />
+      <CreateSessionSheet open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   )
 }
