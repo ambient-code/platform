@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { ScrollText, FileCode } from 'lucide-react'
+import { History, FileCode } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -118,14 +118,18 @@ export default function AgentDetailPage() {
                 <FileCode className="size-4 mr-1.5" /> Manifest
               </TabsTrigger>
               <TabsTrigger value="sessions">
-                <ScrollText className="size-4 mr-1.5" /> Sessions
+                <History className="size-4 mr-1.5" /> Run History
               </TabsTrigger>
             </TabsList>
             <TabsContent value="manifest">
               <AgentManifestTab agent={agent} lifecycle={lifecycle} />
             </TabsContent>
             <TabsContent value="sessions">
-              <AgentSessionsTab agentId={agentId} projectId={projectId} />
+              <AgentSessionsTab
+                agentId={agentId}
+                projectId={projectId}
+                onSelectSession={handleRunTest}
+              />
             </TabsContent>
           </Tabs>
         </div>

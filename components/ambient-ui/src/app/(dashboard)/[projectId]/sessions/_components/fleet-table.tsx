@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import {
   useReactTable,
@@ -27,17 +27,21 @@ import { fleetColumns } from './fleet-columns'
 import type { FleetTableMeta } from './fleet-columns'
 import { BulkActionBar } from './bulk-action-bar'
 
+const TEST_SESSION_ANNOTATION = 'ambient-code.io/ui/test-session'
+
 export function FleetTable({
   sessions,
   searchFilter,
   agentNames,
   phaseFilter,
+  showTestRuns = false,
   onFilteredCountChange,
 }: {
   sessions: DomainSession[]
   searchFilter: string
   agentNames?: Map<string, string>
   phaseFilter?: SessionPhase | null
+  showTestRuns?: boolean
   onFilteredCountChange?: (count: number) => void
 }) {
   const router = useRouter()
@@ -52,6 +56,13 @@ export function FleetTable({
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [useAbsoluteTime, setUseAbsoluteTime] = useState(false)
+
+  const filteredSessions = useMemo(() => {
+    if (showTestRuns) return sessions
+    return sessions.filter(
+      (s) => s.annotations[TEST_SESSION_ANNOTATION] !== 'true',
+    )
+  }, [sessions, showTestRuns])
 
   const handleToggleTimeFormat = useCallback(() => {
     setUseAbsoluteTime(prev => !prev)
@@ -75,7 +86,7 @@ export function FleetTable({
   }
 
   const table = useReactTable({
-    data: sessions,
+    data: filteredSessions,
     columns: fleetColumns,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -108,7 +119,7 @@ export function FleetTable({
   // Clear selection when data changes (e.g., after bulk stop/delete)
   useEffect(() => {
     setRowSelection({})
-  }, [sessions.length])
+  }, [filteredSessions.length])
 
   const visibleRows = table.getRowModel().rows
   const handleKeyboardSelect = useCallback(
