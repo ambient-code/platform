@@ -5,11 +5,6 @@ import { useParams } from 'next/navigation'
 import { History, FileCode } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  ResizablePanelGroup,
-  ResizablePanel,
-  ResizableHandle,
-} from '@/components/ui/resizable'
 import { useAgent } from '@/queries/use-agents'
 import { getAgentLifecycle } from '../_components/lifecycle-badge'
 import { AgentHeader } from './_components/agent-header'
@@ -108,53 +103,48 @@ export default function AgentDetailPage() {
   const hasTestSession = testSessionId !== null
 
   return (
-    <ResizablePanelGroup orientation="horizontal" className={hasTestSession ? 'h-[calc(100dvh-3.5rem)] -m-6 -mb-10' : ''}>
-      <ResizablePanel defaultSize={hasTestSession ? 55 : 100} minSize={30}>
-        <div className={`space-y-6 ${hasTestSession ? 'h-full overflow-y-auto p-6' : 'pr-1'}`}>
-          <AgentHeader agent={agent} lifecycle={lifecycle} onRunTest={handleRunTest} />
-          <Tabs value={activeTab} onValueChange={handleTabChange}>
-            <TabsList className="w-full *:flex-1">
-              <TabsTrigger value="manifest">
-                <FileCode className="size-4 mr-1.5" /> Manifest
-              </TabsTrigger>
-              <TabsTrigger value="sessions">
-                <History className="size-4 mr-1.5" /> Run History
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="manifest">
-              <AgentManifestTab agent={agent} lifecycle={lifecycle} />
-            </TabsContent>
-            <TabsContent value="sessions">
-              <AgentSessionsTab
-                agentId={agentId}
-                projectId={projectId}
-                onSelectSession={handleRunTest}
-              />
-            </TabsContent>
-          </Tabs>
-        </div>
-      </ResizablePanel>
+    <div className="flex gap-0 -mr-6">
+      <div className={`space-y-6 min-w-0 ${hasTestSession ? 'flex-1' : 'w-full'}`}>
+        <AgentHeader agent={agent} lifecycle={lifecycle} onRunTest={handleRunTest} />
+        <Tabs value={activeTab} onValueChange={handleTabChange}>
+          <TabsList className="w-full *:flex-1">
+            <TabsTrigger value="manifest">
+              <FileCode className="size-4 mr-1.5" /> Manifest
+            </TabsTrigger>
+            <TabsTrigger value="sessions">
+              <History className="size-4 mr-1.5" /> Run History
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="manifest">
+            <AgentManifestTab agent={agent} lifecycle={lifecycle} />
+          </TabsContent>
+          <TabsContent value="sessions">
+            <AgentSessionsTab
+              agentId={agentId}
+              projectId={projectId}
+              onSelectSession={handleRunTest}
+            />
+          </TabsContent>
+        </Tabs>
+      </div>
 
       {hasTestSession && (
-        <>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={45} minSize={25}>
-            <TestSessionPane
-              sessionId={testSessionId}
-              sessionName={testSessionName}
-              projectId={projectId}
-              agentId={agentId}
-              agentName={agent.name}
-              agentPrompt={agent.prompt}
-              agentModel={agent.model}
-              history={testHistory}
-              onClose={handleCloseTest}
-              onRunTest={handleRunTest}
-              onSelectHistory={handleSelectHistory}
-            />
-          </ResizablePanel>
-        </>
+        <div className="w-[45%] shrink-0 sticky top-0 h-screen">
+          <TestSessionPane
+            sessionId={testSessionId}
+            sessionName={testSessionName}
+            projectId={projectId}
+            agentId={agentId}
+            agentName={agent.name}
+            agentPrompt={agent.prompt}
+            agentModel={agent.model}
+            history={testHistory}
+            onClose={handleCloseTest}
+            onRunTest={handleRunTest}
+            onSelectHistory={handleSelectHistory}
+          />
+        </div>
       )}
-    </ResizablePanelGroup>
+    </div>
   )
 }
