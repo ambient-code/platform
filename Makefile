@@ -905,6 +905,12 @@ benchmark-ci: ## Run component benchmarks in CI mode
 		$(if $(CANDIDATE),--candidate-ref $(CANDIDATE)) \
 		$(if $(FORMAT),--format $(FORMAT))
 
+audit-patterns: ## Audit repo against 25 Patterns in Agentic Engineering (FORMAT=human|json|tsv PART=1-6)
+	@python3 scripts/agentic-patterns-audit.py . \
+		$(if $(FORMAT),--format $(FORMAT)) \
+		$(if $(PART),--part $(PART)) \
+		$(if $(VERBOSE),--verbose)
+
 kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_IMAGES=true builds from source)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Starting kind cluster '$(KIND_CLUSTER_NAME)'..."
 	@cd e2e && KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) KIND_HTTP_PORT=$(KIND_HTTP_PORT) KIND_HTTPS_PORT=$(KIND_HTTPS_PORT) KIND_HOST=$(KIND_HOST) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/setup-kind.sh
