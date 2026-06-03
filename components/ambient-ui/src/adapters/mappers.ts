@@ -70,53 +70,62 @@ function parseJsonObject(raw: string): Record<string, string> {
 const VALID_REPO_STATUSES: ReadonlySet<string> = new Set(['Cloning', 'Ready', 'Failed'])
 const VALID_CONDITION_STATUSES: ReadonlySet<string> = new Set(['True', 'False', 'Unknown'])
 
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+}
+
 function parseRepos(raw: string): DomainRepo[] {
-  return parseJsonArray(raw).map((item) => {
-    const r = item as Record<string, unknown>
-    return {
+  return parseJsonArray(raw)
+    .filter(isRecord)
+    .map((r) => ({
       url: String(r.url ?? ''),
       branch: r.branch ? String(r.branch) : null,
       name: r.name ? String(r.name) : null,
       autoPush: Boolean(r.autoPush),
-    }
-  })
+    }))
 }
 
 function parseReconciledRepos(raw: string): DomainReconciledRepo[] {
-  return parseJsonArray(raw).map((item) => {
-    const r = item as Record<string, unknown>
-    const status = String(r.status ?? '')
-    return {
-      url: String(r.url ?? ''),
-      name: r.name ? String(r.name) : null,
-      status: VALID_REPO_STATUSES.has(status) ? (status as ReconciledRepoStatus) : null,
-      currentActiveBranch: r.currentActiveBranch ? String(r.currentActiveBranch) : null,
-      defaultBranch: r.defaultBranch ? String(r.defaultBranch) : null,
-      clonedAt: r.clonedAt ? String(r.clonedAt) : null,
-    }
-  })
+  return parseJsonArray(raw)
+    .filter(isRecord)
+    .map((r) => {
+      const status = String(r.status ?? '')
+      return {
+        url: String(r.url ?? ''),
+        name: r.name ? String(r.name) : null,
+        status: VALID_REPO_STATUSES.has(status) ? (status as ReconciledRepoStatus) : null,
+        currentActiveBranch: r.currentActiveBranch ? String(r.currentActiveBranch) : null,
+        defaultBranch: r.defaultBranch ? String(r.defaultBranch) : null,
+        clonedAt: r.clonedAt ? String(r.clonedAt) : null,
+      }
+    })
 }
 
 function parseConditions(raw: string): DomainCondition[] {
-  return parseJsonArray(raw).map((item) => {
-    const c = item as Record<string, unknown>
-    const status = String(c.status ?? 'Unknown')
-    return {
-      type: String(c.type ?? ''),
-      status: VALID_CONDITION_STATUSES.has(status) ? (status as ConditionStatus) : 'Unknown',
-      reason: c.reason ? String(c.reason) : null,
-      message: c.message ? String(c.message) : null,
-      lastTransitionTime: c.lastTransitionTime ? String(c.lastTransitionTime) : null,
-    }
-  })
+  return parseJsonArray(raw)
+    .filter(isRecord)
+    .map((c) => {
+      const status = String(c.status ?? 'Unknown')
+      return {
+        type: String(c.type ?? ''),
+        status: VALID_CONDITION_STATUSES.has(status) ? (status as ConditionStatus) : 'Unknown',
+        reason: c.reason ? String(c.reason) : null,
+        message: c.message ? String(c.message) : null,
+        lastTransitionTime: c.lastTransitionTime ? String(c.lastTransitionTime) : null,
+      }
+    })
 }
 
 function emptyToNull(value: string): string | null {
   return value || null
 }
 
-function numberOrNull(value: number): number | null {
-  return value === 0 || value === undefined || value === null ? null : value
+function numberOrNull(value: number | null | undefined): number | null {
+  return value === undefined || value === null ? null : value
+}
+
+function positiveNumberOrNull(value: number | null | undefined): number | null {
+  return value === undefined || value === null || value === 0 ? null : value
 }
 
 export function mapSdkSessionToDomain(sdk: Session): DomainSession {
@@ -130,8 +139,8 @@ export function mapSdkSessionToDomain(sdk: Session): DomainSession {
     projectId: emptyToNull(sdk.project_id),
     model: emptyToNull(sdk.llm_model),
     temperature: numberOrNull(sdk.llm_temperature),
-    maxTokens: numberOrNull(sdk.llm_max_tokens),
-    timeout: numberOrNull(sdk.timeout),
+    maxTokens: positiveNumberOrNull(sdk.llm_max_tokens),
+    timeout: positiveNumberOrNull(sdk.timeout),
     workflowId: emptyToNull(sdk.workflow_id),
     prompt: emptyToNull(sdk.prompt),
     sdkRestartCount: sdk.sdk_restart_count ?? 0,
