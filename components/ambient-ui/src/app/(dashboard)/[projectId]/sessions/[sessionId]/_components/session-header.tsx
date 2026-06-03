@@ -59,7 +59,7 @@ export function SessionHeader({ session }: { session: DomainSession }) {
     deleteSession.mutate(session.id, {
       onSuccess: () => {
         setDeleteDialogOpen(false)
-        router.push(`/${projectId}/fleet`)
+        router.push(`/${projectId}/sessions`)
       },
       onError: () => setDeleteDialogOpen(false),
     })

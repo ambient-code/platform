@@ -64,7 +64,7 @@ export function FleetTable({
               <TableRow
                 key={row.id}
                 className="cursor-pointer"
-                onClick={() => router.push(`/${projectId}/fleet/${row.original.id}`)}
+                onClick={() => router.push(`/${projectId}/sessions/${row.original.id}`)}
               >
                 {row.getVisibleCells().map(cell => (
                   <TableCell key={cell.id}>

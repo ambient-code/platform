@@ -17,7 +17,7 @@ function extractNavContext(pathname: string) {
   const segments = pathname.split('/').filter(Boolean)
   const projectId = segments.length >= 1 ? segments[0] : null
   const pageName = segments.length >= 2 ? capitalize(segments[1]) : null
-  const sessionId = segments.length >= 3 && segments[1] === 'fleet' ? segments[2] : null
+  const sessionId = segments.length >= 3 && segments[1] === 'sessions' ? segments[2] : null
   return { projectId, pageName, sessionId }
 }
 

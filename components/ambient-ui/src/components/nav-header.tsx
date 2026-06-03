@@ -30,10 +30,7 @@ type NavHeaderProps = {
   sessionName?: string | null
 }
 
-/** Maps URL path segments to user-facing breadcrumb labels. */
-const BREADCRUMB_LABEL_MAP: Record<string, string> = {
-  Fleet: 'Sessions',
-}
+const BREADCRUMB_LABEL_MAP: Record<string, string> = {}
 
 function displayLabel(raw: string): string {
   return BREADCRUMB_LABEL_MAP[raw] ?? raw
@@ -100,7 +97,7 @@ export function NavHeader({ projectId, projectName, pageName, sessionName }: Nav
               <BreadcrumbSeparator />
               <BreadcrumbItem>
                 <BreadcrumbLink asChild>
-                  <Link href={`/${projectId}/fleet`}>{projectName ?? projectId}</Link>
+                  <Link href={`/${projectId}/sessions`}>{projectName ?? projectId}</Link>
                 </BreadcrumbLink>
               </BreadcrumbItem>
             </>
@@ -112,7 +109,7 @@ export function NavHeader({ projectId, projectName, pageName, sessionName }: Nav
               <BreadcrumbItem>
                 {sessionName ? (
                   <BreadcrumbLink asChild>
-                    <Link href={`/${projectId}/fleet`}>{mappedPageName}</Link>
+                    <Link href={`/${projectId}/sessions`}>{mappedPageName}</Link>
                   </BreadcrumbLink>
                 ) : (
                   <BreadcrumbPage>{mappedPageName}</BreadcrumbPage>

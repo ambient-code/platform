@@ -29,7 +29,7 @@ type AppSidebarProps = {
 }
 
 const projectNavItems = [
-  { label: 'Sessions', icon: Monitor, href: 'fleet' },
+  { label: 'Sessions', icon: Monitor, href: 'sessions' },
 ] as const
 
 export function AppSidebar({ projectId }: AppSidebarProps) {

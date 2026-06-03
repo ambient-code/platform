@@ -28,6 +28,48 @@ function phaseColor(phase: SessionPhase): string {
   }
 }
 
+function TimelineSteps({ session, currentOrder }: { session: DomainSession; currentOrder: number }) {
+  const terminalLabel = currentOrder >= TERMINAL_ORDER ? session.phase : 'Terminal'
+  const terminalActive = currentOrder >= TERMINAL_ORDER
+  const steps = [
+    ...LIFECYCLE.map((phase) => ({
+      label: phase,
+      isCurrent: phase === session.phase,
+      isPast: PHASE_ORDER[phase] < currentOrder,
+    })),
+    { label: terminalLabel, isCurrent: terminalActive, isPast: false },
+  ]
+
+  return (
+    <div className="flex items-start">
+      {steps.map((step, i) => (
+        <div key={step.label} className="flex items-start">
+          {i > 0 && (
+            <div className={cn(
+              'mt-[5px] h-0.5 w-8',
+              (step.isPast || step.isCurrent) ? 'bg-foreground' : 'bg-border',
+            )} />
+          )}
+          <div className="flex flex-col items-center gap-1">
+            <div className={cn(
+              'size-3 shrink-0 rounded-full border-2',
+              step.isCurrent && phaseColor(session.phase),
+              step.isPast && 'bg-foreground border-foreground',
+              !step.isCurrent && !step.isPast && 'bg-background border-muted-foreground/40',
+            )} />
+            <span className={cn(
+              'text-xs',
+              step.isCurrent ? 'font-medium' : 'text-muted-foreground',
+            )}>
+              {step.label}
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function OverviewTab({ session }: { session: DomainSession }) {
   const currentOrder = PHASE_ORDER[session.phase]
 
@@ -38,52 +80,7 @@ export function OverviewTab({ session }: { session: DomainSession }) {
           <CardTitle className="text-base">Phase Timeline</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-2">
-            {LIFECYCLE.map((phase, i) => {
-              const order = PHASE_ORDER[phase]
-              const isCurrent = phase === session.phase
-              const isPast = order < currentOrder
-              return (
-                <div key={phase} className="flex items-center gap-2">
-                  {i > 0 && (
-                    <div className={cn(
-                      'h-0.5 w-8',
-                      isPast || isCurrent ? 'bg-foreground' : 'bg-border',
-                    )} />
-                  )}
-                  <div className="flex flex-col items-center gap-1">
-                    <div className={cn(
-                      'h-3 w-3 rounded-full border-2',
-                      isCurrent && phaseColor(session.phase),
-                      isPast && 'bg-foreground border-foreground',
-                      !isCurrent && !isPast && 'bg-background border-muted-foreground/40',
-                    )} />
-                    <span className={cn(
-                      'text-xs',
-                      isCurrent ? 'font-medium' : 'text-muted-foreground',
-                    )}>
-                      {phase}
-                    </span>
-                  </div>
-                </div>
-              )
-            })}
-            <div className="h-0.5 w-8 bg-border" />
-            <div className="flex flex-col items-center gap-1">
-              <div className={cn(
-                'h-3 w-3 rounded-full border-2',
-                currentOrder >= TERMINAL_ORDER
-                  ? phaseColor(session.phase)
-                  : 'bg-background border-muted-foreground/40',
-              )} />
-              <span className={cn(
-                'text-xs',
-                currentOrder >= TERMINAL_ORDER ? 'font-medium' : 'text-muted-foreground',
-              )}>
-                {currentOrder >= TERMINAL_ORDER ? session.phase : 'Terminal'}
-              </span>
-            </div>
-          </div>
+          <TimelineSteps session={session} currentOrder={currentOrder} />
         </CardContent>
       </Card>
 
