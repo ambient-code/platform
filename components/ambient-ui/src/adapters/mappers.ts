@@ -1,6 +1,6 @@
-import type { Session, Project } from 'ambient-sdk'
+import type { Session, Project, Agent } from 'ambient-sdk'
 import type {
-  DomainSession, DomainProject, DomainSessionMessage, SessionPhase, SessionEventType,
+  DomainSession, DomainProject, DomainSessionMessage, DomainAgent, SessionPhase, SessionEventType,
   DomainRepo, DomainReconciledRepo, DomainCondition, ReconciledRepoStatus, ConditionStatus,
 } from '@/domain/types'
 
@@ -163,6 +163,26 @@ export function mapSdkProjectToDomain(sdk: Project): DomainProject {
     name: sdk.name,
     description: emptyToNull(sdk.description),
     status: emptyToNull(sdk.status),
+    createdAt: sdk.created_at ?? '',
+    updatedAt: sdk.updated_at ?? '',
+  }
+}
+
+export function mapSdkAgentToDomain(sdk: Agent): DomainAgent {
+  return {
+    id: sdk.id,
+    name: sdk.name,
+    displayName: emptyToNull(sdk.display_name),
+    description: emptyToNull(sdk.description),
+    model: emptyToNull(sdk.llm_model),
+    ownerUserId: emptyToNull(sdk.owner_user_id),
+    currentSessionId: emptyToNull(sdk.current_session_id),
+    projectId: emptyToNull(sdk.project_id),
+    prompt: emptyToNull(sdk.prompt),
+    repoUrl: emptyToNull(sdk.repo_url),
+    workflowId: emptyToNull(sdk.workflow_id),
+    annotations: parseAnnotations(sdk.annotations),
+    labels: parseJsonObject(sdk.labels),
     createdAt: sdk.created_at ?? '',
     updatedAt: sdk.updated_at ?? '',
   }

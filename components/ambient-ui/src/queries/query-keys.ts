@@ -21,6 +21,12 @@ export const queryKeys = {
   },
   agents: {
     all: ['agents'] as const,
+    lists: () => [...queryKeys.agents.all, 'list'] as const,
+    list: (projectId: string, params?: ListParams) =>
+      [...queryKeys.agents.lists(), projectId, params] as const,
+    details: () => [...queryKeys.agents.all, 'detail'] as const,
+    detail: (agentId: string) =>
+      [...queryKeys.agents.details(), agentId] as const,
     names: (projectId: string) =>
       [...queryKeys.agents.all, 'names', projectId] as const,
   },
