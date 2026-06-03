@@ -392,14 +392,32 @@ export function ChatSidebar() {
             <PhaseIndicator phase={sessionPhase} />
           </div>
         </button>
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setCollapsed(true)} aria-label="Collapse chat sidebar">
-            <PanelRightClose className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => sessions.length === 1 ? closeSidebar() : closeSession(activeSessionId)} aria-label="Close chat sidebar">
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
+        <TooltipProvider delayDuration={300}>
+          <div className="flex items-center gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setCollapsed(true)} aria-label="Hide sidebar">
+                  <PanelRightClose className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Hide sidebar</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => sessions.length === 1 ? closeSidebar() : closeSession(activeSessionId)}
+                  aria-label={sessions.length === 1 ? 'Close sidebar' : 'Close this session'}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{sessions.length === 1 ? 'Close sidebar' : 'Close this session'}</TooltipContent>
+            </Tooltip>
+          </div>
+        </TooltipProvider>
       </div>
 
       {/* Test mode toolbar */}
