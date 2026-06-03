@@ -150,9 +150,19 @@ export const fleetColumns = [
   }),
   col.accessor('name', {
     header: 'Name',
-    cell: info => (
-      <span className="font-medium">{info.getValue()}</span>
-    ),
+    cell: info => {
+      const isTest = info.row.original.annotations['ambient-code.io/ui/test-session'] === 'true'
+      return (
+        <span className="font-medium">
+          {info.getValue()}
+          {isTest && (
+            <span className="ml-1.5 inline-flex items-center rounded border border-border bg-muted px-1 py-0.5 text-[10px] text-muted-foreground align-middle">
+              test
+            </span>
+          )}
+        </span>
+      )
+    },
   }),
   col.display({
     id: 'workItem',

@@ -23,12 +23,7 @@ import {
 import { useCreateSession } from '@/queries/use-sessions'
 import { useAgents } from '@/queries/use-agents'
 import type { DomainSessionCreateRequest } from '@/domain/types'
-
-const MODEL_OPTIONS = [
-  'claude-sonnet-4-20250514',
-  'claude-opus-4-20250514',
-  'claude-haiku-35-20241022',
-] as const
+import { MODEL_OPTIONS } from '@/domain/models'
 
 export function CreateSessionSheet({
   open,

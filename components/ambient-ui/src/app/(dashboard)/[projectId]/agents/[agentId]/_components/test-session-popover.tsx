@@ -19,12 +19,7 @@ import {
 } from '@/components/ui/select'
 import { useCreateSession } from '@/queries/use-sessions'
 import type { DomainAgent } from '@/domain/types'
-
-const MODEL_OPTIONS = [
-  'claude-sonnet-4-20250514',
-  'claude-opus-4-20250514',
-  'claude-haiku-35-20241022',
-] as const
+import { MODEL_OPTIONS } from '@/domain/models'
 
 type TestSessionPopoverProps = {
   agent: DomainAgent

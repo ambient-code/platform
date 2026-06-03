@@ -33,6 +33,7 @@ import { getRegisteredAnnotation } from '@/domain/annotations'
 import type { DomainAgent } from '@/domain/types'
 import type { AgentLifecycle } from '../../_components/lifecycle-badge'
 import { useUpdateAgent } from '@/queries/use-agents'
+import { MODEL_OPTIONS } from '@/domain/models'
 
 const ICON_MAP: Record<string, LucideIcon> = {
   pin: Pin, tag: Tag, ticket: Ticket, layers: Layers, play: Play, bot: Bot,
@@ -41,12 +42,6 @@ const ICON_MAP: Record<string, LucideIcon> = {
   'folder-git-2': FolderGit2, 'external-link': ExternalLink,
   'message-circle': MessageCircle, 'alert-triangle': AlertTriangle,
 }
-
-const MODEL_OPTIONS = [
-  'claude-sonnet-4-20250514',
-  'claude-opus-4-20250514',
-  'claude-haiku-35-20241022',
-] as const
 
 function agentToYaml(agent: DomainAgent): string {
   const lines: string[] = [
