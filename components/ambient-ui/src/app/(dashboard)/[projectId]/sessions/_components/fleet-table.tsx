@@ -86,7 +86,7 @@ export function FleetTable({
   }, [filteredRowCount, onFilteredCountChange])
 
   return (
-    <TooltipProvider>
+    <TooltipProvider delayDuration={300}>
     <div className="rounded-md border">
       <Table>
         <TableHeader>
