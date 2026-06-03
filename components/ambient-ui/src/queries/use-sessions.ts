@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { SessionsPort } from '@/ports/sessions'
-import type { DomainSession, ListParams, SessionPhase } from '@/domain/types'
+import type { DomainSession, DomainSessionCreateRequest, ListParams, SessionPhase } from '@/domain/types'
 import { createSessionsAdapter } from '@/adapters/sdk-sessions'
 import { queryKeys } from './query-keys'
 
@@ -120,6 +120,18 @@ export function useDeleteSession(port?: SessionsPort) {
 
   return useMutation({
     mutationFn: (sessionId: string) => adapter.delete(sessionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all })
+    },
+  })
+}
+
+export function useCreateSession(port?: SessionsPort) {
+  const queryClient = useQueryClient()
+  const adapter = port ?? getDefaultPort()
+
+  return useMutation({
+    mutationFn: (request: DomainSessionCreateRequest) => adapter.create(request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all })
     },

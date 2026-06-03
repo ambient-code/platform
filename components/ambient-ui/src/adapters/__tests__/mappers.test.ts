@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { mapSdkSessionToDomain, mapSdkProjectToDomain, mapSessionMessageToDomain } from '../mappers'
+import { mapSdkSessionToDomain, mapSdkProjectToDomain, mapSessionMessageToDomain, mapSdkAgentToDomain } from '../mappers'
 import type { SdkSessionMessageShape } from '../mappers'
-import type { Session, Project } from 'ambient-sdk'
+import type { Session, Project, Agent } from 'ambient-sdk'
 
 function makeSdkSession(overrides: Partial<Session> = {}): Session {
   return {
@@ -170,6 +170,214 @@ describe('mapSdkSessionToDomain', () => {
     expect(domain.createdAt).toBe('')
     expect(domain.updatedAt).toBe('')
   })
+
+  describe('new session fields', () => {
+    it('parses repos from valid JSON string', () => {
+      const repos = JSON.stringify([
+        { url: 'https://github.com/org/repo1', branch: 'main', name: 'repo1', autoPush: true },
+        { url: 'https://github.com/org/repo2', branch: null, name: null, autoPush: false },
+      ])
+      const sdk = makeSdkSession({ repos })
+      const domain = mapSdkSessionToDomain(sdk)
+
+      expect(domain.repos).toHaveLength(2)
+      expect(domain.repos[0]).toEqual({
+        url: 'https://github.com/org/repo1',
+        branch: 'main',
+        name: 'repo1',
+        autoPush: true,
+      })
+      expect(domain.repos[1]).toEqual({
+        url: 'https://github.com/org/repo2',
+        branch: null,
+        name: null,
+        autoPush: false,
+      })
+    })
+
+    it('returns empty repos for empty string', () => {
+      const sdk = makeSdkSession({ repos: '' })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.repos).toEqual([])
+    })
+
+    it('returns empty repos for invalid JSON', () => {
+      const sdk = makeSdkSession({ repos: 'not valid json' })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.repos).toEqual([])
+    })
+
+    it('parses reconciled repos with all status variants', () => {
+      const reconciledRepos = JSON.stringify([
+        { url: 'https://github.com/org/repo1', name: 'repo1', status: 'Cloning', currentActiveBranch: 'feat-1', defaultBranch: 'main', clonedAt: '2026-01-15T10:00:00Z' },
+        { url: 'https://github.com/org/repo2', name: 'repo2', status: 'Ready', currentActiveBranch: 'main', defaultBranch: 'main', clonedAt: '2026-01-15T10:01:00Z' },
+        { url: 'https://github.com/org/repo3', name: 'repo3', status: 'Failed', currentActiveBranch: null, defaultBranch: null, clonedAt: null },
+      ])
+      const sdk = makeSdkSession({ reconciled_repos: reconciledRepos })
+      const domain = mapSdkSessionToDomain(sdk)
+
+      expect(domain.reconciledRepos).toHaveLength(3)
+      expect(domain.reconciledRepos[0]).toEqual({
+        url: 'https://github.com/org/repo1',
+        name: 'repo1',
+        status: 'Cloning',
+        currentActiveBranch: 'feat-1',
+        defaultBranch: 'main',
+        clonedAt: '2026-01-15T10:00:00Z',
+      })
+      expect(domain.reconciledRepos[1]!.status).toBe('Ready')
+      expect(domain.reconciledRepos[2]!.status).toBe('Failed')
+      expect(domain.reconciledRepos[2]!.currentActiveBranch).toBeNull()
+      expect(domain.reconciledRepos[2]!.clonedAt).toBeNull()
+    })
+
+    it('returns null status for invalid reconciled repo status', () => {
+      const reconciledRepos = JSON.stringify([
+        { url: 'https://github.com/org/repo1', name: 'repo1', status: 'SomeBogusStatus' },
+      ])
+      const sdk = makeSdkSession({ reconciled_repos: reconciledRepos })
+      const domain = mapSdkSessionToDomain(sdk)
+
+      expect(domain.reconciledRepos).toHaveLength(1)
+      expect(domain.reconciledRepos[0]!.status).toBeNull()
+    })
+
+    it('parses conditions array', () => {
+      const conditions = JSON.stringify([
+        { type: 'Ready', status: 'True', reason: 'AllGood', message: 'Session is ready', lastTransitionTime: '2026-01-15T10:05:00Z' },
+        { type: 'Progressing', status: 'False', reason: null, message: null, lastTransitionTime: null },
+      ])
+      const sdk = makeSdkSession({ conditions })
+      const domain = mapSdkSessionToDomain(sdk)
+
+      expect(domain.conditions).toHaveLength(2)
+      expect(domain.conditions[0]).toEqual({
+        type: 'Ready',
+        status: 'True',
+        reason: 'AllGood',
+        message: 'Session is ready',
+        lastTransitionTime: '2026-01-15T10:05:00Z',
+      })
+      expect(domain.conditions[1]).toEqual({
+        type: 'Progressing',
+        status: 'False',
+        reason: null,
+        message: null,
+        lastTransitionTime: null,
+      })
+    })
+
+    it('returns Unknown for invalid condition status', () => {
+      const conditions = JSON.stringify([
+        { type: 'Ready', status: 'Maybe' },
+      ])
+      const sdk = makeSdkSession({ conditions })
+      const domain = mapSdkSessionToDomain(sdk)
+
+      expect(domain.conditions).toHaveLength(1)
+      expect(domain.conditions[0]!.status).toBe('Unknown')
+    })
+
+    it('parses environment variables from JSON string', () => {
+      const envVars = JSON.stringify({ NODE_ENV: 'production', API_URL: 'https://api.example.com' })
+      const sdk = makeSdkSession({ environment_variables: envVars })
+      const domain = mapSdkSessionToDomain(sdk)
+
+      expect(domain.environmentVariables).toEqual({
+        NODE_ENV: 'production',
+        API_URL: 'https://api.example.com',
+      })
+    })
+
+    it('parses labels from JSON string', () => {
+      const labels = JSON.stringify({ team: 'platform', tier: 'production' })
+      const sdk = makeSdkSession({ labels })
+      const domain = mapSdkSessionToDomain(sdk)
+
+      expect(domain.labels).toEqual({
+        team: 'platform',
+        tier: 'production',
+      })
+    })
+
+    it('returns empty object for invalid env vars JSON', () => {
+      const sdk = makeSdkSession({ environment_variables: '{broken' })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.environmentVariables).toEqual({})
+    })
+
+    it('returns empty object for invalid labels JSON', () => {
+      const sdk = makeSdkSession({ labels: 'not-json' })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.labels).toEqual({})
+    })
+
+    it('returns empty object for array-shaped env vars', () => {
+      const sdk = makeSdkSession({ environment_variables: '["a","b"]' })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.environmentVariables).toEqual({})
+    })
+
+    it('returns empty object for array-shaped labels', () => {
+      const sdk = makeSdkSession({ labels: '["x"]' })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.labels).toEqual({})
+    })
+
+    it('maps temperature, maxTokens, timeout from SDK numbers', () => {
+      const sdk = makeSdkSession({ llm_temperature: 0.5, llm_max_tokens: 8192, timeout: 7200 })
+      const domain = mapSdkSessionToDomain(sdk)
+
+      expect(domain.temperature).toBe(0.5)
+      expect(domain.maxTokens).toBe(8192)
+      expect(domain.timeout).toBe(7200)
+    })
+
+    it('preserves zero temperature but nulls zero maxTokens and timeout', () => {
+      const sdk = makeSdkSession({ llm_temperature: 0, llm_max_tokens: 0, timeout: 0 })
+      const domain = mapSdkSessionToDomain(sdk)
+
+      expect(domain.temperature).toBe(0)
+      expect(domain.maxTokens).toBeNull()
+      expect(domain.timeout).toBeNull()
+    })
+
+    it('maps workflowId from workflow_id', () => {
+      const sdk = makeSdkSession({ workflow_id: 'wf-42' })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.workflowId).toBe('wf-42')
+    })
+
+    it('maps workflowId to null for empty string', () => {
+      const sdk = makeSdkSession({ workflow_id: '' })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.workflowId).toBeNull()
+    })
+
+    it('maps prompt from SDK', () => {
+      const sdk = makeSdkSession({ prompt: 'Fix the bug in auth.ts' })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.prompt).toBe('Fix the bug in auth.ts')
+    })
+
+    it('maps prompt to null for empty string', () => {
+      const sdk = makeSdkSession({ prompt: '' })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.prompt).toBeNull()
+    })
+
+    it('maps sdkRestartCount from sdk_restart_count', () => {
+      const sdk = makeSdkSession({ sdk_restart_count: 3 })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.sdkRestartCount).toBe(3)
+    })
+
+    it('defaults sdkRestartCount to 0 when sdk_restart_count is 0', () => {
+      const sdk = makeSdkSession({ sdk_restart_count: 0 })
+      const domain = mapSdkSessionToDomain(sdk)
+      expect(domain.sdkRestartCount).toBe(0)
+    })
+  })
 })
 
 describe('mapSdkProjectToDomain', () => {
@@ -244,5 +452,120 @@ describe('mapSessionMessageToDomain', () => {
     const sdk = makeSdkMessage({ payload: complexPayload })
     const domain = mapSessionMessageToDomain(sdk)
     expect(domain.payload).toBe(complexPayload)
+  })
+})
+
+function makeSdkAgent(overrides: Partial<Agent> = {}): Agent {
+  return {
+    id: 'agent-001',
+    kind: 'Agent',
+    href: '/api/ambient/v1/agents/agent-001',
+    created_at: '2026-02-01T09:00:00Z',
+    updated_at: '2026-02-01T10:00:00Z',
+    annotations: '{}',
+    bot_account_name: '',
+    current_session_id: '',
+    description: 'A test agent',
+    display_name: 'Test Agent',
+    environment_variables: '',
+    labels: '',
+    llm_max_tokens: 4096,
+    llm_model: 'claude-sonnet-4-20250514',
+    llm_temperature: 0.7,
+    name: 'test-agent',
+    owner_user_id: 'user-42',
+    parent_agent_id: '',
+    project_id: 'proj-123',
+    prompt: 'You are a helpful agent.',
+    repo_url: 'https://github.com/org/repo',
+    resource_overrides: '',
+    workflow_id: 'wf-1',
+    ...overrides,
+  }
+}
+
+describe('mapSdkAgentToDomain', () => {
+  it('maps snake_case fields to camelCase', () => {
+    const sdk = makeSdkAgent()
+    const domain = mapSdkAgentToDomain(sdk)
+
+    expect(domain.id).toBe('agent-001')
+    expect(domain.name).toBe('test-agent')
+    expect(domain.displayName).toBe('Test Agent')
+    expect(domain.description).toBe('A test agent')
+    expect(domain.model).toBe('claude-sonnet-4-20250514')
+    expect(domain.ownerUserId).toBe('user-42')
+    expect(domain.projectId).toBe('proj-123')
+    expect(domain.prompt).toBe('You are a helpful agent.')
+    expect(domain.repoUrl).toBe('https://github.com/org/repo')
+    expect(domain.workflowId).toBe('wf-1')
+    expect(domain.createdAt).toBe('2026-02-01T09:00:00Z')
+    expect(domain.updatedAt).toBe('2026-02-01T10:00:00Z')
+  })
+
+  it('maps empty string fields to null', () => {
+    const sdk = makeSdkAgent({
+      display_name: '',
+      description: '',
+      llm_model: '',
+      owner_user_id: '',
+      current_session_id: '',
+      project_id: '',
+      prompt: '',
+      repo_url: '',
+      workflow_id: '',
+    })
+    const domain = mapSdkAgentToDomain(sdk)
+
+    expect(domain.displayName).toBeNull()
+    expect(domain.description).toBeNull()
+    expect(domain.model).toBeNull()
+    expect(domain.ownerUserId).toBeNull()
+    expect(domain.currentSessionId).toBeNull()
+    expect(domain.projectId).toBeNull()
+    expect(domain.prompt).toBeNull()
+    expect(domain.repoUrl).toBeNull()
+    expect(domain.workflowId).toBeNull()
+  })
+
+  it('parses valid annotations JSON to Record', () => {
+    const annotations = JSON.stringify({ team: 'platform', tier: 'production' })
+    const sdk = makeSdkAgent({ annotations })
+    const domain = mapSdkAgentToDomain(sdk)
+
+    expect(domain.annotations).toEqual({ team: 'platform', tier: 'production' })
+  })
+
+  it('returns empty Record for invalid annotations', () => {
+    const sdk = makeSdkAgent({ annotations: 'broken{' })
+    const domain = mapSdkAgentToDomain(sdk)
+    expect(domain.annotations).toEqual({})
+  })
+
+  it('parses valid labels JSON to Record', () => {
+    const labels = JSON.stringify({ env: 'dev', app: 'backend' })
+    const sdk = makeSdkAgent({ labels })
+    const domain = mapSdkAgentToDomain(sdk)
+
+    expect(domain.labels).toEqual({ env: 'dev', app: 'backend' })
+  })
+
+  it('returns empty Record for invalid labels', () => {
+    const sdk = makeSdkAgent({ labels: '["a"]' })
+    const domain = mapSdkAgentToDomain(sdk)
+    expect(domain.labels).toEqual({})
+  })
+
+  it('handles null created_at and updated_at', () => {
+    const sdk = makeSdkAgent({ created_at: null, updated_at: null })
+    const domain = mapSdkAgentToDomain(sdk)
+    expect(domain.createdAt).toBe('')
+    expect(domain.updatedAt).toBe('')
+  })
+
+  it('maps current_session_id when present', () => {
+    const sdk = makeSdkAgent({ current_session_id: 'sess-abc' })
+    const domain = mapSdkAgentToDomain(sdk)
+    expect(domain.currentSessionId).toBe('sess-abc')
   })
 })
