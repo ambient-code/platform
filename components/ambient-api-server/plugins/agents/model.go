@@ -43,11 +43,5 @@ func (d *Agent) BeforeCreate(tx *gorm.DB) error {
 	if d.LlmModel == "" {
 		d.LlmModel = "claude-sonnet-4-6"
 	}
-	if d.LlmTemperature == 0 {
-		d.LlmTemperature = 0.7
-	}
-	if d.LlmMaxTokens == 0 {
-		d.LlmMaxTokens = 4000
-	}
 	return nil
 }
