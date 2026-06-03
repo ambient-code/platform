@@ -360,9 +360,7 @@ export const fleetColumns = [
   }),
   col.display({
     id: 'chat',
-    header: () => (
-      <MessageSquare className="size-3.5 text-muted-foreground" aria-label="Chat" />
-    ),
+    header: '',
     cell: ({ row }) => <ChatColumnButton sessionId={row.original.id} phase={row.original.phase} />,
     size: 48,
     enableSorting: false,
