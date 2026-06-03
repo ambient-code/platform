@@ -1,7 +1,8 @@
 # Ambient Runner Spec
 
 **Date:** 2026-04-05
-**Status:** Living Document — current state documented
+**Last Updated:** 2026-06-03
+**Status:** Living Document — current state documented, desired state (OpenShell) appended
 **Related:** `../control-plane/control-plane.spec.md` — CP provisioning, token endpoint, start context assembly
 
 ---
@@ -28,6 +29,7 @@ Runner Pod (FastAPI + uvicorn)
     └── HTTP endpoints
           ├── GET /events/{thread_id}      ← live SSE tap (drained by backend proxy)
           ├── POST /                       ← AG-UI run (HTTP path, backup)
+          ├── POST /model                  ← runtime LLM model switch
           ├── POST /interrupt
           └── GET /health
 ```
@@ -59,7 +61,10 @@ ambient_runner/
   _session_messages_api.py        ← SessionMessagesAPI (hand-rolled proto codec)
   _inbox_messages_api.py          ← InboxMessagesAPI
   observability.py                ← ObservabilityManager (Langfuse)
+  observability_config.py         ← Observability configuration
   observability_models.py         ← Langfuse event model types
+  observability_privacy.py        ← Privacy-aware observability filtering
+  mlflow_observability.py         ← MLflow observability integration
 
   platform/
     context.py                    ← RunnerContext dataclass (shared runtime state)
@@ -70,7 +75,6 @@ ambient_runner/
     utils.py                      ← Pure helpers (redact_secrets, get_bot_token, url_with_token)
     security_utils.py             ← Input validation helpers
     feedback.py                   ← User feedback storage
-    workspace.py                  ← Workspace setup and validation
 
   bridges/claude/
     bridge.py                     ← ClaudeBridge (PlatformBridge impl)
@@ -82,7 +86,9 @@ ambient_runner/
     backend_tools.py              ← acp_* MCP tools (backend API access for Claude)
     prompts.py                    ← SDK system prompt builder
     corrections.py                ← Correction detection and logging
+    operational_events.py         ← Operational event emission (session lifecycle, errors)
     mock_client.py                ← Local dev mock (no Claude subprocess)
+    fixtures/                     ← JSONL fixtures for local dev mock
 
   bridges/gemini_cli/             ← Gemini CLI bridge (separate impl, same ABC)
   bridges/langgraph/              ← LangGraph bridge (stub)
@@ -99,6 +105,7 @@ ambient_runner/
     content.py                    ← GET /content
     tasks.py                      ← GET /tasks
     feedback.py                   ← POST /feedback
+    model.py                      ← POST /model (runtime LLM model switch)
 
   middleware/
     grpc_push.py                  ← grpc_push_middleware (HTTP-path event fan-out)
@@ -184,6 +191,12 @@ set_bot_token(token)                                         # cache in utils.py
 3. `BOT_TOKEN` env var (local dev fallback)
 
 On gRPC `UNAUTHENTICATED`, the listener calls `grpc_client.reconnect()` which re-fetches from the CP endpoint and rebuilds the channel.
+
+### AGUI_TOKEN Session Authentication
+
+When the `AGUI_TOKEN` env var is set (injected by the Operator), the runner registers an HTTP middleware that requires all non-health requests to include an `X-Ambient-Session-Token` header matching the token. Comparison uses `secrets.compare_digest()` to prevent timing attacks.
+
+This prevents cross-session attacks where an attacker who discovers a runner's in-cluster URL could send requests to another session's runner. Health endpoints (`/health`, `/healthz`) are exempted so liveness/readiness probes continue to work.
 
 ---
 
@@ -451,6 +464,8 @@ All env vars are injected by the CP at pod creation time.
 | `AMBIENT_MCP_URL` | Ambient MCP sidecar URL (SSE transport) |
 | `REPOS_JSON` | JSON array of `{url, branch, autoPush}` repo configs |
 | `ACTIVE_WORKFLOW_GIT_URL` | Active workflow repo URL (overrides REPOS_JSON workspace setup) |
+| `AGUI_TOKEN` | Session-scoped bearer token; when set, all non-health endpoints require `X-Ambient-Session-Token` header (constant-time comparison) |
+| `SDK_OPTIONS` | JSON string of additional Claude SDK options |
 
 ---
 
@@ -498,3 +513,65 @@ The resolved `(cwd_path, add_dirs)` tuple is passed to the Claude SDK via `Claud
 | `--resume` via persisted session IDs | Claude Code saves state to `.claude/` on graceful subprocess shutdown; session IDs survive `mark_dirty()` rebuilds via JSON file and `_saved_session_ids` snapshot |
 | Credential URL validated to cluster-local hostname | Prevents exfiltration of user tokens to external hosts if `BACKEND_API_URL` is tampered with |
 | LLM credentials (Anthropic/Vertex) remain in runner | These are necessary for inference and cannot be moved to sidecars without changing the SDK contract |
+| `AGUI_TOKEN` session auth middleware | Prevents cross-session attacks where an attacker uses another session's runner URL; uses `secrets.compare_digest()` for constant-time comparison |
+| Runtime model switching via `POST /model` | Allows the frontend/CLI to change `LLM_MODEL` without restarting the pod; acquires a lock to prevent concurrent switches and rejects if agent is mid-generation |
+
+---
+
+## Desired State: OpenShell Credential Isolation
+
+> **Status:** Proposed — not yet implemented
+> **Companion docs:** `docs/internal/agents/openshell-security-analysis.md`, `docs/internal/agents/openshell-runner-adaptation.md` (included in this PR)
+
+The current sidecar credential model isolates integration tokens from the runner container. OpenShell extends this further by sandboxing the **agent subprocess itself** — preventing credential exfiltration even if the agent escapes the intended MCP tool boundary (e.g., via Bash tool access to sidecar localhost ports, `/proc` reading, or network sniffing).
+
+### Target Architecture: OpenShell Sidecar Supervisor
+
+Add OpenShell's sandbox layer around the Claude Code subprocess:
+
+```
+Current:  Runner container → Claude subprocess (unrestricted network, can reach sidecar ports)
+Desired:  Runner container → OpenShell Supervisor → Claude subprocess (sandboxed netns)
+            Supervisor controls: network egress, filesystem access, syscalls
+            Agent cannot reach sidecar localhost ports directly
+```
+
+### What Changes
+
+| Component | Current | With OpenShell |
+|-----------|---------|---------------|
+| Claude CLI subprocess | Unrestricted network in pod | Sandboxed in separate network namespace |
+| Sidecar MCP ports (`:8091`-`:8094`) | Reachable from runner container | Blocked from agent netns; only Supervisor can proxy |
+| Network egress | Direct to external APIs | Via OpenShell HTTP CONNECT proxy at `10.200.0.1:3128` |
+| `secret_redaction.py` | Defense-in-depth for output stream | Retained; now truly redundant with network isolation |
+| Filesystem access | Full container filesystem | Landlock-restricted to `/workspace`, `/tmp`, Claude state dirs |
+| Syscalls | Unrestricted | seccomp-BPF allowlist; blocks `ptrace`, `memfd_create`, raw sockets |
+
+### OpenShell Isolation Layers (5)
+
+1. **Network namespace** — Agent in separate netns; all traffic routes through proxy at `10.200.0.1:3128`
+2. **Credential proxy** — Sidecar ports unreachable from agent netns; Supervisor mediates MCP tool calls
+3. **Landlock LSM** — Kernel-level filesystem allowlists; agent confined to workspace directories
+4. **seccomp-BPF** — Blocks `ptrace`, `memfd_create`, raw sockets; prevents privilege escalation
+5. **L7 OPA inspection** — Per-request HTTP allow/deny via Rego policies; binary identity via SHA256 TOFU
+
+### Files to Modify
+
+| File | Change |
+|------|--------|
+| `bridges/claude/bridge.py` | Launch Claude CLI via OpenShell Supervisor instead of direct subprocess |
+| `bridges/claude/session.py` | Supervisor-aware `SessionWorker` lifecycle |
+| `_grpc_client.py` | Verify no changes needed — gRPC runs in runner process outside sandbox boundary |
+| `Dockerfile` | Add OpenShell Supervisor binary, modify entrypoint |
+| `middleware/secret_redaction.py` | Retain as defense-in-depth (now redundant) |
+| `components/operator/` | Configure OpenShell provider + policy per session Job |
+
+### Migration Path
+
+1. **Phase 1 — Network namespace only:** Sandbox Claude subprocess in separate netns; validate sidecar port isolation and proxy egress
+2. **Phase 2 — Full sandbox:** Add Landlock filesystem restrictions and seccomp-BPF syscall filtering
+3. **Phase 3 — OPA policies:** L7 inspection with per-session OPA policies generated by the Operator from project settings
+
+### Kernel Prerequisite
+
+OpenShell's Landlock LSM requires Linux 5.13+. Runner containers use UBI 10 (RHEL 10, kernel 6.x) — satisfied. OpenShell's `best_effort` mode provides graceful degradation if kernel support is absent.
