@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { createColumnHelper } from '@tanstack/react-table'
 import type { SortingFn } from '@tanstack/react-table'
 import {
@@ -189,14 +190,20 @@ export const fleetColumns = [
     header: 'Agent',
     cell: info => {
       const agentId = info.getValue()
+      const projectId = info.row.original.projectId
       const annotationName = info.row.original.agentName
       const agentNames = (info.table.options.meta as FleetTableMeta | undefined)?.agentNames
       const resolvedName = annotationName ?? (agentId ? agentNames?.get(agentId) : null) ?? null
       if (!resolvedName) return <span className="text-muted-foreground">—</span>
+      if (!agentId || !projectId) return <span className="text-sm text-foreground">{resolvedName}</span>
       return (
-        <span className="text-sm text-foreground">
+        <Link
+          href={`/${projectId}/agents/${agentId}`}
+          onClick={e => e.stopPropagation()}
+          className="text-sm text-link underline-offset-4 hover:underline"
+        >
           {resolvedName}
-        </span>
+        </Link>
       )
     },
   }),
