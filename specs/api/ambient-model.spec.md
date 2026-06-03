@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-20
 **Status:** Active
-**Last Updated:** 2026-06-03 — added Application (GitOps continuous sync for agent fleets)
+**Last Updated:** 2026-06-03 — added Application (GitOps continuous sync for agent fleets); addressed review feedback: credential_id FK for remote auth, RoleBinding escalation rules, prune safety, health status semantics, gitops role grantability, sync engine kind filtering
 **Previous:** 2026-05-12 — migrate Credentials from project-scoped to global routes (`/credentials`); remove `project_id` from model, OpenAPI, and SDK; add drop-column migration; update coverage matrix
 **Workflow:** `../../workflows/sessions/ambient-model.workflow.md` — implementation waves, gap table, build commands, run log
 **Design:** `credentials-session.md` — full Credential Kind design spec and rationale
@@ -236,6 +236,7 @@ erDiagram
         string source_path "path within repo to kustomize overlay"
         string destination_ambient_url "nullable — target Ambient API URL; null = local"
         string destination_project "target project name; created if CreateProject=true"
+        string credential_id FK "nullable — Credential for remote Ambient auth; required when destination_ambient_url is set"
         bool   auto_sync "enable automated sync on git change"
         bool   auto_prune "delete resources removed from git"
         bool   self_heal "re-sync when live state drifts"
@@ -277,6 +278,7 @@ erDiagram
     Inbox           }o--o| Agent            : "sent_from"
 
     Application }o--o| Project        : "syncs_to"
+    Application }o--o| Credential     : "credential_id"
 
     Session         ||--o{ SessionMessage   : "streams"
 
@@ -308,15 +310,15 @@ Application is the Ambient equivalent of an [Argo CD Application](https://argo-c
 
 ### What Gets Synced
 
-An Application syncs **project-scoped fleet definitions** — the same resource kinds that `acpctl apply -k` handles:
+An Application syncs **project-scoped fleet definitions** — a subset of resource kinds that `acpctl apply -k` handles (excluding infrastructure inventory kinds like Cluster and Ambient):
 
 | Kind | Sync Behavior |
 |---|---|
 | `Project` | Created if `CreateProject=true` in `sync_options`; patched (description, prompt, labels, annotations) on subsequent syncs |
 | `Agent` | Created or patched within the destination project; prompt, labels, annotations updated |
 | `Credential` | Created if not present; idempotent by name |
-| `RoleBinding` | Created if not present; idempotent by user+role+scope key |
-| `Inbox` (seed messages) | Idempotent delivery — only new messages (by `from_name` + `body` dedup) are posted |
+| `RoleBinding` | Created if not present; idempotent by user+role+scope key. **Escalation-bound:** the sync engine can only create RoleBindings at or below the level of the service credential it uses (see Design Decisions). |
+| `Inbox` (seed messages) | Idempotent delivery — only new messages (by `from_agent_id` + `body` content hash dedup) are posted. Uses immutable `from_agent_id` FK, not mutable `from_name`. |
 
 ### What Does NOT Get Synced
 
@@ -336,15 +338,16 @@ An Application syncs **project-scoped fleet definitions** — the same resource 
 | `source_repo_url` | Git repository URL. HTTPS or SSH. |
 | `source_target_revision` | Branch name, tag, or commit SHA. Default: `main`. |
 | `source_path` | Relative path within the repo to a kustomize directory (must contain `kustomization.yaml`). |
-| `destination_ambient_url` | Nullable. The Ambient API server URL to sync to. Null = local Ambient (this API server). |
+| `credential_id` | Nullable FK → Credential. The stored credential providing authentication for the destination Ambient's REST API. Required when `destination_ambient_url` is set. Uses the same write-only encrypted storage as all Credentials. The credential's token is resolved at sync time via `GET /credentials/{cred_id}/token` (gated by `credential:token-reader`). Null when targeting the local Ambient (controller uses its own service identity). |
+| `destination_ambient_url` | Nullable. The Ambient API server URL to sync to. Null = local Ambient (this API server). When set, `credential_id` must also be set — async polling controllers have no request context to forward a token from. |
 | `destination_project` | Target project name. The project is created on first sync if `CreateProject=true` is in `sync_options`. |
 | `auto_sync` | If true, the controller polls the git repo and syncs automatically when changes are detected. If false, sync is manual via `POST /sync`. |
-| `auto_prune` | If true, resources in the live state that are absent from the target state are deleted. If false, orphaned resources are left in place. |
+| `auto_prune` | If true, resources in the live state that are absent from the target state are deleted. If false, orphaned resources are left in place. **WARNING: Pruning a Project is permanently destructive.** All Agents, Sessions, Inbox messages, and SessionMessages in the project are cascade-deleted. The sync engine will never auto-prune a Project — Project removal requires manual confirmation via `POST /sync` with explicit `prune: true` and `prune_project: true` flags. Agent-level pruning operates normally under `auto_prune`. |
 | `self_heal` | If true, the controller re-syncs when live state drifts from target state (e.g., an agent's prompt is changed via the UI). If false, drift is allowed. |
 | `sync_options` | Comma-separated option flags. Initial options: `CreateProject=true`. |
 | `retry_limit` | Max number of automatic retries on sync failure. Default: 3. |
 | `sync_status` | Computed on refresh. `Synced` = live matches target. `OutOfSync` = differences detected. `Unknown` = not yet refreshed. |
-| `health_status` | Computed from synced resources. `Healthy` = all agents exist and have expected state. `Degraded` = one or more agents missing or misconfigured. `Progressing` = sync in progress. `Unknown` = not yet assessed. |
+| `health_status` | Computed from synced resources. `Healthy` = all synced resources exist in the destination and match the target state (name, prompt, labels, annotations match git). `Degraded` = one or more synced resources are missing, have field drift from target state, or failed to apply. `Progressing` = sync operation is currently running. `Unknown` = not yet assessed (never refreshed). Health is assessed per-resource and aggregated — any single `Degraded` resource makes the whole application `Degraded`. |
 | `sync_revision` | The git commit SHA of the last successful sync. |
 | `operation_phase` | State of the last sync operation: `Succeeded`, `Failed`, `Running`, or empty if never synced. |
 | `operation_message` | Human-readable summary, e.g. `"3 created, 1 configured, 0 pruned"`. |
@@ -362,18 +365,30 @@ An Application syncs **project-scoped fleet definitions** — the same resource 
 5. Status:  update sync_status, health_status, resource_status, operation_*
 ```
 
-For automated sync (`auto_sync=true`), this lifecycle runs on a configurable polling interval (default: 3 minutes). For manual sync, it runs on `POST /applications/{id}/sync`.
+For automated sync (`auto_sync=true`), this lifecycle runs on a configurable polling interval (default: 3 minutes). For manual sync, it runs on `POST /api/ambient/v1/applications/{id}/sync`.
 
 ### Destination Resolution
 
 ```
 Application.destination_ambient_url set?
   |── null  ──> local Ambient (this API server's own service layer)
+  |            ──> controller uses its own service identity
   |── set   ──> remote Ambient (SDK client pointed at the URL)
-              ──> authentication via forwarded token or service credential
+              ──> credential_id MUST be set (FK → Credential)
+              ──> token resolved at sync time via GET /credentials/{id}/token
 ```
 
-When targeting a remote Ambient, the sync engine acts as an API client to the remote Ambient's REST API. This is different from how Sessions use kubeconfig for direct K8s provisioning — the Application works entirely at the Ambient API layer.
+When targeting a remote Ambient, the sync engine acts as an API client to the remote Ambient's REST API, authenticated via the stored Credential. The credential is resolved at sync time — the controller never caches tokens beyond a single sync cycle. This is different from how Sessions use kubeconfig for direct K8s provisioning — the Application works entirely at the Ambient API layer.
+
+### Unsupported Kinds in Sync
+
+The kustomize rendering engine (`acpctl apply -k`) supports additional resource kinds beyond what Application syncs (e.g., `Cluster`, `Ambient` — infrastructure inventory kinds). When a rendered kustomize tree contains documents of unsupported kinds, the sync engine **silently skips** them. Each skipped document is recorded in `resource_status` with a `Skipped` status:
+
+```json
+{"kind": "Ambient", "name": "staging-cluster", "status": "Skipped", "health": "Unknown", "message": "infrastructure inventory — not synced by Application"}
+```
+
+This is not an error. The sync operation proceeds with the supported kinds and reports `operation_phase: Succeeded` if all syncable resources apply cleanly.
 
 ### Multi-Environment Promotion
 
@@ -404,6 +419,7 @@ source:
   path: ambient/overlays/staging
 destination:
   ambient_url: https://ambient-staging.apps.example.com
+  credential: staging-ambient-pat   # Credential name; resolved to credential_id
   project: my-fleet
 auto_sync: false
 auto_prune: false
@@ -1136,8 +1152,8 @@ See [Security Spec — Credential Access via RoleBindings](../security/security.
 | `credential:owner` | Full CRUD on credentials the user created. Bind credentials to projects the user has `project:owner` on. |
 | `credential:viewer` | Read metadata (not token) on credentials bound to projects the user has access to. |
 | `credential:token-reader` | Fetch the raw token via `GET /credentials/{cred_id}/token`. Granted only to runner service accounts at session start. Human users do not hold this role. |
-| `gitops:admin` | Full CRUD on Applications; trigger sync/refresh |
-| `gitops:viewer` | Read-only on Applications and their status |
+| `gitops:admin` | Full CRUD on Applications; trigger sync/refresh. Platform-scoped — grantable only by `platform:admin`. |
+| `gitops:viewer` | Read-only on Applications and their status. Platform-scoped — grantable only by `platform:admin`. |
 
 ### Permission Matrix
 
@@ -1145,10 +1161,10 @@ See [Security Spec — Credential Access via RoleBindings](../security/security.
 |---|---|---|---|---|---|---|---|---|
 | `platform:admin` | full | full | full | full | full | full | full | full |
 | `platform:viewer` | read/list | read/list | read/list | — | read/list | read/list | read | read/list |
-| `project:owner` | full | full | full | full | manage bindings | — | read | project+agent bindings |
+| `project:owner` | full | full | full | full | manage bindings | local-only (own project) | read | project+agent bindings |
 | `project:editor` | read | create/update/ignite | read/list | send/read | — | — | read | — |
 | `project:viewer` | read | read/list | read/list | — | — | — | read | — |
-| `gitops:admin` | — | — | — | — | — | full | — | — |
+| `gitops:admin` | — | — | — | — | — | full (any destination) | — | — |
 | `gitops:viewer` | — | — | — | — | — | read/list | — | — |
 | `agent:operator` | — | update/ignite | read/list | send/read | — | — | — | — |
 | `agent:editor` | — | update | — | — | — | — | — | — |
@@ -1432,6 +1448,12 @@ This structure means you can define and compose bespoke agent suites — entire 
 | Kustomize engine shared between CLI and API server | The sync engine reuses the same kustomize rendering logic as `acpctl apply -k`. |
 | Git polling, not webhooks (v1) | Simplicity. Webhook-triggered refresh is a v2 optimization. |
 | Self-heal is opt-in | Default `false`. When enabled, the controller detects and reverts drift — useful for production fleets where UI-based changes should not persist. |
+| Sync engine bound by credential escalation rules | The sync engine can only create RoleBindings where the role level is at or below the level of the service credential it authenticates with. This prevents a compromised git repo from escalating RBAC in the destination project. The credential's effective role level sets the ceiling. A sync that attempts to create a binding above the ceiling fails with a per-resource `Forbidden` status in `resource_status`. |
+| Remote Ambient auth via stored Credential, not forwarded token | Async polling controllers (`auto_sync`) have no request context. The `credential_id` FK on Application provides the auth context. Token is resolved at sync time via `GET /credentials/{id}/token`, never cached beyond a single sync cycle. |
+| Project prune requires manual confirmation | `auto_prune` deletes Agents and sub-resources automatically, but never auto-prunes a Project. Project removal is permanently destructive (cascades through Agents, Sessions, Inbox, SessionMessages). Pruning a Project requires explicit `POST /sync` with `prune: true, prune_project: true`. |
+| `gitops:admin` is platform-scoped | Applications can target any Ambient instance, including production environments. Cross-environment reach exceeds project scope, so `gitops:admin` is grantable only by `platform:admin`. `project:owner` can create Applications where `destination_ambient_url` is null (local) and `destination_project` matches a project they own. This allows teams to self-serve GitOps for their own projects without platform-admin escalation. |
+| `gitops:admin` / `gitops:viewer` follow platform escalation chain | Only `platform:admin` can grant `gitops:admin` or `gitops:viewer`. `project:owner` cannot grant these roles. This matches the escalation pattern established for `credential:owner` and other platform-scoped roles in the security spec. |
+| Unsupported kinds silently skipped by sync engine | The kustomize engine supports all apply kinds (including Cluster, Ambient). The sync engine intentionally syncs only fleet definition kinds (Project, Agent, Credential, RoleBinding, Inbox). Documents of other kinds are silently skipped with a `Skipped` status in `resource_status`, not treated as errors. This allows shared kustomize overlays to contain infrastructure inventory alongside fleet definitions without breaking sync. |
 
 Security and credential design decisions (RBAC scoping, write-only tokens, role catalog rationale) are in the [Security Spec — Design Decisions](../security/security.spec.md#design-decisions).
 
