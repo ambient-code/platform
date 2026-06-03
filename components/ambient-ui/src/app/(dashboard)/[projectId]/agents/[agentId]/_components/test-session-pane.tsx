@@ -73,23 +73,9 @@ export function TestSessionPane({
   const chatItems = messages ? buildChatItems(messages.items) : []
   const liveTail = useLiveTail(chatItems.length)
 
-  // Stop running session on unmount or session change
   useEffect(() => {
     sessionIdRef.current = sessionId
   }, [sessionId])
-
-  useEffect(() => {
-    return () => {
-      // Cleanup: stop running session when component unmounts
-      const currentId = sessionIdRef.current
-      if (currentId) {
-        // Fire-and-forget stop — component is unmounting
-        stopSession.mutate(currentId)
-      }
-    }
-    // Only run cleanup on unmount — stopSession identity is stable via useMutation
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   // Stop running session on browser close/navigation
   useEffect(() => {

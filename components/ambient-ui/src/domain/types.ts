@@ -132,6 +132,7 @@ export type DomainSessionCreateRequest = {
   temperature?: number
   maxTokens?: number
   timeout?: number
+  annotations?: Record<string, string>
 }
 
 export type DomainAgentCreateRequest = {

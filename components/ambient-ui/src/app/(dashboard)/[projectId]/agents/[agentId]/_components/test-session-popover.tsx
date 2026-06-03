@@ -49,6 +49,7 @@ export function TestSessionPopover({ agent, onRunTest }: TestSessionPopoverProps
         agentId: agent.id,
         prompt,
         model,
+        annotations: { 'ambient-code.io/ui/test-session': 'true' },
       },
       {
         onSuccess: (session) => {
