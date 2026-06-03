@@ -4,11 +4,14 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import {
+  LayoutDashboard,
   Monitor,
   Bot,
   Moon,
   Sun,
 } from 'lucide-react'
+import { useSessions } from '@/queries/use-sessions'
+import { getAttentionItems } from '@/app/(dashboard)/[projectId]/_components/dashboard-helpers'
 import { ProjectSelector } from '@/components/project-selector'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,6 +23,7 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
@@ -31,6 +35,7 @@ type AppSidebarProps = {
 type NavItem = { readonly label: string; readonly icon: typeof Monitor; readonly href: string }
 
 const operateNavItems: readonly NavItem[] = [
+  { label: 'Dashboard', icon: LayoutDashboard, href: '' },
   { label: 'Sessions', icon: Monitor, href: 'sessions' },
 ]
 
@@ -43,11 +48,13 @@ function NavGroup({
   items,
   projectId,
   pathname,
+  badgeCounts,
 }: {
   label: string
   items: readonly NavItem[]
   projectId: string | null
   pathname: string
+  badgeCounts?: Record<string, number>
 }) {
   const isDisabled = !projectId
 
@@ -57,8 +64,15 @@ function NavGroup({
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((item) => {
-            const href = projectId ? `/${projectId}/${item.href}` : '#'
-            const isActive = pathname === href || pathname.startsWith(href + '/')
+            const href = projectId
+              ? item.href
+                ? `/${projectId}/${item.href}`
+                : `/${projectId}`
+              : '#'
+            const isActive = item.href
+              ? pathname === href || pathname.startsWith(href + '/')
+              : pathname === href
+            const badgeCount = badgeCounts?.[item.label] ?? 0
 
             return (
               <SidebarMenuItem key={item.label}>
@@ -80,6 +94,9 @@ function NavGroup({
                     </Link>
                   )}
                 </SidebarMenuButton>
+                {badgeCount > 0 && (
+                  <SidebarMenuBadge>{badgeCount}</SidebarMenuBadge>
+                )}
               </SidebarMenuItem>
             )
           })}
@@ -92,6 +109,13 @@ function NavGroup({
 export function AppSidebar({ projectId }: AppSidebarProps) {
   const pathname = usePathname()
   const { theme, setTheme } = useTheme()
+  const { data: sessionsData } = useSessions(projectId ?? '')
+
+  const operateBadges = (() => {
+    if (!sessionsData?.items) return undefined
+    const count = getAttentionItems(sessionsData.items).length
+    return count > 0 ? { Dashboard: count } : undefined
+  })()
 
   return (
     <Sidebar>
@@ -104,7 +128,7 @@ export function AppSidebar({ projectId }: AppSidebarProps) {
       </SidebarHeader>
 
       <SidebarContent>
-        <NavGroup label="Operate" items={operateNavItems} projectId={projectId} pathname={pathname} />
+        <NavGroup label="Operate" items={operateNavItems} projectId={projectId} pathname={pathname} badgeCounts={operateBadges} />
         <NavGroup label="Build" items={buildNavItems} projectId={projectId} pathname={pathname} />
       </SidebarContent>
 
