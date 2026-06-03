@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { Monitor } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -8,14 +8,21 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/empty-state'
 import { useSessions } from '@/queries/use-sessions'
 import { useAgentNames } from '@/queries/use-agents'
+import type { SessionPhase } from '@/domain/types'
 import { FleetTable } from './_components/fleet-table'
 import { FleetSummary } from './_components/fleet-summary'
 
 export default function FleetPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const [search, setSearch] = useState('')
+  const [phaseFilter, setPhaseFilter] = useState<SessionPhase | null>(null)
+  const [filteredCount, setFilteredCount] = useState<number | undefined>(undefined)
   const { data, isLoading, error } = useSessions(projectId)
   const { data: agentNames } = useAgentNames(projectId)
+
+  const handleFilteredCountChange = useCallback((count: number) => {
+    setFilteredCount(count)
+  }, [])
 
   if (error) {
     return (
@@ -60,14 +67,25 @@ export default function FleetPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Sessions</h1>
         <Input
-          placeholder="Filter sessions..."
+          placeholder="Filter by name, agent, or model..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           className="max-w-xs"
         />
       </div>
-      <FleetSummary sessions={sessions} />
-      <FleetTable sessions={sessions} searchFilter={search} agentNames={agentNames} />
+      <FleetSummary
+        sessions={sessions}
+        filteredCount={filteredCount}
+        activePhase={phaseFilter}
+        onPhaseFilter={setPhaseFilter}
+      />
+      <FleetTable
+        sessions={sessions}
+        searchFilter={search}
+        agentNames={agentNames}
+        phaseFilter={phaseFilter}
+        onFilteredCountChange={handleFilteredCountChange}
+      />
     </div>
   )
 }
