@@ -1,8 +1,8 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { AgentsPort } from '@/ports/agents'
-import type { ListParams } from '@/domain/types'
+import type { DomainAgentCreateRequest, DomainAgentUpdateRequest, ListParams } from '@/domain/types'
 import { createAgentsAdapter } from '@/adapters/sdk-agents'
 import { queryKeys } from './query-keys'
 
@@ -61,5 +61,43 @@ export function useAgentNames(projectId: string) {
     },
     enabled: !!projectId,
     staleTime: 60_000,
+  })
+}
+
+export function useCreateAgent(port?: AgentsPort) {
+  const queryClient = useQueryClient()
+  const adapter = port ?? getDefaultPort()
+
+  return useMutation({
+    mutationFn: ({ projectId, request }: { projectId: string; request: DomainAgentCreateRequest }) =>
+      adapter.create(projectId, request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.agents.all })
+    },
+  })
+}
+
+export function useUpdateAgent(port?: AgentsPort) {
+  const queryClient = useQueryClient()
+  const adapter = port ?? getDefaultPort()
+
+  return useMutation({
+    mutationFn: ({ agentId, request }: { agentId: string; request: DomainAgentUpdateRequest }) =>
+      adapter.update(agentId, request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.agents.all })
+    },
+  })
+}
+
+export function useDeleteAgent(port?: AgentsPort) {
+  const queryClient = useQueryClient()
+  const adapter = port ?? getDefaultPort()
+
+  return useMutation({
+    mutationFn: (agentId: string) => adapter.delete(agentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.agents.all })
+    },
   })
 }

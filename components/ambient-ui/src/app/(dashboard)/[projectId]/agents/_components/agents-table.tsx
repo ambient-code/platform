@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
+import { useRouter, useParams } from 'next/navigation'
 import {
   useReactTable,
   getCoreRowModel,
@@ -21,6 +22,9 @@ import {
 } from '@/components/ui/table'
 import type { DomainAgent } from '@/domain/types'
 import { formatRelativeTime } from '@/lib/format-timestamp'
+import { useTableKeyboardNav } from '@/hooks/use-table-keyboard-nav'
+import { cn } from '@/lib/utils'
+import { LifecycleBadge, getAgentLifecycle } from './lifecycle-badge'
 
 const col = createColumnHelper<DomainAgent>()
 
@@ -38,6 +42,14 @@ const agentColumns = [
         )}
       </div>
     ),
+  }),
+  col.display({
+    id: 'source',
+    header: 'Source',
+    cell: ({ row }) => {
+      const lifecycle = getAgentLifecycle(row.original.annotations)
+      return <LifecycleBadge lifecycle={lifecycle} />
+    },
   }),
   col.accessor('model', {
     header: 'Model',
@@ -85,12 +97,13 @@ const agentColumns = [
 export function AgentsTable({
   agents,
   searchFilter,
-  onSelectAgent,
 }: {
   agents: DomainAgent[]
   searchFilter: string
-  onSelectAgent: (agent: DomainAgent) => void
 }) {
+  const router = useRouter()
+  const { projectId } = useParams<{ projectId: string }>()
+  const containerRef = useRef<HTMLDivElement>(null)
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'lastActive', desc: true },
   ])
@@ -109,8 +122,33 @@ export function AgentsTable({
     onSortingChange: setSorting,
   })
 
+  const visibleRows = table.getRowModel().rows
+
+  const navigateToAgent = useCallback(
+    (agent: DomainAgent) => {
+      router.push(`/${projectId}/agents/${agent.id}`)
+    },
+    [router, projectId],
+  )
+
+  const handleKeyboardSelect = useCallback(
+    (index: number) => {
+      const row = visibleRows[index]
+      if (row) {
+        navigateToAgent(row.original)
+      }
+    },
+    [visibleRows, navigateToAgent],
+  )
+
+  const { selectedIndex } = useTableKeyboardNav({
+    rowCount: visibleRows.length,
+    onSelect: handleKeyboardSelect,
+    containerRef,
+  })
+
   return (
-    <div className="rounded-md border">
+    <div ref={containerRef} tabIndex={-1} className="rounded-md border outline-none">
       <Table>
         <TableHeader>
           {table.getHeaderGroups().map(headerGroup => (
@@ -146,16 +184,20 @@ export function AgentsTable({
           ))}
         </TableHeader>
         <TableBody>
-          {table.getRowModel().rows.length ? (
-            table.getRowModel().rows.map(row => (
+          {visibleRows.length ? (
+            visibleRows.map((row, rowIndex) => (
               <TableRow
                 key={row.id}
-                className="cursor-pointer group"
+                className={cn(
+                  'cursor-pointer group',
+                  rowIndex === selectedIndex && 'bg-muted ring-2 ring-ring ring-inset',
+                )}
                 tabIndex={0}
-                onClick={() => onSelectAgent(row.original)}
+                data-state={rowIndex === selectedIndex ? 'selected' : undefined}
+                onClick={() => navigateToAgent(row.original)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
-                    onSelectAgent(row.original)
+                    navigateToAgent(row.original)
                   }
                 }}
               >

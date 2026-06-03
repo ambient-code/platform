@@ -134,6 +134,24 @@ export type DomainSessionCreateRequest = {
   timeout?: number
 }
 
+export type DomainAgentCreateRequest = {
+  name: string
+  projectId: string
+  displayName?: string
+  model?: string
+  prompt?: string
+  repoUrl?: string
+  description?: string
+}
+
+export type DomainAgentUpdateRequest = {
+  displayName?: string
+  model?: string
+  prompt?: string
+  repoUrl?: string
+  description?: string
+}
+
 export type FeedbackItem = {
   id: string
   type: 'element' | 'region'

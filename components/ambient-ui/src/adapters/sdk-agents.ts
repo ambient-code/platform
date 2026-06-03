@@ -1,6 +1,13 @@
 import { AgentAPI } from 'ambient-sdk'
+import type { AgentCreateRequest, AgentPatchRequest } from 'ambient-sdk'
 import type { AgentsPort } from '@/ports/agents'
-import type { DomainAgent, ListParams, PaginatedResult } from '@/domain/types'
+import type {
+  DomainAgent,
+  DomainAgentCreateRequest,
+  DomainAgentUpdateRequest,
+  ListParams,
+  PaginatedResult,
+} from '@/domain/types'
 import { mapSdkAgentToDomain } from './mappers'
 import { getConfig } from './sdk-client'
 
@@ -21,6 +28,29 @@ function buildSdkListOptions(params?: ListParams) {
       : undefined,
     orderBy: params?.orderBy,
   }
+}
+
+function mapDomainCreateToSdk(request: DomainAgentCreateRequest): AgentCreateRequest {
+  const sdkReq: AgentCreateRequest = {
+    name: request.name,
+    project_id: request.projectId,
+  }
+  if (request.displayName) sdkReq.display_name = request.displayName
+  if (request.model) sdkReq.llm_model = request.model
+  if (request.prompt) sdkReq.prompt = request.prompt
+  if (request.repoUrl) sdkReq.repo_url = request.repoUrl
+  if (request.description) sdkReq.description = request.description
+  return sdkReq
+}
+
+function mapDomainUpdateToSdk(request: DomainAgentUpdateRequest): AgentPatchRequest {
+  const sdkReq: AgentPatchRequest = {}
+  if (request.displayName !== undefined) sdkReq.display_name = request.displayName
+  if (request.model !== undefined) sdkReq.llm_model = request.model
+  if (request.prompt !== undefined) sdkReq.prompt = request.prompt
+  if (request.repoUrl !== undefined) sdkReq.repo_url = request.repoUrl
+  if (request.description !== undefined) sdkReq.description = request.description
+  return sdkReq
 }
 
 export function createAgentsAdapter(): AgentsPort {
@@ -44,6 +74,25 @@ export function createAgentsAdapter(): AgentsPort {
       const api = new AgentAPI({ ...getConfig(), project: '_' })
       const agent = await api.get(agentId)
       return mapSdkAgentToDomain(agent)
+    },
+
+    async create(projectId: string, request: DomainAgentCreateRequest): Promise<DomainAgent> {
+      const api = getProjectScopedAPI(projectId)
+      const sdkReq = mapDomainCreateToSdk(request)
+      const agent = await api.create(sdkReq)
+      return mapSdkAgentToDomain(agent)
+    },
+
+    async update(agentId: string, request: DomainAgentUpdateRequest): Promise<DomainAgent> {
+      const api = new AgentAPI({ ...getConfig(), project: '_' })
+      const sdkReq = mapDomainUpdateToSdk(request)
+      const agent = await api.update(agentId, sdkReq)
+      return mapSdkAgentToDomain(agent)
+    },
+
+    async delete(agentId: string): Promise<void> {
+      const api = new AgentAPI({ ...getConfig(), project: '_' })
+      await api.delete(agentId)
     },
   }
 }
