@@ -20,8 +20,8 @@ export function CommandPalette() {
   const params = useParams<{ projectId: string }>()
   const projectId = params.projectId ?? ''
 
-  const { data: sessionsData } = useSessions(projectId)
-  const { data: agentsData } = useAgents(projectId)
+  const { data: sessionsData } = useSessions(open ? projectId : '')
+  const { data: agentsData } = useAgents(open ? projectId : '')
 
   const sessions = sessionsData?.items ?? []
   const agents = agentsData?.items ?? []
@@ -45,7 +45,7 @@ export function CommandPalette() {
 
   function handleSelectAgent(agentId: string) {
     setOpen(false)
-    router.push(`/${projectId}/agents?selected=${agentId}`)
+    router.push(`/${projectId}/agents/${agentId}`)
   }
 
   return (

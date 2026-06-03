@@ -142,7 +142,16 @@ export function AgentManifestTab({
     }
   }, [updateAgent, projectId, agent.id, displayName, model, prompt, repoUrl, description])
 
-  const yaml = useMemo(() => agentToYaml(agent), [agent])
+  const liveAgent = useMemo((): DomainAgent => ({
+    ...agent,
+    displayName: displayName || null,
+    model: model || null,
+    prompt: prompt || null,
+    repoUrl: repoUrl || null,
+    description: description || null,
+  }), [agent, displayName, model, prompt, repoUrl, description])
+
+  const yaml = useMemo(() => agentToYaml(liveAgent), [liveAgent])
 
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(yaml)

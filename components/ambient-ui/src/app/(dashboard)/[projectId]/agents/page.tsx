@@ -70,9 +70,9 @@ export default function AgentsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">Agents</h1>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <Input
             placeholder="Filter by name, model, or owner..."
             value={search}

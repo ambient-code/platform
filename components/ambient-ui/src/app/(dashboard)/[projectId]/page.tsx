@@ -23,7 +23,7 @@ export default function DashboardPage() {
       <div className="space-y-6">
         <h1 className="text-xl font-semibold">Dashboard</h1>
         <p className="text-sm text-destructive">
-          Failed to load dashboard: {error.message}
+          Failed to load dashboard data. Please try again later.
         </p>
       </div>
     )

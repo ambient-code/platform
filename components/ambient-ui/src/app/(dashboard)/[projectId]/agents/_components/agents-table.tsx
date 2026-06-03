@@ -195,11 +195,6 @@ export function AgentsTable({
                 tabIndex={0}
                 data-state={rowIndex === selectedIndex ? 'selected' : undefined}
                 onClick={() => navigateToAgent(row.original)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    navigateToAgent(row.original)
-                  }
-                }}
               >
                 {row.getVisibleCells().map(cell => (
                   <TableCell key={cell.id}>

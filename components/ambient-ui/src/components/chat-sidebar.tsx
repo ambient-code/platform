@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { X, Plus, PanelRightClose, PanelRightOpen, GripVertical, ChevronUp, ChevronDown, RotateCcw, Save, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
@@ -15,7 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { useChatSidebar, type SidebarSession } from '@/components/chat-sidebar-context'
+import { useChatSidebar, MAX_SESSIONS, type SidebarSession } from '@/components/chat-sidebar-context'
 import {
   ChatItemsList,
   ChatInput,
@@ -211,10 +212,15 @@ function NewSessionButton({ projectId }: { projectId: string }) {
   const [open, setOpen] = useState(false)
   const { data: agentsData } = useAgents(projectId)
   const createSession = useCreateSession()
-  const { openSidebar } = useChatSidebar()
+  const { openSidebar, canAddSession } = useChatSidebar()
   const agents = agentsData?.items ?? []
 
   const handleSelect = useCallback((agent: { id: string; name: string; displayName: string | null }) => {
+    if (!canAddSession()) {
+      toast.warning(`Maximum of ${MAX_SESSIONS} sidebar sessions reached. Close one first.`)
+      setOpen(false)
+      return
+    }
     const sessionName = `${agent.displayName ?? agent.name}-${Date.now()}`
     createSession.mutate(
       { name: sessionName, projectId, agentId: agent.id },
@@ -225,7 +231,7 @@ function NewSessionButton({ projectId }: { projectId: string }) {
         },
       },
     )
-  }, [createSession, projectId, openSidebar])
+  }, [createSession, projectId, openSidebar, canAddSession])
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -358,7 +364,13 @@ export function ChatSidebar() {
   // Escape to close
   useEffect(() => {
     if (!isOpen) return
-    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') closeSidebar() }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      const active = document.activeElement
+      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return
+      if (document.querySelector('[role="dialog"]')) return
+      closeSidebar()
+    }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, closeSidebar])

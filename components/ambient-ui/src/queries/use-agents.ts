@@ -41,7 +41,7 @@ export function useAgent(
 ) {
   const adapter = port ?? getDefaultPort()
   return useQuery({
-    queryKey: queryKeys.agents.detail(agentId),
+    queryKey: queryKeys.agents.detail(projectId, agentId),
     queryFn: () => adapter.get(projectId, agentId),
     enabled: !!projectId && !!agentId,
   })
@@ -85,8 +85,8 @@ export function useUpdateAgent(port?: AgentsPort) {
   return useMutation({
     mutationFn: ({ projectId, agentId, request }: { projectId: string; agentId: string; request: DomainAgentUpdateRequest }) =>
       adapter.update(projectId, agentId, request),
-    onSuccess: (updatedAgent, { agentId }) => {
-      queryClient.setQueryData(queryKeys.agents.detail(agentId), updatedAgent)
+    onSuccess: (updatedAgent, { projectId, agentId }) => {
+      queryClient.setQueryData(queryKeys.agents.detail(projectId, agentId), updatedAgent)
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.lists() })
     },
   })

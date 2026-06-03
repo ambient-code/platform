@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, type ReactNode } from 'react'
 
-const MAX_SESSIONS = 8
+export const MAX_SESSIONS = 8
 
 export type SidebarSession = {
   sessionId: string
@@ -27,6 +27,7 @@ type ChatSidebarState = {
   sessions: SidebarSession[]
   activeSessionId: string | null
   isOpen: boolean
+  canAddSession: () => boolean
   openSidebar: (sessionId: string, sessionName?: string) => void
   openTestSidebar: (opts: OpenTestOpts) => void
   closeSidebar: () => void
@@ -54,6 +55,8 @@ export function ChatSidebarProvider({ children }: { children: ReactNode }) {
     return id ? [{ sessionId: id, mode: 'chat' as const }] : []
   })
   const [activeSessionId, setActiveSessionId] = useState<string | null>(readChatParam)
+
+  const canAddSession = useCallback(() => sessions.length < MAX_SESSIONS, [sessions.length])
 
   const addIfAbsent = useCallback((entry: SidebarSession) => {
     setSessions(prev => {
@@ -114,8 +117,8 @@ export function ChatSidebarProvider({ children }: { children: ReactNode }) {
 
   const isOpen = sessions.length > 0
   const value = useMemo<ChatSidebarState>(
-    () => ({ sessions, activeSessionId, isOpen, openSidebar, openTestSidebar, closeSidebar, closeSession, switchSession }),
-    [sessions, activeSessionId, isOpen, openSidebar, openTestSidebar, closeSidebar, closeSession, switchSession],
+    () => ({ sessions, activeSessionId, isOpen, canAddSession, openSidebar, openTestSidebar, closeSidebar, closeSession, switchSession }),
+    [sessions, activeSessionId, isOpen, canAddSession, openSidebar, openTestSidebar, closeSidebar, closeSession, switchSession],
   )
 
   return <ChatSidebarContext.Provider value={value}>{children}</ChatSidebarContext.Provider>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useParams } from 'next/navigation'
 import type { LucideIcon } from 'lucide-react'
 import {
   Pin, Tag, Ticket, GitPullRequest, GitBranch, FolderGit2,
@@ -52,6 +53,7 @@ export function AgentOverviewTab({
   agent: DomainAgent
   lifecycle: AgentLifecycle
 }) {
+  const { projectId } = useParams<{ projectId: string }>()
   const isGitOps = lifecycle === 'gitops'
   const updateAgent = useUpdateAgent()
 
@@ -76,7 +78,7 @@ export function AgentOverviewTab({
     setSaveSuccess(false)
     try {
       await updateAgent.mutateAsync({
-        projectId: agent.projectId ?? '',
+        projectId,
         agentId: agent.id,
         request: {
           displayName: displayName || undefined,
@@ -91,7 +93,7 @@ export function AgentOverviewTab({
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save changes.')
     }
-  }, [updateAgent, agent.id, displayName, model, prompt, repoUrl, description])
+  }, [updateAgent, projectId, agent.id, displayName, model, prompt, repoUrl, description])
 
   const annotationEntries = Object.entries(agent.annotations)
 

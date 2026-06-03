@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { Square, Trash2, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -34,35 +35,29 @@ export function BulkActionBar({
   const stoppableSessions = selectedSessions.filter(s => STOPPABLE_PHASES.has(s.phase))
   const count = selectedSessions.length
 
-  const handleConfirmStop = useCallback(() => {
+  const handleConfirmStop = useCallback(async () => {
     const toStop = stoppableSessions
-    let remaining = toStop.length
-    for (const session of toStop) {
-      stopSession.mutate(session.id, {
-        onSettled: () => {
-          remaining -= 1
-          if (remaining === 0) {
-            setStopDialogOpen(false)
-            onClearSelection()
-          }
-        },
-      })
+    const results = await Promise.allSettled(
+      toStop.map(session => stopSession.mutateAsync(session.id)),
+    )
+    const failedCount = results.filter(r => r.status === 'rejected').length
+    if (failedCount > 0) {
+      toast.error(`Failed to stop ${failedCount} of ${toStop.length} sessions.`)
     }
+    setStopDialogOpen(false)
+    onClearSelection()
   }, [stoppableSessions, stopSession, onClearSelection])
 
-  const handleConfirmDelete = useCallback(() => {
-    let remaining = selectedSessions.length
-    for (const session of selectedSessions) {
-      deleteSession.mutate(session.id, {
-        onSettled: () => {
-          remaining -= 1
-          if (remaining === 0) {
-            setDeleteDialogOpen(false)
-            onClearSelection()
-          }
-        },
-      })
+  const handleConfirmDelete = useCallback(async () => {
+    const results = await Promise.allSettled(
+      selectedSessions.map(session => deleteSession.mutateAsync(session.id)),
+    )
+    const failedCount = results.filter(r => r.status === 'rejected').length
+    if (failedCount > 0) {
+      toast.error(`Failed to delete ${failedCount} of ${selectedSessions.length} sessions.`)
     }
+    setDeleteDialogOpen(false)
+    onClearSelection()
   }, [selectedSessions, deleteSession, onClearSelection])
 
   if (count === 0) return null

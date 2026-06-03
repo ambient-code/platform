@@ -14,7 +14,7 @@ const ACTIVE_PHASES: ReadonlySet<SessionPhase> = new Set([
   'Stopping',
 ])
 
-const COMPLETED_PHASES: ReadonlySet<SessionPhase> = new Set([
+const TERMINAL_PHASES: ReadonlySet<SessionPhase> = new Set([
   'Completed',
   'Failed',
   'Stopped',
@@ -60,7 +60,7 @@ export function getAttentionItems(sessions: DomainSession[]): AttentionItem[] {
     }
 
     const needsInput = session.annotations[NEEDS_INPUT_KEY]
-    if (needsInput) {
+    if (needsInput && needsInput !== 'false') {
       items.push({ session, reason: 'needs-input' })
     }
   }
@@ -120,7 +120,7 @@ const RECENT_ACTIVITY_LIMIT = 10
 /** Recently completed sessions for the activity feed */
 export function getRecentActivity(sessions: DomainSession[]): RecentActivityItem[] {
   const completed = sessions
-    .filter(s => COMPLETED_PHASES.has(s.phase))
+    .filter(s => TERMINAL_PHASES.has(s.phase))
     .sort((a, b) => {
       const aTime = a.completionTime ?? a.updatedAt
       const bTime = b.completionTime ?? b.updatedAt

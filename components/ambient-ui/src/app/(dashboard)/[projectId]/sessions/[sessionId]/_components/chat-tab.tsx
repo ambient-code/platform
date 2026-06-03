@@ -19,8 +19,8 @@ import { useLiveTail, LiveIndicator } from './live-tail-indicator'
 
 export function ChatTab({ session }: { session: DomainSession }) {
   const { data, isLoading, error } = useSessionMessages(session.id)
-  const { activeSessionId, openSidebar, closeSidebar } = useChatSidebar()
-  const isInSidebar = activeSessionId === session.id
+  const { sessions: sidebarSessions, openSidebar, closeSidebar } = useChatSidebar()
+  const isInSidebar = sidebarSessions.some(s => s.sessionId === session.id)
 
   const chatItems = useMemo(() => {
     return buildChatItems(data?.items ?? [])
