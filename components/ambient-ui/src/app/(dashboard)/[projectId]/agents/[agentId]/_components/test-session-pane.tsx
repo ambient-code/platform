@@ -21,10 +21,11 @@ import {
 } from '@/app/(dashboard)/[projectId]/sessions/[sessionId]/_components/live-tail-indicator'
 import {
   ChatItemsList,
+  ChatInput,
   buildChatItems,
 } from '@/components/chat-messages'
 import { useSessionMessages } from '@/queries/use-session-messages'
-import { useSession, useStopSession, useDeleteSession } from '@/queries/use-sessions'
+import { useSession, useStopSession, useDeleteSession, useCreateSession } from '@/queries/use-sessions'
 import { formatRelativeTime } from '@/lib/format-timestamp'
 import type { SessionPhase } from '@/domain/types'
 
@@ -42,9 +43,14 @@ type TestHistoryEntry = {
 type TestSessionPaneProps = {
   sessionId: string
   sessionName: string
+  projectId: string
+  agentId: string
+  agentName: string
+  agentPrompt: string | null
+  agentModel: string | null
   history: TestHistoryEntry[]
   onClose: () => void
-  onRerun: () => void
+  onRunTest: (sessionId: string, name: string) => void
   onSelectHistory: (entry: TestHistoryEntry) => void
 }
 
@@ -53,9 +59,14 @@ export type { TestHistoryEntry }
 export function TestSessionPane({
   sessionId,
   sessionName,
+  projectId,
+  agentId,
+  agentName,
+  agentPrompt,
+  agentModel,
   history,
   onClose,
-  onRerun,
+  onRunTest,
   onSelectHistory,
 }: TestSessionPaneProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -66,6 +77,7 @@ export function TestSessionPane({
   const { data: messages, isLoading: messagesLoading } = useSessionMessages(sessionId)
   const stopSession = useStopSession()
   const deleteSession = useDeleteSession()
+  const createSession = useCreateSession()
 
   const phase = session?.phase ?? 'Pending'
   const isActive = RUNNING_PHASES.has(phase)
@@ -120,14 +132,26 @@ export function TestSessionPane({
   }, [sessionId, isActive, stopSession, deleteSession, onClose])
 
   const handleRerun = useCallback(() => {
-    if (isActive) {
-      stopSession.mutate(sessionId, {
-        onSettled: () => onRerun(),
-      })
-    } else {
-      onRerun()
+    const doCreate = () => {
+      const newName = `test-${agentName}-${Date.now()}`
+      createSession.mutate(
+        {
+          name: newName,
+          projectId,
+          agentId,
+          prompt: agentPrompt ?? undefined,
+          model: agentModel ?? undefined,
+          annotations: { 'ambient-code.io/ui/test-session': 'true' },
+        },
+        { onSuccess: (s) => onRunTest(s.id, s.name) },
+      )
     }
-  }, [sessionId, isActive, stopSession, onRerun])
+    if (isActive) {
+      stopSession.mutate(sessionId, { onSettled: doCreate })
+    } else {
+      doCreate()
+    }
+  }, [sessionId, isActive, stopSession, createSession, projectId, agentId, agentName, agentPrompt, agentModel, onRunTest])
 
   const visibleHistory = history.slice(0, MAX_HISTORY)
 
@@ -196,6 +220,9 @@ export function TestSessionPane({
           onClick={liveTail.scrollToBottom}
         />
       </div>
+
+      {/* Chat input */}
+      <ChatInput sessionId={sessionId} phase={phase} disabled={false} />
 
       {/* History accordion */}
       {visibleHistory.length > 0 && (

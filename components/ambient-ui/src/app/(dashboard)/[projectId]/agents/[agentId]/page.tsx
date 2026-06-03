@@ -64,24 +64,6 @@ export default function AgentDetailPage() {
     setTestSessionName('')
   }, [])
 
-  const handleRerun = useCallback(() => {
-    // Push current session to history, then open popover for new run
-    // The popover will call handleRunTest which handles the swap
-    if (testSessionId && testSessionName) {
-      setTestHistory((prev) => {
-        const entry: TestHistoryEntry = {
-          id: testSessionId,
-          name: testSessionName,
-          phase: 'Stopped',
-          createdAt: new Date().toISOString(),
-        }
-        return [entry, ...prev].slice(0, MAX_HISTORY)
-      })
-    }
-    setTestSessionId(null)
-    setTestSessionName('')
-  }, [testSessionId, testSessionName])
-
   const handleSelectHistory = useCallback((entry: TestHistoryEntry) => {
     // Push current active session to history if there is one
     if (testSessionId && testSessionName) {
@@ -156,9 +138,14 @@ export default function AgentDetailPage() {
             <TestSessionPane
               sessionId={testSessionId}
               sessionName={testSessionName}
+              projectId={projectId}
+              agentId={agentId}
+              agentName={agent.name}
+              agentPrompt={agent.prompt}
+              agentModel={agent.model}
               history={testHistory}
               onClose={handleCloseTest}
-              onRerun={handleRerun}
+              onRunTest={handleRunTest}
               onSelectHistory={handleSelectHistory}
             />
           </ResizablePanel>
