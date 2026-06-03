@@ -129,7 +129,7 @@ export default function AgentDetailPage() {
       </div>
 
       {hasTestSession && (
-        <div className="w-[45%] shrink-0 sticky top-0 h-screen">
+        <div className="w-[45%] shrink-0 sticky top-14 h-[calc(100vh-3.5rem)]">
           <TestSessionPane
             sessionId={testSessionId}
             sessionName={testSessionName}
