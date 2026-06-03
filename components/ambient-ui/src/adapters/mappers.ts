@@ -120,11 +120,11 @@ function emptyToNull(value: string): string | null {
   return value || null
 }
 
-function numberOrNull(value: number): number | null {
+function numberOrNull(value: number | null | undefined): number | null {
   return value === undefined || value === null ? null : value
 }
 
-function positiveNumberOrNull(value: number): number | null {
+function positiveNumberOrNull(value: number | null | undefined): number | null {
   return value === undefined || value === null || value === 0 ? null : value
 }
 

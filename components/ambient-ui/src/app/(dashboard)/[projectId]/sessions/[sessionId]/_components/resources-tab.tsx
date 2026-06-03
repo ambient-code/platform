@@ -73,7 +73,7 @@ function mergeRepos(
 }
 
 function baseNameFromUrl(url: string): string {
-  const segments = url.replace(/\.git$/, '').split('/')
+  const segments = normalizeUrl(url).split('/').filter(Boolean)
   return segments[segments.length - 1] || url
 }
 
