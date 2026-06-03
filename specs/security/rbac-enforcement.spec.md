@@ -123,6 +123,9 @@ Auto-provisioning SHALL NOT grant any role bindings. The new user starts with ze
 permissions and gains access by creating a project or receiving a grant from an
 existing owner.
 
+Auto-provisioning SHALL only apply to JWT-authenticated human users. Service callers
+authenticating with the platform service token SHALL NOT trigger user auto-provisioning.
+
 #### Scenario: First-time user auto-provisioned
 
 - GIVEN a user authenticates via SSO for the first time
@@ -138,6 +141,13 @@ existing owner.
 - WHEN the user authenticates again
 - THEN no duplicate User record is created
 - AND the existing record is used
+
+#### Scenario: Service caller does not trigger auto-provisioning
+
+- GIVEN a request authenticates with the platform service token
+- WHEN the request is processed
+- THEN no User record is created
+- AND the request bypasses RBAC as a service caller
 
 ### Requirement: Bootstrap via Project Creation
 
@@ -248,19 +258,25 @@ admins can be granted access through the API by existing admins.
 ### Requirement: RoleBinding Mutation Authorization
 
 Creating, updating, and deleting role bindings SHALL be authorized based on the
-caller's existing bindings. A user SHALL only be able to grant access at or below
-their own scope level. This prevents privilege escalation.
+caller's existing bindings. A user SHALL only be able to grant roles **strictly
+below** their own level in the role hierarchy. This prevents privilege escalation —
+no user can mint a peer at their own tier. The sole exception is `platform:admin`,
+which MAY grant `platform:admin` to others (since there is no higher role).
 
-The role hierarchy for escalation checks:
+The role hierarchy for escalation checks (higher number = lower privilege):
 
-- `platform:admin` > all other roles
-- `project:owner` > `project:editor` > `project:viewer`
-- `agent:operator` > `agent:observer`
-- `credential:owner` > `credential:reader` > `credential:token-reader`
+| Level | Roles |
+|-------|-------|
+| 0 | `platform:admin` (may grant at own level) |
+| 1 | `project:owner`, `credential:owner` |
+| 2 | `project:editor`, `agent:operator`, `credential:viewer` |
+| 3 | `project:viewer`, `agent:observer` |
 
-A user MAY grant any role that is at or below the highest role they hold in the
-same scope. A `project:owner` on proj-1 MAY grant `project:editor` or
-`project:viewer` on proj-1, but not `project:owner`.
+Platform-internal roles (`agent:runner`, `credential:token-reader`) SHALL NOT be
+grantable via `POST /role_bindings`. These roles are managed exclusively by the
+platform (e.g., the operator grants `agent:runner` to session service accounts at
+session start, and `credential:token-reader` to runner pods). Attempting to grant
+a platform-internal role via the API SHALL return 403 Forbidden.
 
 #### Scenario: Project owner grants project editor
 
@@ -268,6 +284,20 @@ same scope. A `project:owner` on proj-1 MAY grant `project:editor` or
 - WHEN user A calls `POST /role_bindings` with `role=project:editor`, `scope=project`, `project_id=proj-1`, `user_id=B`
 - THEN the binding is created
 - AND user B gains editor access to proj-1
+
+#### Scenario: Project owner cannot grant project owner
+
+- GIVEN user A has `project:owner` on proj-1
+- WHEN user A calls `POST /role_bindings` with `role=project:owner`, `scope=project`, `project_id=proj-1`, `user_id=B`
+- THEN the request returns 403 Forbidden
+- AND owners cannot mint peers at their own level
+
+#### Scenario: Platform admin grants platform admin
+
+- GIVEN user A has `platform:admin`
+- WHEN user A calls `POST /role_bindings` with `role=platform:admin`, `scope=global`, `user_id=B`
+- THEN the binding is created
+- AND this is the sole exception to the "strictly below" rule
 
 #### Scenario: Project owner cannot grant on other projects
 
@@ -282,6 +312,13 @@ same scope. A `project:owner` on proj-1 MAY grant `project:editor` or
 - THEN the request returns 403 Forbidden
 - AND editors cannot escalate to owner
 
+#### Scenario: Granting platform-internal role rejected
+
+- GIVEN user A has `platform:admin`
+- WHEN user A calls `POST /role_bindings` with `role=agent:runner`
+- THEN the request returns 403 Forbidden
+- AND platform-internal roles are not user-grantable
+
 #### Scenario: Project owner can revoke bindings in their project
 
 - GIVEN user A has `project:owner` on proj-1
@@ -290,12 +327,19 @@ same scope. A `project:owner` on proj-1 MAY grant `project:editor` or
 - THEN the binding is deleted
 - AND user B loses viewer access to proj-1
 
-#### Scenario: Cannot delete own last owner binding
+#### Scenario: Cannot delete own last owner binding on a project
 
 - GIVEN user A is the sole `project:owner` on proj-1
 - WHEN user A calls `DELETE /role_bindings/{own-owner-binding}`
 - THEN the request returns 409 Conflict
 - AND the system prevents orphaned projects with no owner
+
+#### Scenario: Cannot delete sole credential owner binding
+
+- GIVEN user A is the sole `credential:owner` on credential C
+- WHEN user A calls `DELETE /role_bindings/{own-credential-owner-binding}`
+- THEN the request returns 409 Conflict
+- AND the system prevents orphaned credentials with no owner
 
 ### Requirement: Auth-Exempt Endpoints
 
@@ -333,6 +377,13 @@ and evaluate permissions using the same scope-aware logic as the HTTP middleware
 - WHEN user A opens a gRPC `WatchSessions` stream
 - THEN no session events are streamed
 - AND the stream remains open but idle (no error for watches)
+
+#### Scenario: Idle watch stream resource limit
+
+- GIVEN a caller opens multiple gRPC watch streams with no matching bindings
+- WHEN the streams have been idle (no events delivered) beyond the server's idle timeout
+- THEN the server SHALL close idle streams to prevent connection exhaustion
+- AND the client MAY reconnect
 
 #### Scenario: gRPC inbox push authorized
 
@@ -451,8 +502,10 @@ This prevents authorization probing attacks.
 | List endpoints return filtered results, not 403 | Returning 403 on list endpoints breaks pagination and discoverability. An empty list is the correct response when the user has no access. This matches K8s behavior (RBAC-filtered list responses). |
 | Service callers bypass RBAC | The control plane and operator are trusted infrastructure. They reconcile state on behalf of the platform. Requiring them to hold user-level bindings would create circular dependencies and make reconciliation fragile. |
 | No deny rules | Union-only permission model. Simpler mental model, simpler evaluation. If a user should not have access, don't grant a binding. Deny rules create ordering problems and make debugging harder. |
-| Cannot delete last owner binding | Prevents orphaned projects. An ownerless project cannot be administered — no one can grant access, no one can delete it. The system enforces at least one owner per project. |
-| Editors cannot grant owner | Prevents privilege escalation. Only owners (and platform admins) can mint new owners. Editors can grant editor and below within their scope. |
+| Cannot delete last owner binding (projects and credentials) | Prevents orphaned resources. An ownerless project or credential cannot be administered — no one can grant access, update, or delete it. The system enforces at least one owner per project and per credential. Platform admins can always intervene as a recovery path. |
+| Strictly-below escalation with platform:admin exception | Users can only grant roles strictly below their own level. This prevents peer-minting (an owner creating another owner). `platform:admin` is the sole exception — since there is no higher role, admins must be able to grant admin to others. |
+| Platform-internal roles not user-grantable | `agent:runner` and `credential:token-reader` are managed by the platform (operator grants them at session start). Allowing users to grant these roles would bypass the intended runtime-only access model and create security gaps. |
+| Idle gRPC watch streams are closed by the server | An unauthenticated or unauthorized caller could open unlimited idle watch streams to exhaust server connections. The server closes streams that have been idle beyond a timeout to bound resource usage. |
 | gRPC uses same evaluation as HTTP | One authorization model, not two. The gRPC interceptor uses the same evaluation logic as the HTTP middleware. Prevents divergence and bypass via protocol switching. |
 | Tests exercise real RBAC | Disabling the middleware in tests means RBAC bugs ship to production undetected. Tests should create bindings explicitly and verify enforcement. The test helper should make this ergonomic, not skip it. |
 | Configuration flag for rollout | Gradual enablement. Operators can seed admins and verify behavior in staging before enabling in production. No big-bang cutover. |
