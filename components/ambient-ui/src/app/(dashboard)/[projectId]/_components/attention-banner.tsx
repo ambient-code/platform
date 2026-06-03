@@ -48,10 +48,10 @@ export function AttentionBanner({ items, projectId }: AttentionBannerProps) {
             <li key={item.session.id}>
               <Link
                 href={`/${projectId}/sessions/${item.session.id}`}
-                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent"
+                className="flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent"
               >
                 <Icon className="size-4 shrink-0 text-muted-foreground" />
-                <span className="truncate font-medium text-link hover:text-link-hover">
+                <span className="min-w-0 truncate font-medium text-link hover:text-link-hover">
                   {item.session.name}
                 </span>
                 <Badge variant={config.variant} className="ml-auto shrink-0 text-xs">

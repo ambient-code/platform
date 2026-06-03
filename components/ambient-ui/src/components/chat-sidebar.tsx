@@ -1,8 +1,8 @@
 'use client'
 
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
-import { X, PanelRightClose, PanelRightOpen, GripVertical, ChevronUp, ChevronDown, RotateCcw, Save, Trash2 } from 'lucide-react'
+import { useRouter, useParams } from 'next/navigation'
+import { X, Plus, PanelRightClose, PanelRightOpen, GripVertical, ChevronUp, ChevronDown, RotateCcw, Save, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
@@ -22,7 +22,9 @@ import {
   buildChatItems,
   PhaseIndicator,
 } from '@/components/chat-messages'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useSession, useStopSession, useDeleteSession, useCreateSession } from '@/queries/use-sessions'
+import { useAgents } from '@/queries/use-agents'
 import { useSessionMessages } from '@/queries/use-session-messages'
 import { useLiveTail, LiveIndicator } from '@/app/(dashboard)/[projectId]/sessions/[sessionId]/_components/live-tail-indicator'
 import { getPhaseStyle } from '@/lib/status-colors'
@@ -55,19 +57,20 @@ function PhaseDot({ phase, active, size = 'sm' }: { phase: string; active?: bool
   )
 }
 
-/** Tab strip shown when multiple sessions are open */
 function TabStrip({
   sessions,
   activeId,
   onSwitch,
   onClose,
   getPhase,
+  onNewSession,
 }: {
   sessions: SidebarSession[]
   activeId: string | null
   onSwitch: (id: string) => void
   onClose: (id: string) => void
   getPhase: (id: string) => string
+  onNewSession: () => void
 }) {
   return (
     <div
@@ -105,6 +108,21 @@ function TabStrip({
           </button>
         )
       })}
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="shrink-0 px-2 py-1 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+              onClick={onNewSession}
+              aria-label="New session"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>New session</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
   )
 }
@@ -203,12 +221,71 @@ function TestToolbar({ session, activeSession }: { session: { phase: string; id:
   )
 }
 
+function NewSessionPopover({
+  open,
+  onOpenChange,
+  projectId,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  projectId: string
+}) {
+  const { data: agentsData } = useAgents(projectId)
+  const createSession = useCreateSession()
+  const { openSidebar } = useChatSidebar()
+  const agents = agentsData?.items ?? []
+
+  const handleSelect = useCallback((agent: { id: string; name: string; displayName: string | null }) => {
+    const sessionName = `${agent.displayName ?? agent.name}-${Date.now()}`
+    createSession.mutate(
+      { name: sessionName, projectId, agentId: agent.id },
+      {
+        onSuccess: (session) => {
+          openSidebar(session.id, session.name)
+          onOpenChange(false)
+        },
+      },
+    )
+  }, [createSession, projectId, openSidebar, onOpenChange])
+
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild><span /></PopoverTrigger>
+      <PopoverContent className="w-56 p-1" align="start" side="bottom">
+        <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+          Select an agent
+        </div>
+        {agents.length === 0 && (
+          <div className="px-2 py-3 text-xs text-muted-foreground text-center">No agents found</div>
+        )}
+        {agents.map((agent) => (
+          <button
+            key={agent.id}
+            type="button"
+            className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted transition-colors text-left"
+            onClick={() => handleSelect(agent)}
+            disabled={createSession.isPending}
+          >
+            <span className="truncate">{agent.displayName ?? agent.name}</span>
+            {agent.model && (
+              <span className="ml-auto text-[10px] text-muted-foreground shrink-0">{agent.model}</span>
+            )}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 export function ChatSidebar() {
   const { sessions, activeSessionId, isOpen, closeSidebar, closeSession, switchSession } = useChatSidebar()
   const router = useRouter()
+  const params = useParams<{ projectId?: string }>()
+  const projectId = params?.projectId ?? ''
   const [collapsed, setCollapsed] = useState(false)
   const [width, setWidth] = useState(DEFAULT_WIDTH)
   const [showScrollToTop, setShowScrollToTop] = useState(false)
+  const [newSessionOpen, setNewSessionOpen] = useState(false)
   const isDragging = useRef(false)
   const startX = useRef(0)
   const startWidth = useRef(DEFAULT_WIDTH)
@@ -369,10 +446,8 @@ export function ChatSidebar() {
         <GripVertical className="h-4 w-4 text-muted-foreground/50 -ml-1.5 pointer-events-none" aria-hidden="true" />
       </div>
 
-      {/* Tab strip (multi-session) */}
-      {sessions.length > 1 && (
-        <TabStrip sessions={sessions} activeId={activeSessionId} onSwitch={switchSession} onClose={closeSession} getPhase={getPhase} />
-      )}
+      {/* Tab strip */}
+      <TabStrip sessions={sessions} activeId={activeSessionId} onSwitch={switchSession} onClose={closeSession} getPhase={getPhase} onNewSession={() => setNewSessionOpen(true)} />
 
       {/* Header */}
       <div className="flex items-center gap-2 border-b px-3 py-2 min-h-[48px]">
@@ -393,30 +468,14 @@ export function ChatSidebar() {
           </div>
         </button>
         <TooltipProvider delayDuration={300}>
-          <div className="flex items-center gap-1">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setCollapsed(true)} aria-label="Hide sidebar">
-                  <PanelRightClose className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Hide sidebar</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() => sessions.length === 1 ? closeSidebar() : closeSession(activeSessionId)}
-                  aria-label={sessions.length === 1 ? 'Close sidebar' : 'Close this session'}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{sessions.length === 1 ? 'Close sidebar' : 'Close this session'}</TooltipContent>
-            </Tooltip>
-          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setCollapsed(true)} aria-label="Collapse sidebar">
+                <PanelRightClose className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Collapse sidebar</TooltipContent>
+          </Tooltip>
         </TooltipProvider>
       </div>
 
@@ -469,6 +528,11 @@ export function ChatSidebar() {
 
       {/* Input area */}
       <ChatInput sessionId={activeSessionId} phase={sessionPhase} disabled={messagesLoading} />
+
+      {/* New session popover */}
+      {projectId && (
+        <NewSessionPopover open={newSessionOpen} onOpenChange={setNewSessionOpen} projectId={projectId} />
+      )}
     </aside>
   )
 }

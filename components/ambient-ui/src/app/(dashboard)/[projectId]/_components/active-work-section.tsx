@@ -30,10 +30,10 @@ function WorkItemCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <Icon className="size-4 text-muted-foreground" />
-          <span>{group.ref.key}</span>
-          <Badge variant="outline" className="ml-auto text-xs">
+        <CardTitle className="flex min-w-0 items-center gap-2 text-sm">
+          <Icon className="size-4 shrink-0 text-muted-foreground" />
+          <span className="truncate">{group.ref.key}</span>
+          <Badge variant="outline" className="ml-auto shrink-0 text-xs">
             {config.label}
           </Badge>
         </CardTitle>
@@ -44,7 +44,7 @@ function WorkItemCard({
             <li key={session.id}>
               <Link
                 href={`/${projectId}/sessions/${session.id}`}
-                className="flex items-center gap-2 text-sm"
+                className="flex min-w-0 items-center gap-2 text-sm"
               >
                 <PhaseBadge phase={session.phase} />
                 <span className="truncate text-link hover:text-link-hover">
@@ -73,11 +73,11 @@ function SessionCard({
 }) {
   return (
     <Card className="py-4">
-      <CardContent className="flex items-center gap-3">
+      <CardContent className="flex items-center gap-3 overflow-hidden">
         <Monitor className="size-4 shrink-0 text-muted-foreground" />
         <Link
           href={`/${projectId}/sessions/${session.id}`}
-          className="truncate text-sm font-medium text-link hover:text-link-hover"
+          className="min-w-0 truncate text-sm font-medium text-link hover:text-link-hover"
         >
           {session.name}
         </Link>
@@ -109,7 +109,7 @@ export function ActiveWorkSection({ grouped, ungrouped, projectId }: ActiveWorkS
   return (
     <div>
       <h2 className="mb-3 text-sm font-semibold">Active work</h2>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 @md:grid-cols-2 @2xl:grid-cols-3">
         {grouped.map(group => (
           <WorkItemCard
             key={`${group.ref.type}:${group.ref.key}`}

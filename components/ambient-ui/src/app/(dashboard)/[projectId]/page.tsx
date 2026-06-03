@@ -60,7 +60,7 @@ export default function DashboardPage() {
   const recentItems = getRecentActivity(sessions)
 
   return (
-    <div className="space-y-6">
+    <div className="@container space-y-6">
       <h1 className="text-xl font-semibold">Dashboard</h1>
       <AttentionBanner items={attentionItems} projectId={projectId} />
       <ActiveWorkSection

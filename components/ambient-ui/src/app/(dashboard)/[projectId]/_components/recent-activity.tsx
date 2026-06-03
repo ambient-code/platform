@@ -39,11 +39,11 @@ export function RecentActivity({ items, projectId }: RecentActivityProps) {
               : null
 
             return (
-              <li key={session.id} className="flex items-center gap-3 px-4 py-2.5">
+              <li key={session.id} className="flex min-w-0 items-center gap-3 px-4 py-2.5">
                 <PhaseBadge phase={session.phase} />
 
                 {ref ? (
-                  <span className="flex items-center gap-1.5 text-sm">
+                  <span className="flex shrink-0 items-center gap-1.5 text-sm">
                     {(() => {
                       const Icon = REF_ICONS[ref.type]
                       return <Icon className="size-3.5 text-muted-foreground" />
@@ -54,17 +54,17 @@ export function RecentActivity({ items, projectId }: RecentActivityProps) {
 
                 <Link
                   href={`/${projectId}/sessions/${session.id}`}
-                  className="truncate text-sm text-link hover:text-link-hover"
+                  className="min-w-0 truncate text-sm text-link hover:text-link-hover"
                 >
                   {session.name}
                 </Link>
 
                 <div className="ml-auto flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
                   {duration && (
-                    <span className="font-mono">{duration}</span>
+                    <span className="hidden font-mono @lg:inline">{duration}</span>
                   )}
                   {cost && (
-                    <span className="font-mono">{cost}</span>
+                    <span className="hidden font-mono @lg:inline">{cost}</span>
                   )}
                   <span>{formatRelativeTime(completionTime)}</span>
                 </div>
