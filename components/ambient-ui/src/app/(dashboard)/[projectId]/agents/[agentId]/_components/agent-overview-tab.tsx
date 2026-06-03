@@ -81,6 +81,7 @@ export function AgentOverviewTab({
     setSaveSuccess(false)
     try {
       await updateAgent.mutateAsync({
+        projectId: agent.projectId ?? '',
         agentId: agent.id,
         request: {
           displayName: displayName || undefined,

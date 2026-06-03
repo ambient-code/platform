@@ -8,8 +8,8 @@ import type {
 
 export type AgentsPort = {
   list: (projectId: string, params?: ListParams) => Promise<PaginatedResult<DomainAgent>>
-  get: (agentId: string) => Promise<DomainAgent>
+  get: (projectId: string, agentId: string) => Promise<DomainAgent>
   create: (projectId: string, request: DomainAgentCreateRequest) => Promise<DomainAgent>
-  update: (agentId: string, request: DomainAgentUpdateRequest) => Promise<DomainAgent>
-  delete: (agentId: string) => Promise<void>
+  update: (projectId: string, agentId: string, request: DomainAgentUpdateRequest) => Promise<DomainAgent>
+  delete: (projectId: string, agentId: string) => Promise<void>
 }

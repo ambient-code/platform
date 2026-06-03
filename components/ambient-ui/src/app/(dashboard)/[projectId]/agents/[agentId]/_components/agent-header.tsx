@@ -71,7 +71,7 @@ export function AgentHeader({
   const deleteAgent = useDeleteAgent()
 
   const handleConfirmDelete = useCallback(() => {
-    deleteAgent.mutate(agent.id, {
+    deleteAgent.mutate({ projectId, agentId: agent.id }, {
       onSuccess: () => {
         setDeleteDialogOpen(false)
         router.push(`/${projectId}/agents`)

@@ -15,7 +15,7 @@ import { AgentConfigTab } from './_components/agent-config-tab'
 export default function AgentDetailPage() {
   const { projectId, agentId } = useParams<{ projectId: string; agentId: string }>()
   const [activeTab, setActiveTab] = useState('overview')
-  const { data: agent, isLoading, error } = useAgent(agentId)
+  const { data: agent, isLoading, error } = useAgent(projectId, agentId)
 
   useEffect(() => {
     const tab = new URL(window.location.href).searchParams.get('tab')

@@ -70,8 +70,8 @@ export function createAgentsAdapter(): AgentsPort {
       }
     },
 
-    async get(agentId: string): Promise<DomainAgent> {
-      const api = new AgentAPI({ ...getConfig(), project: '_' })
+    async get(projectId: string, agentId: string): Promise<DomainAgent> {
+      const api = getProjectScopedAPI(projectId)
       const agent = await api.get(agentId)
       return mapSdkAgentToDomain(agent)
     },
@@ -83,15 +83,15 @@ export function createAgentsAdapter(): AgentsPort {
       return mapSdkAgentToDomain(agent)
     },
 
-    async update(agentId: string, request: DomainAgentUpdateRequest): Promise<DomainAgent> {
-      const api = new AgentAPI({ ...getConfig(), project: '_' })
+    async update(projectId: string, agentId: string, request: DomainAgentUpdateRequest): Promise<DomainAgent> {
+      const api = getProjectScopedAPI(projectId)
       const sdkReq = mapDomainUpdateToSdk(request)
       const agent = await api.update(agentId, sdkReq)
       return mapSdkAgentToDomain(agent)
     },
 
-    async delete(agentId: string): Promise<void> {
-      const api = new AgentAPI({ ...getConfig(), project: '_' })
+    async delete(projectId: string, agentId: string): Promise<void> {
+      const api = getProjectScopedAPI(projectId)
       await api.delete(agentId)
     },
   }
