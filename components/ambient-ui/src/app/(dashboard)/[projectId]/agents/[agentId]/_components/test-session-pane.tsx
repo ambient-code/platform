@@ -158,7 +158,7 @@ export function TestSessionPane({
   return (
     <div className="flex flex-col border-l h-screen sticky top-0">
       {/* Header */}
-      <div className="flex items-center justify-between border-b px-3 py-2">
+      <div className="flex items-center justify-between border-b px-3 py-2 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <h3 className="text-sm font-medium truncate">{sessionName}</h3>
           <PhaseBadge phase={phase} />
@@ -176,7 +176,7 @@ export function TestSessionPane({
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center gap-1 border-b px-3 py-1.5">
+      <div className="flex items-center gap-1 border-b px-3 py-1.5 shrink-0">
         <Button
           variant="ghost"
           size="sm"
@@ -222,11 +222,13 @@ export function TestSessionPane({
       </div>
 
       {/* Chat input */}
-      <ChatInput sessionId={sessionId} phase={phase} disabled={false} />
+      <div className="shrink-0">
+        <ChatInput sessionId={sessionId} phase={phase} disabled={false} />
+      </div>
 
       {/* History accordion */}
       {visibleHistory.length > 0 && (
-        <div className="border-t">
+        <div className="border-t shrink-0 max-h-40 overflow-y-auto">
           <button
             type="button"
             className="flex w-full items-center gap-1.5 px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
