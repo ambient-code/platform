@@ -6,13 +6,11 @@ import {
   getCoreRowModel,
   getSortedRowModel,
   getFilteredRowModel,
-  getExpandedRowModel,
-  getGroupedRowModel,
   createColumnHelper,
   flexRender,
 } from '@tanstack/react-table'
-import type { SortingState, ExpandedState } from '@tanstack/react-table'
-import { ChevronUp, ChevronDown, ChevronRight } from 'lucide-react'
+import type { SortingState } from '@tanstack/react-table'
+import { ChevronUp, ChevronDown } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -47,8 +45,9 @@ function ProviderBadge({ provider }: { provider: string }) {
 const credentialColumns = [
   col.accessor('category', {
     header: 'Category',
-    enableGrouping: true,
-    cell: info => info.getValue(),
+    cell: info => (
+      <span className="text-xs text-muted-foreground">{info.getValue()}</span>
+    ),
   }),
   col.accessor('name', {
     header: 'Name',
@@ -102,8 +101,7 @@ export function CredentialTable({
   bindings: DomainRoleBinding[]
 }) {
   const [search, setSearch] = useState('')
-  const [sorting, setSorting] = useState<SortingState>([])
-  const [expanded, setExpanded] = useState<ExpandedState>(true)
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'category', desc: false }])
   const [selectedCredential, setSelectedCredential] = useState<DomainCredential | null>(null)
 
   const rows: CredentialRow[] = useMemo(
@@ -122,17 +120,12 @@ export function CredentialTable({
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    getGroupedRowModel: getGroupedRowModel(),
-    getExpandedRowModel: getExpandedRowModel(),
     globalFilterFn: 'includesString',
     state: {
       globalFilter: search,
       sorting,
-      expanded,
-      grouping: ['category'],
     },
     onSortingChange: setSorting,
-    onExpandedChange: setExpanded,
   })
 
   return (
@@ -152,7 +145,6 @@ export function CredentialTable({
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
-                  if (header.column.id === 'category') return null
                   const canSort = header.column.getCanSort()
                   const sorted = header.column.getIsSorted()
 
@@ -185,55 +177,23 @@ export function CredentialTable({
           </TableHeader>
           <TableBody>
             {table.getRowModel().rows.length ? (
-              table.getRowModel().rows.map((row) => {
-                if (row.getIsGrouped()) {
-                  const isExpanded = row.getIsExpanded()
-                  return (
-                    <TableRow
-                      key={row.id}
-                      className="cursor-pointer bg-muted/50 hover:bg-muted"
-                      onClick={() => row.toggleExpanded()}
-                    >
-                      <TableCell colSpan={credentialColumns.length - 1}>
-                        <div className="flex items-center gap-2">
-                          <ChevronRight
-                            className={`size-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-                          />
-                          <span className="text-sm font-medium">
-                            {row.groupingValue as string}
-                          </span>
-                          <Badge variant="secondary" className="text-xs">
-                            {row.subRows.length}
-                          </Badge>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                }
-
-                return (
-                  <TableRow
-                    key={row.id}
-                    className="cursor-pointer"
-                    onClick={() => setSelectedCredential(row.original)}
-                  >
-                    {row.getVisibleCells().map((cell) => {
-                      if (cell.column.id === 'category') return null
-                      return (
-                        <TableCell key={cell.id}>
-                          {cell.getIsAggregated()
-                            ? null
-                            : flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </TableCell>
-                      )
-                    })}
-                  </TableRow>
-                )
-              })
+              table.getRowModel().rows.map((row) => (
+                <TableRow
+                  key={row.id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => setSelectedCredential(row.original)}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
             ) : (
               <TableRow>
                 <TableCell
-                  colSpan={credentialColumns.length - 1}
+                  colSpan={credentialColumns.length}
                   className="h-24 text-center text-muted-foreground"
                 >
                   No credentials match your filter.
