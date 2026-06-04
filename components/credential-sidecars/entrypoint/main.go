@@ -11,11 +11,108 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/ambient-code/platform/components/ambient-mcp/tokenexchange"
 )
+
+type processManager struct {
+	args    []string
+	mu      sync.Mutex
+	cmd     *exec.Cmd
+	stopped bool
+}
+
+func newProcessManager(args []string) *processManager {
+	return &processManager{args: args}
+}
+
+func (pm *processManager) start() error {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	if pm.stopped {
+		return nil
+	}
+	cmd := exec.Command(pm.args[0], pm.args[1:]...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	cmd.Env = os.Environ()
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start %s: %w", pm.args[0], err)
+	}
+	pm.cmd = cmd
+	return nil
+}
+
+func (pm *processManager) restart() {
+	pm.mu.Lock()
+	if pm.stopped {
+		pm.mu.Unlock()
+		return
+	}
+	cmd := pm.cmd
+	pm.mu.Unlock()
+
+	if cmd != nil && cmd.Process != nil {
+		fmt.Fprintf(os.Stderr, "credential-sidecar: restarting MCP subprocess for credential refresh\n")
+		_ = cmd.Process.Signal(syscall.SIGTERM)
+		done := make(chan struct{})
+		go func() { _ = cmd.Wait(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			_ = cmd.Process.Kill()
+			<-done
+		}
+	}
+
+	pm.mu.Lock()
+	if pm.stopped {
+		pm.mu.Unlock()
+		return
+	}
+	cmd = exec.Command(pm.args[0], pm.args[1:]...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	cmd.Env = os.Environ()
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "credential-sidecar: restart failed: %v\n", err)
+		pm.mu.Unlock()
+		return
+	}
+	pm.cmd = cmd
+	pm.mu.Unlock()
+}
+
+func (pm *processManager) signal(s os.Signal) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	pm.stopped = true
+	if pm.cmd != nil && pm.cmd.Process != nil {
+		_ = pm.cmd.Process.Signal(s)
+	}
+}
+
+func (pm *processManager) wait() int {
+	pm.mu.Lock()
+	cmd := pm.cmd
+	pm.mu.Unlock()
+	if cmd == nil {
+		return 1
+	}
+	if err := cmd.Wait(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return exitErr.ExitCode()
+		}
+		fmt.Fprintf(os.Stderr, "subprocess failed: %v\n", err)
+		return 1
+	}
+	return 0
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -53,21 +150,37 @@ func main() {
 		}
 	}
 
+	args := os.Args[1:]
+	if os.Getenv("PLATFORM_MODE") == "mpp" && provider == "kubeconfig" {
+		args = injectMPPConfig(args)
+	}
+
+	pm := newProcessManager(args)
+	if err := pm.start(); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+
 	exchanger.OnRefresh(func(newToken string) {
 		if apiURL != "" && provider != "" {
 			if err := fetchAndSetCredential(newToken, apiURL, provider); err != nil {
 				fmt.Fprintf(os.Stderr, "credential refresh failed: %v\n", err)
+				return
 			}
+			pm.restart()
 		}
 	})
 	exchanger.StartBackgroundRefresh()
 	defer exchanger.Stop()
 
-	args := os.Args[1:]
-	if os.Getenv("PLATFORM_MODE") == "mpp" && provider == "kubeconfig" {
-		args = injectMPPConfig(args)
-	}
-	runSubprocess(args)
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		s := <-sig
+		pm.signal(s)
+	}()
+
+	os.Exit(pm.wait())
 }
 
 func fetchAndSetCredential(bearerToken, apiURL, provider string) error {
@@ -213,32 +326,4 @@ kind = "Namespace"
 	}
 	fmt.Fprintf(os.Stderr, "MPP mode: injecting kubernetes-mcp-server config to deny cluster-scoped Namespace access\n")
 	return append([]string{args[0], "--config", configPath}, args[1:]...)
-}
-
-func runSubprocess(args []string) {
-	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	cmd.Env = os.Environ()
-
-	if err := cmd.Start(); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to start %s: %v\n", args[0], err)
-		os.Exit(1)
-	}
-
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
-	go func() {
-		s := <-sig
-		_ = cmd.Process.Signal(s)
-	}()
-
-	if err := cmd.Wait(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			os.Exit(exitErr.ExitCode())
-		}
-		fmt.Fprintf(os.Stderr, "subprocess failed: %v\n", err)
-		os.Exit(1)
-	}
 }

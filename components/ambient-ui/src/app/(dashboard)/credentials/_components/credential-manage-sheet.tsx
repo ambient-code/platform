@@ -218,7 +218,7 @@ export function CredentialManageSheet({
               Rotate Token
             </h3>
             <p className="text-xs text-muted-foreground">
-              Replace the existing secret with a new value. This takes effect immediately.
+              Replace the existing secret with a new value. Running sessions automatically pick up the new token within 5 minutes.
             </p>
             <div className="flex items-center gap-2">
               <Input
@@ -244,7 +244,7 @@ export function CredentialManageSheet({
                     <AlertDialogTitle>Rotate token?</AlertDialogTitle>
                     <AlertDialogDescription>
                       This will replace the existing token for &quot;{resolved.name}&quot;.
-                      Any agents using this credential will immediately use the new token.
+                      New sessions use the new token immediately. Running sessions pick it up within 5 minutes.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -265,7 +265,7 @@ export function CredentialManageSheet({
           <div className="rounded-lg border-2 border-destructive/30 bg-destructive/5 p-4 space-y-3 mt-2">
             <h3 className="text-base font-semibold text-destructive">Danger Zone</h3>
             <p className="text-xs text-muted-foreground">
-              Permanently delete this credential. This cannot be undone.
+              Permanently delete this credential and revoke all bindings. Running sessions lose access within 5 minutes as sidecars refresh. This cannot be undone.
             </p>
             <AlertDialog>
               <AlertDialogTrigger asChild>

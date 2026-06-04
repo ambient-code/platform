@@ -120,7 +120,10 @@ export function ChatSidebarProvider({ children }: { children: ReactNode }) {
     const handlePopState = () => {
       const id = readChatParam()
       setActiveSessionId(id)
-      if (id) addIfAbsent({ sessionId: id, mode: 'chat' })
+      if (id) {
+        addIfAbsent({ sessionId: id, mode: 'chat' })
+        setIsCollapsed(false)
+      }
     }
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
