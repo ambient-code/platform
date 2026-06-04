@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { Monitor, Plus } from 'lucide-react'
+import { Monitor, Plus, FlaskConical } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -20,6 +20,7 @@ export default function FleetPage() {
   const [phaseFilter, setPhaseFilter] = useState<SessionPhase | null>(null)
   const [filteredCount, setFilteredCount] = useState<number | undefined>(undefined)
   const [createOpen, setCreateOpen] = useState(false)
+  const [showTestRuns, setShowTestRuns] = useState(false)
   const { data, isLoading, error } = useSessions(projectId)
   const { data: agentNames } = useAgentNames(projectId)
 
@@ -51,6 +52,9 @@ export default function FleetPage() {
   }
 
   const sessions = data?.items ?? []
+  const testSessionCount = sessions.filter(
+    (s) => s.annotations['ambient-code.io/ui/test-session'] === 'true',
+  ).length
 
   if (sessions.length === 0) {
     return (
@@ -77,6 +81,19 @@ export default function FleetPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Sessions</h1>
         <div className="flex items-center gap-2">
+          {testSessionCount > 0 && (
+            <Button
+              variant={showTestRuns ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => setShowTestRuns((prev) => !prev)}
+              className="text-xs text-muted-foreground"
+            >
+              <FlaskConical className="mr-1 size-3.5" />
+              {showTestRuns
+                ? 'Hide test runs'
+                : `Show test runs (${testSessionCount})`}
+            </Button>
+          )}
           <Input
             placeholder="Filter by name, agent, or model..."
             value={search}
@@ -100,6 +117,7 @@ export default function FleetPage() {
         searchFilter={search}
         agentNames={agentNames}
         phaseFilter={phaseFilter}
+        showTestRuns={showTestRuns}
         onFilteredCountChange={handleFilteredCountChange}
       />
       <CreateSessionSheet open={createOpen} onOpenChange={setCreateOpen} />
