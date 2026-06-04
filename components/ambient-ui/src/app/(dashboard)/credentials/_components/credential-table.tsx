@@ -208,14 +208,16 @@ export function CredentialTable({
         </Table>
       </div>
 
-      <CredentialManageSheet
-        credential={selectedCredential}
-        open={selectedCredential !== null}
-        onOpenChange={(open) => {
-          if (!open) setSelectedCredential(null)
-        }}
-        onNavigateToMatrix={onNavigateToMatrix}
-      />
+      {selectedCredential && (
+        <CredentialManageSheet
+          credential={selectedCredential}
+          open
+          onOpenChange={(open) => {
+            if (!open) setSelectedCredential(null)
+          }}
+          onNavigateToMatrix={onNavigateToMatrix}
+        />
+      )}
     </>
   )
 }

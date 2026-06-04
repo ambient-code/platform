@@ -37,7 +37,7 @@ export function CredentialManageSheet({
   onOpenChange,
   onNavigateToMatrix,
 }: {
-  credential: DomainCredential | null
+  credential: DomainCredential
   open: boolean
   onOpenChange: (open: boolean) => void
   onNavigateToMatrix?: (credentialName: string) => void
@@ -48,16 +48,12 @@ export function CredentialManageSheet({
   const updateCredential = useUpdateCredential()
   const deleteCredential = useDeleteCredential()
 
-  const { data: liveCredential } = useCredential(credential?.id ?? '')
+  const { data: liveCredential } = useCredential(credential.id)
   const resolved = liveCredential ?? credential
 
   const { data: bindingsData } = useRoleBindings(
-    credential
-      ? { search: `credential_id = '${credential.id}'` }
-      : undefined,
+    { search: `credential_id = '${credential.id}'` },
   )
-
-  if (!credential || !resolved) return null
 
   const providerMeta = getProviderMeta(resolved.provider)
   const category = getCategoryForProvider(resolved.provider)
