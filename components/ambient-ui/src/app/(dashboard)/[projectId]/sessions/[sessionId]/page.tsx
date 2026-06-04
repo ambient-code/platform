@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
+import { useEscapeBack } from '@/hooks/use-escape-back'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useSession } from '@/queries/use-sessions'
@@ -21,6 +22,7 @@ import { ConfigTab } from './_components/config-tab'
 
 export default function SessionDetailPage() {
   const { sessionId } = useParams<{ projectId: string; sessionId: string }>()
+  useEscapeBack()
   const [activeTab, setActiveTab] = useState('overview')
   const { data: session, isLoading, error } = useSession(sessionId)
 

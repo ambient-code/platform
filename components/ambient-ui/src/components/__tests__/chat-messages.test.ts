@@ -3,8 +3,7 @@ import type { DomainSessionMessage } from '@/domain/types'
 import {
   tryParseToolPayload,
   tryParseToolResult,
-  extractLastAssistantMessage,
-  enrichMessages,
+  filterEmptyMessages,
   groupChatItems,
   buildChatItems,
 } from '../chat-messages'
@@ -111,95 +110,35 @@ describe('tryParseToolResult', () => {
   })
 })
 
-// ---- extractLastAssistantMessage ----
+// ---- filterEmptyMessages ----
 
-describe('extractLastAssistantMessage', () => {
-  it('extracts last_assistant_message from a system event payload', () => {
-    const payload = JSON.stringify({
-      value: { last_assistant_message: 'Hello from the assistant' },
-    })
-    expect(extractLastAssistantMessage(payload)).toBe('Hello from the assistant')
-  })
-
-  it('returns null when last_assistant_message is missing', () => {
-    const payload = JSON.stringify({ value: { other_field: 'x' } })
-    expect(extractLastAssistantMessage(payload)).toBeNull()
-  })
-
-  it('returns null when last_assistant_message is whitespace-only', () => {
-    const payload = JSON.stringify({ value: { last_assistant_message: '   ' } })
-    expect(extractLastAssistantMessage(payload)).toBeNull()
-  })
-
-  it('returns null when value is not an object', () => {
-    const payload = JSON.stringify({ value: 'string-value' })
-    expect(extractLastAssistantMessage(payload)).toBeNull()
-  })
-
-  it('returns null for invalid JSON', () => {
-    expect(extractLastAssistantMessage('not json')).toBeNull()
-  })
-
-  it('returns null for a JSON array', () => {
-    expect(extractLastAssistantMessage('[1]')).toBeNull()
-  })
-})
-
-// ---- enrichMessages ----
-
-describe('enrichMessages', () => {
-  it('enriches empty assistant messages from a preceding system event', () => {
-    const messages = [
-      makeMsg({
-        eventType: 'system',
-        payload: JSON.stringify({
-          value: { last_assistant_message: 'Extracted text' },
-        }),
-      }),
-      makeMsg({ eventType: 'assistant', payload: '' }),
-    ]
-
-    const result = enrichMessages(messages)
-    expect(result).toHaveLength(2)
-    // The system event passes through
-    expect(result[0].eventType).toBe('system')
-    // The assistant message is enriched
-    expect(result[1].eventType).toBe('assistant')
-    expect(result[1].payload).toBe('Extracted text')
-  })
-
-  it('drops empty assistant messages with no nearby system event', () => {
+describe('filterEmptyMessages', () => {
+  it('drops empty assistant messages', () => {
     const messages = [
       makeMsg({ eventType: 'user', payload: 'hello' }),
       makeMsg({ eventType: 'assistant', payload: '' }),
     ]
 
-    const result = enrichMessages(messages)
+    const result = filterEmptyMessages(messages)
     expect(result).toHaveLength(1)
     expect(result[0].eventType).toBe('user')
   })
 
-  it('drops empty assistant messages when system event lacks last_assistant_message', () => {
+  it('drops whitespace-only assistant messages', () => {
     const messages = [
-      makeMsg({
-        eventType: 'system',
-        payload: JSON.stringify({ value: { some_other: 'data' } }),
-      }),
-      makeMsg({ eventType: 'assistant', payload: '' }),
+      makeMsg({ eventType: 'assistant', payload: '   ' }),
     ]
 
-    const result = enrichMessages(messages)
-    // System passes through, empty assistant is dropped
-    expect(result).toHaveLength(1)
-    expect(result[0].eventType).toBe('system')
+    const result = filterEmptyMessages(messages)
+    expect(result).toHaveLength(0)
   })
 
-  it('passes through non-empty assistant messages unchanged', () => {
+  it('passes through non-empty assistant messages', () => {
     const messages = [
       makeMsg({ eventType: 'assistant', payload: 'I have content' }),
     ]
 
-    const result = enrichMessages(messages)
+    const result = filterEmptyMessages(messages)
     expect(result).toHaveLength(1)
     expect(result[0].payload).toBe('I have content')
   })
@@ -211,48 +150,9 @@ describe('enrichMessages', () => {
       makeMsg({ eventType: 'lifecycle', payload: 'started' }),
     ]
 
-    const result = enrichMessages(messages)
+    const result = filterEmptyMessages(messages)
     expect(result).toHaveLength(3)
     expect(result.map(m => m.eventType)).toEqual(['user', 'tool_use', 'lifecycle'])
-  })
-
-  it('looks back up to 3 positions for a system event', () => {
-    const messages = [
-      makeMsg({
-        eventType: 'system',
-        payload: JSON.stringify({
-          value: { last_assistant_message: 'Found it' },
-        }),
-      }),
-      makeMsg({ eventType: 'user', payload: 'filler1' }),
-      makeMsg({ eventType: 'user', payload: 'filler2' }),
-      makeMsg({ eventType: 'assistant', payload: '' }),
-    ]
-
-    const result = enrichMessages(messages)
-    const assistant = result.find(m => m.eventType === 'assistant')
-    expect(assistant).toBeDefined()
-    expect(assistant!.payload).toBe('Found it')
-  })
-
-  it('does not look back more than 3 positions', () => {
-    const messages = [
-      makeMsg({
-        eventType: 'system',
-        payload: JSON.stringify({
-          value: { last_assistant_message: 'Too far' },
-        }),
-      }),
-      makeMsg({ eventType: 'user', payload: 'a' }),
-      makeMsg({ eventType: 'user', payload: 'b' }),
-      makeMsg({ eventType: 'user', payload: 'c' }),
-      makeMsg({ eventType: 'assistant', payload: '' }),
-    ]
-
-    const result = enrichMessages(messages)
-    // The empty assistant should be dropped since system event is 4 positions back
-    const assistant = result.find(m => m.eventType === 'assistant')
-    expect(assistant).toBeUndefined()
   })
 })
 
@@ -371,12 +271,7 @@ describe('buildChatItems', () => {
     const messages = [
       makeMsg({ eventType: 'user', payload: 'Fix the bug' }),
       makeMsg({ eventType: 'lifecycle', payload: 'session_started' }),
-      makeMsg({
-        eventType: 'system',
-        payload: JSON.stringify({
-          value: { last_assistant_message: 'I will fix the bug.' },
-        }),
-      }),
+      makeMsg({ eventType: 'system', payload: '{}' }),
       makeMsg({ eventType: 'assistant', payload: '' }),
       makeMsg({
         eventType: 'tool_use',
@@ -391,9 +286,9 @@ describe('buildChatItems', () => {
 
     const items = buildChatItems(messages)
 
-    // lifecycle and system events are filtered out
+    // lifecycle, system, and empty assistant are filtered out
     const kinds = items.map(i => i.kind)
-    expect(kinds).toEqual(['message', 'message', 'tool_call', 'message'])
+    expect(kinds).toEqual(['message', 'tool_call', 'message'])
 
     // First message is the user message
     if (items[0].kind === 'message') {
@@ -401,21 +296,15 @@ describe('buildChatItems', () => {
       expect(items[0].message.payload).toBe('Fix the bug')
     }
 
-    // Second message is the enriched assistant
-    if (items[1].kind === 'message') {
-      expect(items[1].message.eventType).toBe('assistant')
-      expect(items[1].message.payload).toBe('I will fix the bug.')
-    }
-
     // Tool call is grouped
-    if (items[2].kind === 'tool_call') {
-      expect(items[2].group.toolResult).not.toBeNull()
+    if (items[1].kind === 'tool_call') {
+      expect(items[1].group.toolResult).not.toBeNull()
     }
 
-    // Final assistant message
-    if (items[3].kind === 'message') {
-      expect(items[3].message.eventType).toBe('assistant')
-      expect(items[3].message.payload).toBe('Done fixing.')
+    // Final assistant message (with content)
+    if (items[2].kind === 'message') {
+      expect(items[2].message.eventType).toBe('assistant')
+      expect(items[2].message.payload).toBe('Done fixing.')
     }
   })
 
@@ -433,23 +322,13 @@ describe('buildChatItems', () => {
     }
   })
 
-  it('includes enriched empty assistant messages derived from system events', () => {
+  it('drops empty assistant messages', () => {
     const messages = [
-      makeMsg({
-        eventType: 'system',
-        payload: JSON.stringify({
-          value: { last_assistant_message: 'Enriched reply' },
-        }),
-      }),
       makeMsg({ eventType: 'assistant', payload: '' }),
     ]
 
     const items = buildChatItems(messages)
-    expect(items).toHaveLength(1)
-    if (items[0].kind === 'message') {
-      expect(items[0].message.eventType).toBe('assistant')
-      expect(items[0].message.payload).toBe('Enriched reply')
-    }
+    expect(items).toHaveLength(0)
   })
 
   it('returns empty array when given no messages', () => {
