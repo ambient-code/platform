@@ -186,6 +186,35 @@ class ClaudeBridge(PlatformBridge):
             session_persistence=True,
         )
 
+    async def _reconnect_failed_mcp_servers(self, thread_id: str) -> None:
+        """Check credential sidecar MCP servers and reconnect any that failed."""
+        from .mcp import _CREDENTIAL_SIDECAR_REGISTRY
+
+        worker = self._session_manager.get_existing(thread_id)
+        if worker is None:
+            return
+
+        sidecar_names = {
+            spec["server_name"] for spec in _CREDENTIAL_SIDECAR_REGISTRY.values()
+        }
+
+        try:
+            status = await worker.get_mcp_status()
+        except Exception:
+            return
+
+        servers = status.get("mcpServers", [])
+        for server in servers:
+            name = server.get("name", "")
+            state = server.get("status", "")
+            if name in sidecar_names and state == "failed":
+                logger.info(
+                    "MCP server %s is in failed state, reconnecting "
+                    "(likely credential sidecar restart)",
+                    name,
+                )
+                await worker.reconnect_mcp_server(name)
+
     async def _initialize_run(
         self,
         thread_id: str,
@@ -217,6 +246,10 @@ class ClaudeBridge(PlatformBridge):
         await populate_runtime_credentials(self._context)
         await populate_mcp_server_credentials(self._context)
         self._last_creds_refresh = time.monotonic()
+
+        # Reconnect any failed credential sidecar MCP servers (e.g. after
+        # sidecar restarts the MCP subprocess on token refresh).
+        await self._reconnect_failed_mcp_servers(thread_id)
 
         # If the caller changed, destroy the worker and rebuild MCP servers +
         # adapter so the new ClaudeSDKClient gets fresh mcp_servers config.
