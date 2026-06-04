@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/empty-state'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useCredentials } from '@/queries/use-credentials'
-import { useRoleBindings } from '@/queries/use-role-bindings'
+import { useAllRoleBindings } from '@/queries/use-role-bindings'
 import { useProjects } from '@/queries/use-projects'
 import { useRoles } from '@/queries/use-roles'
 import { queryKeys } from '@/queries/query-keys'
@@ -88,11 +88,11 @@ export default function CredentialsPage() {
 
   const { data, isLoading, error } = useCredentials()
   const { data: projectsData } = useProjects()
-  const { data: bindingsData } = useRoleBindings({ size: 1000, search: "scope = 'credential'" })
+  const { data: allBindings } = useAllRoleBindings("scope = 'credential'")
   const { data: rolesData, isLoading: rolesLoading } = useRoles({ size: 100 })
 
   const projects = useMemo(() => projectsData?.items ?? [], [projectsData])
-  const bindings = useMemo(() => bindingsData?.items ?? [], [bindingsData])
+  const bindings = useMemo(() => allBindings ?? [], [allBindings])
 
   const agentQueries = useQueries({
     queries: projects.map((p) => ({

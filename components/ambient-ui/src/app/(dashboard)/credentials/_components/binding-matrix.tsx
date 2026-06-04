@@ -54,9 +54,6 @@ import { cn } from '@/lib/utils'
 import type { DomainCredential, DomainRoleBinding, DomainProject, DomainAgent } from '@/domain/types'
 import {
   cellKey,
-  findProjectBinding,
-  findAgentBinding,
-  isInherited,
   buildBindingIndex,
   findProjectBindingIndexed,
   findAgentBindingIndexed,

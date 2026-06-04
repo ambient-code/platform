@@ -26,6 +26,7 @@ const agentsAdapter = createAgentsAdapter()
 
 const DEBOUNCE_MS = 300
 const MAX_RECENT_DISPLAY = 10
+const MAX_SEARCH_PROJECTS = 5
 
 type ProjectGroup = {
   project: DomainProject
@@ -80,35 +81,48 @@ export function CommandPalette() {
   const { data: projectsData } = useProjects()
   const projects = useMemo(() => projectsData?.items ?? [], [projectsData])
 
+  // Cap search fan-out: current project first, then alphabetical, limited to MAX_SEARCH_PROJECTS
+  const searchProjects = useMemo(() => {
+    const sorted = [...projects].sort((a, b) => {
+      if (a.id === currentProjectId) return -1
+      if (b.id === currentProjectId) return 1
+      return a.name.localeCompare(b.name)
+    })
+    return sorted.slice(0, MAX_SEARCH_PROJECTS)
+  }, [projects, currentProjectId])
+
+  const searchCapped = projects.length > MAX_SEARCH_PROJECTS
+
   // -----------------------------------------------------------------------
   // Search queries -- only fire when the user has typed something (debounced)
+  // Capped to MAX_SEARCH_PROJECTS to avoid unbounded N+1 fan-out.
   // -----------------------------------------------------------------------
   const sessionQueries = useQueries({
-    queries: projects.map((p) => ({
+    queries: searchProjects.map((p) => ({
       queryKey: queryKeys.sessions.list(p.id, { size: 50, search: debouncedQuery }),
       queryFn: () => sessionsAdapter.list(p.id, { size: 50, search: debouncedQuery }),
-      enabled: open && isSearching && projects.length > 0,
+      enabled: open && isSearching && searchProjects.length > 0,
       staleTime: 15_000,
     })),
   })
 
   const agentQueries = useQueries({
-    queries: projects.map((p) => ({
+    queries: searchProjects.map((p) => ({
       queryKey: queryKeys.agents.list(p.id, { size: 50, search: debouncedQuery }),
       queryFn: () => agentsAdapter.list(p.id, { size: 50, search: debouncedQuery }),
-      enabled: open && isSearching && projects.length > 0,
+      enabled: open && isSearching && searchProjects.length > 0,
       staleTime: 15_000,
     })),
   })
 
   const groups = useMemo<ProjectGroup[]>(() => {
     if (!isSearching) return []
-    return projects.map((p, i) => ({
+    return searchProjects.map((p, i) => ({
       project: p,
       sessions: sessionQueries[i]?.data?.items ?? [],
       agents: agentQueries[i]?.data?.items ?? [],
     }))
-  }, [projects, sessionQueries, agentQueries, isSearching])
+  }, [searchProjects, sessionQueries, agentQueries, isSearching])
 
   // Sort: current project first, then alphabetical
   const sortedGroups = useMemo(() => {
@@ -340,6 +354,13 @@ export function CommandPalette() {
               </CommandGroup>
             )
           })}
+
+        {/* ---- Capped search note ---- */}
+        {isSearching && searchCapped && (
+          <div className="px-4 py-2 text-xs text-muted-foreground">
+            Showing results from {MAX_SEARCH_PROJECTS} of {projects.length} projects
+          </div>
+        )}
 
         {/* ---- Quick navigation (below recents or search results) ---- */}
         <CommandGroup heading="Navigate">
