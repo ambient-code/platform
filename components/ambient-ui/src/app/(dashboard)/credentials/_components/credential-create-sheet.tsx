@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { toast } from 'sonner'
 import { useCreateCredential } from '@/queries/use-credentials'
 import type { DomainCredentialCreateRequest } from '@/domain/types'
 import {
@@ -95,6 +96,7 @@ export function CredentialCreateSheet({
 
     try {
       await createCredential.mutateAsync(request)
+      toast.success(`Credential "${name.trim()}" created`)
       resetForm()
       onOpenChange(false)
     } catch (err) {

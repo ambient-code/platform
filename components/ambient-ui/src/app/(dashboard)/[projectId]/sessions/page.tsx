@@ -31,7 +31,7 @@ export default function FleetPage() {
   if (error) {
     return (
       <div className="space-y-6">
-        <h1 className="text-xl font-semibold">Sessions</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Sessions</h1>
         <p className="text-sm text-destructive">
           Failed to load sessions: {error.message}
         </p>
@@ -42,7 +42,7 @@ export default function FleetPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-xl font-semibold">Sessions</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Sessions</h1>
         <div className="space-y-3">
           <Skeleton className="h-8 w-64" />
           <Skeleton className="h-[400px] w-full" />
@@ -59,7 +59,7 @@ export default function FleetPage() {
   if (sessions.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-xl font-semibold">Sessions</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Sessions</h1>
         <EmptyState
           icon={Monitor}
           title="No sessions"
@@ -79,7 +79,7 @@ export default function FleetPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Sessions</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Sessions</h1>
         <div className="flex items-center gap-2">
           {testSessionCount > 0 && (
             <Button

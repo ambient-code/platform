@@ -27,10 +27,12 @@ type ChatSidebarState = {
   sessions: SidebarSession[]
   activeSessionId: string | null
   isOpen: boolean
+  isCollapsed: boolean
   canAddSession: () => boolean
   openSidebar: (sessionId: string, sessionName?: string) => void
   openTestSidebar: (opts: OpenTestOpts) => void
-  closeSidebar: () => void
+  collapseSidebar: () => void
+  closeAllSessions: () => void
   closeSession: (sessionId: string) => void
   switchSession: (sessionId: string) => void
 }
@@ -55,6 +57,7 @@ export function ChatSidebarProvider({ children }: { children: ReactNode }) {
     return id ? [{ sessionId: id, mode: 'chat' as const }] : []
   })
   const [activeSessionId, setActiveSessionId] = useState<string | null>(readChatParam)
+  const [isCollapsed, setIsCollapsed] = useState(false)
 
   const canAddSession = useCallback(() => sessions.length < MAX_SESSIONS, [sessions.length])
 
@@ -68,6 +71,7 @@ export function ChatSidebarProvider({ children }: { children: ReactNode }) {
   const openSidebar = useCallback((sessionId: string, sessionName?: string) => {
     addIfAbsent({ sessionId, sessionName, mode: 'chat' })
     setActiveSessionId(sessionId)
+    setIsCollapsed(false)
     updateChatParam(sessionId)
   }, [addIfAbsent])
 
@@ -78,6 +82,7 @@ export function ChatSidebarProvider({ children }: { children: ReactNode }) {
       agentPrompt: opts.agentPrompt, agentModel: opts.agentModel,
     })
     setActiveSessionId(opts.sessionId)
+    setIsCollapsed(false)
     updateChatParam(opts.sessionId)
   }, [addIfAbsent])
 
@@ -94,9 +99,15 @@ export function ChatSidebarProvider({ children }: { children: ReactNode }) {
     })
   }, [sessions])
 
-  const closeSidebar = useCallback(() => {
+  const collapseSidebar = useCallback(() => {
+    setIsCollapsed(true)
+    updateChatParam(null)
+  }, [])
+
+  const closeAllSessions = useCallback(() => {
     setSessions([])
     setActiveSessionId(null)
+    setIsCollapsed(false)
     updateChatParam(null)
   }, [])
 
@@ -115,10 +126,10 @@ export function ChatSidebarProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('popstate', handlePopState)
   }, [addIfAbsent])
 
-  const isOpen = sessions.length > 0
+  const isOpen = sessions.length > 0 && !isCollapsed
   const value = useMemo<ChatSidebarState>(
-    () => ({ sessions, activeSessionId, isOpen, canAddSession, openSidebar, openTestSidebar, closeSidebar, closeSession, switchSession }),
-    [sessions, activeSessionId, isOpen, canAddSession, openSidebar, openTestSidebar, closeSidebar, closeSession, switchSession],
+    () => ({ sessions, activeSessionId, isOpen, isCollapsed, canAddSession, openSidebar, openTestSidebar, collapseSidebar, closeAllSessions, closeSession, switchSession }),
+    [sessions, activeSessionId, isOpen, isCollapsed, canAddSession, openSidebar, openTestSidebar, collapseSidebar, closeAllSessions, closeSession, switchSession],
   )
 
   return <ChatSidebarContext.Provider value={value}>{children}</ChatSidebarContext.Provider>

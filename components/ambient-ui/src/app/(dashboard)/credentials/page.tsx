@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
-import { KeyRound, Plus, AlertTriangle } from 'lucide-react'
+import { useQueries } from '@tanstack/react-query'
+import { KeyRound, Plus, AlertTriangle, Settings2, Link } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/empty-state'
@@ -10,26 +11,51 @@ import { useCredentials } from '@/queries/use-credentials'
 import { useRoleBindings } from '@/queries/use-role-bindings'
 import { useProjects } from '@/queries/use-projects'
 import { useRoles } from '@/queries/use-roles'
+import { queryKeys } from '@/queries/query-keys'
+import { createAgentsAdapter } from '@/adapters/sdk-agents'
+import type { DomainAgent } from '@/domain/types'
 import { CredentialTable } from './_components/credential-table'
 import { CredentialCreateSheet } from './_components/credential-create-sheet'
 import { BindingMatrix } from './_components/binding-matrix'
+
+const agentsAdapter = createAgentsAdapter()
 
 const CREDENTIAL_VIEWER_ROLE_NAME = 'credential:viewer'
 
 export default function CredentialsPage() {
   const [createSheetOpen, setCreateSheetOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('registry')
+  const [matrixCredentialFilter, setMatrixCredentialFilter] = useState<string | undefined>(undefined)
 
   useEffect(() => {
-    const tab = new URL(window.location.href).searchParams.get('tab')
+    const params = new URL(window.location.href).searchParams
+    const tab = params.get('tab')
+    const cred = params.get('credential')
     if (tab) setActiveTab(tab)
+    if (cred) {
+      setMatrixCredentialFilter(cred)
+      if (!tab) setActiveTab('access-matrix')
+    }
   }, [])
 
   const handleTabChange = (value: string) => {
     setActiveTab(value)
     const url = new URL(window.location.href)
     url.searchParams.set('tab', value)
+    if (value !== 'access-matrix') {
+      url.searchParams.delete('credential')
+      setMatrixCredentialFilter(undefined)
+    }
     window.history.replaceState({}, '', url.toString())
+  }
+
+  const handleNavigateToMatrix = (credentialName: string) => {
+    setMatrixCredentialFilter(credentialName)
+    const url = new URL(window.location.href)
+    url.searchParams.set('tab', 'access-matrix')
+    url.searchParams.set('credential', credentialName)
+    window.history.replaceState({}, '', url.toString())
+    setActiveTab('access-matrix')
   }
 
   const { data, isLoading, error } = useCredentials()
@@ -40,6 +66,20 @@ export default function CredentialsPage() {
   const projects = useMemo(() => projectsData?.items ?? [], [projectsData])
   const bindings = useMemo(() => bindingsData?.items ?? [], [bindingsData])
 
+  const agentQueries = useQueries({
+    queries: projects.map((p) => ({
+      queryKey: queryKeys.agents.list(p.id, { size: 100 }),
+      queryFn: () => agentsAdapter.list(p.id, { size: 100 }),
+      enabled: projects.length > 0,
+      staleTime: 30_000,
+      refetchInterval: 30_000,
+    })),
+  })
+
+  const allAgents = useMemo<DomainAgent[]>(() => {
+    return agentQueries.flatMap((q) => q.data?.items ?? [])
+  }, [agentQueries])
+
   const credentialViewerRoleId = useMemo(() => {
     const roles = rolesData?.items ?? []
     const role = roles.find((r) => r.name === CREDENTIAL_VIEWER_ROLE_NAME)
@@ -49,7 +89,7 @@ export default function CredentialsPage() {
   if (error) {
     return (
       <div className="space-y-6">
-        <h1 className="text-xl font-semibold">Credentials</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Credentials</h1>
         <p className="text-sm text-destructive">
           Failed to load credentials. Please try again later.
         </p>
@@ -60,7 +100,7 @@ export default function CredentialsPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-xl font-semibold">Credentials</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Credentials</h1>
         <div className="space-y-3">
           <Skeleton className="h-10 w-64" />
           <Skeleton className="h-[400px] w-full" />
@@ -74,7 +114,7 @@ export default function CredentialsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Credentials</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Credentials</h1>
         <Button onClick={() => setCreateSheetOpen(true)}>
           <Plus className="size-4" />
           New Credential
@@ -82,9 +122,15 @@ export default function CredentialsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList>
-          <TabsTrigger value="registry">Credentials</TabsTrigger>
-          <TabsTrigger value="access-matrix">Project Access</TabsTrigger>
+        <TabsList className="w-full *:flex-1">
+          <TabsTrigger value="registry">
+            <Settings2 className="size-4 mr-1.5" />
+            Manage
+          </TabsTrigger>
+          <TabsTrigger value="access-matrix">
+            <Link className="size-4 mr-1.5" />
+            Bindings
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="registry">
@@ -101,7 +147,11 @@ export default function CredentialsPage() {
               }
             />
           ) : (
-            <CredentialTable credentials={credentials} bindings={bindings} />
+            <CredentialTable
+              credentials={credentials}
+              bindings={bindings}
+              onNavigateToMatrix={handleNavigateToMatrix}
+            />
           )}
         </TabsContent>
 
@@ -131,9 +181,10 @@ export default function CredentialsPage() {
             <BindingMatrix
               credentials={credentials}
               projects={projects}
-              agents={[]}
+              agents={allAgents}
               bindings={bindings}
               roleId={credentialViewerRoleId}
+              initialFilter={matrixCredentialFilter}
             />
           )}
         </TabsContent>

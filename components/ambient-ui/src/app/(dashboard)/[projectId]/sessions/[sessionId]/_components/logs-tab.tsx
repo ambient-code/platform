@@ -94,7 +94,7 @@ export function LogsTab({ session }: { session: DomainSession }) {
               size="sm"
               className={cn(
                 'h-7 text-xs gap-1.5',
-                hasErrors && !isActive && 'border-[#f0561d] text-[#f0561d]',
+                hasErrors && !isActive && 'border-status-error-foreground text-status-error-foreground',
               )}
               onClick={() => toggleFilter(eventType)}
               aria-pressed={isActive}
@@ -107,8 +107,8 @@ export function LogsTab({ session }: { session: DomainSession }) {
                     isActive
                       ? 'bg-primary-foreground/20 text-primary-foreground'
                       : 'bg-muted text-muted-foreground',
-                    hasErrors && !isActive && 'bg-[#ffe3d9] text-[#f0561d]',
-                    hasErrors && isActive && 'bg-[#f0561d]/30 text-primary-foreground',
+                    hasErrors && !isActive && 'bg-status-error text-status-error-foreground',
+                    hasErrors && isActive && 'bg-status-error-foreground/30 text-primary-foreground',
                   )}
                 >
                   {count}

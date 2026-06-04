@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useRef, useEffect, useState, useCallback } from 'react'
-import { ExternalLink, ArrowDownLeft, Bot, ChevronUp, ChevronDown } from 'lucide-react'
+import { PanelRight, ArrowDownLeft, Bot, ChevronUp, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -19,7 +19,7 @@ import { useLiveTail, LiveIndicator } from './live-tail-indicator'
 
 export function ChatTab({ session }: { session: DomainSession }) {
   const { data, isLoading, error } = useSessionMessages(session.id)
-  const { sessions: sidebarSessions, openSidebar, closeSidebar } = useChatSidebar()
+  const { sessions: sidebarSessions, openSidebar, closeSession } = useChatSidebar()
   const isInSidebar = sidebarSessions.some(s => s.sessionId === session.id)
 
   const chatItems = useMemo(() => {
@@ -85,7 +85,7 @@ export function ChatTab({ session }: { session: DomainSession }) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => closeSidebar()}
+              onClick={() => closeSession(session.id)}
               aria-label="Bring chat back to this tab"
             >
               <ArrowDownLeft className="h-4 w-4 mr-1.5" />
@@ -109,11 +109,11 @@ export function ChatTab({ session }: { session: DomainSession }) {
             variant="ghost"
             size="sm"
             onClick={() => openSidebar(session.id, session.name)}
-            aria-label="Pop out chat to sidebar"
+            aria-label="Move chat to sidebar"
             className="text-xs text-muted-foreground hover:text-foreground"
           >
-            <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
-            Pop out
+            <PanelRight className="h-3.5 w-3.5 mr-1.5" />
+            Move to sidebar
           </Button>
         </div>
 

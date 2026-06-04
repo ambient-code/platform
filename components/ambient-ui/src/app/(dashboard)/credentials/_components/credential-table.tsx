@@ -96,9 +96,11 @@ const credentialColumns = [
 export function CredentialTable({
   credentials,
   bindings,
+  onNavigateToMatrix,
 }: {
   credentials: DomainCredential[]
   bindings: DomainRoleBinding[]
+  onNavigateToMatrix?: (credentialName: string) => void
 }) {
   const [search, setSearch] = useState('')
   const [sorting, setSorting] = useState<SortingState>([{ id: 'category', desc: false }])
@@ -210,6 +212,7 @@ export function CredentialTable({
         onOpenChange={(open) => {
           if (!open) setSelectedCredential(null)
         }}
+        onNavigateToMatrix={onNavigateToMatrix}
       />
     </>
   )

@@ -26,6 +26,7 @@ import {
 import type { DomainCredential } from '@/domain/types'
 import { getProviderMeta, getCategoryForProvider } from '@/domain/credential-providers'
 import { formatRelativeTime, formatAbsoluteTime } from '@/lib/format-timestamp'
+import { toast } from 'sonner'
 import { useUpdateCredential, useDeleteCredential } from '@/queries/use-credentials'
 import { useRoleBindings } from '@/queries/use-role-bindings'
 
@@ -33,13 +34,16 @@ export function CredentialManageSheet({
   credential,
   open,
   onOpenChange,
+  onNavigateToMatrix,
 }: {
   credential: DomainCredential | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  onNavigateToMatrix?: (credentialName: string) => void
 }) {
   const [newToken, setNewToken] = useState('')
   const [rotateError, setRotateError] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const updateCredential = useUpdateCredential()
   const deleteCredential = useDeleteCredential()
 
@@ -64,6 +68,7 @@ export function CredentialManageSheet({
         id: credential.id,
         request: { token: newToken },
       })
+      toast.success(`Token rotated for "${credential.name}"`)
       setNewToken('')
     } catch (err) {
       console.error('rotate token failed', err)
@@ -73,11 +78,14 @@ export function CredentialManageSheet({
 
   async function handleDelete() {
     if (!credential) return
+    setDeleteError(null)
     try {
       await deleteCredential.mutateAsync(credential.id)
+      toast.success(`Credential "${credential.name}" deleted`)
       onOpenChange(false)
     } catch (err) {
       console.error('delete credential failed', err)
+      setDeleteError('Failed to delete credential. It may have active bindings.')
     }
   }
 
@@ -85,6 +93,7 @@ export function CredentialManageSheet({
     if (!v) {
       setNewToken('')
       setRotateError(null)
+      setDeleteError(null)
     }
     onOpenChange(v)
   }
@@ -151,9 +160,41 @@ export function CredentialManageSheet({
           <div className="space-y-2">
             <h3 className="text-sm font-medium text-muted-foreground">Bindings</h3>
             <p className="text-sm">
-              {bindingCount === 0
-                ? 'Not bound to any projects or agents.'
-                : `Bound to ${bindingCount} ${bindingCount === 1 ? 'target' : 'targets'}. Use the Access Matrix tab to manage bindings.`}
+              {bindingCount === 0 ? (
+                <>
+                  Not bound to any projects or agents.{' '}
+                  {onNavigateToMatrix && (
+                    <button
+                      type="button"
+                      className="text-primary underline underline-offset-2 hover:text-primary/80"
+                      onClick={() => {
+                        onOpenChange(false)
+                        onNavigateToMatrix(credential.name)
+                      }}
+                    >
+                      Set up access
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  Bound to {bindingCount} {bindingCount === 1 ? 'target' : 'targets'}.{' '}
+                  {onNavigateToMatrix ? (
+                    <button
+                      type="button"
+                      className="text-primary underline underline-offset-2 hover:text-primary/80"
+                      onClick={() => {
+                        onOpenChange(false)
+                        onNavigateToMatrix(credential.name)
+                      }}
+                    >
+                      Manage in Access Matrix
+                    </button>
+                  ) : (
+                    'Use the Access Matrix tab to manage bindings.'
+                  )}
+                </>
+              )}
             </p>
           </div>
 
@@ -243,6 +284,9 @@ export function CredentialManageSheet({
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+            {deleteError && (
+              <p className="text-sm text-destructive">{deleteError}</p>
+            )}
           </div>
         </div>
       </SheetContent>

@@ -1,7 +1,8 @@
 'use client'
 
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { LogOut } from 'lucide-react'
+import { LogOut, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Breadcrumb,
@@ -28,12 +29,46 @@ type NavHeaderProps = {
   projectName?: string | null
   pageName?: string | null
   sessionName?: string | null
+  detailName?: string | null
 }
 
 const BREADCRUMB_LABEL_MAP: Record<string, string> = {}
 
 function displayLabel(raw: string): string {
   return BREADCRUMB_LABEL_MAP[raw] ?? raw
+}
+
+function useIsMac() {
+  const [isMac, setIsMac] = useState(false)
+
+  useEffect(() => {
+    setIsMac(navigator.platform.toUpperCase().includes('MAC'))
+  }, [])
+
+  return isMac
+}
+
+function SearchTrigger() {
+  const isMac = useIsMac()
+
+  const handleClick = useCallback(() => {
+    document.dispatchEvent(new CustomEvent('open-command-palette'))
+  }, [])
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className="inline-flex items-center gap-2 rounded-md border border-input bg-muted/50 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      aria-label="Search"
+    >
+      <Search className="size-4" />
+      <span className="hidden sm:inline">Search...</span>
+      <kbd className="pointer-events-none hidden h-5 select-none items-center gap-0.5 rounded border bg-background px-1.5 font-mono text-[10px] font-medium opacity-70 sm:inline-flex">
+        {isMac ? '⌘' : 'Ctrl+'}K
+      </kbd>
+    </button>
+  )
 }
 
 function UserMenu() {
@@ -74,7 +109,7 @@ function UserMenu() {
   )
 }
 
-export function NavHeader({ projectId, projectName, pageName, sessionName }: NavHeaderProps) {
+export function NavHeader({ projectId, projectName, pageName, sessionName, detailName }: NavHeaderProps) {
   const mappedPageName = pageName ? displayLabel(pageName) : null
 
   return (
@@ -97,7 +132,7 @@ export function NavHeader({ projectId, projectName, pageName, sessionName }: Nav
               <BreadcrumbSeparator />
               <BreadcrumbItem>
                 <BreadcrumbLink asChild>
-                  <Link href={`/${projectId}/sessions`}>{projectName ?? projectId}</Link>
+                  <Link href={`/${projectId}`}>{projectName ?? projectId}</Link>
                 </BreadcrumbLink>
               </BreadcrumbItem>
             </>
@@ -107,9 +142,9 @@ export function NavHeader({ projectId, projectName, pageName, sessionName }: Nav
             <>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
-                {sessionName ? (
+                {sessionName || detailName ? (
                   <BreadcrumbLink asChild>
-                    <Link href={`/${projectId}/sessions`}>{mappedPageName}</Link>
+                    <Link href={`/${projectId}/${mappedPageName.toLowerCase()}`}>{mappedPageName}</Link>
                   </BreadcrumbLink>
                 ) : (
                   <BreadcrumbPage>{mappedPageName}</BreadcrumbPage>
@@ -118,18 +153,19 @@ export function NavHeader({ projectId, projectName, pageName, sessionName }: Nav
             </>
           )}
 
-          {sessionName && (
+          {(sessionName ?? detailName) && (
             <>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
-                <BreadcrumbPage>{sessionName}</BreadcrumbPage>
+                <BreadcrumbPage>{sessionName ?? detailName}</BreadcrumbPage>
               </BreadcrumbItem>
             </>
           )}
         </BreadcrumbList>
       </Breadcrumb>
 
-      <div className="ml-auto">
+      <div className="ml-auto flex items-center gap-2">
+        <SearchTrigger />
         <UserMenu />
       </div>
     </header>
