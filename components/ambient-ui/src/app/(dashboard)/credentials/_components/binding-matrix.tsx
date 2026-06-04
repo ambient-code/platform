@@ -7,7 +7,7 @@ import {
   useRef,
   useEffect,
 } from 'react'
-import { Check, ChevronDown, Loader2, Search, AlertTriangle } from 'lucide-react'
+import { Check, ChevronDown, Loader2, Search, AlertTriangle, Link2, MoreVertical } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -690,10 +690,12 @@ export function BindingMatrix({
             <span className="inline-block h-3.5 w-3.5 rounded-sm bg-green-600" />
             <span>Directly bound</span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="inline-block h-3.5 w-3.5 rounded-sm bg-green-600/40" />
-            <span>Inherited from project</span>
-          </div>
+          {hasAnyAgents && (
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block h-3.5 w-3.5 rounded-sm border-2 border-dashed border-green-600/60 bg-green-600/10" />
+              <span>Inherited from project</span>
+            </div>
+          )}
           <div className="flex items-center gap-1.5">
             <span className="inline-block h-3.5 w-3.5 rounded-sm border-2 border-muted-foreground/30" />
             <span>Not bound</span>
@@ -707,7 +709,7 @@ export function BindingMatrix({
               {!hasAnyAgents ? (
                 /* === SIMPLE LAYOUT: no agents anywhere === */
                 <TableRow>
-                  <TableHead className="sticky left-0 z-30 bg-background min-w-[160px]">
+                  <TableHead className="sticky left-0 z-30 bg-background min-w-[200px]">
                     Credential
                   </TableHead>
                   {projectGroups.map((group, gIdx) => (
@@ -730,7 +732,7 @@ export function BindingMatrix({
                   <TableRow>
                     <TableHead
                       rowSpan={2}
-                      className="sticky left-0 z-30 bg-background min-w-[160px]"
+                      className="sticky left-0 z-30 bg-background min-w-[200px]"
                     >
                       Credential
                     </TableHead>
@@ -784,50 +786,60 @@ export function BindingMatrix({
               {filteredCredentials.length > 0 ? (
                 paginatedCredentials.map((cred, rowIndex) => (
                   <TableRow key={cred.id}>
-                    {/* Row header: credential name with bulk-ops popover */}
+                    {/* Row header: credential name label + separate kebab for bulk ops */}
                     <TableCell className="sticky left-0 z-10 bg-background font-medium border-r p-0">
-                      <Popover
-                        open={openRowPopovers[cred.id] ?? false}
-                        onOpenChange={(open) =>
-                          setOpenRowPopovers((prev) => ({ ...prev, [cred.id]: open }))
-                        }
-                      >
-                        <PopoverTrigger asChild>
-                          <button
-                            type="button"
-                            className="group w-full text-left px-4 py-2 cursor-pointer hover:bg-accent/60 rounded-sm transition-colors inline-flex items-center justify-between gap-1 max-w-[200px]"
-                          >
+                      <div className="flex items-center justify-between gap-1 px-4 py-2 max-w-[280px]">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
                             <span className="truncate">{cred.name}</span>
-                            <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground opacity-50 group-hover:opacity-100 transition-opacity" />
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-56 p-2" align="start" side="right">
-                          <div className="space-y-1">
-                            <p className="text-xs font-medium text-muted-foreground px-2 py-1">
-                              {cred.name}
-                            </p>
-                            <Separator />
-                            {projectGroups.length > 0 && (
+                          </TooltipTrigger>
+                          <TooltipContent side="right">
+                            <p>{cred.name}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Popover
+                          open={openRowPopovers[cred.id] ?? false}
+                          onOpenChange={(open) =>
+                            setOpenRowPopovers((prev) => ({ ...prev, [cred.id]: open }))
+                          }
+                        >
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label={`Bulk actions for ${cred.name}`}
+                              className="shrink-0 h-6 w-6 flex items-center justify-center rounded-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
+                            >
+                              <MoreVertical className="h-3.5 w-3.5" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-56 p-2" align="start" side="right">
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground px-2 py-1">
+                                {cred.name}
+                              </p>
+                              <Separator />
+                              {projectGroups.length > 0 && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="w-full justify-start text-sm"
+                                  onClick={() => void bulkBindRowProjects(cred)}
+                                >
+                                  Bind to all projects
+                                </Button>
+                              )}
                               <Button
-                                variant="ghost"
+                                variant="destructive"
                                 size="sm"
                                 className="w-full justify-start text-sm"
-                                onClick={() => void bulkBindRowProjects(cred)}
+                                onClick={() => bulkUnbindRow(cred)}
                               >
-                                Bind to all projects
+                                Unbind from all
                               </Button>
-                            )}
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              className="w-full justify-start text-sm"
-                              onClick={() => bulkUnbindRow(cred)}
-                            >
-                              Unbind from all
-                            </Button>
-                          </div>
-                        </PopoverContent>
-                      </Popover>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
                     </TableCell>
 
                     {/* Cells per project group */}
@@ -1032,7 +1044,9 @@ function GroupCells({
             <button
               ref={focusCellRef}
               type="button"
-              className="h-8 w-8 flex items-center justify-center mx-auto cursor-pointer rounded transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50"
+              role="checkbox"
+              aria-checked={projectBound}
+              className="h-9 w-9 flex items-center justify-center mx-auto cursor-pointer rounded transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50"
               disabled={projectPending}
               data-matrix-row={rowIndex}
               data-matrix-col={colIdx}
@@ -1046,13 +1060,13 @@ function GroupCells({
               }
             >
               {projectPending ? (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               ) : projectBound ? (
-                <span className="h-4 w-4 rounded-sm bg-green-600 flex items-center justify-center">
-                  <Check className="h-3 w-3 text-white" />
+                <span className="h-5 w-5 rounded-sm bg-green-600 flex items-center justify-center">
+                  <Check className="h-3.5 w-3.5 text-white" />
                 </span>
               ) : (
-                <span className="h-4 w-4 rounded-sm border-2 border-muted-foreground/30 inline-block" />
+                <span className="h-5 w-5 rounded-sm border-2 border-muted-foreground/30 inline-block" />
               )}
             </button>
           </TooltipTrigger>
@@ -1080,16 +1094,17 @@ function GroupCells({
             )}
           >
             {inherited ? (
-              /* Inherited state: non-clickable, manage at project level */
+              /* Inherited state: non-clickable, visually distinct with dashed border + link icon */
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
-                    className="h-8 w-8 flex items-center justify-center mx-auto rounded opacity-70"
+                    className="h-9 w-9 flex items-center justify-center mx-auto rounded"
+                    aria-label="Inherited from project"
                     data-matrix-row={rowIndex}
                     data-matrix-col={agentColIdx}
                   >
-                    <span className="h-4 w-4 rounded-sm bg-green-600/40 flex items-center justify-center">
-                      <Check className="h-3 w-3 text-white/80" />
+                    <span className="h-5 w-5 rounded-sm border-2 border-dashed border-green-600/60 bg-green-600/10 flex items-center justify-center">
+                      <Link2 className="h-3 w-3 text-green-700 dark:text-green-400" />
                     </span>
                   </span>
                 </TooltipTrigger>
@@ -1103,7 +1118,9 @@ function GroupCells({
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="h-8 w-8 flex items-center justify-center mx-auto cursor-pointer rounded transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50"
+                    role="checkbox"
+                    aria-checked={agentBound}
+                    className="h-9 w-9 flex items-center justify-center mx-auto cursor-pointer rounded transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50"
                     disabled={agentPending}
                     data-matrix-row={rowIndex}
                     data-matrix-col={agentColIdx}
@@ -1118,13 +1135,13 @@ function GroupCells({
                     }
                   >
                     {agentPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                     ) : agentBound ? (
-                      <span className="h-4 w-4 rounded-sm bg-green-600 flex items-center justify-center">
-                        <Check className="h-3 w-3 text-white" />
+                      <span className="h-5 w-5 rounded-sm bg-green-600 flex items-center justify-center">
+                        <Check className="h-3.5 w-3.5 text-white" />
                       </span>
                     ) : (
-                      <span className="h-4 w-4 rounded-sm border-2 border-muted-foreground/30 inline-block" />
+                      <span className="h-5 w-5 rounded-sm border-2 border-muted-foreground/30 inline-block" />
                     )}
                   </button>
                 </TooltipTrigger>

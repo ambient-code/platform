@@ -23,14 +23,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import type { DomainCredential } from '@/domain/types'
+import type { DomainCredential, DomainRoleBinding } from '@/domain/types'
 import { getCategoryForProvider, getProviderMeta } from '@/domain/credential-providers'
 import { formatRelativeTime } from '@/lib/format-timestamp'
-import { useRoleBindings } from '@/queries/use-role-bindings'
 import { CredentialManageSheet } from './credential-manage-sheet'
 
 type CredentialRow = DomainCredential & {
   category: string
+  bindingCount: number
 }
 
 const col = createColumnHelper<CredentialRow>()
@@ -42,17 +42,6 @@ function ProviderBadge({ provider }: { provider: string }) {
       {meta?.label ?? provider}
     </Badge>
   )
-}
-
-function BindingsCount({ credentialId }: { credentialId: string }) {
-  const { data } = useRoleBindings({
-    search: `credential_id = '${credentialId}'`,
-  })
-  const count = data?.items.length ?? 0
-  if (count === 0) {
-    return <span className="text-muted-foreground">0</span>
-  }
-  return <span>{count}</span>
 }
 
 const credentialColumns = [
@@ -83,12 +72,16 @@ const credentialColumns = [
       )
     },
   }),
-  col.display({
+  col.accessor('bindingCount', {
     id: 'bindings',
     header: 'Bindings',
-    cell: ({ row }) => {
+    cell: ({ row, getValue }) => {
       if (row.getIsGrouped()) return null
-      return <BindingsCount credentialId={row.original.id} />
+      const count = getValue()
+      if (count === 0) {
+        return <span className="text-muted-foreground">0</span>
+      }
+      return <span>{count}</span>
     },
   }),
   col.accessor('createdAt', {
@@ -103,8 +96,10 @@ const credentialColumns = [
 
 export function CredentialTable({
   credentials,
+  bindings,
 }: {
   credentials: DomainCredential[]
+  bindings: DomainRoleBinding[]
 }) {
   const [search, setSearch] = useState('')
   const [sorting, setSorting] = useState<SortingState>([])
@@ -116,8 +111,9 @@ export function CredentialTable({
       credentials.map((c) => ({
         ...c,
         category: getCategoryForProvider(c.provider) ?? 'Other',
+        bindingCount: bindings.filter((b) => b.credentialId === c.id).length,
       })),
-    [credentials],
+    [credentials, bindings],
   )
 
   const table = useReactTable({

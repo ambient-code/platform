@@ -15,7 +15,9 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -23,6 +25,7 @@ import { useCreateCredential } from '@/queries/use-credentials'
 import type { DomainCredentialCreateRequest } from '@/domain/types'
 import {
   CREDENTIAL_CATEGORIES,
+  getCategoryForProvider,
   getProviderMeta,
 } from '@/domain/credential-providers'
 import type { ProviderMeta } from '@/domain/credential-providers'
@@ -36,7 +39,6 @@ export function CredentialCreateSheet({
 }) {
   const createCredential = useCreateCredential()
 
-  const [category, setCategory] = useState('')
   const [provider, setProvider] = useState('')
   const [name, setName] = useState('')
   const [token, setToken] = useState('')
@@ -44,12 +46,6 @@ export function CredentialCreateSheet({
   const [email, setEmail] = useState('')
   const [description, setDescription] = useState('')
   const [error, setError] = useState<string | null>(null)
-
-  const filteredProviders = useMemo(() => {
-    if (!category) return []
-    const cat = CREDENTIAL_CATEGORIES.find((c) => c.label === category)
-    return cat?.providers ?? []
-  }, [category])
 
   const providerMeta: ProviderMeta | undefined = useMemo(
     () => (provider ? getProviderMeta(provider) : undefined),
@@ -59,7 +55,6 @@ export function CredentialCreateSheet({
   const requiredFields = providerMeta?.fields ?? []
 
   function resetForm() {
-    setCategory('')
     setProvider('')
     setName('')
     setToken('')
@@ -83,6 +78,11 @@ export function CredentialCreateSheet({
       return
     }
 
+    if (requiredFields.includes('token') && !token) {
+      setError('Token is required for this provider.')
+      return
+    }
+
     const request: DomainCredentialCreateRequest = {
       name: name.trim(),
       provider,
@@ -103,6 +103,9 @@ export function CredentialCreateSheet({
     }
   }
 
+  // Auto-derive category from the selected provider
+  const _derivedCategory = provider ? getCategoryForProvider(provider) : undefined
+
   return (
     <Sheet
       open={open}
@@ -121,49 +124,32 @@ export function CredentialCreateSheet({
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4 px-4 pb-4">
           <div className="space-y-1.5">
-            <label htmlFor="cred-category" className="text-sm font-medium">
-              Category <span className="text-destructive">*</span>
-            </label>
-            <Select
-              value={category}
-              onValueChange={(v) => {
-                setCategory(v)
-                setProvider('')
-              }}
-            >
-              <SelectTrigger id="cred-category" className="w-full">
-                <SelectValue placeholder="Select a category" />
-              </SelectTrigger>
-              <SelectContent>
-                {CREDENTIAL_CATEGORIES.map((cat) => (
-                  <SelectItem key={cat.label} value={cat.label}>
-                    {cat.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
             <label htmlFor="cred-provider" className="text-sm font-medium">
               Provider <span className="text-destructive">*</span>
             </label>
             <Select
               value={provider}
               onValueChange={setProvider}
-              disabled={!category}
             >
               <SelectTrigger id="cred-provider" className="w-full">
-                <SelectValue placeholder={category ? 'Select a provider' : 'Select a category first'} />
+                <SelectValue placeholder="Select a provider" />
               </SelectTrigger>
               <SelectContent>
-                {filteredProviders.map((p) => (
-                  <SelectItem key={p.provider} value={p.provider}>
-                    {p.label}
-                  </SelectItem>
+                {CREDENTIAL_CATEGORIES.map((cat) => (
+                  <SelectGroup key={cat.label}>
+                    <SelectLabel>{cat.label}</SelectLabel>
+                    {cat.providers.map((p) => (
+                      <SelectItem key={p.provider} value={p.provider}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 ))}
               </SelectContent>
             </Select>
+            {_derivedCategory && (
+              <p className="text-xs text-muted-foreground">Category: {_derivedCategory}</p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -182,7 +168,7 @@ export function CredentialCreateSheet({
           {requiredFields.includes('token') && (
             <div className="space-y-1.5">
               <label htmlFor="cred-token" className="text-sm font-medium">
-                Token
+                Token <span className="text-destructive">*</span>
               </label>
               <Input
                 id="cred-token"
@@ -198,7 +184,7 @@ export function CredentialCreateSheet({
           {requiredFields.includes('url') && (
             <div className="space-y-1.5">
               <label htmlFor="cred-url" className="text-sm font-medium">
-                URL
+                URL <span className="text-destructive">*</span>
               </label>
               <Input
                 id="cred-url"
@@ -213,7 +199,7 @@ export function CredentialCreateSheet({
           {requiredFields.includes('email') && (
             <div className="space-y-1.5">
               <label htmlFor="cred-email" className="text-sm font-medium">
-                Email
+                Email <span className="text-destructive">*</span>
               </label>
               <Input
                 id="cred-email"

@@ -51,4 +51,10 @@ export const queryKeys = {
     list: (params?: ListParams) =>
       [...queryKeys.roleBindings.lists(), params] as const,
   },
+  roles: {
+    all: ['roles'] as const,
+    lists: () => [...queryKeys.roles.all, 'list'] as const,
+    list: (params?: ListParams) =>
+      [...queryKeys.roles.lists(), params] as const,
+  },
 } as const
