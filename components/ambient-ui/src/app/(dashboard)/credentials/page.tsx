@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { KeyRound, Plus, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -18,6 +18,20 @@ const CREDENTIAL_VIEWER_ROLE_NAME = 'credential:viewer'
 
 export default function CredentialsPage() {
   const [createSheetOpen, setCreateSheetOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState('registry')
+
+  useEffect(() => {
+    const tab = new URL(window.location.href).searchParams.get('tab')
+    if (tab) setActiveTab(tab)
+  }, [])
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value)
+    const url = new URL(window.location.href)
+    url.searchParams.set('tab', value)
+    window.history.replaceState({}, '', url.toString())
+  }
+
   const { data, isLoading, error } = useCredentials()
   const { data: projectsData } = useProjects()
   const { data: bindingsData } = useRoleBindings({ size: 1000, search: "scope = 'credential'" })
@@ -67,7 +81,7 @@ export default function CredentialsPage() {
         </Button>
       </div>
 
-      <Tabs defaultValue="registry">
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList>
           <TabsTrigger value="registry">Credentials</TabsTrigger>
           <TabsTrigger value="access-matrix">Project Access</TabsTrigger>

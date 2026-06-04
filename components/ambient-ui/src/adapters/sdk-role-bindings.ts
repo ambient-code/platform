@@ -22,9 +22,7 @@ function buildSdkListOptions(params?: ListParams) {
   return {
     page: params?.page ?? 1,
     size: params?.size ?? 100,
-    search: params?.search
-      ? sanitizeSearch(params.search)
-      : undefined,
+    search: params?.search ?? undefined,
     orderBy: params?.orderBy,
   }
 }
