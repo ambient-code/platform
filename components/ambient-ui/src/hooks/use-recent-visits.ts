@@ -46,7 +46,13 @@ function readItems(): RecentVisitItem[] {
     if (!raw) return []
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
-    return parsed as RecentVisitItem[]
+    return (parsed as Record<string, unknown>[]).filter(
+      (item) =>
+        typeof item.id === 'string' &&
+        typeof item.type === 'string' &&
+        typeof item.href === 'string' &&
+        typeof item.label === 'string',
+    ) as RecentVisitItem[]
   } catch {
     return []
   }

@@ -106,7 +106,7 @@ export function CredentialCreateSheet({
   }
 
   // Auto-derive category from the selected provider
-  const _derivedCategory = provider ? getCategoryForProvider(provider) : undefined
+  const derivedCategory = provider ? getCategoryForProvider(provider) : undefined
 
   return (
     <Sheet
@@ -149,8 +149,8 @@ export function CredentialCreateSheet({
                 ))}
               </SelectContent>
             </Select>
-            {_derivedCategory && (
-              <p className="text-xs text-muted-foreground">Category: {_derivedCategory}</p>
+            {derivedCategory && (
+              <p className="text-xs text-muted-foreground">Category: {derivedCategory}</p>
             )}
           </div>
 

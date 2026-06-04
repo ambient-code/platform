@@ -99,8 +99,7 @@ export default function CredentialsPage() {
       queryKey: queryKeys.agents.list(p.id, { size: 100 }),
       queryFn: () => agentsAdapter.list(p.id, { size: 100 }),
       enabled: projects.length > 0,
-      staleTime: 30_000,
-      refetchInterval: 30_000,
+      staleTime: 60_000,
     })),
   })
 
@@ -231,12 +230,14 @@ export default function CredentialsPage() {
       </Tabs>
 
       <CredentialCreateSheet open={createSheetOpen} onOpenChange={setCreateSheetOpen} />
-      <CredentialManageSheet
-        credential={managedCredential}
-        open={managedCredential !== null}
-        onOpenChange={(open) => { if (!open) closeManageSheet() }}
-        onNavigateToMatrix={handleNavigateToMatrix}
-      />
+      {managedCredential && (
+        <CredentialManageSheet
+          credential={managedCredential}
+          open
+          onOpenChange={(open) => { if (!open) closeManageSheet() }}
+          onNavigateToMatrix={handleNavigateToMatrix}
+        />
+      )}
     </div>
   )
 }

@@ -135,7 +135,7 @@ function NavGroup({
 export function AppSidebar({ projectId }: AppSidebarProps) {
   const pathname = usePathname()
   const { theme, setTheme } = useTheme()
-  const { data: sessionsData } = useSessions(projectId ?? '')
+  const { data: sessionsData } = useSessions(projectId ?? '', undefined)
 
   const operateBadges = (() => {
     if (!sessionsData?.items) return undefined
