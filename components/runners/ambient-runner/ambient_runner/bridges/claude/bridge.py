@@ -186,46 +186,6 @@ class ClaudeBridge(PlatformBridge):
             session_persistence=True,
         )
 
-    _last_sidecar_epochs: dict[str, str] = {}
-
-    async def _reconnect_failed_mcp_servers(self, thread_id: str) -> None:
-        """Detect credential sidecar restarts and rebuild the SDK client.
-
-        Each credential sidecar writes a restart epoch file when it
-        restarts the MCP subprocess. The file is on a shared volume at
-        /var/run/credential-epochs/{provider}/.credential-{provider}-restart-epoch.
-        If the epoch changed since the last check, the sidecar restarted
-        and the SDK's MCP connection is stale — destroy the worker and
-        let get_or_create() rebuild with --resume.
-        """
-        import os
-        from .mcp import _CREDENTIAL_SIDECAR_REGISTRY
-
-        worker = self._session_manager.get_existing(thread_id)
-        if worker is None:
-            return
-
-        restarted_providers: list[str] = []
-        for provider in _CREDENTIAL_SIDECAR_REGISTRY:
-            epoch_path = f"/var/run/credential-epochs/{provider}/.credential-{provider}-restart-epoch"
-            try:
-                epoch = open(epoch_path).read().strip()
-            except FileNotFoundError:
-                continue
-
-            prev = self._last_sidecar_epochs.get(provider)
-            if prev is not None and epoch != prev:
-                restarted_providers.append(provider)
-            self._last_sidecar_epochs[provider] = epoch
-
-        if restarted_providers:
-            logger.info(
-                "Credential sidecar(s) restarted: %s — destroying worker "
-                "for fresh SDK connection with --resume",
-                ", ".join(restarted_providers),
-            )
-            await self._session_manager.destroy(thread_id)
-
     async def _initialize_run(
         self,
         thread_id: str,
@@ -257,10 +217,6 @@ class ClaudeBridge(PlatformBridge):
         await populate_runtime_credentials(self._context)
         await populate_mcp_server_credentials(self._context)
         self._last_creds_refresh = time.monotonic()
-
-        # Reconnect any failed credential sidecar MCP servers (e.g. after
-        # sidecar restarts the MCP subprocess on token refresh).
-        await self._reconnect_failed_mcp_servers(thread_id)
 
         # If the caller changed, destroy the worker and rebuild MCP servers +
         # adapter so the new ClaudeSDKClient gets fresh mcp_servers config.

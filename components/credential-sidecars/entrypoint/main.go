@@ -11,145 +11,11 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
 	"github.com/ambient-code/platform/components/ambient-mcp/tokenexchange"
 )
-
-type managedProc struct {
-	cmd  *exec.Cmd
-	done chan struct{}
-	err  error
-}
-
-type processManager struct {
-	args      []string
-	mu        sync.Mutex
-	restartMu sync.Mutex
-	proc      *managedProc
-	stopped   bool
-}
-
-func newProcessManager(args []string) *processManager {
-	return &processManager{args: args}
-}
-
-func (pm *processManager) spawnLocked() error {
-	cmd := exec.Command(pm.args[0], pm.args[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	cmd.Env = os.Environ()
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start %s: %w", pm.args[0], err)
-	}
-	p := &managedProc{cmd: cmd, done: make(chan struct{})}
-	go func() {
-		p.err = cmd.Wait()
-		close(p.done)
-	}()
-	pm.proc = p
-	return nil
-}
-
-func (pm *processManager) start() error {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-	if pm.stopped {
-		return nil
-	}
-	return pm.spawnLocked()
-}
-
-func (pm *processManager) restart() error {
-	pm.restartMu.Lock()
-	defer pm.restartMu.Unlock()
-
-	pm.mu.Lock()
-	if pm.stopped {
-		pm.mu.Unlock()
-		return nil
-	}
-	old := pm.proc
-	// Spawn P2 BEFORE killing P1. This guarantees pm.proc points to the
-	// new process before old.done closes, so wait() always sees
-	// replaced=true and loops instead of exiting.
-	fmt.Fprintf(os.Stderr, "credential-sidecar: restarting MCP subprocess for credential refresh\n")
-	if err := pm.spawnLocked(); err != nil {
-		pm.mu.Unlock()
-		return err
-	}
-	pm.mu.Unlock()
-
-	// Now signal the old process to shut down
-	if old != nil && old.cmd.Process != nil {
-		_ = old.cmd.Process.Signal(syscall.SIGTERM)
-		select {
-		case <-old.done:
-		case <-time.After(5 * time.Second):
-			_ = old.cmd.Process.Kill()
-			<-old.done
-		}
-	}
-
-	// Write restart epoch so the runner knows to rebuild its SDK client
-	provider := os.Getenv("CREDENTIAL_PROVIDER")
-	if provider != "" {
-		epochPath := fmt.Sprintf("/tmp/.credential-%s-restart-epoch", provider)
-		epoch := fmt.Sprintf("%d", time.Now().UnixMilli())
-		_ = os.WriteFile(epochPath, []byte(epoch), 0644)
-		fmt.Fprintf(os.Stderr, "credential-sidecar: wrote restart epoch to %s\n", epochPath)
-	}
-
-	return nil
-}
-
-func (pm *processManager) signal(s os.Signal) {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-	pm.stopped = true
-	if pm.proc != nil && pm.proc.cmd.Process != nil {
-		_ = pm.proc.cmd.Process.Signal(s)
-	}
-}
-
-func (pm *processManager) wait() int {
-	for {
-		pm.mu.Lock()
-		proc := pm.proc
-		pm.mu.Unlock()
-		if proc == nil {
-			return 1
-		}
-
-		<-proc.done
-
-		pm.mu.Lock()
-		isStopped := pm.stopped
-		replaced := pm.proc != proc
-		pm.mu.Unlock()
-
-		if isStopped {
-			if exitErr, ok := proc.err.(*exec.ExitError); ok {
-				return exitErr.ExitCode()
-			}
-			return 0
-		}
-		if replaced {
-			continue
-		}
-		if proc.err != nil {
-			if exitErr, ok := proc.err.(*exec.ExitError); ok {
-				return exitErr.ExitCode()
-			}
-			fmt.Fprintf(os.Stderr, "subprocess failed: %v\n", proc.err)
-			return 1
-		}
-		return 0
-	}
-}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -187,40 +53,21 @@ func main() {
 		}
 	}
 
-	args := os.Args[1:]
-	if os.Getenv("PLATFORM_MODE") == "mpp" && provider == "kubeconfig" {
-		args = injectMPPConfig(args)
-	}
-
-	pm := newProcessManager(args)
-	if err := pm.start(); err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
-	}
-
 	exchanger.OnRefresh(func(newToken string) {
 		if apiURL != "" && provider != "" {
 			if err := fetchAndSetCredential(newToken, apiURL, provider); err != nil {
 				fmt.Fprintf(os.Stderr, "credential refresh failed: %v\n", err)
-				return
-			}
-			if err := pm.restart(); err != nil {
-				fmt.Fprintf(os.Stderr, "credential-sidecar: restart failed, exiting: %v\n", err)
-				pm.signal(syscall.SIGTERM)
 			}
 		}
 	})
 	exchanger.StartBackgroundRefresh()
 	defer exchanger.Stop()
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
-	go func() {
-		s := <-sig
-		pm.signal(s)
-	}()
-
-	os.Exit(pm.wait())
+	args := os.Args[1:]
+	if os.Getenv("PLATFORM_MODE") == "mpp" && provider == "kubeconfig" {
+		args = injectMPPConfig(args)
+	}
+	runSubprocess(args)
 }
 
 func fetchAndSetCredential(bearerToken, apiURL, provider string) error {
@@ -366,4 +213,32 @@ kind = "Namespace"
 	}
 	fmt.Fprintf(os.Stderr, "MPP mode: injecting kubernetes-mcp-server config to deny cluster-scoped Namespace access\n")
 	return append([]string{args[0], "--config", configPath}, args[1:]...)
+}
+
+func runSubprocess(args []string) {
+	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	cmd.Env = os.Environ()
+
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to start %s: %v\n", args[0], err)
+		os.Exit(1)
+	}
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		s := <-sig
+		_ = cmd.Process.Signal(s)
+	}()
+
+	if err := cmd.Wait(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			os.Exit(exitErr.ExitCode())
+		}
+		fmt.Fprintf(os.Stderr, "subprocess failed: %v\n", err)
+		os.Exit(1)
+	}
 }

@@ -385,27 +385,6 @@ class SessionWorker:
         else:
             raise RuntimeError("No active client")
 
-    async def reconnect_mcp_server(self, server_name: str) -> None:
-        """Reconnect a single MCP server (e.g. after credential sidecar restart)."""
-        if self._client is not None:
-            try:
-                await self._client.reconnect_mcp_server(server_name)
-                logger.info(f"[SessionWorker] Reconnected MCP server: {server_name}")
-            except Exception as exc:
-                logger.warning(f"[SessionWorker] reconnect_mcp_server({server_name}) failed: {exc}")
-        else:
-            logger.warning("[SessionWorker] reconnect_mcp_server requested but no active client")
-
-    async def get_mcp_status(self) -> dict:
-        """Get status of all MCP servers from the SDK client."""
-        if self._client is not None:
-            try:
-                return await self._client.get_mcp_status()
-            except Exception as exc:
-                logger.warning(f"[SessionWorker] get_mcp_status failed: {exc}")
-                return {}
-        return {}
-
 
 class SessionManager:
     """Creates, caches, and tears down :class:`SessionWorker` instances.
