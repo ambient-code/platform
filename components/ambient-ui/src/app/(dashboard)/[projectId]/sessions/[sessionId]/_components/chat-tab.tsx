@@ -19,8 +19,8 @@ import { useLiveTail, LiveIndicator } from './live-tail-indicator'
 
 export function ChatTab({ session }: { session: DomainSession }) {
   const { data, isLoading, error } = useSessionMessages(session.id)
-  const { openSessionId, openSidebar, closeSidebar } = useChatSidebar()
-  const isInSidebar = openSessionId === session.id
+  const { sessions: sidebarSessions, openSidebar, closeSidebar } = useChatSidebar()
+  const isInSidebar = sidebarSessions.some(s => s.sessionId === session.id)
 
   const chatItems = useMemo(() => {
     return buildChatItems(data?.items ?? [])
@@ -108,7 +108,7 @@ export function ChatTab({ session }: { session: DomainSession }) {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => openSidebar(session.id)}
+            onClick={() => openSidebar(session.id, session.name)}
             aria-label="Pop out chat to sidebar"
             className="text-xs text-muted-foreground hover:text-foreground"
           >
