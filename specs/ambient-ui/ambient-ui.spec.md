@@ -424,6 +424,39 @@ Condition colors SHALL reflect semantic health, not literal True/False values. "
 
 Note: the runner currently persists one `assistant` message per turn (final text only). Intermediate assistant text and individual tool call arguments are not yet persisted as separate messages — they arrive via the operational event writer with tool name and result only. Full streaming with intermediate text requires the SSE-Driven Updates requirement.
 
+### Requirement: Draft Message Persistence
+
+The chat input SHALL persist unsent text to `localStorage` as the user types, scoped per session ID. If the user navigates away, refreshes, or is redirected by an auth flow, the draft SHALL be restored when they return to the same session.
+
+Drafts SHALL be cleared when the message is successfully sent. Drafts SHOULD be cleared on explicit logout (`/api/auth/sso/logout`). Drafts older than 48 hours SHOULD be silently discarded on read.
+
+The storage key format SHALL be `ambient-draft:{sessionId}`. The stored value SHALL include the text and a timestamp.
+
+#### Scenario: Draft survives page reload
+
+- GIVEN a user has typed "review the PR" in the chat input for session A
+- WHEN the page reloads (browser refresh or auth redirect)
+- THEN the chat input for session A is pre-filled with "review the PR"
+
+#### Scenario: Draft cleared on send
+
+- GIVEN a user has a draft for session A
+- WHEN they send the message successfully
+- THEN the draft for session A is removed from localStorage
+
+#### Scenario: Draft expires after 48 hours
+
+- GIVEN a draft was saved 49 hours ago
+- WHEN the user returns to that session
+- THEN the draft is discarded and the input is empty
+
+#### Scenario: Drafts independent per session
+
+- GIVEN drafts exist for session A and session B
+- WHEN the user views session A
+- THEN only session A's draft is restored
+- AND session B's draft is unaffected
+
 ### Requirement: Persistent Chat Sidebar
 
 The Ambient UI SHALL support popping a session's chat into a persistent sidebar panel that remains visible across page navigation. The sidebar allows the user to monitor and interact with an agent while performing other tasks in the UI.
