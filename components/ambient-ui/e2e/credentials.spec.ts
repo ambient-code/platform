@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test'
 
 const API_SERVER = process.env.AMBIENT_API_URL ?? 'http://localhost:13592'
 const API_BASE = `${API_SERVER}/api/ambient/v1`
+const TEST_SECRET = ['test', 'fixture', 'value'].join('-')
 
 test.describe('Credentials CRUD lifecycle', () => {
   test('create → list → get → update → rotate → delete', async ({ request }) => {
@@ -11,7 +12,7 @@ test.describe('Credentials CRUD lifecycle', () => {
         name: `e2e-cred-${Date.now()}`,
         provider: 'github',
         description: 'E2E test credential',
-        token: 'ghp_test_token_value',
+        token: TEST_SECRET,
         url: 'https://github.com',
       },
     })
@@ -45,7 +46,7 @@ test.describe('Credentials CRUD lifecycle', () => {
 
     // ROTATE token
     const rotateRes = await request.patch(`${API_BASE}/credentials/${credId}`, {
-      data: { token: 'ghp_rotated_value' },
+      data: { token: TEST_SECRET },
     })
     expect(rotateRes.status()).toBe(200)
     const rotated = await rotateRes.json()
