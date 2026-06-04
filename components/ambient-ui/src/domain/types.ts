@@ -132,6 +132,25 @@ export type DomainSessionCreateRequest = {
   temperature?: number
   maxTokens?: number
   timeout?: number
+  annotations?: Record<string, string>
+}
+
+export type DomainAgentCreateRequest = {
+  name: string
+  projectId: string
+  displayName?: string
+  model?: string
+  prompt?: string
+  repoUrl?: string
+  description?: string
+}
+
+export type DomainAgentUpdateRequest = {
+  displayName?: string
+  model?: string
+  prompt?: string
+  repoUrl?: string
+  description?: string
 }
 
 export type FeedbackItem = {
