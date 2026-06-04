@@ -38,10 +38,20 @@ func (l AgentList) Index() AgentIndex {
 	return index
 }
 
+// unsetTemperature is a sentinel value indicating the caller did not provide a temperature.
+// Valid temperatures are 0.0–2.0, so -1 is unambiguously "unset".
+const unsetTemperature = -1.0
+
 func (d *Agent) BeforeCreate(tx *gorm.DB) error {
 	d.ID = api.NewID()
 	if d.LlmModel == "" {
 		d.LlmModel = "claude-sonnet-4-6"
+	}
+	if d.LlmTemperature == unsetTemperature {
+		d.LlmTemperature = 0.7
+	}
+	if d.LlmMaxTokens <= 0 {
+		d.LlmMaxTokens = 4000
 	}
 	return nil
 }

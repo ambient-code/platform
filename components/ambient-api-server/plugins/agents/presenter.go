@@ -27,6 +27,8 @@ func ConvertAgent(agent openapi.Agent) *Agent {
 	}
 	if agent.LlmTemperature != nil {
 		c.LlmTemperature = *agent.LlmTemperature
+	} else {
+		c.LlmTemperature = unsetTemperature
 	}
 	if agent.LlmMaxTokens != nil {
 		c.LlmMaxTokens = *agent.LlmMaxTokens
