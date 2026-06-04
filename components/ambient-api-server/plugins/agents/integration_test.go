@@ -145,9 +145,9 @@ func TestAgentPostLlmDefaults(t *testing.T) {
 	Expect(agentOutput.LlmModel).NotTo(BeNil(), "llm_model should be defaulted")
 	Expect(*agentOutput.LlmModel).To(Equal("claude-sonnet-4-6"))
 	Expect(agentOutput.LlmTemperature).NotTo(BeNil(), "llm_temperature should be present")
-	Expect(*agentOutput.LlmTemperature).To(BeNumerically("~", 0.0, 0.001))
+	Expect(*agentOutput.LlmTemperature).To(BeNumerically("~", 0.7, 0.001))
 	Expect(agentOutput.LlmMaxTokens).NotTo(BeNil(), "llm_max_tokens should be present")
-	Expect(*agentOutput.LlmMaxTokens).To(Equal(int32(0)))
+	Expect(*agentOutput.LlmMaxTokens).To(Equal(int32(4000)))
 }
 
 func TestAgentPatch(t *testing.T) {

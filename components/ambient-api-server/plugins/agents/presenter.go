@@ -32,6 +32,8 @@ func ConvertAgent(agent openapi.Agent) *Agent {
 	}
 	if agent.LlmMaxTokens != nil {
 		c.LlmMaxTokens = *agent.LlmMaxTokens
+	} else {
+		c.LlmMaxTokens = unsetMaxTokens
 	}
 	c.BotAccountName = agent.BotAccountName
 	c.ResourceOverrides = agent.ResourceOverrides
