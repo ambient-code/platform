@@ -79,7 +79,8 @@ export function CreateAgentSheet({
       onOpenChange(false)
       router.push(`/${projectId}/agents/${agent.id}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create agent.')
+      console.error('create agent failed', err)
+      setError('Failed to create agent. Please try again.')
     }
   }
 

@@ -115,7 +115,7 @@ function TabStrip({
 }
 
 /** Test-mode toolbar with re-run, save, delete */
-function TestToolbar({ session, activeSession }: { session: { phase: string; id: string }; activeSession: SidebarSession }) {
+function TestToolbar({ session, activeSession, projectId }: { session: { phase: string; id: string }; activeSession: SidebarSession; projectId: string }) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const { closeSession, openTestSidebar } = useChatSidebar()
   const stopSession = useStopSession()
@@ -131,7 +131,7 @@ function TestToolbar({ session, activeSession }: { session: { phase: string; id:
       createSession.mutate(
         {
           name: newName,
-          projectId: '', // will be derived from the agent
+          projectId,
           agentId: activeSession.agentId,
           prompt: activeSession.agentPrompt ?? undefined,
           model: activeSession.agentModel ?? undefined,
@@ -147,6 +147,9 @@ function TestToolbar({ session, activeSession }: { session: { phase: string; id:
               agentPrompt: activeSession.agentPrompt ?? null,
               agentModel: activeSession.agentModel ?? null,
             })
+          },
+          onError: () => {
+            console.error('[TestToolbar] Re-run failed')
           },
         },
       )
@@ -479,7 +482,7 @@ export function ChatSidebar() {
 
       {/* Test mode toolbar */}
       {activeSession?.mode === 'test' && session && (
-        <TestToolbar session={{ phase: sessionPhase, id: activeSessionId }} activeSession={activeSession} />
+        <TestToolbar session={{ phase: sessionPhase, id: activeSessionId }} activeSession={activeSession} projectId={projectId} />
       )}
 
       {/* Message area */}
