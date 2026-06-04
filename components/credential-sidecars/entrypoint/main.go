@@ -18,18 +18,25 @@ import (
 	"github.com/ambient-code/platform/components/ambient-mcp/tokenexchange"
 )
 
+type managedProc struct {
+	cmd  *exec.Cmd
+	done chan struct{}
+	err  error
+}
+
 type processManager struct {
-	args    []string
-	mu      sync.Mutex
-	cmd     *exec.Cmd
-	stopped bool
+	args      []string
+	mu        sync.Mutex
+	restartMu sync.Mutex
+	proc      *managedProc
+	stopped   bool
 }
 
 func newProcessManager(args []string) *processManager {
 	return &processManager{args: args}
 }
 
-func (pm *processManager) startLocked() error {
+func (pm *processManager) spawnLocked() error {
 	cmd := exec.Command(pm.args[0], pm.args[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -38,7 +45,12 @@ func (pm *processManager) startLocked() error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start %s: %w", pm.args[0], err)
 	}
-	pm.cmd = cmd
+	p := &managedProc{cmd: cmd, done: make(chan struct{})}
+	go func() {
+		p.err = cmd.Wait()
+		close(p.done)
+	}()
+	pm.proc = p
 	return nil
 }
 
@@ -48,23 +60,30 @@ func (pm *processManager) start() error {
 	if pm.stopped {
 		return nil
 	}
-	return pm.startLocked()
+	return pm.spawnLocked()
 }
 
 func (pm *processManager) restart() error {
+	pm.restartMu.Lock()
+	defer pm.restartMu.Unlock()
+
 	pm.mu.Lock()
 	if pm.stopped {
 		pm.mu.Unlock()
 		return nil
 	}
-	old := pm.cmd
+	old := pm.proc
 	pm.mu.Unlock()
 
-	if old != nil && old.Process != nil {
+	if old != nil && old.cmd.Process != nil {
 		fmt.Fprintf(os.Stderr, "credential-sidecar: restarting MCP subprocess for credential refresh\n")
-		_ = old.Process.Signal(syscall.SIGTERM)
-		time.Sleep(5 * time.Second)
-		_ = old.Process.Kill()
+		_ = old.cmd.Process.Signal(syscall.SIGTERM)
+		select {
+		case <-old.done:
+		case <-time.After(5 * time.Second):
+			_ = old.cmd.Process.Kill()
+			<-old.done
+		}
 	}
 
 	pm.mu.Lock()
@@ -72,36 +91,36 @@ func (pm *processManager) restart() error {
 	if pm.stopped {
 		return nil
 	}
-	return pm.startLocked()
+	return pm.spawnLocked()
 }
 
 func (pm *processManager) signal(s os.Signal) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 	pm.stopped = true
-	if pm.cmd != nil && pm.cmd.Process != nil {
-		_ = pm.cmd.Process.Signal(s)
+	if pm.proc != nil && pm.proc.cmd.Process != nil {
+		_ = pm.proc.cmd.Process.Signal(s)
 	}
 }
 
 func (pm *processManager) wait() int {
 	for {
 		pm.mu.Lock()
-		cmd := pm.cmd
+		proc := pm.proc
 		pm.mu.Unlock()
-		if cmd == nil {
+		if proc == nil {
 			return 1
 		}
 
-		err := cmd.Wait()
+		<-proc.done
 
 		pm.mu.Lock()
 		isStopped := pm.stopped
-		replaced := pm.cmd != cmd
+		replaced := pm.proc != proc
 		pm.mu.Unlock()
 
 		if isStopped {
-			if exitErr, ok := err.(*exec.ExitError); ok {
+			if exitErr, ok := proc.err.(*exec.ExitError); ok {
 				return exitErr.ExitCode()
 			}
 			return 0
@@ -109,11 +128,11 @@ func (pm *processManager) wait() int {
 		if replaced {
 			continue
 		}
-		if err != nil {
-			if exitErr, ok := err.(*exec.ExitError); ok {
+		if proc.err != nil {
+			if exitErr, ok := proc.err.(*exec.ExitError); ok {
 				return exitErr.ExitCode()
 			}
-			fmt.Fprintf(os.Stderr, "subprocess failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, "subprocess failed: %v\n", proc.err)
 			return 1
 		}
 		return 0
