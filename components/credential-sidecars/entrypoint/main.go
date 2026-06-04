@@ -51,11 +51,11 @@ func (pm *processManager) start() error {
 	return pm.startLocked()
 }
 
-func (pm *processManager) restart() {
+func (pm *processManager) restart() error {
 	pm.mu.Lock()
 	if pm.stopped {
 		pm.mu.Unlock()
-		return
+		return nil
 	}
 	old := pm.cmd
 	pm.mu.Unlock()
@@ -70,11 +70,9 @@ func (pm *processManager) restart() {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 	if pm.stopped {
-		return
+		return nil
 	}
-	if err := pm.startLocked(); err != nil {
-		fmt.Fprintf(os.Stderr, "credential-sidecar: restart failed: %v\n", err)
-	}
+	return pm.startLocked()
 }
 
 func (pm *processManager) signal(s os.Signal) {
@@ -175,7 +173,10 @@ func main() {
 				fmt.Fprintf(os.Stderr, "credential refresh failed: %v\n", err)
 				return
 			}
-			pm.restart()
+			if err := pm.restart(); err != nil {
+				fmt.Fprintf(os.Stderr, "credential-sidecar: restart failed, exiting: %v\n", err)
+				pm.signal(syscall.SIGTERM)
+			}
 		}
 	})
 	exchanger.StartBackgroundRefresh()

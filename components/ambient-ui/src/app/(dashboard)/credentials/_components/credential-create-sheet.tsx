@@ -139,7 +139,12 @@ export function CredentialCreateSheet({
             </label>
             <Select
               value={provider}
-              onValueChange={setProvider}
+              onValueChange={(v) => {
+                setProvider(v)
+                setToken('')
+                setUrl('')
+                setEmail('')
+              }}
             >
               <SelectTrigger id="cred-provider" className="w-full">
                 <SelectValue placeholder="Select a provider" />
