@@ -8,9 +8,10 @@ GRPCSessionListener — pod-lifetime WatchSessionMessages subscriber.
     (a) bridge._active_streams[thread_id] queue — feeds the /events SSE tap
     (b) GRPCMessageWriter — assembles and writes the durable DB record
 
-GRPCMessageWriter — per-turn event consumer.
-  Accumulates MESSAGES_SNAPSHOT content.
-  Pushes one PushSessionMessage(event_type="assistant") on RUN_FINISHED / RUN_ERROR.
+GRPCMessageWriter — real-time assistant text writer.
+  Accumulates TEXT_MESSAGE_CONTENT deltas, pushes on TEXT_MESSAGE_END.
+  Each assistant turn gets a server-assigned seq at its correct chronological
+  position relative to tool events. push_error() handles crash recovery.
 
 When AMBIENT_GRPC_ENABLED is not set, none of this code is instantiated or called.
 """
