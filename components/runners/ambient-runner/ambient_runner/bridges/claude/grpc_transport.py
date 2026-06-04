@@ -377,12 +377,12 @@ class GRPCSessionListener:
 
 
 class GRPCMessageWriter:
-    """Per-turn event consumer. Writes one PushSessionMessage on turn end.
+    """Pushes assistant text to the session messages API in real-time.
 
-    Accumulates messages from MESSAGES_SNAPSHOT events (storing only the
-    latest snapshot — each MESSAGES_SNAPSHOT is a complete replacement).
-    On RUN_FINISHED or RUN_ERROR, pushes the assembled payload as a single
-    durable DB record with event_type="assistant".
+    Accumulates TEXT_MESSAGE_CONTENT deltas and pushes the complete text
+    on TEXT_MESSAGE_END. This ensures each assistant turn gets a server-
+    assigned seq number at the correct chronological position — after any
+    preceding tool events and before any subsequent ones.
     """
 
     def __init__(
@@ -394,63 +394,40 @@ class GRPCMessageWriter:
         self._session_id = session_id
         self._run_id = run_id
         self._grpc_client = grpc_client
-        self._accumulated_messages: list = []
+        self._text_buffer: str = ""
 
     async def consume(self, event: BaseEvent) -> None:
-        """Process one event from bridge.run(). Called by the listener fan-out loop."""
         raw_type = getattr(event, "type", None)
         if raw_type is None:
             return
         event_type_str = raw_type.value if hasattr(raw_type, "value") else str(raw_type)
 
-        if event_type_str == "MESSAGES_SNAPSHOT":
-            messages = getattr(event, "messages", None) or []
-            self._accumulated_messages = [
-                m.model_dump() if hasattr(m, "model_dump") else m for m in messages
-            ]
-            logger.debug(
-                "[GRPC WRITER] MESSAGES_SNAPSHOT accumulated: session=%s count=%d",
-                self._session_id,
-                len(self._accumulated_messages),
-            )
+        if event_type_str == "TEXT_MESSAGE_START":
+            self._text_buffer = ""
 
-        elif event_type_str == "RUN_FINISHED":
-            await self._write_message(status="completed")
+        elif event_type_str == "TEXT_MESSAGE_CONTENT":
+            delta = getattr(event, "delta", None) or ""
+            self._text_buffer += delta
 
-        elif event_type_str == "RUN_ERROR":
-            await self._write_message(status="error")
+        elif event_type_str == "TEXT_MESSAGE_END":
+            text = self._text_buffer.strip()
+            self._text_buffer = ""
+            if text:
+                await self._push_assistant(text)
 
-    async def _write_message(self, status: str) -> None:
+    async def _push_assistant(self, text: str) -> None:
         if self._grpc_client is None:
             logger.warning(
-                "[GRPC WRITER] No gRPC client — cannot push assembled message: session=%s",
+                "[GRPC WRITER] No gRPC client — cannot push assistant text: session=%s",
                 self._session_id,
             )
             return
 
-        assistant_text = next(
-            (
-                m.get("content") or ""
-                for m in self._accumulated_messages
-                if m.get("role") == "assistant"
-            ),
-            "",
-        )
-
-        if not assistant_text:
-            logger.warning(
-                "[GRPC WRITER] No assistant message in snapshot: session=%s run=%s messages=%d",
-                self._session_id,
-                self._run_id,
-                len(self._accumulated_messages),
-            )
-
         logger.info(
-            "[GRPC WRITER] PushSessionMessage: session=%s run=%s status=%s text_len=%d",
+            "[GRPC WRITER] PushAssistant: session=%s run=%s text_len=%d",
             self._session_id,
             self._run_id,
-            status,
-            len(assistant_text),
+            len(text),
         )
 
         client = self._grpc_client
@@ -460,15 +437,14 @@ class GRPCMessageWriter:
             client.session_messages.push(
                 session_id,
                 event_type="assistant",
-                payload=assistant_text,
+                payload=text,
             )
 
         try:
             await asyncio.get_running_loop().run_in_executor(None, _do_push)
         except Exception as exc:
             logger.warning(
-                "[GRPC WRITER] Push failed: session=%s status=%s error=%s",
+                "[GRPC WRITER] Push failed: session=%s error=%s",
                 self._session_id,
-                status,
                 exc,
             )

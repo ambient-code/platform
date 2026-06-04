@@ -88,46 +88,12 @@ export function tryFormatJson(payload: string): string {
   }
 }
 
-// ---- Message Enrichment ----
+// ---- Message Filtering ----
 
-export function extractLastAssistantMessage(payload: string): string | null {
-  try {
-    const parsed: unknown = JSON.parse(payload)
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
-    const obj = parsed as Record<string, unknown>
-    if (typeof obj.value !== 'object' || obj.value === null) return null
-    const value = obj.value as Record<string, unknown>
-    if (typeof value.last_assistant_message === 'string' && value.last_assistant_message.trim()) {
-      return value.last_assistant_message
-    }
-    return null
-  } catch {
-    return null
-  }
-}
-
-export function enrichMessages(messages: DomainSessionMessage[]): DomainSessionMessage[] {
-  const enriched: DomainSessionMessage[] = []
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i]
-    if (msg.eventType === 'assistant' && !msg.payload.trim()) {
-      for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
-        if (messages[j].eventType === 'system') {
-          const extracted = extractLastAssistantMessage(messages[j].payload)
-          if (extracted) {
-            enriched.push({ ...msg, payload: extracted })
-            break
-          }
-        }
-      }
-      // Empty assistant messages with no extractable text are dropped — the
-      // runner sometimes pushes an empty "assistant" record alongside a system
-      // event that contains the actual response in last_assistant_message.
-      continue
-    }
-    enriched.push(msg)
-  }
-  return enriched
+export function filterEmptyMessages(messages: DomainSessionMessage[]): DomainSessionMessage[] {
+  return messages.filter(
+    (msg) => !(msg.eventType === 'assistant' && !msg.payload.trim()),
+  )
 }
 
 // ---- Tool Call Grouping ----
@@ -474,7 +440,7 @@ export function ChatItemsList({
 
 /** Filter and group raw messages into chat items */
 export function buildChatItems(messages: DomainSessionMessage[]): ChatItem[] {
-  const enriched = enrichMessages(messages)
-  const chatOnly = enriched.filter(m => CHAT_EVENT_TYPES.has(m.eventType))
+  const filtered = filterEmptyMessages(messages)
+  const chatOnly = filtered.filter(m => CHAT_EVENT_TYPES.has(m.eventType))
   return groupChatItems(chatOnly)
 }
