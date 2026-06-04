@@ -7,7 +7,7 @@ import {
   useRef,
   useEffect,
 } from 'react'
-import { Check, ChevronDown, Loader2, Search, X, AlertTriangle, Link2, Unlink, MoreVertical, Plus, Minus, ShieldCheck, ShieldOff, KeyRound, FolderOpen } from 'lucide-react'
+import { Check, ChevronDown, Loader2, Search, X, AlertTriangle, Link2, Unlink, MoreVertical, Plus, Minus, ShieldCheck, ShieldOff, KeyRound, FolderOpen, Settings2 } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -93,6 +93,7 @@ type BindingMatrixProps = {
   bindings: DomainRoleBinding[]
   roleId: string
   initialFilter?: string
+  onEditCredential?: (credential: DomainCredential) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -139,6 +140,7 @@ export function BindingMatrix({
   bindings,
   roleId,
   initialFilter,
+  onEditCredential,
 }: BindingMatrixProps) {
   // --- filter / pagination state ---
   const [filterText, setFilterText] = useState(initialFilter ?? '')
@@ -654,7 +656,7 @@ export function BindingMatrix({
               onClick={() => void bulkBindProject(group.project.id)}
             >
               <Plus className="h-3.5 w-3.5 mr-1.5" />
-              Bind all to project
+              Grant all to project
             </Button>
             <Button
               variant="destructive"
@@ -663,7 +665,7 @@ export function BindingMatrix({
               onClick={() => bulkUnbindProject(group.project.id)}
             >
               <Unlink className="h-3.5 w-3.5 mr-1.5" />
-              Unbind from project
+              Revoke from project
             </Button>
           </div>
         </PopoverContent>
@@ -717,7 +719,7 @@ export function BindingMatrix({
               onClick={() => void bulkBindAgent(agent.id, group.project.id)}
             >
               <Plus className="h-3.5 w-3.5 mr-1.5" />
-              Bind all to this agent
+              Grant all to this agent
             </Button>
             <Button
               variant="destructive"
@@ -726,7 +728,7 @@ export function BindingMatrix({
               onClick={() => bulkUnbindAgent(agent.id)}
             >
               <Unlink className="h-3.5 w-3.5 mr-1.5" />
-              Unbind from this agent
+              Revoke from this agent
             </Button>
           </div>
         </PopoverContent>
@@ -754,21 +756,27 @@ export function BindingMatrix({
             </SelectContent>
           </Select>
           <div className="relative w-64">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Search className={cn(
+              'absolute left-2.5 top-2.5 h-4 w-4',
+              filterText ? 'text-primary' : 'text-muted-foreground',
+            )} />
             <Input
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
               placeholder="Filter credentials..."
-              className="pl-9 pr-8 h-9"
+              className={cn(
+                'pl-9 pr-8 h-9',
+                filterText && 'ring-2 ring-primary/50 bg-primary/5',
+              )}
             />
             {filterText && (
               <button
                 type="button"
                 onClick={() => setFilterText('')}
-                className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground"
+                className="absolute right-2 top-2 h-5 w-5 flex items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent"
                 aria-label="Clear filter"
               >
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
@@ -799,6 +807,23 @@ export function BindingMatrix({
             <span>Not bound</span>
           </div>
         </div>
+
+        {/* --- Filtered state indicator --- */}
+        {filterText && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>
+              Filtered to <span className="font-medium text-foreground">{filteredCredentials.length}</span> of {credentials.length} credentials
+            </span>
+            <span className="text-muted-foreground/40">·</span>
+            <button
+              type="button"
+              onClick={() => setFilterText('')}
+              className="text-primary hover:text-primary/80 text-sm"
+            >
+              Show all
+            </button>
+          </div>
+        )}
 
         {/* --- Axis label --- */}
         <div className="flex items-end justify-between">
@@ -924,6 +949,21 @@ export function BindingMatrix({
                               <p className="text-xs font-medium text-muted-foreground px-2 py-1">
                                 {cred.name}
                               </p>
+                              <Separator />
+                              {onEditCredential && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="w-full justify-start text-sm"
+                                  onClick={() => {
+                                    closeRowPopover(cred.id)
+                                    onEditCredential(cred)
+                                  }}
+                                >
+                                  <Settings2 className="h-3.5 w-3.5 mr-1.5" />
+                                  Manage credential
+                                </Button>
+                              )}
                               <Separator />
                               {projectGroups.length > 0 && (
                                 <Button
@@ -1264,7 +1304,7 @@ function GroupCells({
           </TooltipTrigger>
           <TooltipContent>
             <p>
-              {projectBound ? 'Unbind from' : 'Bind to'} project: {group.project.name}
+              {projectBound ? 'Revoke from' : 'Grant to'} project: {group.project.name}
             </p>
           </TooltipContent>
         </Tooltip>
@@ -1355,7 +1395,7 @@ function GroupCells({
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>
-                    {agentBound ? 'Unbind from' : 'Bind to'} agent: {agent.displayName ?? agent.name}
+                    {agentBound ? 'Revoke from' : 'Grant to'} agent: {agent.displayName ?? agent.name}
                   </p>
                 </TooltipContent>
               </Tooltip>

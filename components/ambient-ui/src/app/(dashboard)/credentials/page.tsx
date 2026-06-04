@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useQueries } from '@tanstack/react-query'
 import { KeyRound, Plus, AlertTriangle, Settings2, Link } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -13,9 +13,10 @@ import { useProjects } from '@/queries/use-projects'
 import { useRoles } from '@/queries/use-roles'
 import { queryKeys } from '@/queries/query-keys'
 import { createAgentsAdapter } from '@/adapters/sdk-agents'
-import type { DomainAgent } from '@/domain/types'
+import type { DomainAgent, DomainCredential } from '@/domain/types'
 import { CredentialTable } from './_components/credential-table'
 import { CredentialCreateSheet } from './_components/credential-create-sheet'
+import { CredentialManageSheet } from './_components/credential-manage-sheet'
 import { BindingMatrix } from './_components/binding-matrix'
 
 const agentsAdapter = createAgentsAdapter()
@@ -24,6 +25,7 @@ const CREDENTIAL_VIEWER_ROLE_NAME = 'credential:viewer'
 
 export default function CredentialsPage() {
   const [createSheetOpen, setCreateSheetOpen] = useState(false)
+  const [managedCredential, setManagedCredential] = useState<DomainCredential | null>(null)
   const [activeTab, setActiveTab] = useState('registry')
   const [matrixCredentialFilter, setMatrixCredentialFilter] = useState<string | undefined>(undefined)
 
@@ -35,6 +37,32 @@ export default function CredentialsPage() {
     if (cred) {
       setMatrixCredentialFilter(cred)
       if (!tab) setActiveTab('access-matrix')
+    }
+  }, [])
+
+  // Close manage sheet on browser back
+  useEffect(() => {
+    const handlePopState = () => {
+      const manage = new URL(window.location.href).searchParams.get('manage')
+      if (!manage) setManagedCredential(null)
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
+  const openManageSheet = useCallback((cred: DomainCredential) => {
+    setManagedCredential(cred)
+    const url = new URL(window.location.href)
+    url.searchParams.set('manage', cred.id)
+    window.history.pushState({}, '', url.toString())
+  }, [])
+
+  const closeManageSheet = useCallback(() => {
+    setManagedCredential(null)
+    const url = new URL(window.location.href)
+    if (url.searchParams.has('manage')) {
+      url.searchParams.delete('manage')
+      window.history.pushState({}, '', url.toString())
     }
   }, [])
 
@@ -85,6 +113,16 @@ export default function CredentialsPage() {
     const role = roles.find((r) => r.name === CREDENTIAL_VIEWER_ROLE_NAME)
     return role?.id ?? null
   }, [rolesData])
+
+  // Restore manage sheet from ?manage= URL param
+  useEffect(() => {
+    const manageId = new URL(window.location.href).searchParams.get('manage')
+    const items = data?.items
+    if (manageId && items && items.length > 0 && !managedCredential) {
+      const cred = items.find((c) => c.id === manageId)
+      if (cred) setManagedCredential(cred)
+    }
+  }, [data, managedCredential])
 
   if (error) {
     return (
@@ -151,6 +189,7 @@ export default function CredentialsPage() {
               credentials={credentials}
               bindings={bindings}
               onNavigateToMatrix={handleNavigateToMatrix}
+              onEditCredential={openManageSheet}
             />
           )}
         </TabsContent>
@@ -185,12 +224,19 @@ export default function CredentialsPage() {
               bindings={bindings}
               roleId={credentialViewerRoleId}
               initialFilter={matrixCredentialFilter}
+              onEditCredential={openManageSheet}
             />
           )}
         </TabsContent>
       </Tabs>
 
       <CredentialCreateSheet open={createSheetOpen} onOpenChange={setCreateSheetOpen} />
+      <CredentialManageSheet
+        credential={managedCredential}
+        open={managedCredential !== null}
+        onOpenChange={(open) => { if (!open) closeManageSheet() }}
+        onNavigateToMatrix={handleNavigateToMatrix}
+      />
     </div>
   )
 }

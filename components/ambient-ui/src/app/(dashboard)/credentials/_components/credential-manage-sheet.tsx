@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { KeyRound, AlertTriangle } from 'lucide-react'
 import {
   Sheet,
   SheetContent,
@@ -27,7 +28,7 @@ import type { DomainCredential } from '@/domain/types'
 import { getProviderMeta, getCategoryForProvider } from '@/domain/credential-providers'
 import { formatRelativeTime, formatAbsoluteTime } from '@/lib/format-timestamp'
 import { toast } from 'sonner'
-import { useUpdateCredential, useDeleteCredential } from '@/queries/use-credentials'
+import { useCredential, useUpdateCredential, useDeleteCredential } from '@/queries/use-credentials'
 import { useRoleBindings } from '@/queries/use-role-bindings'
 
 export function CredentialManageSheet({
@@ -47,16 +48,19 @@ export function CredentialManageSheet({
   const updateCredential = useUpdateCredential()
   const deleteCredential = useDeleteCredential()
 
+  const { data: liveCredential } = useCredential(credential?.id ?? '')
+  const resolved = liveCredential ?? credential
+
   const { data: bindingsData } = useRoleBindings(
     credential
       ? { search: `credential_id = '${credential.id}'` }
       : undefined,
   )
 
-  if (!credential) return null
+  if (!credential || !resolved) return null
 
-  const providerMeta = getProviderMeta(credential.provider)
-  const category = getCategoryForProvider(credential.provider)
+  const providerMeta = getProviderMeta(resolved.provider)
+  const category = getCategoryForProvider(resolved.provider)
   const bindingCount = bindingsData?.items.length ?? 0
 
   async function handleRotateToken() {
@@ -101,65 +105,78 @@ export function CredentialManageSheet({
   return (
     <Sheet open={open} onOpenChange={handleClose}>
       <SheetContent side="right" className="sm:max-w-lg overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>{credential.name}</SheetTitle>
+        <SheetHeader className="border-l-4 border-primary pl-3">
+          <SheetTitle className="flex items-center gap-2">
+            <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+              <KeyRound className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <span>{resolved.name}</span>
+              <div className="flex items-center gap-2 mt-0.5">
+                <Badge variant="outline" className="text-xs font-normal">
+                  {providerMeta?.label ?? resolved.provider}
+                </Badge>
+                {category && (
+                  <span className="text-xs text-muted-foreground">{category}</span>
+                )}
+              </div>
+            </div>
+          </SheetTitle>
           <SheetDescription>
             Manage credential settings and access.
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex flex-col gap-6 px-4 pb-4">
-          {/* Metadata */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium text-muted-foreground">Details</h3>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <span className="text-muted-foreground">Provider</span>
+        <div className="flex flex-col gap-5 px-4 pb-4">
+          {/* Details */}
+          <div className="rounded-lg bg-muted/40 p-4 space-y-3">
+            <h3 className="text-base font-semibold tracking-tight">Details</h3>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4">
               <div>
-                <Badge variant="outline">
-                  {providerMeta?.label ?? credential.provider}
-                </Badge>
+                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Created</span>
+                <p className="text-sm mt-0.5" title={formatAbsoluteTime(resolved.createdAt)}>
+                  {formatRelativeTime(resolved.createdAt)}
+                </p>
               </div>
-
-              <span className="text-muted-foreground">Category</span>
-              <span>{category ?? 'Unknown'}</span>
-
-              <span className="text-muted-foreground">Created</span>
-              <span title={formatAbsoluteTime(credential.createdAt)}>
-                {formatRelativeTime(credential.createdAt)}
-              </span>
-
-              <span className="text-muted-foreground">Updated</span>
-              <span title={formatAbsoluteTime(credential.updatedAt)}>
-                {formatRelativeTime(credential.updatedAt)}
-              </span>
-
-              {credential.url && (
-                <>
-                  <span className="text-muted-foreground">URL</span>
-                  <span className="truncate">{credential.url}</span>
-                </>
+              <div>
+                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Updated</span>
+                <p className="text-sm mt-0.5" title={formatAbsoluteTime(resolved.updatedAt)}>
+                  {formatRelativeTime(resolved.updatedAt)}
+                </p>
+              </div>
+              {resolved.url && (
+                <div className="col-span-2">
+                  <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">URL</span>
+                  <p className="text-sm mt-0.5 truncate">
+                    <a href={resolved.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                      {resolved.url}
+                    </a>
+                  </p>
+                </div>
               )}
-
-              {credential.email && (
-                <>
-                  <span className="text-muted-foreground">Email</span>
-                  <span className="truncate">{credential.email}</span>
-                </>
+              {resolved.email && (
+                <div className="col-span-2">
+                  <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Email</span>
+                  <p className="text-sm mt-0.5">
+                    <a href={`mailto:${resolved.email}`} className="text-primary hover:underline">
+                      {resolved.email}
+                    </a>
+                  </p>
+                </div>
               )}
-
-              {credential.description && (
-                <>
-                  <span className="text-muted-foreground col-span-2">Description</span>
-                  <p className="col-span-2 text-sm">{credential.description}</p>
-                </>
+              {resolved.description && (
+                <div className="col-span-2">
+                  <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Description</span>
+                  <p className="text-sm mt-0.5 text-muted-foreground">{resolved.description}</p>
+                </div>
               )}
             </div>
           </div>
 
           {/* Bindings summary */}
-          <div className="space-y-2">
-            <h3 className="text-sm font-medium text-muted-foreground">Bindings</h3>
-            <p className="text-sm">
+          <div className="rounded-lg border p-4 space-y-2">
+            <h3 className="text-base font-semibold tracking-tight">Bindings</h3>
+            <p className="text-sm text-muted-foreground">
               {bindingCount === 0 ? (
                 <>
                   Not bound to any projects or agents.{' '}
@@ -169,7 +186,7 @@ export function CredentialManageSheet({
                       className="text-primary underline underline-offset-2 hover:text-primary/80"
                       onClick={() => {
                         onOpenChange(false)
-                        onNavigateToMatrix(credential.name)
+                        onNavigateToMatrix(resolved.name)
                       }}
                     >
                       Set up access
@@ -178,31 +195,32 @@ export function CredentialManageSheet({
                 </>
               ) : (
                 <>
-                  Bound to {bindingCount} {bindingCount === 1 ? 'target' : 'targets'}.{' '}
+                  Bound to <span className="font-medium text-foreground">{bindingCount}</span> {bindingCount === 1 ? 'target' : 'targets'}.{' '}
                   {onNavigateToMatrix ? (
                     <button
                       type="button"
                       className="text-primary underline underline-offset-2 hover:text-primary/80"
                       onClick={() => {
                         onOpenChange(false)
-                        onNavigateToMatrix(credential.name)
+                        onNavigateToMatrix(resolved.name)
                       }}
                     >
-                      Manage in Access Matrix
+                      View bindings
                     </button>
                   ) : (
-                    'Use the Access Matrix tab to manage bindings.'
+                    'Use the Bindings tab to manage access.'
                   )}
                 </>
               )}
             </p>
           </div>
 
-          <Separator />
-
           {/* Rotate Token */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium">Rotate Token</h3>
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
+            <h3 className="text-base font-semibold tracking-tight flex items-center gap-1.5">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              Rotate Token
+            </h3>
             <p className="text-xs text-muted-foreground">
               Replace the existing secret with a new value. This takes effect immediately.
             </p>
@@ -229,7 +247,7 @@ export function CredentialManageSheet({
                   <AlertDialogHeader>
                     <AlertDialogTitle>Rotate token?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This will replace the existing token for &quot;{credential.name}&quot;.
+                      This will replace the existing token for &quot;{resolved.name}&quot;.
                       Any agents using this credential will immediately use the new token.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
@@ -247,11 +265,9 @@ export function CredentialManageSheet({
             )}
           </div>
 
-          <Separator />
-
-          {/* Delete */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium text-destructive">Danger Zone</h3>
+          {/* Danger Zone */}
+          <div className="rounded-lg border-2 border-destructive/30 bg-destructive/5 p-4 space-y-3 mt-2">
+            <h3 className="text-base font-semibold text-destructive">Danger Zone</h3>
             <p className="text-xs text-muted-foreground">
               Permanently delete this credential. This cannot be undone.
             </p>
@@ -269,7 +285,7 @@ export function CredentialManageSheet({
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete credential?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This will permanently delete &quot;{credential.name}&quot; and remove all
+                    This will permanently delete &quot;{resolved.name}&quot; and remove all
                     associated bindings. This action cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>

@@ -97,10 +97,12 @@ export function CredentialTable({
   credentials,
   bindings,
   onNavigateToMatrix,
+  onEditCredential,
 }: {
   credentials: DomainCredential[]
   bindings: DomainRoleBinding[]
   onNavigateToMatrix?: (credentialName: string) => void
+  onEditCredential?: (credential: DomainCredential) => void
 }) {
   const [search, setSearch] = useState('')
   const [sorting, setSorting] = useState<SortingState>([{ id: 'category', desc: false }])
@@ -183,7 +185,7 @@ export function CredentialTable({
                 <TableRow
                   key={row.id}
                   className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => setSelectedCredential(row.original)}
+                  onClick={() => onEditCredential ? onEditCredential(row.original) : setSelectedCredential(row.original)}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
