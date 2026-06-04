@@ -73,10 +73,18 @@ func (pm *processManager) restart() error {
 		return nil
 	}
 	old := pm.proc
+	// Spawn P2 BEFORE killing P1. This guarantees pm.proc points to the
+	// new process before old.done closes, so wait() always sees
+	// replaced=true and loops instead of exiting.
+	fmt.Fprintf(os.Stderr, "credential-sidecar: restarting MCP subprocess for credential refresh\n")
+	if err := pm.spawnLocked(); err != nil {
+		pm.mu.Unlock()
+		return err
+	}
 	pm.mu.Unlock()
 
+	// Now signal the old process to shut down
 	if old != nil && old.cmd.Process != nil {
-		fmt.Fprintf(os.Stderr, "credential-sidecar: restarting MCP subprocess for credential refresh\n")
 		_ = old.cmd.Process.Signal(syscall.SIGTERM)
 		select {
 		case <-old.done:
@@ -85,13 +93,7 @@ func (pm *processManager) restart() error {
 			<-old.done
 		}
 	}
-
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-	if pm.stopped {
-		return nil
-	}
-	return pm.spawnLocked()
+	return nil
 }
 
 func (pm *processManager) signal(s os.Signal) {

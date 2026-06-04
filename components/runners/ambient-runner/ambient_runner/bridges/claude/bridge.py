@@ -187,7 +187,15 @@ class ClaudeBridge(PlatformBridge):
         )
 
     async def _reconnect_failed_mcp_servers(self, thread_id: str) -> None:
-        """Check credential sidecar MCP servers and reconnect any that failed."""
+        """Check credential sidecar MCP servers and restart the SDK if any failed.
+
+        When the credential sidecar restarts its MCP subprocess (on token
+        refresh), the SDK's SSE connection goes stale. The lightweight
+        reconnect_mcp_server() API has an init-ordering race, so we use
+        the heavier but reliable approach: destroy the worker and let the
+        next get_or_create() rebuild it with --resume, preserving
+        conversation context while getting a fresh MCP connection.
+        """
         from .mcp import _CREDENTIAL_SIDECAR_REGISTRY
 
         worker = self._session_manager.get_existing(thread_id)
@@ -204,16 +212,25 @@ class ClaudeBridge(PlatformBridge):
             return
 
         servers = status.get("mcpServers", [])
-        for server in servers:
-            name = server.get("name", "")
-            state = server.get("status", "")
-            if name in sidecar_names and state == "failed":
-                logger.info(
-                    "MCP server %s is in failed state, reconnecting "
-                    "(likely credential sidecar restart)",
-                    name,
-                )
-                await worker.reconnect_mcp_server(name)
+        has_failed = any(
+            server.get("name", "") in sidecar_names
+            and server.get("status", "") == "failed"
+            for server in servers
+        )
+
+        if has_failed:
+            failed_names = [
+                server.get("name", "")
+                for server in servers
+                if server.get("name", "") in sidecar_names
+                and server.get("status", "") == "failed"
+            ]
+            logger.info(
+                "MCP server(s) %s in failed state (credential sidecar restart), "
+                "destroying worker for fresh SDK connection with --resume",
+                ", ".join(failed_names),
+            )
+            await self._session_manager.destroy(thread_id)
 
     async def _initialize_run(
         self,
