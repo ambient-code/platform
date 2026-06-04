@@ -39,6 +39,10 @@ function subscribe(listener: () => void): () => void {
 // Read / write helpers
 // ---------------------------------------------------------------------------
 
+const RECENT_VISIT_TYPES: ReadonlySet<RecentVisitType> = new Set([
+  'session', 'agent', 'credential', 'project',
+])
+
 function readItems(): RecentVisitItem[] {
   if (typeof window === 'undefined') return []
   try {
@@ -47,9 +51,10 @@ function readItems(): RecentVisitItem[] {
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
     return (parsed as Record<string, unknown>[]).filter(
-      (item) =>
+      (item): item is RecentVisitItem =>
         typeof item.id === 'string' &&
         typeof item.type === 'string' &&
+        RECENT_VISIT_TYPES.has(item.type as RecentVisitType) &&
         typeof item.href === 'string' &&
         typeof item.label === 'string',
     ) as RecentVisitItem[]
@@ -90,9 +95,14 @@ export function useRecentVisits() {
       const now = new Date().toISOString()
       const current = readItems()
 
-      // Remove any existing entry with the same type+id to avoid duplicates
+      // Remove any existing entry with the same type+id+projectId to avoid duplicates
       const filtered = current.filter(
-        (existing) => !(existing.type === item.type && existing.id === item.id),
+        (existing) =>
+          !(
+            existing.type === item.type &&
+            existing.id === item.id &&
+            existing.projectId === item.projectId
+          ),
       )
 
       const entry: RecentVisitItem = { ...item, visitedAt: now }

@@ -20,9 +20,11 @@ function mapSdkRoleToDomain(sdk: Role): DomainRole {
 }
 
 function buildSdkListOptions(params?: ListParams) {
+  const page = Math.max(1, params?.page ?? 1)
+  const size = Math.min(100, Math.max(1, params?.size ?? 100))
   return {
-    page: params?.page ?? 1,
-    size: params?.size ?? 100,
+    page,
+    size,
     search: params?.search,
     orderBy: params?.orderBy,
   }

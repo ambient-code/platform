@@ -20,9 +20,11 @@ function getAPI(): CredentialAPI {
 }
 
 function buildSdkListOptions(params?: ListParams) {
+  const page = Math.max(1, params?.page ?? 1)
+  const size = Math.min(100, Math.max(1, params?.size ?? 20))
   return {
-    page: params?.page ?? 1,
-    size: params?.size ?? 20,
+    page,
+    size,
     search: params?.search
       ? `name like '%${sanitizeSearch(params.search)}%'`
       : undefined,

@@ -51,8 +51,9 @@ export function CredentialManageSheet({
   const { data: liveCredential } = useCredential(credential.id)
   const resolved = liveCredential ?? credential
 
+  const safeId = credential.id.replace(/[^a-zA-Z0-9_-]/g, '')
   const { data: bindingsData } = useRoleBindings(
-    { search: `credential_id = '${credential.id}'` },
+    { search: `credential_id = '${safeId}'` },
   )
 
   const providerMeta = getProviderMeta(resolved.provider)
@@ -144,9 +145,13 @@ export function CredentialManageSheet({
                 <div className="col-span-2">
                   <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">URL</span>
                   <p className="text-sm mt-0.5 truncate">
-                    <a href={resolved.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                      {resolved.url}
-                    </a>
+                    {/^https?:\/\//i.test(resolved.url) ? (
+                      <a href={resolved.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                        {resolved.url}
+                      </a>
+                    ) : (
+                      <span className="truncate text-muted-foreground">{resolved.url}</span>
+                    )}
                   </p>
                 </div>
               )}

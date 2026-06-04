@@ -59,7 +59,7 @@ export function LogsTab({ session }: { session: DomainSession }) {
     return (
       <div className="pt-4">
         <p className="text-sm text-destructive">
-          Failed to load messages: {error.message}
+          Failed to load messages. Please refresh.
         </p>
       </div>
     )

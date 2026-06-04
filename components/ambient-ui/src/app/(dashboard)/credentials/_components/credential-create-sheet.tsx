@@ -79,8 +79,16 @@ export function CredentialCreateSheet({
       return
     }
 
-    if (requiredFields.includes('token') && !token) {
+    if (requiredFields.includes('token') && !token.trim()) {
       setError('Token is required for this provider.')
+      return
+    }
+    if (requiredFields.includes('url') && !url.trim()) {
+      setError('URL is required for this provider.')
+      return
+    }
+    if (requiredFields.includes('email') && !email.trim()) {
+      setError('Email is required for this provider.')
       return
     }
 

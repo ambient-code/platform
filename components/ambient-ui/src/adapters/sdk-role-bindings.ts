@@ -10,6 +10,10 @@ import type {
 import { mapSdkRoleBindingToDomain } from './mappers'
 import { getConfig } from './sdk-client'
 
+function sanitizeId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, '')
+}
+
 function sanitizeSearch(value: string): string {
   return value.replace(/['"%;\\]/g, '')
 }
@@ -19,9 +23,11 @@ function getAPI(): RoleBindingAPI {
 }
 
 function buildSdkListOptions(params?: ListParams) {
+  const page = Math.max(1, params?.page ?? 1)
+  const size = Math.min(100, Math.max(1, params?.size ?? 100))
   return {
-    page: params?.page ?? 1,
-    size: params?.size ?? 100,
+    page,
+    size,
     search: params?.search ?? undefined,
     orderBy: params?.orderBy,
   }
@@ -36,6 +42,7 @@ function mapDomainCreateToSdk(request: DomainRoleBindingCreateRequest): RoleBind
   if (request.projectId) sdkReq.project_id = request.projectId
   if (request.agentId) sdkReq.agent_id = request.agentId
   if (request.credentialId) sdkReq.credential_id = request.credentialId
+  if (request.sessionId) sdkReq.session_id = request.sessionId
   return sdkReq
 }
 

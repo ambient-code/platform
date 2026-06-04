@@ -52,7 +52,17 @@ import { toast } from 'sonner'
 import { useCreateRoleBinding, useDeleteRoleBinding } from '@/queries/use-role-bindings'
 import { cn } from '@/lib/utils'
 import type { DomainCredential, DomainRoleBinding, DomainProject, DomainAgent } from '@/domain/types'
-import { cellKey, findProjectBinding, findAgentBinding, isInherited } from './binding-helpers'
+import {
+  cellKey,
+  findProjectBinding,
+  findAgentBinding,
+  isInherited,
+  buildBindingIndex,
+  findProjectBindingIndexed,
+  findAgentBindingIndexed,
+  isInheritedIndexed,
+} from './binding-helpers'
+import type { BindingIndex } from './binding-helpers'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -161,6 +171,9 @@ export function BindingMatrix({
     return [...serverVisible, ...optimisticAdds]
   }, [bindings, optimisticAdds, optimisticDeletes])
 
+  // Pre-indexed bindings for O(1) lookups in the render loop
+  const bindingIndex = useMemo(() => buildBindingIndex(effectiveBindings), [effectiveBindings])
+
   // Refs for focus management
   const focusCellRef = useRef<HTMLButtonElement | null>(null)
 
@@ -177,7 +190,6 @@ export function BindingMatrix({
   useEffect(() => {
     setCurrentPage(1)
   }, [filterText, selectedProjectFilter])
-
 
   // --- Build project groups ---
   const allProjectGroups = useMemo<ProjectGroup[]>(() => {
@@ -209,6 +221,12 @@ export function BindingMatrix({
     if (!q) return sorted
     return sorted.filter((c) => c.name.toLowerCase().includes(q))
   }, [credentials, filterText])
+
+  // --- Clamp page when filtered rows shrink ---
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(filteredCredentials.length / PAGE_SIZE))
+    setCurrentPage((prev) => Math.min(prev, maxPage))
+  }, [filteredCredentials.length])
 
   const totalPages = Math.ceil(filteredCredentials.length / PAGE_SIZE)
   const startRow = filteredCredentials.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1
@@ -258,8 +276,8 @@ export function BindingMatrix({
 
       const existingBinding =
         params.targetType === 'project'
-          ? findProjectBinding(effectiveBindings, params.credentialId, params.targetId)
-          : findAgentBinding(effectiveBindings, params.credentialId, params.targetId)
+          ? findProjectBindingIndexed(bindingIndex, params.credentialId, params.targetId)
+          : findAgentBindingIndexed(bindingIndex, params.credentialId, params.targetId)
 
       addPending(key)
 
@@ -314,7 +332,7 @@ export function BindingMatrix({
         }
       }
     },
-    [pendingCells, effectiveBindings, addPending, removePending, roleId, createBinding, deleteBinding],
+    [pendingCells, bindingIndex, addPending, removePending, roleId, createBinding, deleteBinding],
   )
 
   // --- Batch toggle with concurrency pool ---
@@ -346,7 +364,7 @@ export function BindingMatrix({
   const bulkBindProject = useCallback(
     (projectId: string) => {
       const unboundCreds = credentials.filter(
-        (c) => !findProjectBinding(effectiveBindings, c.id, projectId),
+        (c) => !findProjectBindingIndexed(bindingIndex, c.id, projectId),
       )
       if (unboundCreds.length === 0) { closeColumnPopover(projectId); return }
       const project = projects.find((p) => p.id === projectId)
@@ -378,13 +396,13 @@ export function BindingMatrix({
         },
       })
     },
-    [credentials, effectiveBindings, projects, allProjectGroups, batchToggle, closeColumnPopover],
+    [credentials, bindingIndex, projects, allProjectGroups, batchToggle, closeColumnPopover],
   )
 
   const bulkUnbindProject = useCallback(
     (projectId: string) => {
       const boundCreds = credentials.filter(
-        (c) => !!findProjectBinding(effectiveBindings, c.id, projectId),
+        (c) => !!findProjectBindingIndexed(bindingIndex, c.id, projectId),
       )
       const project = projects.find((p) => p.id === projectId)
       const projectName = project?.name ?? projectId
@@ -413,13 +431,13 @@ export function BindingMatrix({
         },
       })
     },
-    [credentials, effectiveBindings, projects, batchToggle, closeColumnPopover],
+    [credentials, bindingIndex, projects, batchToggle, closeColumnPopover],
   )
 
   const bulkBindAgent = useCallback(
     (agentId: string, projectId: string) => {
       const unboundCreds = credentials.filter(
-        (c) => !findAgentBinding(effectiveBindings, c.id, agentId),
+        (c) => !findAgentBindingIndexed(bindingIndex, c.id, agentId),
       )
       if (unboundCreds.length === 0) { closeColumnPopover(agentId); return }
       const agent = agents.find((a) => a.id === agentId)
@@ -450,13 +468,13 @@ export function BindingMatrix({
         },
       })
     },
-    [credentials, agents, effectiveBindings, batchToggle, closeColumnPopover],
+    [credentials, agents, bindingIndex, batchToggle, closeColumnPopover],
   )
 
   const bulkUnbindAgent = useCallback(
     (agentId: string) => {
       const boundCreds = credentials.filter(
-        (c) => !!findAgentBinding(effectiveBindings, c.id, agentId),
+        (c) => !!findAgentBindingIndexed(bindingIndex, c.id, agentId),
       )
       const agent = agents.find((a) => a.id === agentId)
       const agentName = agent?.name ?? agentId
@@ -485,13 +503,13 @@ export function BindingMatrix({
         },
       })
     },
-    [credentials, effectiveBindings, agents, batchToggle, closeColumnPopover],
+    [credentials, bindingIndex, agents, batchToggle, closeColumnPopover],
   )
 
   const bulkBindRowProjects = useCallback(
     (cred: DomainCredential) => {
       const unboundProjects = projects.filter(
-        (p) => !findProjectBinding(effectiveBindings, cred.id, p.id),
+        (p) => !findProjectBindingIndexed(bindingIndex, cred.id, p.id),
       )
       if (unboundProjects.length === 0) { closeRowPopover(cred.id); return }
       closeRowPopover(cred.id)
@@ -526,7 +544,7 @@ export function BindingMatrix({
         },
       })
     },
-    [projects, effectiveBindings, allProjectGroups, batchToggle, closeRowPopover],
+    [projects, bindingIndex, allProjectGroups, batchToggle, closeRowPopover],
   )
 
   const bulkUnbindRow = useCallback(
@@ -534,7 +552,7 @@ export function BindingMatrix({
       closeRowPopover(cred.id)
       const calls: Array<Parameters<typeof toggleCell>[0]> = []
       for (const p of projects) {
-        if (findProjectBinding(effectiveBindings, cred.id, p.id)) {
+        if (findProjectBindingIndexed(bindingIndex, cred.id, p.id)) {
           calls.push({
             credentialId: cred.id,
             targetId: p.id,
@@ -543,7 +561,7 @@ export function BindingMatrix({
         }
       }
       for (const a of agents) {
-        if (findAgentBinding(effectiveBindings, cred.id, a.id)) {
+        if (findAgentBindingIndexed(bindingIndex, cred.id, a.id)) {
           calls.push({
             credentialId: cred.id,
             targetId: a.id,
@@ -591,7 +609,7 @@ export function BindingMatrix({
         },
       })
     },
-    [projects, agents, effectiveBindings, batchToggle, closeRowPopover, toggleCell],
+    [projects, agents, bindingIndex, batchToggle, closeRowPopover, toggleCell],
   )
 
   // --- Keyboard navigation ---
@@ -1001,7 +1019,7 @@ export function BindingMatrix({
                         rowIndex={rowIndex}
                         projectGroups={projectGroups}
                         hasAnyAgents={hasAnyAgents}
-                        effectiveBindings={effectiveBindings}
+                        bindingIndex={bindingIndex}
                         pendingCells={pendingCells}
                         onToggle={toggleCell}
                         onKeyDown={handleCellKeydown}
@@ -1233,7 +1251,7 @@ function GroupCells({
   rowIndex,
   projectGroups,
   hasAnyAgents,
-  effectiveBindings,
+  bindingIndex,
   pendingCells,
   onToggle,
   onKeyDown,
@@ -1245,7 +1263,7 @@ function GroupCells({
   rowIndex: number
   projectGroups: ProjectGroup[]
   hasAnyAgents: boolean
-  effectiveBindings: DomainRoleBinding[]
+  bindingIndex: BindingIndex
   pendingCells: Set<string>
   onToggle: (params: {
     credentialId: string
@@ -1256,7 +1274,7 @@ function GroupCells({
   onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>, row: number, col: number) => void
   focusCellRef: React.MutableRefObject<HTMLButtonElement | null>
 }) {
-  const projectBound = !!findProjectBinding(effectiveBindings, cred.id, group.project.id)
+  const projectBound = !!findProjectBindingIndexed(bindingIndex, cred.id, group.project.id)
   const projectPending = pendingCells.has(cellKey(cred.id, group.project.id))
   const colIdx = globalColIndex(projectGroups, gIdx, 0)
 
@@ -1313,8 +1331,8 @@ function GroupCells({
       {/* Agent cells */}
       {group.agents.map((agent, aIdx) => {
         const agentColIdx = globalColIndex(projectGroups, gIdx, aIdx + 1)
-        const inherited = isInherited(effectiveBindings, cred.id, agent.id, group.project.id)
-        const agentBound = !!findAgentBinding(effectiveBindings, cred.id, agent.id)
+        const inherited = isInheritedIndexed(bindingIndex, cred.id, agent.id, group.project.id)
+        const agentBound = !!findAgentBindingIndexed(bindingIndex, cred.id, agent.id)
         const agentPending = pendingCells.has(cellKey(cred.id, agent.id))
 
         return (

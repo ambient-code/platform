@@ -222,4 +222,5 @@ export type DomainRoleBindingCreateRequest = {
   projectId?: string
   agentId?: string
   credentialId?: string
+  sessionId?: string
 }
