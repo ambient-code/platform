@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { User, Bot, Wrench, Send, ChevronDown, ChevronRight } from 'lucide-react'
@@ -309,12 +309,56 @@ type ChatInputProps = {
   disabled: boolean
 }
 
+const DRAFT_PREFIX = 'ambient-draft:'
+const DRAFT_MAX_AGE_MS = 48 * 60 * 60 * 1000
+
+function readDraft(sessionId: string): string {
+  try {
+    const raw = localStorage.getItem(`${DRAFT_PREFIX}${sessionId}`)
+    if (!raw) return ''
+    const parsed: unknown = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null) return ''
+    const { text, ts } = parsed as Record<string, unknown>
+    if (typeof text !== 'string' || typeof ts !== 'number') return ''
+    if (Date.now() - ts > DRAFT_MAX_AGE_MS) {
+      localStorage.removeItem(`${DRAFT_PREFIX}${sessionId}`)
+      return ''
+    }
+    return text
+  } catch {
+    return ''
+  }
+}
+
+function saveDraft(sessionId: string, text: string): void {
+  try {
+    if (!text.trim()) {
+      localStorage.removeItem(`${DRAFT_PREFIX}${sessionId}`)
+      return
+    }
+    localStorage.setItem(`${DRAFT_PREFIX}${sessionId}`, JSON.stringify({ text, ts: Date.now() }))
+  } catch { /* quota exceeded — silently ignore */ }
+}
+
+function clearDraft(sessionId: string): void {
+  try { localStorage.removeItem(`${DRAFT_PREFIX}${sessionId}`) } catch { /* */ }
+}
+
 export function ChatInput({ sessionId, phase, disabled }: ChatInputProps) {
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState(() => readDraft(sessionId))
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const sendMessage = useSendMessage(sessionId)
   const isRunning = phase === 'Running'
   const canSend = isRunning && !disabled && input.trim().length > 0 && !sendMessage.isPending
+
+  useEffect(() => {
+    setInput(readDraft(sessionId))
+  }, [sessionId])
+
+  const handleChange = useCallback((text: string) => {
+    setInput(text)
+    saveDraft(sessionId, text)
+  }, [sessionId])
 
   const handleSend = useCallback(() => {
     const trimmed = input.trim()
@@ -322,10 +366,11 @@ export function ChatInput({ sessionId, phase, disabled }: ChatInputProps) {
     sendMessage.mutate(trimmed, {
       onSuccess: () => {
         setInput('')
+        clearDraft(sessionId)
         textareaRef.current?.focus()
       },
     })
-  }, [input, isRunning, sendMessage])
+  }, [input, isRunning, sendMessage, sessionId])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -357,7 +402,7 @@ export function ChatInput({ sessionId, phase, disabled }: ChatInputProps) {
         <Textarea
           ref={textareaRef}
           value={input}
-          onChange={e => setInput(e.target.value)}
+          onChange={e => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={isRunning ? 'Send a message...' : 'Session is not running'}
           disabled={!isRunning || sendMessage.isPending}
