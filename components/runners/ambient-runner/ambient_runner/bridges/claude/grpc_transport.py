@@ -66,12 +66,12 @@ def _synthesize_run_error(
                 thread_id,
             )
 
-    task = asyncio.ensure_future(writer._write_message(status="error"))
+    task = asyncio.ensure_future(writer.push_error(error_message))
 
     def _log_write_error(f: asyncio.Future) -> None:
         if not f.cancelled() and f.exception() is not None:
             logger.warning(
-                "[GRPC LISTENER] _write_message(error) failed: %s", f.exception()
+                "[GRPC LISTENER] push_error failed: %s", f.exception()
             )
 
     task.add_done_callback(_log_write_error)
@@ -445,6 +445,35 @@ class GRPCMessageWriter:
         except Exception as exc:
             logger.warning(
                 "[GRPC WRITER] Push failed: session=%s error=%s",
+                self._session_id,
+                exc,
+            )
+
+    async def push_error(self, error_message: str) -> None:
+        """Push any buffered text plus the error as an assistant message."""
+        text = self._text_buffer.strip()
+        self._text_buffer = ""
+        if text:
+            await self._push_assistant(text)
+
+        if not self._grpc_client:
+            return
+
+        client = self._grpc_client
+        session_id = self._session_id
+
+        def _do_push() -> None:
+            client.session_messages.push(
+                session_id,
+                event_type="error",
+                payload=error_message,
+            )
+
+        try:
+            await asyncio.get_running_loop().run_in_executor(None, _do_push)
+        except Exception as exc:
+            logger.warning(
+                "[GRPC WRITER] Error push failed: session=%s error=%s",
                 self._session_id,
                 exc,
             )
