@@ -14,10 +14,16 @@ import {
   SidebarProvider,
 } from '@/components/ui/sidebar'
 
+const GLOBAL_ROUTES = new Set(['credentials', 'settings'])
+
 function extractNavContext(pathname: string) {
   const segments = pathname.split('/').filter(Boolean)
-  const projectId = segments.length >= 1 ? segments[0] : null
-  const pageName = segments.length >= 2 ? capitalize(segments[1]) : null
+  const firstSegment = segments.length >= 1 ? segments[0] : null
+  const isGlobalRoute = firstSegment !== null && GLOBAL_ROUTES.has(firstSegment)
+  const projectId = isGlobalRoute ? null : firstSegment
+  const pageName = isGlobalRoute
+    ? capitalize(firstSegment)
+    : segments.length >= 2 ? capitalize(segments[1]) : null
   const sessionId = segments.length >= 3 && segments[1] === 'sessions' ? segments[2] : null
   return { projectId, pageName, sessionId }
 }

@@ -309,12 +309,6 @@ export function BindingMatrix({
             return next
           })
         } finally {
-          // Clean up optimistic delete once server data refreshes
-          setOptimisticDeletes((prev) => {
-            const next = new Set(prev)
-            next.delete(existingBinding.id)
-            return next
-          })
           removePending(key)
         }
       } else {
