@@ -32,7 +32,9 @@ network_policies:
       - { host: statsig.anthropic.com, port: 443 }
     binaries:
       - { path: /usr/local/bin/claude }
+      - { path: /usr/local/lib/python3.12/site-packages/claude_agent_sdk/_bundled/claude }
       - { path: /usr/bin/node }
+      - { path: /usr/bin/node-22 }
       - { path: /usr/bin/curl }
 
   vertex_ai:
@@ -44,7 +46,9 @@ network_policies:
       - { host: oauth2.googleapis.com, port: 443 }
     binaries:
       - { path: /usr/local/bin/claude }
+      - { path: /usr/local/lib/python3.12/site-packages/claude_agent_sdk/_bundled/claude }
       - { path: /usr/bin/node }
+      - { path: /usr/bin/node-22 }
       - { path: /usr/bin/curl }
 
   github:
@@ -64,6 +68,7 @@ network_policies:
     binaries:
       - { path: /usr/bin/npm }
       - { path: /usr/bin/node }
+      - { path: /usr/bin/node-22 }
       - { path: /usr/bin/npx }
 
   pypi:

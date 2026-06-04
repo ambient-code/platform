@@ -858,6 +858,7 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 			envVar("OPENSHELL_ENABLED", "true"),
 			envVar("OPENSHELL_POLICY_RULES", "/etc/openshell/policy.rego"),
 			envVar("OPENSHELL_POLICY_DATA", "/etc/openshell/policy.yaml"),
+			envVar("OPENSHELL_LOG_LEVEL", "debug"),
 		)
 	}
 
