@@ -518,60 +518,170 @@ The resolved `(cwd_path, add_dirs)` tuple is passed to the Claude SDK via `Claud
 
 ---
 
-## Desired State: OpenShell Credential Isolation
+## OpenShell Sandbox Isolation
 
-> **Status:** Proposed — not yet implemented
-> **Companion docs:** `docs/internal/agents/openshell-security-analysis.md`, `docs/internal/agents/openshell-runner-adaptation.md` (included in this PR)
+> **Status:** Implemented — validated end-to-end on ROSA OpenShift (kernel 5.14+)
+> **Companion docs:** `docs/internal/agents/openshell-runner-adaptation.md` (implementation details), `docs/internal/agents/openshell-security-analysis.md` (threat model)
+> **Formal requirements:** `specs/security/openshell-sandbox.spec.md`
 
-The current sidecar credential model isolates integration tokens from the runner container. OpenShell extends this further by sandboxing the **agent subprocess itself** — preventing credential exfiltration even if the agent escapes the intended MCP tool boundary (e.g., via Bash tool access to sidecar localhost ports, `/proc` reading, or network sniffing).
+The runner wraps the Claude Code subprocess inside NVIDIA OpenShell's Supervisor
+binary (`openshell-sandbox` v0.0.56), applying five defense-in-depth isolation
+layers. The Supervisor operates in **file mode** — policy is provided via local
+Rego + YAML files mounted from a ConfigMap. No OpenShell Gateway is required.
 
-### Target Architecture: OpenShell Sidecar Supervisor
-
-Add OpenShell's sandbox layer around the Claude Code subprocess:
+### Architecture
 
 ```
-Current:  Runner container → Claude subprocess (unrestricted network, can reach sidecar ports)
-Desired:  Runner container → OpenShell Supervisor → Claude subprocess (sandboxed netns)
-            Supervisor controls: network egress, filesystem access, syscalls
-            Agent cannot reach sidecar localhost ports directly
+Runner Pod (FastAPI + uvicorn) — runs UNSANDBOXED
+  │
+  └── bridge.py sets cli_path = /app/openshell-claude-wrapper.sh
+        │
+        └── Claude Agent SDK spawns wrapper as subprocess
+              │
+              └── openshell-claude-wrapper.sh
+                    │
+                    └── exec /openshell-sandbox \
+                          --policy-rules /etc/openshell/policy.rego \
+                          --policy-data /etc/openshell/policy.yaml \
+                          -- /usr/local/bin/claude "$@"
+                              │
+                              ├── fork()
+                              │     pre_exec closure (in child, before exec):
+                              │       1. setns(CLONE_NEWNET) → enter sandbox network namespace
+                              │       2. drop_privileges(setgroups/setgid/setuid → sandbox:sandbox)
+                              │       3. harden_child_process(RLIMIT_CORE=0, PR_SET_DUMPABLE=0, PR_SET_NO_NEW_PRIVS=1)
+                              │       4. landlock::enforce(restrict_self) → filesystem allowlist
+                              │       5. seccomp::apply(bpf_filter) → syscall blocklist
+                              │
+                              └── exec(/usr/local/bin/claude) ← runs as sandbox user in isolated netns
 ```
 
-### What Changes
+The runner process (FastAPI, gRPC client, credential fetching) runs outside the
+sandbox boundary. Only the Claude CLI subprocess is sandboxed. This means the
+gRPC client, SSE tap, and health endpoints are unaffected.
 
-| Component | Current | With OpenShell |
-|-----------|---------|---------------|
-| Claude CLI subprocess | Unrestricted network in pod | Sandboxed in separate network namespace |
-| Sidecar MCP ports (`:8091`-`:8094`) | Reachable from runner container | Blocked from agent netns; only Supervisor can proxy |
-| Network egress | Direct to external APIs | Via OpenShell HTTP CONNECT proxy at `10.200.0.1:3128` |
-| `secret_redaction.py` | Defense-in-depth for output stream | Retained; now truly redundant with network isolation |
-| Filesystem access | Full container filesystem | Landlock-restricted to `/workspace`, `/tmp`, Claude state dirs |
-| Syscalls | Unrestricted | seccomp-BPF allowlist; blocks `ptrace`, `memfd_create`, raw sockets |
+### Five Isolation Layers (All Verified Working)
 
-### OpenShell Isolation Layers (5)
+| Layer | Mechanism | Verified Evidence |
+|-------|-----------|-------------------|
+| **1. Network namespace** | `ip netns add` + veth pair (`10.200.0.1`↔`10.200.0.2`), default route via proxy | `OCSF CONFIG:CREATED [INFO] Network namespace created [ns:sandbox-* host_ip:10.200.0.1 sandbox_ip:10.200.0.2]` |
+| **2. TLS proxy (L7)** | HTTP CONNECT proxy at `10.200.0.1:3128`, ephemeral per-sandbox CA, `HTTPS_PROXY`/`SSL_CERT_FILE`/`NODE_EXTRA_CA_CERTS` injected | `HTTP/1.1 200 Connection Established` for policy-allowed hosts; `000` (refused) for blocked hosts |
+| **3. Landlock LSM** | Filesystem allowlist via `landlock_restrict_self` (12 rules: 8 read-only, 4 read-write) | `OCSF CONFIG:BUILT [INFO] Landlock ruleset built [rules_applied:12 skipped:0]` |
+| **4. seccomp-BPF** | Three-layer filter: supervisor prelude → clone3 ENOSYS → main runtime (blocks `ptrace`, `memfd_create`, raw sockets) | `Blocking socket domain via seccomp` (3 domains blocked) |
+| **5. OPA policy enforcement** | Per-binary network ACLs via Rego rules; binary identity checked per-request | Allowed endpoints return HTTP status; blocked hosts return connection refused |
 
-1. **Network namespace** — Agent in separate netns; all traffic routes through proxy at `10.200.0.1:3128`
-2. **Credential proxy** — Sidecar ports unreachable from agent netns; Supervisor mediates MCP tool calls
-3. **Landlock LSM** — Kernel-level filesystem allowlists; agent confined to workspace directories
-4. **seccomp-BPF** — Blocks `ptrace`, `memfd_create`, raw sockets; prevents privilege escalation
-5. **L7 OPA inspection** — Per-request HTTP allow/deny via Rego policies; binary identity via SHA256 TOFU
+### Policy Files
 
-### Files to Modify
+Policy is stored in a ConfigMap (`openshell-policy`) in the CP namespace and
+propagated to each runner namespace by the reconciler's `ensureOpenShellPolicy()`.
 
-| File | Change |
-|------|--------|
-| `bridges/claude/bridge.py` | Launch Claude CLI via OpenShell Supervisor instead of direct subprocess |
-| `bridges/claude/session.py` | Supervisor-aware `SessionWorker` lifecycle |
-| `_grpc_client.py` | Verify no changes needed — gRPC runs in runner process outside sandbox boundary |
-| `Dockerfile` | Add OpenShell Supervisor binary, modify entrypoint |
-| `middleware/secret_redaction.py` | Retain as defense-in-depth (now redundant) |
-| `components/operator/` | Configure OpenShell provider + policy per session Job |
+**Filesystem policy** (`policy.yaml`):
 
-### Migration Path
+| Access | Paths |
+|--------|-------|
+| Read-only | `/usr`, `/lib`, `/proc`, `/dev/urandom`, `/app`, `/etc`, `/var/log`, `/home/sandbox` |
+| Read-write | `/workspace`, `/tmp`, `/dev/null`, `/app/.claude` |
 
-1. **Phase 1 — Network namespace only:** Sandbox Claude subprocess in separate netns; validate sidecar port isolation and proxy egress
-2. **Phase 2 — Full sandbox:** Add Landlock filesystem restrictions and seccomp-BPF syscall filtering
-3. **Phase 3 — OPA policies:** L7 inspection with per-session OPA policies generated by the Operator from project settings
+**Network policy** (`policy.yaml`):
 
-### Kernel Prerequisite
+| Policy | Endpoints | Allowed Binaries |
+|--------|-----------|-----------------|
+| `anthropic-api` | `api.anthropic.com:443`, `statsig.anthropic.com:443` | `claude`, `node`, `curl` |
+| `vertex-ai` | `us-east5-aiplatform.googleapis.com:443`, `europe-west1-aiplatform.googleapis.com:443`, `us-central1-aiplatform.googleapis.com:443`, `oauth2.googleapis.com:443` | `claude`, `node`, `curl` |
+| `github` | `github.com:443`, `api.github.com:443` | `git`, `gh`, `curl` |
+| `npm-registry` | `registry.npmjs.org:443` | `npm`, `node`, `npx` |
+| `pypi` | `pypi.org:443`, `files.pythonhosted.org:443` | `pip3`, `python3` |
+| `gitlab` | `gitlab.com:443` | `git`, `glab` |
 
-OpenShell's Landlock LSM requires Linux 5.13+. Runner containers use UBI 10 (RHEL 10, kernel 6.x) — satisfied. OpenShell's `best_effort` mode provides graceful degradation if kernel support is absent.
+**Rego rules** (`policy.rego`): Official policy from the OpenShell repository
+(`package openshell.sandbox`). Evaluates `allow_network`, `network_action`,
+`deny_reason`, and `allow_request` based on host, port, binary path, HTTP method,
+and canonicalized request path.
+
+### Required Linux Capabilities
+
+The Supervisor needs elevated capabilities for sandbox setup. These are granted
+only when `OPENSHELL_ENABLED=true` in the CP config:
+
+| Capability | Required For |
+|------------|-------------|
+| `NET_ADMIN` | Create network namespace (`ip netns add`), configure veth pair and routing |
+| `SYS_ADMIN` | Mount propagation for `/var/run/netns`, `nsenter` for in-namespace commands |
+| `SYS_PTRACE` | Process tracing for binary identity verification |
+| `SETUID` | `drop_privileges()`: switch from root to `sandbox` user via `setuid` |
+| `SETGID` | `drop_privileges()`: switch group via `setgid`/`setgroups` |
+| `CHOWN` | Set ownership on sandbox directories (`/workspace`, `/tmp`) |
+| `DAC_OVERRIDE` | Access directories during privilege transition |
+
+The container also requires:
+- `allowPrivilegeEscalation: true` (needed for `setuid`/`setns` in the pre_exec closure)
+- `runAsUser: 0` (Supervisor must start as root to set up netns and drop privileges)
+- `seccompProfile: Unconfined` at the pod level (Supervisor applies its own seccomp filter)
+
+### OpenShift SCC
+
+On OpenShift clusters, a custom SecurityContextConstraints object (`openshell-sandbox`)
+MUST be created and bound to the runner service account. The SCC allows the seven
+capabilities listed above, `allowPrivilegeEscalation: true`, `runAsUser: RunAsAny`,
+and all seccomp profiles.
+
+### Control Plane Integration
+
+The CP reconciler (`kube_reconciler.go`) conditionally enables OpenShell via the
+`OPENSHELL_ENABLED` environment variable:
+
+| CP Config | Env Var | Default | Purpose |
+|-----------|---------|---------|---------|
+| `OpenShellEnabled` | `OPENSHELL_ENABLED` | `false` | Master toggle for sandbox isolation |
+| `OpenShellPolicyName` | `OPENSHELL_POLICY_CONFIGMAP` | `openshell-policy` | ConfigMap name for policy files |
+
+When enabled, the reconciler:
+1. Copies the policy ConfigMap from the CP namespace to the runner namespace (`ensureOpenShellPolicy`)
+2. Adds the policy ConfigMap as a volume + mount at `/etc/openshell`
+3. Injects `OPENSHELL_ENABLED=true`, `OPENSHELL_POLICY_RULES`, `OPENSHELL_POLICY_DATA` env vars
+4. Overrides the runner security context with elevated capabilities and root UID
+5. Sets pod-level seccomp profile to `Unconfined`
+
+### Environment Variables (OpenShell-specific)
+
+| Var | Injected By | Purpose |
+|-----|-------------|---------|
+| `OPENSHELL_ENABLED` | CP reconciler | Enables sandbox wrapper in `bridge.py` |
+| `OPENSHELL_POLICY_RULES` | CP reconciler | Path to Rego policy file (`/etc/openshell/policy.rego`) |
+| `OPENSHELL_POLICY_DATA` | CP reconciler | Path to YAML policy data (`/etc/openshell/policy.yaml`) |
+| `OPENSHELL_LOG_LEVEL` | Wrapper script default | Supervisor log level (`warn` default) |
+
+### Files Modified
+
+| File | Component | Change |
+|------|-----------|--------|
+| `Dockerfile` | Runner | Added `openshell-sandbox` v0.0.56 binary, `sandbox` user, `/workspace` dir, `/usr/local/bin/claude` symlink, `iproute` package |
+| `openshell-claude-wrapper.sh` | Runner | Wrapper script: dispatches to supervisor or direct claude based on `OPENSHELL_ENABLED` |
+| `bridges/claude/bridge.py` | Runner | `cli_path = "/app/openshell-claude-wrapper.sh"` when OpenShell enabled |
+| `.openshell-ref/policy.rego` | Runner | Official OPA Rego policy from OpenShell repository |
+| `.openshell-ref/policy.yaml` | Runner | Network + filesystem + process policy data |
+| `internal/reconciler/kube_reconciler.go` | Control Plane | `buildRunnerSecurityContext`, `buildVolumes`, `buildVolumeMounts`, `buildEnv`, `ensureOpenShellPolicy` |
+| `internal/config/config.go` | Control Plane | `OpenShellEnabled`, `OpenShellPolicyName` config fields |
+| `internal/kubeclient/kubeclient.go` | Control Plane | `ConfigMapGVR`, `GetConfigMap`, `CreateConfigMap` methods |
+| `cmd/ambient-control-plane/main.go` | Control Plane | Thread OpenShell config into reconciler |
+
+### Known Limitations
+
+| Limitation | Impact | Mitigation |
+|------------|--------|------------|
+| `nftables` not installed in runner image | Bypass detection iptables rules not installed; supervisor logs `DEGRADED` warning | Network namespace still enforces proxy routing via default route; add `nftables` package to Dockerfile in a future iteration |
+| `cgroup pids.max` unlimited | Supervisor warns about missing PID limit | Configure pod resource limits or cgroup constraints at the node level |
+| Network namespace cleanup on crash | If the supervisor crashes, leftover netns/veth pairs may cause `Address in use` on next start | Pod restart cleans up; the supervisor's cleanup logic handles most cases |
+| Credential proxy pattern not yet implemented | Agent still has LLM credentials in environment (Vertex AI service account) | LLM credentials are necessary for inference; placeholder/proxy rewrite is a future phase |
+| Kernel 5.14+ required for Landlock ABI v2+ | Landlock `restrict_self` with flags requires kernel 6.10+; v0.0.56 uses flags=0 on older kernels | `best_effort` compatibility mode ensures graceful degradation |
+
+### Design Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| File mode (no Gateway) | Eliminates operational dependency on OpenShell Gateway; policy is static per-deployment and distributed via ConfigMap |
+| Wrapper script instead of direct SDK modification | Minimal change surface in bridge.py (1 line); wrapper handles supervisor dispatch vs. direct execution |
+| Supervisor v0.0.56 pinned | Reproducible builds; version tested end-to-end on ROSA |
+| Root UID for runner when sandbox enabled | Supervisor must create network namespaces and drop privileges to sandbox user; running as non-root prevents netns setup |
+| ConfigMap propagation from CP namespace | Runner namespace may not exist when the CP starts; propagation on session provision ensures policy availability |
+| `/usr/local/bin/claude` symlink | Claude SDK bundles its CLI at a version-dependent path; symlink provides a stable path for the policy's `binaries` list |

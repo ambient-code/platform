@@ -2,6 +2,8 @@
 
 > Research date: 2026-06-03
 > Source: https://github.com/NVIDIA/OpenShell (commit f954e592)
+> Implementation status: **Integrated** — Supervisor v0.0.56, file mode, validated on ROSA OpenShift (kernel 5.14+)
+> Implementation record: [openshell-runner-adaptation.md](openshell-runner-adaptation.md)
 
 ## Overview
 
@@ -221,20 +223,45 @@ OpenShell uses the Open Cybersecurity Schema Framework (OCSF) standard for struc
 
 ## Relevance to Ambient
 
+> **Status: Implemented.** The Supervisor (file mode, v0.0.56) is integrated into the
+> runner. See [openshell-runner-adaptation.md](openshell-runner-adaptation.md) for
+> full implementation details.
+
 OpenShell operates at a different layer than Ambient but is directly complementary:
 
 - **Ambient** orchestrates *which* agents run, *when*, *where*, and *with what prompt/context*
 - **OpenShell** provides the *sandbox runtime* that those agents execute inside
 
-OpenShell could replace or augment the current `ambient-runner` container security model. Today, Ambient runners rely on container-level isolation (SecurityContext, NetworkPolicy). OpenShell adds intra-container isolation (Landlock, seccomp, credential proxying, L7 inspection) that is significantly more granular.
+The runner now uses OpenShell's Supervisor to add intra-container isolation
+(Landlock, seccomp, network namespace, L7 proxy) that is significantly more
+granular than container-level SecurityContext and NetworkPolicy alone.
 
-The credential placeholder/proxy pattern is architecturally superior to injecting real secrets as environment variables — which is what Ambient runners currently do. If Ambient adopted OpenShell as a runner runtime, agents would never have access to real API keys, even if they inspected their own process environment.
+### Integration Points (Implemented)
 
-### Integration Points
-
-| Ambient Component | OpenShell Equivalent | Integration Model |
+| Ambient Component | OpenShell Equivalent | Integration Status |
 |-------------------|---------------------|-------------------|
-| Runner container (SecurityContext) | Supervisor (Landlock + seccomp + netns) | OpenShell Supervisor replaces or augments runner SecurityContext |
-| Runner NetworkPolicy | Network namespace + proxy + OPA | Per-session network policy with L7 inspection |
-| K8s Secret env var injection | Provider placeholder/proxy rewrite | Credential isolation without agent access to real secrets |
-| Runner pod RBAC | Binary identity + TOFU cache | Per-binary network ACLs within the sandbox |
+| Runner container (SecurityContext) | Supervisor (Landlock + seccomp + netns) | **Implemented** — Supervisor wraps Claude CLI; 7 capabilities granted to runner |
+| Runner NetworkPolicy | Network namespace + proxy + OPA | **Implemented** — per-binary network ACLs via Rego policy; TLS proxy enforces endpoint allowlist |
+| K8s Secret env var injection | Provider placeholder/proxy rewrite | **Deferred** — LLM credentials still in runner env; integration credentials isolated via MCP sidecars |
+| Runner pod RBAC | Binary identity + TOFU cache | **Implemented** — policy `binaries` list restricts which executables can access each endpoint |
+
+### What We Learned During Implementation
+
+Key divergences from this analysis that were discovered during implementation:
+
+1. **File mode eliminates Gateway dependency.** The Supervisor reads policy from
+   local files (`--policy-rules`, `--policy-data`). No gRPC Gateway, no mTLS PKI,
+   no provider registration. Policy is distributed via K8s ConfigMap.
+
+2. **7 capabilities required, not just NET_ADMIN.** The Supervisor's `pre_exec`
+   closure calls `setgroups`/`setgid`/`setuid` (requires SETUID, SETGID), `chown`
+   (requires CHOWN), mount operations (requires SYS_ADMIN), and process inspection
+   (requires SYS_PTRACE).
+
+3. **Landlock ABI compatibility.** The Supervisor detects the kernel's Landlock ABI
+   version at runtime (`abi:v5` on kernel 5.14+) and applies rules compatible with
+   that version. The `best_effort` mode ensures graceful degradation.
+
+4. **OCSF logging is production-ready.** The structured log format provides clear
+   diagnostics for each sandbox setup phase, making production troubleshooting
+   straightforward.
