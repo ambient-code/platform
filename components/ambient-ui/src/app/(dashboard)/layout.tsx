@@ -6,6 +6,7 @@ import { NavHeader } from '@/components/nav-header'
 import { StatusBar } from '@/components/status-bar'
 import { ChatSidebar } from '@/components/chat-sidebar'
 import { ChatSidebarProvider } from '@/components/chat-sidebar-context'
+import { CommandPalette } from '@/components/command-palette'
 import { useProject } from '@/queries/use-projects'
 import { useSession } from '@/queries/use-sessions'
 import {
@@ -48,6 +49,7 @@ export default function DashboardLayout({
           />
           <div className="flex-1 p-6 pb-10">{children}</div>
           <StatusBar />
+          <CommandPalette />
         </SidebarInset>
         <ChatSidebar />
       </SidebarProvider>
