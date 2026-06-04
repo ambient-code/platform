@@ -12,8 +12,9 @@ ARG PRE_COMMIT_VERSION=4.2.0
 ARG GEMINI_CLI_VERSION=0.1.17
 
 # Install system packages: Python 3.12, git, jq, Node.js, Go, unzip (needed by CodeRabbit install script)
+# iproute provides ip-netns for OpenShell network namespace setup
 RUN dnf install -y python3 python3-pip python3-devel \
-    git jq nodejs npm go-toolset unzip && \
+    git jq nodejs npm go-toolset unzip iproute && \
     dnf clean all
 
 # Install GitHub CLI and GitLab CLI (binary downloads, pinned)
@@ -31,17 +32,34 @@ RUN pip3 install --break-system-packages --no-cache-dir uv==${UV_VERSION} pre-co
 # (uvx downloads + installs into a temp venv which spikes memory to ~9GB)
 RUN uv tool install mcp-server-fetch==2025.4.7
 
+# OpenShell supervisor binary for sandbox isolation (file mode, no Gateway required)
+# libcap used for setcap to grant NET_ADMIN file capability to non-root binary
+COPY --from=ghcr.io/nvidia/openshell/supervisor:0.0.56 /openshell-sandbox /openshell-sandbox
+RUN chmod +x /openshell-sandbox && \
+    mkdir -p /var/run/netns && chmod 777 /var/run/netns
+
+# sandbox user required by OpenShell (process.run_as_user constraint)
+RUN groupadd -r sandbox && useradd -r -g sandbox -d /home/sandbox -m -s /bin/bash sandbox && \
+    chmod 755 /home/sandbox && \
+    mkdir -p /workspace && chown sandbox:sandbox /workspace
+
 # Create working directory
 WORKDIR /app
 
 # Copy ambient-runner package
 COPY . /app/ambient-runner
 
+# OpenShell wrapper script (dispatches to supervisor or direct claude based on OPENSHELL_ENABLED)
+COPY openshell-claude-wrapper.sh /app/openshell-claude-wrapper.sh
+RUN chmod +x /app/openshell-claude-wrapper.sh
+
 # Install runner as a package, then remove build-only deps in same layer
 RUN pip3 install --break-system-packages --no-cache-dir '/app/ambient-runner[all]' && \
     dnf remove -y python3-devel && \
     dnf clean all && \
-    rm -rf /var/cache/dnf /var/lib/dnf
+    rm -rf /var/cache/dnf /var/lib/dnf && \
+    BUNDLED=$(python3 -c 'import claude_agent_sdk; from pathlib import Path; print(Path(claude_agent_sdk.__file__).parent / "_bundled" / "claude")') && \
+    ln -sf "$BUNDLED" /usr/local/bin/claude
 
 # Install Gemini CLI (npm package, Node.js already available)
 RUN npm install -g @google/gemini-cli@${GEMINI_CLI_VERSION} && \
