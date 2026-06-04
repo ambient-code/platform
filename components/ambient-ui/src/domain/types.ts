@@ -171,3 +171,55 @@ export type FeedbackBatch = {
   sessionId: string
   previewUrl: string
 }
+
+export type DomainCredential = {
+  id: string
+  name: string
+  provider: string
+  description: string | null
+  email: string | null
+  url: string | null
+  annotations: Record<string, string>
+  labels: Record<string, string>
+  createdAt: string
+  updatedAt: string
+}
+
+export type DomainCredentialCreateRequest = {
+  name: string
+  provider: string
+  description?: string
+  email?: string
+  url?: string
+  token?: string
+}
+
+export type DomainCredentialUpdateRequest = {
+  name?: string
+  description?: string
+  email?: string
+  url?: string
+  token?: string
+}
+
+export type DomainRoleBinding = {
+  id: string
+  roleId: string
+  scope: string
+  userId: string | null
+  projectId: string | null
+  agentId: string | null
+  credentialId: string | null
+  sessionId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type DomainRoleBindingCreateRequest = {
+  roleId: string
+  scope: string
+  userId?: string
+  projectId?: string
+  agentId?: string
+  credentialId?: string
+}
