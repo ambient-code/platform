@@ -79,8 +79,10 @@ function getSnapshot(): RecentVisitItem[] {
   return snapshot
 }
 
+const EMPTY_ITEMS: RecentVisitItem[] = []
+
 function getServerSnapshot(): RecentVisitItem[] {
-  return []
+  return EMPTY_ITEMS
 }
 
 // ---------------------------------------------------------------------------

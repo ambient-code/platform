@@ -200,35 +200,53 @@ class ClaudeBridge(PlatformBridge):
 
         worker = self._session_manager.get_existing(thread_id)
         if worker is None:
+            logger.debug("_reconnect_failed_mcp_servers: no worker for thread=%s", thread_id)
             return
 
         sidecar_names = {
             spec["server_name"] for spec in _CREDENTIAL_SIDECAR_REGISTRY.values()
         }
+        logger.debug("_reconnect_failed_mcp_servers: sidecar_names=%s", sidecar_names)
 
         try:
             status = await worker.get_mcp_status()
-        except Exception:
+        except Exception as exc:
+            logger.warning("_reconnect_failed_mcp_servers: get_mcp_status raised: %s", exc)
             return
 
         servers = status.get("mcpServers", [])
-        has_failed = any(
-            server.get("name", "") in sidecar_names
-            and server.get("status", "") == "failed"
-            for server in servers
+        logger.info(
+            "_reconnect_failed_mcp_servers: MCP status: %s",
+            [
+                {
+                    "name": s.get("name", ""),
+                    "status": s.get("status", ""),
+                    "tools": len(s.get("tools", [])),
+                }
+                for s in servers
+                if s.get("name", "") in sidecar_names
+            ],
         )
 
-        if has_failed:
-            failed_names = [
-                server.get("name", "")
-                for server in servers
-                if server.get("name", "") in sidecar_names
-                and server.get("status", "") == "failed"
-            ]
+        def is_broken(server: dict) -> bool:
+            name = server.get("name", "")
+            if name not in sidecar_names:
+                return False
+            st = server.get("status", "")
+            if st in ("failed", "pending"):
+                return True
+            # Connected but no tools means init never completed
+            if st == "connected" and len(server.get("tools", [])) == 0:
+                return True
+            return False
+
+        broken = [s.get("name", "") for s in servers if is_broken(s)]
+
+        if broken:
             logger.info(
-                "MCP server(s) %s in failed state (credential sidecar restart), "
+                "MCP server(s) %s broken (credential sidecar restart), "
                 "destroying worker for fresh SDK connection with --resume",
-                ", ".join(failed_names),
+                ", ".join(broken),
             )
             await self._session_manager.destroy(thread_id)
 
