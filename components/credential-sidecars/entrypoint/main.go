@@ -93,6 +93,16 @@ func (pm *processManager) restart() error {
 			<-old.done
 		}
 	}
+
+	// Write restart epoch so the runner knows to rebuild its SDK client
+	provider := os.Getenv("CREDENTIAL_PROVIDER")
+	if provider != "" {
+		epochPath := fmt.Sprintf("/tmp/.credential-%s-restart-epoch", provider)
+		epoch := fmt.Sprintf("%d", time.Now().UnixMilli())
+		_ = os.WriteFile(epochPath, []byte(epoch), 0644)
+		fmt.Fprintf(os.Stderr, "credential-sidecar: wrote restart epoch to %s\n", epochPath)
+	}
+
 	return nil
 }
 

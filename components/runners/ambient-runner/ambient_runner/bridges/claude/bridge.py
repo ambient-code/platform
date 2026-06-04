@@ -186,67 +186,43 @@ class ClaudeBridge(PlatformBridge):
             session_persistence=True,
         )
 
-    async def _reconnect_failed_mcp_servers(self, thread_id: str) -> None:
-        """Check credential sidecar MCP servers and restart the SDK if any failed.
+    _last_sidecar_epochs: dict[str, str] = {}
 
-        When the credential sidecar restarts its MCP subprocess (on token
-        refresh), the SDK's SSE connection goes stale. The lightweight
-        reconnect_mcp_server() API has an init-ordering race, so we use
-        the heavier but reliable approach: destroy the worker and let the
-        next get_or_create() rebuild it with --resume, preserving
-        conversation context while getting a fresh MCP connection.
+    async def _reconnect_failed_mcp_servers(self, thread_id: str) -> None:
+        """Detect credential sidecar restarts and rebuild the SDK client.
+
+        Each credential sidecar writes a restart epoch file when it
+        restarts the MCP subprocess. The file is on a shared volume at
+        /var/run/credential-epochs/{provider}/.credential-{provider}-restart-epoch.
+        If the epoch changed since the last check, the sidecar restarted
+        and the SDK's MCP connection is stale — destroy the worker and
+        let get_or_create() rebuild with --resume.
         """
+        import os
         from .mcp import _CREDENTIAL_SIDECAR_REGISTRY
 
         worker = self._session_manager.get_existing(thread_id)
         if worker is None:
-            logger.debug("_reconnect_failed_mcp_servers: no worker for thread=%s", thread_id)
             return
 
-        sidecar_names = {
-            spec["server_name"] for spec in _CREDENTIAL_SIDECAR_REGISTRY.values()
-        }
-        logger.debug("_reconnect_failed_mcp_servers: sidecar_names=%s", sidecar_names)
+        restarted_providers: list[str] = []
+        for provider in _CREDENTIAL_SIDECAR_REGISTRY:
+            epoch_path = f"/var/run/credential-epochs/{provider}/.credential-{provider}-restart-epoch"
+            try:
+                epoch = open(epoch_path).read().strip()
+            except FileNotFoundError:
+                continue
 
-        try:
-            status = await worker.get_mcp_status()
-        except Exception as exc:
-            logger.warning("_reconnect_failed_mcp_servers: get_mcp_status raised: %s", exc)
-            return
+            prev = self._last_sidecar_epochs.get(provider)
+            if prev is not None and epoch != prev:
+                restarted_providers.append(provider)
+            self._last_sidecar_epochs[provider] = epoch
 
-        servers = status.get("mcpServers", [])
-        logger.info(
-            "_reconnect_failed_mcp_servers: MCP status: %s",
-            [
-                {
-                    "name": s.get("name", ""),
-                    "status": s.get("status", ""),
-                    "tools": len(s.get("tools", [])),
-                }
-                for s in servers
-                if s.get("name", "") in sidecar_names
-            ],
-        )
-
-        def is_broken(server: dict) -> bool:
-            name = server.get("name", "")
-            if name not in sidecar_names:
-                return False
-            st = server.get("status", "")
-            if st in ("failed", "pending"):
-                return True
-            # Connected but no tools means init never completed
-            if st == "connected" and len(server.get("tools", [])) == 0:
-                return True
-            return False
-
-        broken = [s.get("name", "") for s in servers if is_broken(s)]
-
-        if broken:
+        if restarted_providers:
             logger.info(
-                "MCP server(s) %s broken (credential sidecar restart), "
-                "destroying worker for fresh SDK connection with --resume",
-                ", ".join(broken),
+                "Credential sidecar(s) restarted: %s — destroying worker "
+                "for fresh SDK connection with --resume",
+                ", ".join(restarted_providers),
             )
             await self._session_manager.destroy(thread_id)
 

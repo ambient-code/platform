@@ -552,6 +552,15 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 				credentialSidecarMode = true
 			}
 			r.logger.Info().Int("count", len(credSidecars)).Str("session_id", session.ID).Msg("credential sidecars injected")
+			// Mount sidecar tmp volumes on the runner so it can read
+			// restart epoch files written by credential sidecars.
+			for provider := range credMCPURLs {
+				appendRunnerVolumeMount(&containers, map[string]interface{}{
+					"name":      "cred-tmp-" + provider,
+					"mountPath": "/var/run/credential-epochs/" + provider,
+					"readOnly":  true,
+				})
+			}
 		}
 	} else if len(credentialIDs) > 0 {
 		r.logger.Warn().Str("session_id", session.ID).Msg("credential sidecars skipped: CPTokenURL or CPTokenPublicKey not configured")
@@ -941,6 +950,19 @@ func appendRunnerEnv(containers *[]interface{}, envEntry interface{}) {
 		}
 		if ctr["name"] == "ambient-code-runner" {
 			ctr["env"] = append(ctr["env"].([]interface{}), envEntry)
+			return
+		}
+	}
+}
+
+func appendRunnerVolumeMount(containers *[]interface{}, mount interface{}) {
+	for _, c := range *containers {
+		ctr, ok := c.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if ctr["name"] == "ambient-code-runner" {
+			ctr["volumeMounts"] = append(ctr["volumeMounts"].([]interface{}), mount)
 			return
 		}
 	}
