@@ -82,31 +82,30 @@ function TabStrip({
       {sessions.map(s => {
         const isActive = s.sessionId === activeId
         return (
-          <button
+          <div
             key={s.sessionId}
-            type="button"
             role="tab"
+            tabIndex={0}
             aria-selected={isActive}
-            className={`group flex items-center gap-1.5 px-2.5 py-1 text-xs min-w-0 flex-1 truncate transition-colors ${
+            className={`group flex items-center gap-1.5 px-2.5 py-1 text-xs min-w-0 flex-1 truncate transition-colors cursor-pointer ${
               isActive
                 ? 'border-b-2 border-primary text-foreground'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
             }`}
             onClick={() => onSwitch(s.sessionId)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSwitch(s.sessionId) } }}
           >
             <PhaseDot phase={getPhase(s.sessionId)} />
             <span className="truncate">{s.sessionName ?? s.agentName ?? s.sessionId.slice(0, 8)}</span>
-            <span
-              role="button"
-              tabIndex={0}
+            <button
+              type="button"
               className="ml-auto shrink-0 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
               onClick={e => { e.stopPropagation(); onClose(s.sessionId) }}
-              onKeyDown={e => { if (e.key === 'Enter') { e.stopPropagation(); onClose(s.sessionId) } }}
               aria-label="Close tab"
             >
               <X className="h-3 w-3" />
-            </span>
-          </button>
+            </button>
+          </div>
         )
       })}
       {projectId && <NewSessionButton projectId={projectId} />}
