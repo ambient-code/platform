@@ -64,8 +64,8 @@ export function useAllRoleBindings(search?: string, port?: RoleBindingsPort) {
       const allItems: DomainRoleBinding[] = []
       let page = 1
       const size = 100
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
+      const maxPages = 50
+      while (page <= maxPages) {
         const result = await adapter.list({ page, size, search })
         allItems.push(...result.items)
         if (!result.hasMore) break

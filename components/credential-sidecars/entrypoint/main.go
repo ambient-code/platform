@@ -29,12 +29,7 @@ func newProcessManager(args []string) *processManager {
 	return &processManager{args: args}
 }
 
-func (pm *processManager) start() error {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-	if pm.stopped {
-		return nil
-	}
+func (pm *processManager) startLocked() error {
 	cmd := exec.Command(pm.args[0], pm.args[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -47,45 +42,39 @@ func (pm *processManager) start() error {
 	return nil
 }
 
+func (pm *processManager) start() error {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	if pm.stopped {
+		return nil
+	}
+	return pm.startLocked()
+}
+
 func (pm *processManager) restart() {
 	pm.mu.Lock()
 	if pm.stopped {
 		pm.mu.Unlock()
 		return
 	}
-	cmd := pm.cmd
+	old := pm.cmd
 	pm.mu.Unlock()
 
-	if cmd != nil && cmd.Process != nil {
+	if old != nil && old.Process != nil {
 		fmt.Fprintf(os.Stderr, "credential-sidecar: restarting MCP subprocess for credential refresh\n")
-		_ = cmd.Process.Signal(syscall.SIGTERM)
-		done := make(chan struct{})
-		go func() { _ = cmd.Wait(); close(done) }()
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-			_ = cmd.Process.Kill()
-			<-done
-		}
+		_ = old.Process.Signal(syscall.SIGTERM)
+		time.Sleep(5 * time.Second)
+		_ = old.Process.Kill()
 	}
 
 	pm.mu.Lock()
+	defer pm.mu.Unlock()
 	if pm.stopped {
-		pm.mu.Unlock()
 		return
 	}
-	cmd = exec.Command(pm.args[0], pm.args[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	cmd.Env = os.Environ()
-	if err := cmd.Start(); err != nil {
+	if err := pm.startLocked(); err != nil {
 		fmt.Fprintf(os.Stderr, "credential-sidecar: restart failed: %v\n", err)
-		pm.mu.Unlock()
-		return
 	}
-	pm.cmd = cmd
-	pm.mu.Unlock()
 }
 
 func (pm *processManager) signal(s os.Signal) {
@@ -98,20 +87,39 @@ func (pm *processManager) signal(s os.Signal) {
 }
 
 func (pm *processManager) wait() int {
-	pm.mu.Lock()
-	cmd := pm.cmd
-	pm.mu.Unlock()
-	if cmd == nil {
-		return 1
-	}
-	if err := cmd.Wait(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return exitErr.ExitCode()
+	for {
+		pm.mu.Lock()
+		cmd := pm.cmd
+		pm.mu.Unlock()
+		if cmd == nil {
+			return 1
 		}
-		fmt.Fprintf(os.Stderr, "subprocess failed: %v\n", err)
-		return 1
+
+		err := cmd.Wait()
+
+		pm.mu.Lock()
+		isStopped := pm.stopped
+		replaced := pm.cmd != cmd
+		pm.mu.Unlock()
+
+		if isStopped {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				return exitErr.ExitCode()
+			}
+			return 0
+		}
+		if replaced {
+			continue
+		}
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				return exitErr.ExitCode()
+			}
+			fmt.Fprintf(os.Stderr, "subprocess failed: %v\n", err)
+			return 1
+		}
+		return 0
 	}
-	return 0
 }
 
 func main() {
