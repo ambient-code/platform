@@ -117,6 +117,9 @@ func (s *sqlCredentialService) Get(ctx context.Context, id string) (*Credential,
 }
 
 func (s *sqlCredentialService) Create(ctx context.Context, credential *Credential) (*Credential, *errors.ServiceError) {
+	if credential.ID == "" {
+		credential.ID = api.NewID()
+	}
 	if svcErr := s.encryptToken(credential); svcErr != nil {
 		return nil, svcErr
 	}
@@ -125,13 +128,15 @@ func (s *sqlCredentialService) Create(ctx context.Context, credential *Credentia
 		return nil, services.HandleCreateError("Credential", err)
 	}
 
-	_, evErr := s.events.Create(ctx, &api.Event{
-		Source:    "Credentials",
-		SourceID:  credential.ID,
-		EventType: api.CreateEventType,
-	})
-	if evErr != nil {
-		return nil, services.HandleCreateError("Credential", evErr)
+	if s.events != nil {
+		_, evErr := s.events.Create(ctx, &api.Event{
+			Source:    "Credentials",
+			SourceID:  credential.ID,
+			EventType: api.CreateEventType,
+		})
+		if evErr != nil {
+			return nil, services.HandleCreateError("Credential", evErr)
+		}
 	}
 
 	return credential, nil
