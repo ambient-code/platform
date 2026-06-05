@@ -27,15 +27,11 @@ export const CREDENTIAL_CATEGORIES: readonly CredentialCategory[] = [
   {
     label: 'Source Control',
     providers: [
-      { provider: 'github', label: 'GitHub', icon: 'Github', fields: ['token', 'url'],
+      { provider: 'github', label: 'GitHub', icon: 'Github', fields: ['token'],
         namePlaceholder: 'my-github-pat',
-        urlOptional: true,
-        urlHint: 'Only required for GitHub Enterprise. Leave blank for github.com.',
       },
-      { provider: 'gitlab', label: 'GitLab', icon: 'GitBranch', fields: ['token', 'url'],
+      { provider: 'gitlab', label: 'GitLab', icon: 'GitBranch', fields: ['token'],
         namePlaceholder: 'my-gitlab-pat',
-        urlOptional: true,
-        urlHint: 'Only required for self-hosted GitLab. Leave blank for gitlab.com.',
       },
     ],
   },
