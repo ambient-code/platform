@@ -1,8 +1,8 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { AgentsPort } from '@/ports/agents'
-import type { ListParams } from '@/domain/types'
+import type { DomainAgentCreateRequest, DomainAgentUpdateRequest, ListParams } from '@/domain/types'
 import { createAgentsAdapter } from '@/adapters/sdk-agents'
 import { queryKeys } from './query-keys'
 
@@ -35,14 +35,15 @@ export function useAgents(
 }
 
 export function useAgent(
+  projectId: string,
   agentId: string,
   port?: AgentsPort,
 ) {
   const adapter = port ?? getDefaultPort()
   return useQuery({
-    queryKey: queryKeys.agents.detail(agentId),
-    queryFn: () => adapter.get(agentId),
-    enabled: !!agentId,
+    queryKey: queryKeys.agents.detail(projectId, agentId),
+    queryFn: () => adapter.get(projectId, agentId),
+    enabled: !!projectId && !!agentId,
   })
 }
 
@@ -61,5 +62,45 @@ export function useAgentNames(projectId: string) {
     },
     enabled: !!projectId,
     staleTime: 60_000,
+  })
+}
+
+export function useCreateAgent(port?: AgentsPort) {
+  const queryClient = useQueryClient()
+  const adapter = port ?? getDefaultPort()
+
+  return useMutation({
+    mutationFn: ({ projectId, request }: { projectId: string; request: DomainAgentCreateRequest }) =>
+      adapter.create(projectId, request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.agents.all })
+    },
+  })
+}
+
+export function useUpdateAgent(port?: AgentsPort) {
+  const queryClient = useQueryClient()
+  const adapter = port ?? getDefaultPort()
+
+  return useMutation({
+    mutationFn: ({ projectId, agentId, request }: { projectId: string; agentId: string; request: DomainAgentUpdateRequest }) =>
+      adapter.update(projectId, agentId, request),
+    onSuccess: (updatedAgent, { projectId, agentId }) => {
+      queryClient.setQueryData(queryKeys.agents.detail(projectId, agentId), updatedAgent)
+      queryClient.invalidateQueries({ queryKey: queryKeys.agents.lists() })
+    },
+  })
+}
+
+export function useDeleteAgent(port?: AgentsPort) {
+  const queryClient = useQueryClient()
+  const adapter = port ?? getDefaultPort()
+
+  return useMutation({
+    mutationFn: ({ projectId, agentId }: { projectId: string; agentId: string }) =>
+      adapter.delete(projectId, agentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.agents.all })
+    },
   })
 }
