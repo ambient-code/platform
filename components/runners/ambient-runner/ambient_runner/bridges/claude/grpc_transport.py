@@ -18,8 +18,11 @@ When AMBIENT_GRPC_ENABLED is not set, none of this code is instantiated or calle
 
 import asyncio
 import logging
+import os
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Optional
 
 import grpc
@@ -186,6 +189,19 @@ class GRPCSessionListener:
             )
 
     async def _listen_loop(self) -> None:
+        is_resume = os.getenv("IS_RESUME", "").strip().lower() == "true"
+        # Record start time for filtering historical user messages on resume.
+        # Use a 5-second grace window to handle clock skew between the runner
+        # pod and the API server that stamps created_at.
+        resume_cutoff: float | None = None
+        if is_resume:
+            resume_cutoff = time.time() - 5.0
+            logger.info(
+                "[GRPC LISTENER] Resume mode: will skip user messages created before %.3f: session=%s",
+                resume_cutoff,
+                self._session_id,
+            )
+
         last_seq = 0
         backoff = _BACKOFF_INITIAL
 
@@ -222,6 +238,20 @@ class GRPCSessionListener:
                             msg.seq,
                         )
                         continue
+
+                    # On resume, skip historical user messages that existed
+                    # before this runner pod started.
+                    if resume_cutoff is not None and msg.created_at is not None:
+                        msg_epoch = msg.created_at.timestamp()
+                        if msg_epoch < resume_cutoff:
+                            logger.info(
+                                "[GRPC LISTENER] Skipping historical user message: seq=%d created_at=%.3f < cutoff=%.3f session=%s",
+                                msg.seq,
+                                msg_epoch,
+                                resume_cutoff,
+                                self._session_id,
+                            )
+                            continue
 
                     logger.info(
                         "[GRPC LISTENER] User message seq=%d — triggering run: session=%s",

@@ -36,4 +36,25 @@ export const queryKeys = {
     list: (sessionId: string) =>
       [...queryKeys.messages.lists(), sessionId] as const,
   },
+  credentials: {
+    all: ['credentials'] as const,
+    lists: () => [...queryKeys.credentials.all, 'list'] as const,
+    list: (params?: ListParams) =>
+      [...queryKeys.credentials.lists(), params] as const,
+    details: () => [...queryKeys.credentials.all, 'detail'] as const,
+    detail: (id: string) =>
+      [...queryKeys.credentials.details(), id] as const,
+  },
+  roleBindings: {
+    all: ['roleBindings'] as const,
+    lists: () => [...queryKeys.roleBindings.all, 'list'] as const,
+    list: (params?: ListParams) =>
+      [...queryKeys.roleBindings.lists(), params] as const,
+  },
+  roles: {
+    all: ['roles'] as const,
+    lists: () => [...queryKeys.roles.all, 'list'] as const,
+    list: (params?: ListParams) =>
+      [...queryKeys.roles.lists(), params] as const,
+  },
 } as const
