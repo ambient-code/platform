@@ -14,6 +14,7 @@ export type ProviderMeta = {
   fields: CredentialField[]
   tokenField?: TokenFieldMeta
   namePlaceholder?: string
+  urlOptional?: boolean
   urlHint?: string
 }
 
@@ -28,10 +29,12 @@ export const CREDENTIAL_CATEGORIES: readonly CredentialCategory[] = [
     providers: [
       { provider: 'github', label: 'GitHub', icon: 'Github', fields: ['token', 'url'],
         namePlaceholder: 'my-github-pat',
+        urlOptional: true,
         urlHint: 'Only required for GitHub Enterprise. Leave blank for github.com.',
       },
       { provider: 'gitlab', label: 'GitLab', icon: 'GitBranch', fields: ['token', 'url'],
         namePlaceholder: 'my-gitlab-pat',
+        urlOptional: true,
         urlHint: 'Only required for self-hosted GitLab. Leave blank for gitlab.com.',
       },
     ],

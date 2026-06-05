@@ -75,6 +75,8 @@ export function CredentialManageSheet({
       })
       toast.success(`Token rotated for "${credential.name}"`)
       setNewToken('')
+      setRotateFileName(null)
+      setShowRotateSecret(false)
     } catch (err) {
       console.error('rotate token failed', err)
       setRotateError('Failed to rotate token. Please try again.')
@@ -94,19 +96,31 @@ export function CredentialManageSheet({
     }
   }
 
+  const MAX_UPLOAD_BYTES = 1_048_576
+
   const handleRotateFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setRotateError('File exceeds 1 MB limit.')
+      return
+    }
     const reader = new FileReader()
     reader.onload = () => {
       const text = reader.result
       if (typeof text === 'string') {
         setNewToken(text)
         setRotateFileName(file.name)
+        setRotateError(null)
       }
     }
+    reader.onerror = () => {
+      setRotateError('Failed to read file.')
+      setNewToken('')
+      setRotateFileName(null)
+    }
     reader.readAsText(file)
-    e.target.value = ''
   }, [])
 
   function handleClose(v: boolean) {

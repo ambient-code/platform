@@ -66,7 +66,7 @@ export function CredentialCreateSheet({
   )
 
   const fields = providerMeta?.fields ?? []
-  const isUrlOptional = !!providerMeta?.urlHint
+  const isUrlOptional = providerMeta?.urlOptional === true
 
   function resetForm() {
     setProvider('')
@@ -125,9 +125,16 @@ export function CredentialCreateSheet({
     }
   }
 
+  const MAX_UPLOAD_BYTES = 1_048_576
+
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setFieldErrors((prev) => ({ ...prev, token: 'File exceeds 1 MB limit.' }))
+      return
+    }
     const reader = new FileReader()
     reader.onload = () => {
       const text = reader.result
@@ -137,8 +144,12 @@ export function CredentialCreateSheet({
         setFieldErrors((prev) => ({ ...prev, token: undefined }))
       }
     }
+    reader.onerror = () => {
+      setFieldErrors((prev) => ({ ...prev, token: 'Failed to read file.' }))
+      setToken('')
+      setUploadedFileName(null)
+    }
     reader.readAsText(file)
-    e.target.value = ''
   }, [])
 
   const clearUpload = useCallback(() => {
