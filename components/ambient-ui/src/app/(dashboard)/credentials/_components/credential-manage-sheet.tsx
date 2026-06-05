@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { KeyRound, AlertTriangle } from 'lucide-react'
+import { useState, useCallback, useRef } from 'react'
+import { KeyRound, AlertTriangle, Eye, EyeOff, Upload, X } from 'lucide-react'
 import {
   Sheet,
   SheetContent,
@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import {
@@ -45,6 +46,9 @@ export function CredentialManageSheet({
   const [newToken, setNewToken] = useState('')
   const [rotateError, setRotateError] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [showRotateSecret, setShowRotateSecret] = useState(false)
+  const [rotateFileName, setRotateFileName] = useState<string | null>(null)
+  const rotateFileRef = useRef<HTMLInputElement>(null)
   const updateCredential = useUpdateCredential()
   const deleteCredential = useDeleteCredential()
 
@@ -71,6 +75,8 @@ export function CredentialManageSheet({
       })
       toast.success(`Token rotated for "${credential.name}"`)
       setNewToken('')
+      setRotateFileName(null)
+      setShowRotateSecret(false)
     } catch (err) {
       console.error('rotate token failed', err)
       setRotateError('Failed to rotate token. Please try again.')
@@ -90,11 +96,40 @@ export function CredentialManageSheet({
     }
   }
 
+  const MAX_UPLOAD_BYTES = 1_048_576
+
+  const handleRotateFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setRotateError('File exceeds 1 MB limit.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const text = reader.result
+      if (typeof text === 'string') {
+        setNewToken(text)
+        setRotateFileName(file.name)
+        setRotateError(null)
+      }
+    }
+    reader.onerror = () => {
+      setRotateError('Failed to read file.')
+      setNewToken('')
+      setRotateFileName(null)
+    }
+    reader.readAsText(file)
+  }, [])
+
   function handleClose(v: boolean) {
     if (!v) {
       setNewToken('')
       setRotateError(null)
       setDeleteError(null)
+      setShowRotateSecret(false)
+      setRotateFileName(null)
     }
     onOpenChange(v)
   }
@@ -220,47 +255,148 @@ export function CredentialManageSheet({
           <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
             <h3 className="text-base font-semibold tracking-tight flex items-center gap-1.5">
               <AlertTriangle className="h-4 w-4 text-amber-500" />
-              Rotate Token
+              Rotate {providerMeta?.tokenField?.label ?? 'Token'}
             </h3>
             <p className="text-xs text-muted-foreground">
               Replace the existing secret with a new value. New sessions use it immediately. Restart running sessions to pick up the change.
             </p>
-            <div className="flex items-center gap-2">
-              <Input
-                type="password"
-                placeholder="Enter new token"
-                value={newToken}
-                onChange={(e) => setNewToken(e.target.value)}
-                autoComplete="off"
-                className="flex-1"
-              />
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
+            {providerMeta?.tokenField?.multiline ? (
+              <div className="space-y-2">
+                {rotateFileName ? (
+                  <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                    <Upload className="size-4 text-muted-foreground shrink-0" />
+                    <span className="truncate flex-1 font-mono text-xs">{rotateFileName}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-6 shrink-0"
+                      onClick={() => { setNewToken(''); setRotateFileName(null) }}
+                      aria-label="Remove uploaded file"
+                    >
+                      <X className="size-3.5" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <Textarea
+                      placeholder={providerMeta.tokenField.placeholder}
+                      value={newToken}
+                      onChange={(e) => setNewToken(e.target.value)}
+                      autoComplete="off"
+                      className={`min-h-24 font-mono text-xs pr-10`}
+                      style={!showRotateSecret ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-1.5 top-1.5 size-7"
+                      onClick={() => setShowRotateSecret((v) => !v)}
+                      aria-label={showRotateSecret ? 'Hide secret' : 'Show secret'}
+                    >
+                      {showRotateSecret ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                    </Button>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
                   <Button
+                    type="button"
                     variant="outline"
                     size="sm"
-                    disabled={!newToken || updateCredential.isPending}
+                    className="h-7 text-xs"
+                    onClick={() => rotateFileRef.current?.click()}
                   >
-                    {updateCredential.isPending ? 'Rotating...' : 'Rotate'}
+                    <Upload className="size-3 mr-1" />
+                    Upload file
                   </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Rotate token?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This will replace the existing token for &quot;{resolved.name}&quot;.
-                      New sessions use the new token immediately. Restart running sessions to pick up the change.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleRotateToken}>
-                      Rotate Token
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
+                  <input
+                    ref={rotateFileRef}
+                    type="file"
+                    className="hidden"
+                    accept=".yaml,.yml,.json,.txt,.pem,.key,*"
+                    onChange={handleRotateFileUpload}
+                  />
+                  <div className="flex-1" />
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7"
+                        disabled={!newToken || updateCredential.isPending}
+                      >
+                        {updateCredential.isPending ? 'Rotating...' : 'Rotate'}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Rotate {providerMeta.tokenField.label.toLowerCase()}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will replace the existing {providerMeta.tokenField.label.toLowerCase()} for &quot;{resolved.name}&quot;.
+                          New sessions use the new value immediately. Restart running sessions to pick up the change.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleRotateToken}>
+                          Rotate
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    type={showRotateSecret ? 'text' : 'password'}
+                    placeholder="Enter new token"
+                    value={newToken}
+                    onChange={(e) => setNewToken(e.target.value)}
+                    autoComplete="off"
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 size-7"
+                    onClick={() => setShowRotateSecret((v) => !v)}
+                    aria-label={showRotateSecret ? 'Hide token' : 'Show token'}
+                  >
+                    {showRotateSecret ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                  </Button>
+                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!newToken || updateCredential.isPending}
+                    >
+                      {updateCredential.isPending ? 'Rotating...' : 'Rotate'}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Rotate token?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will replace the existing token for &quot;{resolved.name}&quot;.
+                        New sessions use the new token immediately. Restart running sessions to pick up the change.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleRotateToken}>
+                        Rotate Token
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            )}
             {rotateError && (
               <p className="text-sm text-destructive">{rotateError}</p>
             )}
