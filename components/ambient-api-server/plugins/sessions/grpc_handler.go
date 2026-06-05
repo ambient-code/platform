@@ -13,6 +13,7 @@ import (
 	localgrpc "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc"
 	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/middleware"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/server"
 	"github.com/openshift-online/rh-trex-ai/pkg/server/grpcutil"
@@ -285,16 +286,22 @@ func (h *sessionGRPCHandler) WatchSessionMessages(req *pb.WatchSessionMessagesRe
 	ctx := stream.Context()
 
 	if !middleware.IsServiceCaller(ctx) {
-		username := auth.GetUsernameFromContext(ctx)
-		if username == "" {
+		authResult := rbac.GetAuthResult(ctx)
+		if authResult == nil || authResult.Username == "" {
 			return status.Error(codes.PermissionDenied, "not authorized to watch this session")
 		}
-		session, svcErr := h.service.Get(ctx, req.GetSessionId())
-		if svcErr != nil {
-			return grpcutil.ServiceErrorToGRPC(svcErr)
-		}
-		if session.CreatedByUserId == nil || *session.CreatedByUserId != username {
-			return status.Error(codes.PermissionDenied, "not authorized to watch this session")
+		if !authResult.IsGlobalAdmin {
+			session, svcErr := h.service.Get(ctx, req.GetSessionId())
+			if svcErr != nil {
+				return grpcutil.ServiceErrorToGRPC(svcErr)
+			}
+			projectID := ""
+			if session.ProjectId != nil {
+				projectID = *session.ProjectId
+			}
+			if !isProjectAuthorized(authResult, projectID) {
+				return status.Error(codes.PermissionDenied, "not authorized to watch this session")
+			}
 		}
 	}
 
@@ -341,6 +348,9 @@ func (h *sessionGRPCHandler) WatchSessions(req *pb.WatchSessionsRequest, stream 
 	}
 
 	ctx := stream.Context()
+	authResult := rbac.GetAuthResult(ctx)
+	isService := middleware.IsServiceCaller(ctx)
+
 	sub, err := broker.Subscribe(ctx)
 	if err != nil {
 		return status.Errorf(codes.Internal, "failed to subscribe to event broker: %v", err)
@@ -370,6 +380,17 @@ func (h *sessionGRPCHandler) WatchSessions(req *pb.WatchSessionsRequest, stream 
 					glog.Errorf("WatchSessions: failed to get session %s: %v", event.SourceID, svcErr)
 					continue
 				}
+
+				if !isService && authResult != nil && !authResult.IsGlobalAdmin {
+					projectID := ""
+					if session.ProjectId != nil {
+						projectID = *session.ProjectId
+					}
+					if !isProjectAuthorized(authResult, projectID) {
+						continue
+					}
+				}
+
 				watchEvent.Session = sessionToProto(session)
 			}
 
@@ -378,4 +399,19 @@ func (h *sessionGRPCHandler) WatchSessions(req *pb.WatchSessionsRequest, stream 
 			}
 		}
 	}
+}
+
+func isProjectAuthorized(authResult *rbac.AuthResult, projectID string) bool {
+	if authResult == nil || authResult.IsGlobalAdmin {
+		return true
+	}
+	if projectID == "" {
+		return false
+	}
+	for _, id := range authResult.ProjectIDs {
+		if id == projectID {
+			return true
+		}
+	}
+	return false
 }
