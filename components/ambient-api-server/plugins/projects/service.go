@@ -4,7 +4,9 @@ import (
 	"context"
 	"regexp"
 
+	"github.com/golang/glog"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/db"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/logger"
@@ -44,20 +46,22 @@ type ProjectService interface {
 	OnDelete(ctx context.Context, id string) error
 }
 
-func NewProjectService(lockFactory db.LockFactory, projectDao ProjectDao, events services.EventService) ProjectService {
+func NewProjectService(lockFactory db.LockFactory, projectDao ProjectDao, events services.EventService, sessionFactory *db.SessionFactory) ProjectService {
 	return &sqlProjectService{
-		lockFactory: lockFactory,
-		projectDao:  projectDao,
-		events:      events,
+		lockFactory:    lockFactory,
+		projectDao:     projectDao,
+		events:         events,
+		sessionFactory: sessionFactory,
 	}
 }
 
 var _ ProjectService = &sqlProjectService{}
 
 type sqlProjectService struct {
-	lockFactory db.LockFactory
-	projectDao  ProjectDao
-	events      services.EventService
+	lockFactory    db.LockFactory
+	projectDao     ProjectDao
+	events         services.EventService
+	sessionFactory *db.SessionFactory
 }
 
 func (s *sqlProjectService) OnUpsert(ctx context.Context, id string) error {
@@ -97,6 +101,8 @@ func (s *sqlProjectService) Create(ctx context.Context, project *Project) (*Proj
 		return nil, services.HandleCreateError("Project", err)
 	}
 
+	s.createOwnerBinding(ctx, project.ID)
+
 	_, evErr := s.events.Create(ctx, &api.Event{
 		Source:    "Projects",
 		SourceID:  project.ID,
@@ -107,6 +113,24 @@ func (s *sqlProjectService) Create(ctx context.Context, project *Project) (*Proj
 	}
 
 	return project, nil
+}
+
+func (s *sqlProjectService) createOwnerBinding(ctx context.Context, projectID string) {
+	username := auth.GetUsernameFromContext(ctx)
+	if username == "" {
+		return
+	}
+	g := (*s.sessionFactory).New(ctx)
+	result := g.Exec(
+		`INSERT INTO role_bindings (id, role_id, scope, user_id, project_id, created_at, updated_at)
+		 SELECT ?, r.id, 'project', ?, ?, NOW(), NOW()
+		 FROM roles r WHERE r.name = 'project:owner' AND r.deleted_at IS NULL
+		 LIMIT 1`,
+		api.NewID(), username, projectID,
+	)
+	if result.Error != nil {
+		glog.Warningf("failed to create owner binding for project %s: %v", projectID, result.Error)
+	}
 }
 
 func (s *sqlProjectService) Replace(ctx context.Context, project *Project) (*Project, *errors.ServiceError) {

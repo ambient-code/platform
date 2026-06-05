@@ -5,7 +5,9 @@ import (
 	"fmt"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/crypto"
+	"github.com/golang/glog"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/db"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/logger"
@@ -32,22 +34,24 @@ type CredentialService interface {
 	OnDelete(ctx context.Context, id string) error
 }
 
-func NewCredentialService(lockFactory db.LockFactory, credentialDao CredentialDao, events services.EventService, keyring *crypto.Keyring) CredentialService {
+func NewCredentialService(lockFactory db.LockFactory, credentialDao CredentialDao, events services.EventService, keyring *crypto.Keyring, sessionFactory *db.SessionFactory) CredentialService {
 	return &sqlCredentialService{
-		lockFactory:   lockFactory,
-		credentialDao: credentialDao,
-		events:        events,
-		keyring:       keyring,
+		lockFactory:    lockFactory,
+		credentialDao:  credentialDao,
+		events:         events,
+		keyring:        keyring,
+		sessionFactory: sessionFactory,
 	}
 }
 
 var _ CredentialService = &sqlCredentialService{}
 
 type sqlCredentialService struct {
-	lockFactory   db.LockFactory
-	credentialDao CredentialDao
-	events        services.EventService
-	keyring       *crypto.Keyring
+	lockFactory    db.LockFactory
+	credentialDao  CredentialDao
+	events         services.EventService
+	keyring        *crypto.Keyring
+	sessionFactory *db.SessionFactory
 }
 
 func (s *sqlCredentialService) encryptToken(credential *Credential) *errors.ServiceError {
@@ -128,6 +132,8 @@ func (s *sqlCredentialService) Create(ctx context.Context, credential *Credentia
 		return nil, services.HandleCreateError("Credential", err)
 	}
 
+	s.createOwnerBinding(ctx, credential.ID)
+
 	if s.events != nil {
 		_, evErr := s.events.Create(ctx, &api.Event{
 			Source:    "Credentials",
@@ -140,6 +146,27 @@ func (s *sqlCredentialService) Create(ctx context.Context, credential *Credentia
 	}
 
 	return credential, nil
+}
+
+func (s *sqlCredentialService) createOwnerBinding(ctx context.Context, credentialID string) {
+	if s.sessionFactory == nil {
+		return
+	}
+	username := auth.GetUsernameFromContext(ctx)
+	if username == "" {
+		return
+	}
+	g := (*s.sessionFactory).New(ctx)
+	result := g.Exec(
+		`INSERT INTO role_bindings (id, role_id, scope, user_id, credential_id, created_at, updated_at)
+		 SELECT ?, r.id, 'credential', ?, ?, NOW(), NOW()
+		 FROM roles r WHERE r.name = 'credential:owner' AND r.deleted_at IS NULL
+		 LIMIT 1`,
+		api.NewID(), username, credentialID,
+	)
+	if result.Error != nil {
+		glog.Warningf("failed to create owner binding for credential %s: %v", credentialID, result.Error)
+	}
 }
 
 func (s *sqlCredentialService) Replace(ctx context.Context, credential *Credential) (*Credential, *errors.ServiceError) {

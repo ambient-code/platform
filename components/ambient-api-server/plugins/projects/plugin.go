@@ -43,6 +43,7 @@ func NewServiceLocator(env *environments.Env) ServiceLocator {
 			db.NewAdvisoryLockFactory(env.Database.SessionFactory),
 			NewProjectDao(&env.Database.SessionFactory),
 			events.Service(&env.Services),
+			&env.Database.SessionFactory,
 		)
 	}
 }
@@ -70,6 +71,7 @@ func init() {
 				db.NewAdvisoryLockFactory(e.Database.SessionFactory),
 				NewProjectDao(&e.Database.SessionFactory),
 				events.Service(&e.Services),
+				&e.Database.SessionFactory,
 			)}
 		}
 		return loc

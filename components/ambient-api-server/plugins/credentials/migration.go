@@ -106,6 +106,50 @@ func rolesMigration() *gormigrate.Migration {
 	}
 }
 
+func credentialOwnerRoleMigration() *gormigrate.Migration {
+	seed := []struct {
+		name        string
+		displayName string
+		description string
+		permissions []string
+	}{
+		{
+			name:        "credential:owner",
+			displayName: "Credential Owner",
+			description: "Full CRUD on owned credentials and bind to projects",
+			permissions: []string{"credential:create", "credential:read", "credential:update", "credential:delete", "credential:list"},
+		},
+		{
+			name:        "agent:editor",
+			displayName: "Agent Editor",
+			description: "Update prompt and metadata on a specific agent",
+			permissions: []string{"agent:read", "agent:update"},
+		},
+	}
+
+	return &gormigrate.Migration{
+		ID: "202606050002",
+		Migrate: func(tx *gorm.DB) error {
+			for _, r := range seed {
+				permsJSON, err := json.Marshal(r.permissions)
+				if err != nil {
+					return err
+				}
+				if err := tx.Exec(
+					`INSERT INTO roles (id, name, display_name, description, permissions, built_in) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (name) DO NOTHING`,
+					api.NewID(), r.name, r.displayName, r.description, string(permsJSON), true,
+				).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return tx.Exec("DELETE FROM roles WHERE name IN ?", []string{"credential:owner", "agent:editor"}).Error
+		},
+	}
+}
+
 func dropProjectIDMigration() *gormigrate.Migration {
 	return &gormigrate.Migration{
 		ID: "202605060003",
