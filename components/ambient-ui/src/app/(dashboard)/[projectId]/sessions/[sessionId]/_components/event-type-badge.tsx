@@ -10,39 +10,39 @@ type EventBadgeConfig = {
 export const EVENT_BADGE_CONFIG: Record<SessionEventType, EventBadgeConfig> = {
   user: {
     label: 'User',
-    className: 'bg-[#e0f0ff] text-[#003366] border-[#b9dafc]',
+    className: 'bg-event-user text-event-user-foreground border-event-user-border',
   },
   assistant: {
     label: 'Assistant',
-    className: 'bg-[#ece6ff] text-[#21134d] border-[#d0c5f4]',
+    className: 'bg-event-assistant text-event-assistant-foreground border-event-assistant-border',
   },
   text: {
     label: 'Text',
-    className: 'bg-[#e0e0e0] text-[#383838] border-[#c7c7c7]',
+    className: 'bg-event-lifecycle text-event-lifecycle-foreground border-event-lifecycle-border',
   },
   tool_use: {
     label: 'Tool Call',
-    className: 'bg-[#e0f0ff] text-[#003366] border-[#b9dafc]',
+    className: 'bg-event-tool text-event-tool-foreground border-event-tool-border',
   },
   tool_result: {
     label: 'Tool Result',
-    className: 'bg-[#daf2f2] text-[#004d4d] border-[#b9e5e5]',
+    className: 'bg-event-user text-event-user-foreground border-event-user-border',
   },
   error: {
     label: 'Error',
-    className: 'bg-[#ffe3d9] text-[#731f00] border-[#fbbea8]',
+    className: 'bg-status-error text-status-error-foreground border-status-error-border',
   },
   lifecycle: {
     label: 'Lifecycle',
-    className: 'bg-[#ece6ff] text-[#21134d] border-[#d0c5f4]',
+    className: 'bg-event-assistant text-event-assistant-foreground border-event-assistant-border',
   },
   user_feedback: {
     label: 'Feedback',
-    className: 'bg-[#e9f7df] text-[#204d00] border-[#d1f1bb]',
+    className: 'bg-event-feedback text-event-feedback-foreground border-event-feedback-border',
   },
   system: {
     label: 'System',
-    className: 'bg-[#f2f2f2] text-[#4d4d4d] border-[#e0e0e0]',
+    className: 'bg-event-system text-event-system-foreground border-event-system-border',
   },
 }
 
