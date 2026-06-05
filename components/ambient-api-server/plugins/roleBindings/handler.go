@@ -66,16 +66,27 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 					return nil, errors.Forbidden("insufficient privileges to grant this role")
 				}
 
-				// c) Credential scope: caller must be credential:owner on that credential
+				// c) Credential scope: caller must be credential:owner AND project:owner
 				if roleBinding.Scope == "credential" && roleBinding.CredentialId != nil {
-					var ownerCount int64
+					var credOwnerCount int64
 					g.Raw(`SELECT COUNT(*) FROM role_bindings rb
 						   JOIN roles r ON r.id = rb.role_id
 						   WHERE rb.user_id = ? AND r.name = ?
 						   AND rb.credential_id = ? AND rb.deleted_at IS NULL AND r.deleted_at IS NULL`,
-						username, pkgrbac.RoleCredentialOwner, *roleBinding.CredentialId).Scan(&ownerCount)
-					if ownerCount == 0 {
+						username, pkgrbac.RoleCredentialOwner, *roleBinding.CredentialId).Scan(&credOwnerCount)
+					if credOwnerCount == 0 {
 						return nil, errors.Forbidden("caller must be credential owner to grant credential-scoped bindings")
+					}
+					if roleBinding.ProjectId != nil {
+						var projOwnerCount int64
+						g.Raw(`SELECT COUNT(*) FROM role_bindings rb
+							   JOIN roles r ON r.id = rb.role_id
+							   WHERE rb.user_id = ? AND r.name = 'project:owner'
+							   AND rb.project_id = ? AND rb.deleted_at IS NULL AND r.deleted_at IS NULL`,
+							username, *roleBinding.ProjectId).Scan(&projOwnerCount)
+						if projOwnerCount == 0 {
+							return nil, errors.Forbidden("caller must be project owner to bind credentials to a project")
+						}
 					}
 				}
 			}
