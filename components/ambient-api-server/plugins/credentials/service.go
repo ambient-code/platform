@@ -170,13 +170,15 @@ func (s *sqlCredentialService) Replace(ctx context.Context, credential *Credenti
 		return nil, services.HandleUpdateError("Credential", err)
 	}
 
-	_, evErr := s.events.Create(ctx, &api.Event{
-		Source:    "Credentials",
-		SourceID:  credential.ID,
-		EventType: api.UpdateEventType,
-	})
-	if evErr != nil {
-		return nil, services.HandleUpdateError("Credential", evErr)
+	if s.events != nil {
+		_, evErr := s.events.Create(ctx, &api.Event{
+			Source:    "Credentials",
+			SourceID:  credential.ID,
+			EventType: api.UpdateEventType,
+		})
+		if evErr != nil {
+			return nil, services.HandleUpdateError("Credential", evErr)
+		}
 	}
 
 	return credential, nil
@@ -187,12 +189,14 @@ func (s *sqlCredentialService) Delete(ctx context.Context, id string) *errors.Se
 		return services.HandleDeleteError("Credential", errors.GeneralError("Unable to delete credential: %s", err))
 	}
 
-	if _, evErr := s.events.Create(ctx, &api.Event{
-		Source:    "Credentials",
-		SourceID:  id,
-		EventType: api.DeleteEventType,
-	}); evErr != nil {
-		logger.NewLogger(ctx).Warning(fmt.Sprintf("Credential %s deleted but event creation failed: %v", id, evErr))
+	if s.events != nil {
+		if _, evErr := s.events.Create(ctx, &api.Event{
+			Source:    "Credentials",
+			SourceID:  id,
+			EventType: api.DeleteEventType,
+		}); evErr != nil {
+			logger.NewLogger(ctx).Warning(fmt.Sprintf("Credential %s deleted but event creation failed: %v", id, evErr))
+		}
 	}
 
 	return nil
