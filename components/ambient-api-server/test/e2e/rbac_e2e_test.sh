@@ -239,12 +239,12 @@ echo ""
 echo -e "${BOLD}Phase 3: Agent & Session Isolation${NC}"
 
 # Test 10: User A creates agent in proj-alpha
-api POST "/projects/proj-alpha/agents" "$TOKEN_A" '{"name":"agent-a","prompt":"test agent a"}'
+api POST "/projects/proj-alpha/agents" "$TOKEN_A" '{"name":"agent-a","prompt":"test agent a","project_id":"proj-alpha"}'
 assert_status "201" "$HTTP_STATUS" "User A creates agent-a in proj-alpha"
 AGENT_A_ID=$(echo "$HTTP_BODY" | jq -r '.id // empty')
 
 # Test 11: User B creates agent in proj-beta
-api POST "/projects/proj-beta/agents" "$TOKEN_B" '{"name":"agent-b","prompt":"test agent b"}'
+api POST "/projects/proj-beta/agents" "$TOKEN_B" '{"name":"agent-b","prompt":"test agent b","project_id":"proj-beta"}'
 assert_status "201" "$HTTP_STATUS" "User B creates agent-b in proj-beta"
 
 # Test 12: User A cannot list agents in proj-beta
@@ -315,7 +315,7 @@ api GET "/projects/proj-alpha" "$TOKEN_B"
 assert_status "200" "$HTTP_STATUS" "User B GET proj-alpha returns 200 after sharing"
 
 # Test 23: User B can create agent in proj-alpha
-api POST "/projects/proj-alpha/agents" "$TOKEN_B" '{"name":"agent-shared","prompt":"shared agent"}'
+api POST "/projects/proj-alpha/agents" "$TOKEN_B" '{"name":"agent-shared","prompt":"shared agent","project_id":"proj-alpha"}'
 assert_status "201" "$HTTP_STATUS" "User B creates agent in proj-alpha (shared)"
 
 # ============================================================

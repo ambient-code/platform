@@ -75,6 +75,23 @@ func (m *DBAuthorizationMiddleware) AuthorizeApi(next http.Handler) http.Handler
 			if isListEndpoint(r.Method, r.URL.Path) {
 				projectIDs, isGlobal, _ := m.evaluator.AuthorizedProjectIDs(ctx, username)
 				credentialIDs, credGlobal, _ := m.evaluator.AuthorizedCredentialIDs(ctx, username)
+
+				if scope.ProjectID != "" && !isGlobal {
+					found := false
+					for _, pid := range projectIDs {
+						if pid == scope.ProjectID {
+							found = true
+							break
+						}
+					}
+					if !found {
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusNotFound)
+						_, _ = w.Write([]byte(`{"kind":"Error","reason":"Not Found"}`))
+						return
+					}
+				}
+
 				ctx = SetAuthResult(ctx, &AuthResult{
 					Username:      username,
 					IsGlobalAdmin: isGlobal && credGlobal,
@@ -111,23 +128,37 @@ func (m *DBAuthorizationMiddleware) AuthorizeApi(next http.Handler) http.Handler
 }
 
 func (m *DBAuthorizationMiddleware) autoProvisionUser(ctx context.Context) {
+	var username, name, email string
+
 	payload, err := auth.GetAuthPayloadFromContext(ctx)
-	if err != nil || payload == nil || payload.Username == "" {
-		return
+	if err == nil && payload != nil && payload.Username != "" {
+		username = payload.Username
+		name = payload.FirstName
+		if payload.LastName != "" {
+			name = payload.FirstName + " " + payload.LastName
+		}
+		email = payload.Email
+	} else {
+		username = auth.GetUsernameFromContext(ctx)
+		if username == "" {
+			return
+		}
+		name = username
 	}
+
 	g := (*m.sessionFactory).New(ctx)
-	name := payload.FirstName
-	if payload.LastName != "" {
-		name = payload.FirstName + " " + payload.LastName
+	var emailPtr interface{} = nil
+	if email != "" {
+		emailPtr = email
 	}
 	result := g.Exec(
 		`INSERT INTO users (id, username, name, email, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, NOW(), NOW())
 		 ON CONFLICT (username) WHERE deleted_at IS NULL DO NOTHING`,
-		api.NewID(), payload.Username, name, payload.Email,
+		api.NewID(), username, name, emailPtr,
 	)
 	if result.Error != nil {
-		glog.Warningf("user auto-provision failed for %s: %v", payload.Username, result.Error)
+		glog.Warningf("user auto-provision failed for %s: %v", username, result.Error)
 	}
 }
 
