@@ -280,6 +280,74 @@ func TestEncrypt_EmptyPlaintext(t *testing.T) {
 	}
 }
 
+func TestVersions(t *testing.T) {
+	key1 := testKey()
+	key2 := make([]byte, 32)
+	for i := range key2 {
+		key2[i] = byte(i + 50)
+	}
+
+	kr, _ := NewKeyring(map[string]string{
+		"1": base64.StdEncoding.EncodeToString(key1),
+		"3": base64.StdEncoding.EncodeToString(key2),
+	}, 1)
+
+	versions := kr.Versions()
+	if len(versions) != 2 {
+		t.Fatalf("expected 2 versions, got %d", len(versions))
+	}
+	has1, has3 := false, false
+	for _, v := range versions {
+		if v == 1 {
+			has1 = true
+		}
+		if v == 3 {
+			has3 = true
+		}
+	}
+	if !has1 || !has3 {
+		t.Fatalf("expected versions [1, 3], got %v", versions)
+	}
+}
+
+func TestTokenVersion_Valid(t *testing.T) {
+	kr := testKeyring(t)
+	ct, _ := kr.Encrypt("secret", "cred-001")
+
+	v, ok := TokenVersion(ct)
+	if !ok {
+		t.Fatal("expected ok=true for valid ciphertext")
+	}
+	if v != 1 {
+		t.Fatalf("expected version 1, got %d", v)
+	}
+}
+
+func TestTokenVersion_Plaintext(t *testing.T) {
+	_, ok := TokenVersion("ghp_abc123")
+	if ok {
+		t.Fatal("expected ok=false for plaintext")
+	}
+}
+
+func TestNewKeyring_DuplicateVersions(t *testing.T) {
+	key := base64.StdEncoding.EncodeToString(testKey())
+	key2 := make([]byte, 32)
+	for i := range key2 {
+		key2[i] = byte(i + 99)
+	}
+	_, err := NewKeyring(map[string]string{
+		"1":  key,
+		"01": base64.StdEncoding.EncodeToString(key2),
+	}, 1)
+	if err == nil {
+		t.Fatal("expected error for duplicate version (1 and 01)")
+	}
+	if !strings.Contains(err.Error(), "duplicate key version") {
+		t.Fatalf("expected duplicate error, got: %v", err)
+	}
+}
+
 func TestEncrypt_LargePayload(t *testing.T) {
 	kr := testKeyring(t)
 	large := strings.Repeat("a]kubeconfig-content-here[", 1000)
