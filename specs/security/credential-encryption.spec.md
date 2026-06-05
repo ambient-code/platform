@@ -109,7 +109,7 @@ If a value has the `enc:` prefix but fails any validation step, the system SHALL
 #### Scenario: Legacy plaintext token
 
 - GIVEN a credential with token `ghp_abc123` (no `enc:` prefix)
-- AND `CREDENTIAL_ENCRYPTION_KEY` is configured
+- AND `CREDENTIAL_ENCRYPTION_KEYRING` and `CREDENTIAL_ENCRYPTION_KEY_VERSION` are configured
 - WHEN the API server reads this token via `GET /credentials/{id}/token`
 - THEN it returns the plaintext value as-is (no decryption needed)
 - AND the token remains plaintext in the database until explicitly migrated
