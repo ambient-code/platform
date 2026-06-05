@@ -20,6 +20,8 @@ func TestPathToResource(t *testing.T) {
 		{"/api/ambient/v1/sessions", "session"},
 		{"/api/ambient/v1/role_bindings", "role_binding"},
 		{"/api/ambient/v1/roles", "role"},
+		{"/api/ambient/v1/projects/proj-1/scheduled-sessions", "session"},
+		{"/api/ambient/v1/projects/proj-1/scheduled-sessions/ss-1", "session"},
 		{"/foo/bar", "unknown"},
 	}
 	for _, tt := range tests {
@@ -72,6 +74,10 @@ func TestIsAuthExempt(t *testing.T) {
 		{http.MethodPost, "/api/ambient/v1/roles", false},
 		{http.MethodDelete, "/api/ambient/v1/roles/abc123", false},
 		{http.MethodGet, "/api/ambient/v1/roles/abc123/something", false},
+		{http.MethodPost, "/api/ambient/v1/role_bindings", true},
+		{http.MethodPatch, "/api/ambient/v1/role_bindings/rb1", false},
+		{http.MethodDelete, "/api/ambient/v1/role_bindings/rb1", false},
+		{http.MethodGet, "/api/ambient/v1/role_bindings", false},
 		{http.MethodGet, "/api/ambient/v1/sessions", false},
 		{http.MethodPost, "/api/ambient/v1/projects/p1/agents", false},
 	}

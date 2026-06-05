@@ -110,6 +110,68 @@ func (m *DBAuthorizationMiddleware) AuthorizeApi(next http.Handler) http.Handler
 			}
 
 			if isSingletonGet(r.Method, r.URL.Path) {
+				// For session sub-resource GETs, resolve the session's project
+				// and check whether the caller has a binding covering that
+				// project.  This avoids relying solely on Evaluate() which
+				// may fail when the request scope lacks a project_id.
+				if scope.SessionID != "" {
+					resolvedProjectID := scope.ProjectID
+					if resolvedProjectID == "" {
+						if pid, err := m.evaluator.resolveSessionProject((*m.sessionFactory).New(ctx), scope.SessionID); err == nil {
+							resolvedProjectID = pid
+						}
+					}
+					if resolvedProjectID != "" {
+						projectIDs, isGlobal, _ := m.evaluator.AuthorizedProjectIDs(ctx, username)
+						credentialIDs, credGlobal, _ := m.evaluator.AuthorizedCredentialIDs(ctx, username)
+						hasAccess := isGlobal
+						if !hasAccess {
+							for _, pid := range projectIDs {
+								if pid == resolvedProjectID {
+									hasAccess = true
+									break
+								}
+							}
+						}
+						if hasAccess {
+							ctx = SetAuthResult(ctx, &AuthResult{
+								Username:      username,
+								IsGlobalAdmin: isGlobal && credGlobal,
+								ProjectIDs:    projectIDs,
+								CredentialIDs: credentialIDs,
+							})
+							next.ServeHTTP(w, r.WithContext(ctx))
+							return
+						}
+					}
+				}
+
+				// For credential sub-resource GETs (e.g. /credentials/{id}/token),
+				// check whether the caller has a binding covering the credential.
+				if scope.CredentialID != "" {
+					credentialIDs, credGlobal, _ := m.evaluator.AuthorizedCredentialIDs(ctx, username)
+					projectIDs, isGlobal, _ := m.evaluator.AuthorizedProjectIDs(ctx, username)
+					hasAccess := credGlobal
+					if !hasAccess {
+						for _, cid := range credentialIDs {
+							if cid == scope.CredentialID {
+								hasAccess = true
+								break
+							}
+						}
+					}
+					if hasAccess {
+						ctx = SetAuthResult(ctx, &AuthResult{
+							Username:      username,
+							IsGlobalAdmin: isGlobal && credGlobal,
+							ProjectIDs:    projectIDs,
+							CredentialIDs: credentialIDs,
+						})
+						next.ServeHTTP(w, r.WithContext(ctx))
+						return
+					}
+				}
+
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusNotFound)
 				_, _ = w.Write([]byte(`{"kind":"Error","reason":"Not Found"}`))
@@ -208,7 +270,13 @@ func pathToResource(path string) string {
 			if resource == "projects" && i+3 < len(segments) {
 				resource = segments[i+3]
 			}
-			return singularize(resource)
+			resource = singularize(resource)
+			// Map sub-resource names to their parent permission resource.
+			switch resource {
+			case "scheduled-session":
+				resource = "session"
+			}
+			return resource
 		}
 	}
 	return "unknown"

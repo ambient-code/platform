@@ -99,4 +99,5 @@ func init() {
 	db.RegisterMigration(removeCredentialReaderRoleMigration())
 	db.RegisterMigration(dropProjectIDMigration())
 	db.RegisterMigration(credentialOwnerRoleMigration())
+	db.RegisterMigration(credentialTokenPermMigration())
 }

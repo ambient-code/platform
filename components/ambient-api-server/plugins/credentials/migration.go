@@ -150,6 +150,50 @@ func credentialOwnerRoleMigration() *gormigrate.Migration {
 	}
 }
 
+func credentialTokenPermMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202606050003",
+		Migrate: func(tx *gorm.DB) error {
+			// Add credential:fetch_token to credential:owner permissions.
+			ownerPerms, _ := json.Marshal([]string{
+				"credential:create", "credential:read", "credential:update",
+				"credential:delete", "credential:list", "credential:fetch_token",
+			})
+			if err := tx.Exec(
+				`UPDATE roles SET permissions = ? WHERE name = 'credential:owner' AND deleted_at IS NULL`,
+				string(ownerPerms),
+			).Error; err != nil {
+				return err
+			}
+
+			// Align credential:token-reader with the action returned by
+			// pathToAction ("fetch_token") so the middleware matches.
+			tokenReaderPerms, _ := json.Marshal([]string{"credential:fetch_token"})
+			return tx.Exec(
+				`UPDATE roles SET permissions = ? WHERE name = 'credential:token-reader' AND deleted_at IS NULL`,
+				string(tokenReaderPerms),
+			).Error
+		},
+		Rollback: func(tx *gorm.DB) error {
+			ownerPerms, _ := json.Marshal([]string{
+				"credential:create", "credential:read", "credential:update",
+				"credential:delete", "credential:list",
+			})
+			if err := tx.Exec(
+				`UPDATE roles SET permissions = ? WHERE name = 'credential:owner' AND deleted_at IS NULL`,
+				string(ownerPerms),
+			).Error; err != nil {
+				return err
+			}
+			tokenReaderPerms, _ := json.Marshal([]string{"credential:token"})
+			return tx.Exec(
+				`UPDATE roles SET permissions = ? WHERE name = 'credential:token-reader' AND deleted_at IS NULL`,
+				string(tokenReaderPerms),
+			).Error
+		},
+	}
+}
+
 func dropProjectIDMigration() *gormigrate.Migration {
 	return &gormigrate.Migration{
 		ID: "202605060003",

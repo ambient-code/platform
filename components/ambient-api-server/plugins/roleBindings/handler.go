@@ -152,6 +152,47 @@ func (h roleBindingHandler) Patch(w http.ResponseWriter, r *http.Request) {
 				return nil, err
 			}
 
+			// --- Escalation prevention ---
+			username := auth.GetUsernameFromContext(ctx)
+
+			if h.sessionFactory != nil {
+				g := (*h.sessionFactory).New(ctx)
+
+				var callerRoleNames []string
+				g.Raw(`SELECT r.name FROM role_bindings rb
+					   JOIN roles r ON r.id = rb.role_id
+					   WHERE rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL`,
+					username).Scan(&callerRoleNames)
+				callerLevel := pkgrbac.HighestLevel(callerRoleNames)
+
+				// Non-admin callers can only PATCH their own bindings.
+				isOwner := found.UserId != nil && *found.UserId == username
+				if callerLevel != 0 && !isOwner {
+					return nil, errors.Forbidden("Forbidden")
+				}
+
+				// Prevent changing role_id to a role the caller cannot grant.
+				if patch.RoleId != nil && *patch.RoleId != found.RoleId {
+					var targetRoleName string
+					if dbErr := g.Raw("SELECT name FROM roles WHERE id = ? AND deleted_at IS NULL", *patch.RoleId).Scan(&targetRoleName).Error; dbErr != nil || targetRoleName == "" {
+						return nil, errors.Forbidden("target role not found")
+					}
+					if pkgrbac.InternalRoles[targetRoleName] {
+						return nil, errors.Forbidden("cannot assign internal role")
+					}
+					if !pkgrbac.CanGrant(callerLevel, targetRoleName) {
+						return nil, errors.Forbidden("insufficient privileges to change role")
+					}
+				}
+
+				// Prevent changing user_id (ownership transfer).
+				if patch.UserId != nil && (found.UserId == nil || *patch.UserId != *found.UserId) {
+					if callerLevel != 0 {
+						return nil, errors.Forbidden("Forbidden")
+					}
+				}
+			}
+
 			if patch.RoleId != nil {
 				found.RoleId = *patch.RoleId
 			}
@@ -196,7 +237,30 @@ func (h roleBindingHandler) List(w http.ResponseWriter, r *http.Request) {
 			authResult := pkgrbac.GetAuthResult(ctx)
 			if authResult != nil && !authResult.IsGlobalAdmin {
 				username := auth.GetUsernameFromContext(ctx)
-				scopeFilter := fmt.Sprintf("user_id = '%s'", strings.ReplaceAll(username, "'", "''"))
+				// Show bindings where:
+				// 1. user_id matches caller (own bindings), OR
+				// 2. project_id is in caller's authorized projects (team bindings), OR
+				// 3. credential_id is in caller's authorized credentials
+				var conditions []string
+				conditions = append(conditions, fmt.Sprintf("user_id = '%s'", strings.ReplaceAll(username, "'", "''")))
+
+				if len(authResult.ProjectIDs) > 0 {
+					quoted := make([]string, len(authResult.ProjectIDs))
+					for i, id := range authResult.ProjectIDs {
+						quoted[i] = fmt.Sprintf("'%s'", strings.ReplaceAll(id, "'", "''"))
+					}
+					conditions = append(conditions, fmt.Sprintf("project_id in (%s)", strings.Join(quoted, ",")))
+				}
+
+				if len(authResult.CredentialIDs) > 0 {
+					quoted := make([]string, len(authResult.CredentialIDs))
+					for i, id := range authResult.CredentialIDs {
+						quoted[i] = fmt.Sprintf("'%s'", strings.ReplaceAll(id, "'", "''"))
+					}
+					conditions = append(conditions, fmt.Sprintf("credential_id in (%s)", strings.Join(quoted, ",")))
+				}
+
+				scopeFilter := strings.Join(conditions, " or ")
 				if listArgs.Search != "" {
 					listArgs.Search = fmt.Sprintf("(%s) and (%s)", listArgs.Search, scopeFilter)
 				} else {

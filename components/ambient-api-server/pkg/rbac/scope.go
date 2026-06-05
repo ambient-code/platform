@@ -115,7 +115,7 @@ func isAuthExempt(method, path string) bool {
 		return true
 	case method == http.MethodPost && normalized == "/api/ambient/v1/credentials":
 		return true
-	case strings.HasPrefix(normalized, "/api/ambient/v1/role_bindings"):
+	case method == http.MethodPost && normalized == "/api/ambient/v1/role_bindings":
 		return true
 	case method == http.MethodGet && normalized == "/api/ambient/v1/roles":
 		return true
