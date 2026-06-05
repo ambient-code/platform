@@ -166,7 +166,9 @@ The `encrypt-credentials` command SHALL support a `--decrypt` flag that reverses
 
 The `encrypt-credentials` command SHALL be a cobra subcommand of `ambient-api-server`, alongside the existing `serve` and `migrate` commands. It SHALL reuse the existing `SessionFactory` for database access and the standard environment system for configuration.
 
-The command operates directly on the database — it does not go through the REST API. It is a privileged operation intended for platform operators with direct database and K8s Secret access.
+The command operates directly on the database — it does not go through the REST API. It is a privileged operation intended for platform operators with direct database and K8s Secret access. No application-level RBAC role grants access to this command; authorization is enforced by infrastructure access (K8s RBAC on the pod/namespace and database credentials).
+
+Decrypted token values are never exposed to end users. The `GET /credentials/{id}/token` endpoint requires the `credential:token-reader` role, which is granted only to runner service accounts — not to human users.
 
 #### Scenario: Command execution
 
