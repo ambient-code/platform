@@ -76,10 +76,17 @@ func (m *DBAuthorizationMiddleware) AuthorizeApi(next http.Handler) http.Handler
 				projectIDs, isGlobal, _ := m.evaluator.AuthorizedProjectIDs(ctx, username)
 				credentialIDs, credGlobal, _ := m.evaluator.AuthorizedCredentialIDs(ctx, username)
 
-				if scope.ProjectID != "" && !isGlobal {
+				resolvedProjectID := scope.ProjectID
+				if resolvedProjectID == "" && scope.SessionID != "" {
+					if pid, err := m.evaluator.resolveSessionProject((*m.sessionFactory).New(ctx), scope.SessionID); err == nil {
+						resolvedProjectID = pid
+					}
+				}
+
+				if resolvedProjectID != "" && !isGlobal {
 					found := false
 					for _, pid := range projectIDs {
-						if pid == scope.ProjectID {
+						if pid == resolvedProjectID {
 							found = true
 							break
 						}

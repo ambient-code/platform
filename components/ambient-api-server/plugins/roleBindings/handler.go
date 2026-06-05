@@ -1,7 +1,9 @@
 package roleBindings
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/mux"
 
@@ -190,6 +192,18 @@ func (h roleBindingHandler) List(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 
 			listArgs := services.NewListArguments(r.URL.Query())
+
+			authResult := pkgrbac.GetAuthResult(ctx)
+			if authResult != nil && !authResult.IsGlobalAdmin {
+				username := auth.GetUsernameFromContext(ctx)
+				scopeFilter := fmt.Sprintf("user_id = '%s'", strings.ReplaceAll(username, "'", "''"))
+				if listArgs.Search != "" {
+					listArgs.Search = fmt.Sprintf("(%s) and (%s)", listArgs.Search, scopeFilter)
+				} else {
+					listArgs.Search = scopeFilter
+				}
+			}
+
 			var roleBindings []RoleBinding
 			paging, err := h.generic.List(ctx, "id", listArgs, &roleBindings)
 			if err != nil {

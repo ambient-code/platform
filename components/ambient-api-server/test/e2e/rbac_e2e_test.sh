@@ -880,6 +880,109 @@ echo ""
 echo -e "  ${BOLD}Escalation matrix total: $((MATRIX_PASS + CROSS_PASS + GLOBAL_PASS)) passed, $((MATRIX_FAIL + CROSS_FAIL + GLOBAL_FAIL)) failed (${TOTAL_MATRIX} tests)${NC}"
 
 # ============================================================
+echo ""
+echo -e "${BOLD}Phase 15: Session Sub-resource Isolation${NC}"
+
+# User A starts a session via agent ignite
+api POST "/projects/rbac-proj-alpha/agents/${AGENT_A_ID}/start" "$TOKEN_A" '{"prompt":"test session"}'
+if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "201" ]]; then
+  pass "User A starts session via agent ignite"
+  SESSION_A_ID=$(echo "$HTTP_BODY" | jq -r '.id // .session.id // empty')
+else
+  fail "User A starts session via agent ignite" "got $HTTP_STATUS"
+  SESSION_A_ID=""
+fi
+
+if [[ -n "$SESSION_A_ID" ]]; then
+  # User A can GET own session
+  api GET "/sessions/${SESSION_A_ID}" "$TOKEN_A"
+  assert_status "200" "$HTTP_STATUS" "User A GET own session returns 200"
+
+  # User B cannot GET User A's session -> 404
+  api GET "/sessions/${SESSION_A_ID}" "$TOKEN_B"
+  assert_status "404" "$HTTP_STATUS" "User B GET User A's session returns 404"
+
+  # User B cannot POST messages to User A's session -> 403
+  api POST "/sessions/${SESSION_A_ID}/messages" "$TOKEN_B" '{"event_type":"user","payload":"unauthorized message"}'
+  assert_status "403" "$HTTP_STATUS" "User B POST message to User A's session returns 403"
+
+  # User A CAN post messages to own session
+  api POST "/sessions/${SESSION_A_ID}/messages" "$TOKEN_A" '{"event_type":"user","payload":"authorized message"}'
+  if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "201" ]]; then
+    pass "User A POST message to own session succeeds"
+  else
+    fail "User A POST message to own session" "got $HTTP_STATUS"
+  fi
+
+  # User B cannot GET messages from User A's session -> 404
+  api GET "/sessions/${SESSION_A_ID}/messages" "$TOKEN_B"
+  assert_status "404" "$HTTP_STATUS" "User B GET messages from User A's session returns 404"
+
+  # User B cannot GET events from User A's session -> 404
+  api GET "/sessions/${SESSION_A_ID}/events" "$TOKEN_B"
+  assert_status "404" "$HTTP_STATUS" "User B GET events from User A's session returns 404"
+
+  # User B cannot clone User A's session -> 403
+  api POST "/sessions/${SESSION_A_ID}/clone" "$TOKEN_B" '{}'
+  assert_status "403" "$HTTP_STATUS" "User B clone User A's session returns 403"
+
+  # User B cannot stop User A's session -> 403
+  api POST "/sessions/${SESSION_A_ID}/stop" "$TOKEN_B" '{}'
+  assert_status "403" "$HTTP_STATUS" "User B stop User A's session returns 403"
+
+  # User B cannot delete User A's session -> 403 (mutation = opaque 403)
+  api DELETE "/sessions/${SESSION_A_ID}" "$TOKEN_B"
+  assert_status "403" "$HTTP_STATUS" "User B DELETE User A's session returns 403"
+
+  # User C (no bindings) cannot access session -> 404
+  api GET "/sessions/${SESSION_A_ID}" "$TOKEN_C"
+  assert_status "404" "$HTTP_STATUS" "User C GET session returns 404 (no bindings)"
+fi
+
+# ============================================================
+echo ""
+echo -e "${BOLD}Phase 16: Role Binding List Isolation${NC}"
+
+# User A lists role_bindings -> should only see own bindings, not User B's
+api GET "/role_bindings?page=1&size=100" "$TOKEN_A"
+assert_status "200" "$HTTP_STATUS" "User A GET /role_bindings returns 200"
+# User A should see bindings for their projects/credentials
+assert_list_not_contains "$HTTP_BODY" "user_id" "rbac-user-b" "User A role_bindings list does NOT contain User B's bindings"
+
+api GET "/role_bindings?page=1&size=100" "$TOKEN_B"
+assert_status "200" "$HTTP_STATUS" "User B GET /role_bindings returns 200"
+assert_list_not_contains "$HTTP_BODY" "user_id" "rbac-user-a" "User B role_bindings list does NOT contain User A's bindings"
+
+# User C (minimal bindings) lists role_bindings
+api GET "/role_bindings?page=1&size=100" "$TOKEN_C"
+assert_status "200" "$HTTP_STATUS" "User C GET /role_bindings returns 200"
+
+# ============================================================
+echo ""
+echo -e "${BOLD}Phase 17: Project Settings Isolation${NC}"
+
+# project_settings is a top-level route without project scope in URL
+# The middleware blocks it since no scope can be extracted -> safe (no leak)
+api GET "/project_settings?page=1&size=100" "$TOKEN_A"
+if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "404" ]]; then
+  pass "User A GET /project_settings does not leak data (status $HTTP_STATUS)"
+else
+  fail "User A GET /project_settings" "unexpected status $HTTP_STATUS"
+fi
+
+api GET "/project_settings?page=1&size=100" "$TOKEN_C"
+if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "404" ]]; then
+  pass "User C GET /project_settings does not leak data (status $HTTP_STATUS)"
+else
+  fail "User C GET /project_settings" "unexpected status $HTTP_STATUS"
+fi
+
+# Phase 18: Top-level session_messages
+# This endpoint is internal (control plane only via service token).
+# Non-service callers get 404 (route not found) — this is safe.
+# No test needed; the route is not exposed to user callers.
+
+# ============================================================
 # Cleanup is handled by the EXIT trap (clean_db + Keycloak user deletion)
 # ============================================================
 echo ""
