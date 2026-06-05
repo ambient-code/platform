@@ -98,6 +98,25 @@ oc create secret generic github-app-secret -n $NAMESPACE \
 
 Use `--dry-run=client -o yaml | oc apply -f -` to make secret creation idempotent on re-runs.
 
+### Credential Encryption Key (required for production)
+
+Credential tokens are encrypted at rest with AES-256-GCM. Generate a key and create the secret:
+
+```bash
+ENCRYPTION_KEY=$(openssl rand -base64 32)
+oc create secret generic credential-encryption-key -n $NAMESPACE \
+  --from-literal=keyring="{\"1\":\"$ENCRYPTION_KEY\"}" \
+  --from-literal=version=1
+```
+
+The hcmais overlay mounts this as `CREDENTIAL_ENCRYPTION_KEYRING` and `CREDENTIAL_ENCRYPTION_KEY_VERSION`. After first deploy, encrypt existing tokens:
+
+```bash
+oc exec deploy/ambient-api-server -n $NAMESPACE -- ambient-api-server encrypt-credentials
+```
+
+To rotate: add new key to keyring JSON, bump version, restart, re-run `encrypt-credentials`. To skip in dev: set `CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT=true`. See `specs/security/credential-encryption.spec.md`.
+
 ### Anthropic API Key (required for runner pods)
 
 ```bash

@@ -98,6 +98,10 @@ async function proxyRequest(
     })
   }
 
+  if (upstream.status === 204) {
+    return new Response(null, { status: 204 })
+  }
+
   const text = await upstream.text()
   return new Response(text, {
     status: upstream.status,

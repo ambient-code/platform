@@ -4,6 +4,7 @@ import (
 	"github.com/golang/glog"
 
 	localapi "github.com/ambient-code/platform/components/ambient-api-server/pkg/api"
+	localcmd "github.com/ambient-code/platform/components/ambient-api-server/pkg/cmd"
 	pkgcmd "github.com/openshift-online/rh-trex-ai/pkg/cmd"
 
 	_ "github.com/ambient-code/platform/components/ambient-api-server/cmd/ambient-api-server/environments"
@@ -34,6 +35,7 @@ func main() {
 	rootCmd.AddCommand(
 		pkgcmd.NewMigrateCommand("ambient-api-server"),
 		pkgcmd.NewServeCommand(localapi.GetOpenAPISpec),
+		localcmd.NewEncryptCredentialsCommand(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {

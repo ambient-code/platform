@@ -90,6 +90,8 @@ spec:
               value: production
             - name: GRPC_SERVICE_ACCOUNT
               value: "service-account-ocm-ams-service"
+            - name: CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT
+              value: "true"
           ports:
             - name: api
               containerPort: 8000

@@ -20,7 +20,7 @@ export default function AgentsPage() {
   if (error) {
     return (
       <div className="space-y-6">
-        <h1 className="text-xl font-semibold">Agents</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Agents</h1>
         <p className="text-sm text-destructive">
           Failed to load agents: {error.message}
         </p>
@@ -31,7 +31,7 @@ export default function AgentsPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-xl font-semibold">Agents</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Agents</h1>
         <div className="space-y-3">
           <Skeleton className="h-8 w-64" />
           <Skeleton className="h-[400px] w-full" />
@@ -46,7 +46,7 @@ export default function AgentsPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold">Agents</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Agents</h1>
           <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
             <Plus className="size-4" />
             New Agent
@@ -71,7 +71,7 @@ export default function AgentsPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">Agents</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Agents</h1>
         <div className="flex flex-wrap items-center gap-2">
           <Input
             placeholder="Filter by name, model, or owner..."

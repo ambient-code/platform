@@ -12,3 +12,17 @@ spec:
               value: production
             - name: JWK_CERT_URL
               value: "https://keycloak-ambient-keycloak.apps.rosa.hcmais01ue1.s9m2.p3.openshiftapps.com/realms/ambient-code/protocol/openid-connect/certs"
+            - name: CREDENTIAL_ENCRYPTION_KEYRING
+              valueFrom:
+                secretKeyRef:
+                  name: credential-encryption-key
+                  key: keyring
+                  optional: true
+            - name: CREDENTIAL_ENCRYPTION_KEY_VERSION
+              valueFrom:
+                secretKeyRef:
+                  name: credential-encryption-key
+                  key: version
+                  optional: true
+            - name: CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT
+              value: "true"
