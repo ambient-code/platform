@@ -45,38 +45,6 @@ func ensureBuiltInRoles(t *testing.T) {
 	}
 }
 
-func seedRole(t *testing.T, roleName string) string {
-	t.Helper()
-	g := environments.Environment().Database.SessionFactory.New(context.Background())
-	var roleID string
-	err := g.Raw(`SELECT id FROM roles WHERE name = ? AND deleted_at IS NULL`, roleName).Scan(&roleID).Error
-	Expect(err).NotTo(HaveOccurred())
-	Expect(roleID).NotTo(BeEmpty(), "role %s not found", roleName)
-	return roleID
-}
-
-func createBinding(t *testing.T, roleID, userID string, scope string, projectID *string, credentialID *string) string {
-	t.Helper()
-	g := environments.Environment().Database.SessionFactory.New(context.Background())
-	bindingID := api.NewID()
-	err := g.Exec(
-		`INSERT INTO role_bindings (id, role_id, scope, user_id, project_id, credential_id, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-		bindingID, roleID, scope, userID, projectID, credentialID,
-	).Error
-	Expect(err).NotTo(HaveOccurred())
-	return bindingID
-}
-
-func createUser(t *testing.T, username string) {
-	t.Helper()
-	g := environments.Environment().Database.SessionFactory.New(context.Background())
-	g.Exec(
-		`INSERT INTO users (id, username, name, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW()) ON CONFLICT DO NOTHING`,
-		api.NewID(), username, username,
-	)
-}
-
 func TestRBAC_ProjectCreationCreatesOwnerBinding(t *testing.T) {
 	RegisterTestingT(t)
 	h := test.NewHelper(t)
