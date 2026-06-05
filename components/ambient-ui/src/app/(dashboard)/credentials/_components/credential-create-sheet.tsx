@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
+import { Eye, EyeOff, Upload, X } from 'lucide-react'
 import {
   Sheet,
   SheetContent,
@@ -26,10 +27,17 @@ import { useCreateCredential } from '@/queries/use-credentials'
 import type { DomainCredentialCreateRequest } from '@/domain/types'
 import {
   CREDENTIAL_CATEGORIES,
-  getCategoryForProvider,
   getProviderMeta,
 } from '@/domain/credential-providers'
 import type { ProviderMeta } from '@/domain/credential-providers'
+
+type FieldErrors = {
+  name?: string
+  provider?: string
+  token?: string
+  url?: string
+  email?: string
+}
 
 export function CredentialCreateSheet({
   open,
@@ -46,14 +54,19 @@ export function CredentialCreateSheet({
   const [url, setUrl] = useState('')
   const [email, setEmail] = useState('')
   const [description, setDescription] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [showSecret, setShowSecret] = useState(false)
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const providerMeta: ProviderMeta | undefined = useMemo(
     () => (provider ? getProviderMeta(provider) : undefined),
     [provider],
   )
 
-  const requiredFields = providerMeta?.fields ?? []
+  const fields = providerMeta?.fields ?? []
+  const isUrlOptional = providerMeta?.urlOptional === true
 
   function resetForm() {
     setProvider('')
@@ -62,35 +75,35 @@ export function CredentialCreateSheet({
     setUrl('')
     setEmail('')
     setDescription('')
-    setError(null)
+    setFieldErrors({})
+    setSubmitError(null)
+    setShowSecret(false)
+    setUploadedFileName(null)
+  }
+
+  function validate(): FieldErrors {
+    const errors: FieldErrors = {}
+    if (!name.trim()) errors.name = 'Name is required.'
+    if (!provider) errors.provider = 'Select a provider.'
+    if (fields.includes('token') && !token.trim()) {
+      errors.token = `${providerMeta?.tokenField?.label ?? 'Token'} is required.`
+    }
+    if (fields.includes('url') && !isUrlOptional && !url.trim()) {
+      errors.url = 'URL is required for this provider.'
+    }
+    if (fields.includes('email') && !email.trim()) {
+      errors.email = 'Email is required for this provider.'
+    }
+    return errors
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setError(null)
+    setSubmitError(null)
 
-    if (!name.trim()) {
-      setError('Name is required.')
-      return
-    }
-
-    if (!provider) {
-      setError('Provider is required.')
-      return
-    }
-
-    if (requiredFields.includes('token') && !token.trim()) {
-      setError('Token is required for this provider.')
-      return
-    }
-    if (requiredFields.includes('url') && !url.trim()) {
-      setError('URL is required for this provider.')
-      return
-    }
-    if (requiredFields.includes('email') && !email.trim()) {
-      setError('Email is required for this provider.')
-      return
-    }
+    const errors = validate()
+    setFieldErrors(errors)
+    if (Object.keys(errors).length > 0) return
 
     const request: DomainCredentialCreateRequest = {
       name: name.trim(),
@@ -107,14 +120,42 @@ export function CredentialCreateSheet({
       toast.success(`Credential "${name.trim()}" created`)
       resetForm()
       onOpenChange(false)
-    } catch (err) {
-      console.error('create credential failed', err)
-      setError('Failed to create credential. Please try again.')
+    } catch {
+      setSubmitError('Failed to create credential. Please try again.')
     }
   }
 
-  // Auto-derive category from the selected provider
-  const derivedCategory = provider ? getCategoryForProvider(provider) : undefined
+  const MAX_UPLOAD_BYTES = 1_048_576
+
+  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setFieldErrors((prev) => ({ ...prev, token: 'File exceeds 1 MB limit.' }))
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const text = reader.result
+      if (typeof text === 'string') {
+        setToken(text)
+        setUploadedFileName(file.name)
+        setFieldErrors((prev) => ({ ...prev, token: undefined }))
+      }
+    }
+    reader.onerror = () => {
+      setFieldErrors((prev) => ({ ...prev, token: 'Failed to read file.' }))
+      setToken('')
+      setUploadedFileName(null)
+    }
+    reader.readAsText(file)
+  }, [])
+
+  const clearUpload = useCallback(() => {
+    setToken('')
+    setUploadedFileName(null)
+  }, [])
 
   return (
     <Sheet
@@ -133,6 +174,7 @@ export function CredentialCreateSheet({
         </SheetHeader>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4 px-4 pb-4">
+          {/* Provider */}
           <div className="space-y-1.5">
             <label htmlFor="cred-provider" className="text-sm font-medium">
               Provider <span className="text-destructive">*</span>
@@ -144,9 +186,16 @@ export function CredentialCreateSheet({
                 setToken('')
                 setUrl('')
                 setEmail('')
+                setShowSecret(false)
+                setUploadedFileName(null)
+                setFieldErrors({})
               }}
             >
-              <SelectTrigger id="cred-provider" className="w-full">
+              <SelectTrigger
+                id="cred-provider"
+                className="w-full"
+                aria-describedby={fieldErrors.provider ? 'err-provider' : undefined}
+              >
                 <SelectValue placeholder="Select a provider" />
               </SelectTrigger>
               <SelectContent>
@@ -162,56 +211,169 @@ export function CredentialCreateSheet({
                 ))}
               </SelectContent>
             </Select>
-            {derivedCategory && (
-              <p className="text-xs text-muted-foreground">Category: {derivedCategory}</p>
+            {fieldErrors.provider && (
+              <p id="err-provider" className="text-xs text-destructive">{fieldErrors.provider}</p>
             )}
           </div>
 
+          {/* Name */}
           <div className="space-y-1.5">
             <label htmlFor="cred-name" className="text-sm font-medium">
               Name <span className="text-destructive">*</span>
             </label>
             <Input
               id="cred-name"
-              placeholder="my-api-key"
+              placeholder={providerMeta?.namePlaceholder ?? 'my-credential'}
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
+              onChange={(e) => {
+                setName(e.target.value)
+                if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: undefined }))
+              }}
+              aria-describedby={fieldErrors.name ? 'err-name' : undefined}
             />
+            {fieldErrors.name && (
+              <p id="err-name" className="text-xs text-destructive">{fieldErrors.name}</p>
+            )}
           </div>
 
-          {requiredFields.includes('token') && (
+          {/* Token / Secret / Kubeconfig */}
+          {fields.includes('token') && (
             <div className="space-y-1.5">
               <label htmlFor="cred-token" className="text-sm font-medium">
-                Token <span className="text-destructive">*</span>
+                {providerMeta?.tokenField?.label ?? 'Token'} <span className="text-destructive">*</span>
               </label>
-              <Input
-                id="cred-token"
-                type="password"
-                placeholder="Enter token or API key"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                autoComplete="off"
-              />
+              {providerMeta?.tokenField?.multiline ? (
+                <>
+                  {uploadedFileName ? (
+                    <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                      <Upload className="size-4 text-muted-foreground shrink-0" />
+                      <span className="truncate flex-1 font-mono text-xs">{uploadedFileName}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-6 shrink-0"
+                        onClick={clearUpload}
+                        aria-label="Remove uploaded file"
+                      >
+                        <X className="size-3.5" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <Textarea
+                        id="cred-token"
+                        placeholder={providerMeta.tokenField.placeholder}
+                        value={token}
+                        onChange={(e) => {
+                          setToken(e.target.value)
+                          if (fieldErrors.token) setFieldErrors((prev) => ({ ...prev, token: undefined }))
+                        }}
+                        autoComplete="off"
+                        className={`min-h-32 font-mono text-xs pr-10 ${!showSecret ? '[&]:text-security-disc' : ''}`}
+                        style={!showSecret ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined}
+                        aria-describedby={fieldErrors.token ? 'err-token' : 'hint-token'}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1.5 top-1.5 size-7"
+                        onClick={() => setShowSecret((v) => !v)}
+                        aria-label={showSecret ? 'Hide secret' : 'Show secret'}
+                      >
+                        {showSecret ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                      </Button>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Upload className="size-3 mr-1" />
+                      Upload file
+                    </Button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      className="hidden"
+                      accept=".yaml,.yml,.json,.txt,.pem,.key,*"
+                      onChange={handleFileUpload}
+                    />
+                    {providerMeta.tokenField.hint && (
+                      <p id="hint-token" className="text-xs text-muted-foreground">{providerMeta.tokenField.hint}</p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="relative">
+                  <Input
+                    id="cred-token"
+                    type={showSecret ? 'text' : 'password'}
+                    placeholder="Enter token or API key"
+                    value={token}
+                    onChange={(e) => {
+                      setToken(e.target.value)
+                      if (fieldErrors.token) setFieldErrors((prev) => ({ ...prev, token: undefined }))
+                    }}
+                    autoComplete="off"
+                    className="pr-10"
+                    aria-describedby={fieldErrors.token ? 'err-token' : undefined}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 size-7"
+                    onClick={() => setShowSecret((v) => !v)}
+                    aria-label={showSecret ? 'Hide token' : 'Show token'}
+                  >
+                    {showSecret ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                  </Button>
+                </div>
+              )}
+              {fieldErrors.token && (
+                <p id="err-token" className="text-xs text-destructive">{fieldErrors.token}</p>
+              )}
             </div>
           )}
 
-          {requiredFields.includes('url') && (
+          {/* URL */}
+          {fields.includes('url') && (
             <div className="space-y-1.5">
               <label htmlFor="cred-url" className="text-sm font-medium">
-                URL <span className="text-destructive">*</span>
+                URL {!isUrlOptional && <span className="text-destructive">*</span>}
               </label>
               <Input
                 id="cred-url"
                 type="url"
-                placeholder="https://api.example.com"
+                placeholder={
+                  provider === 'github' ? 'https://github.example.com'
+                    : provider === 'gitlab' ? 'https://gitlab.example.com'
+                    : 'https://your-instance.atlassian.net'
+                }
                 value={url}
-                onChange={(e) => setUrl(e.target.value)}
+                onChange={(e) => {
+                  setUrl(e.target.value)
+                  if (fieldErrors.url) setFieldErrors((prev) => ({ ...prev, url: undefined }))
+                }}
+                aria-describedby={fieldErrors.url ? 'err-url' : isUrlOptional ? 'hint-url' : undefined}
               />
+              {isUrlOptional && (
+                <p id="hint-url" className="text-xs text-muted-foreground">{providerMeta?.urlHint}</p>
+              )}
+              {fieldErrors.url && (
+                <p id="err-url" className="text-xs text-destructive">{fieldErrors.url}</p>
+              )}
             </div>
           )}
 
-          {requiredFields.includes('email') && (
+          {/* Email */}
+          {fields.includes('email') && (
             <div className="space-y-1.5">
               <label htmlFor="cred-email" className="text-sm font-medium">
                 Email <span className="text-destructive">*</span>
@@ -221,11 +383,19 @@ export function CredentialCreateSheet({
                 type="email"
                 placeholder="user@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value)
+                  if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }))
+                }}
+                aria-describedby={fieldErrors.email ? 'err-email' : undefined}
               />
+              {fieldErrors.email && (
+                <p id="err-email" className="text-xs text-destructive">{fieldErrors.email}</p>
+              )}
             </div>
           )}
 
+          {/* Description */}
           <div className="space-y-1.5">
             <label htmlFor="cred-description" className="text-sm font-medium">
               Description
@@ -239,7 +409,7 @@ export function CredentialCreateSheet({
             />
           </div>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {submitError && <p className="text-sm text-destructive">{submitError}</p>}
 
           <SheetFooter className="px-0">
             <Button
