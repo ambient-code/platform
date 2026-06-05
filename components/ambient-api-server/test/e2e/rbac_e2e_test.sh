@@ -1143,6 +1143,34 @@ api POST "/role_bindings" "$TOKEN_C" "{\"role_id\":\"${ROLE_PLATFORM_ADMIN}\",\"
 assert_status "403" "$HTTP_STATUS" "Zero-binding user cannot create platform:admin binding (escalation checks active)"
 
 # ============================================================
+echo ""
+echo -e "${BOLD}Phase 24: Platform Viewer Cannot Escalate to Admin${NC}"
+
+# Grant User C platform:viewer (via direct DB insert since we need a global binding)
+# We can't grant global from a non-admin, so we use the seed-admin pattern via kubectl
+VIEWER_GLOBAL_BIND=""
+DB_POD_NAME=$(kubectl get pods -n ambient-code -l app=ambient-api-server,component=database -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+if [[ -n "$DB_POD_NAME" ]]; then
+  kubectl exec -n ambient-code "$DB_POD_NAME" -- psql -U ambient -d ambient_api_server -t -A -c "
+    INSERT INTO role_bindings (id, role_id, scope, user_id, created_at, updated_at)
+    SELECT '$(date +%s)viewerbind', r.id, 'global', 'rbac-user-c', NOW(), NOW()
+    FROM roles r WHERE r.name = 'platform:viewer' AND r.deleted_at IS NULL
+    ON CONFLICT DO NOTHING;
+  " 2>/dev/null >/dev/null
+
+  # Refresh token for User C
+  TOKEN_C=$(get_token "rbac-user-c" "testpass")
+
+  # User C (platform:viewer) tries to grant platform:admin to themselves → MUST fail
+  api POST "/role_bindings" "$TOKEN_C" "{\"role_id\":\"${ROLE_PLATFORM_ADMIN}\",\"scope\":\"global\",\"user_id\":\"rbac-user-c\"}"
+  assert_status "403" "$HTTP_STATUS" "CRITICAL: platform:viewer cannot grant platform:admin"
+
+  # User C tries to grant platform:viewer to someone else → should also fail (viewers can't grant)
+  api POST "/role_bindings" "$TOKEN_C" "{\"role_id\":\"${ROLE_PLATFORM_VIEWER}\",\"scope\":\"global\",\"user_id\":\"rbac-user-a\"}"
+  assert_status "403" "$HTTP_STATUS" "platform:viewer cannot grant platform:viewer (no self-mint)"
+fi
+
+# ============================================================
 # Cleanup is handled by the EXIT trap (clean_db + Keycloak user deletion)
 # ============================================================
 echo ""

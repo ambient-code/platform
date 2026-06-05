@@ -32,7 +32,10 @@ func GetAuthResult(ctx context.Context) *AuthResult {
 // Returns false if the user has zero authorized IDs (caller should return empty list).
 func ApplyListFilter(ctx context.Context, listArgs *services.ListArguments, filterColumn string, useCredentialIDs bool) bool {
 	auth := GetAuthResult(ctx)
-	if auth == nil || auth.IsGlobalAdmin {
+	if auth == nil {
+		return false
+	}
+	if auth.IsGlobalAdmin {
 		return true
 	}
 
