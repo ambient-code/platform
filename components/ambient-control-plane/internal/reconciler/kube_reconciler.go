@@ -719,6 +719,10 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 		envVar("REQUESTS_CA_BUNDLE", "/etc/pki/ca-trust/extracted/pem/service-ca.crt"),
 	}
 
+	if session.StartTime != nil {
+		env = append(env, envVar("IS_RESUME", "true"))
+	}
+
 	if r.cfg.AnthropicAPIKey != "" {
 		env = append(env, envVar("ANTHROPIC_API_KEY", r.cfg.AnthropicAPIKey))
 	}

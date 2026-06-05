@@ -52,6 +52,28 @@
   --color-status-info-border: var(--status-info-border);
   --color-link: var(--link);
   --color-link-hover: var(--link-hover);
+  /* Event type badge tokens */
+  --color-event-tool: var(--event-tool);
+  --color-event-tool-foreground: var(--event-tool-foreground);
+  --color-event-tool-border: var(--event-tool-border);
+  --color-event-user: var(--event-user);
+  --color-event-user-foreground: var(--event-user-foreground);
+  --color-event-user-border: var(--event-user-border);
+  --color-event-assistant: var(--event-assistant);
+  --color-event-assistant-foreground: var(--event-assistant-foreground);
+  --color-event-assistant-border: var(--event-assistant-border);
+  --color-event-lifecycle: var(--event-lifecycle);
+  --color-event-lifecycle-foreground: var(--event-lifecycle-foreground);
+  --color-event-lifecycle-border: var(--event-lifecycle-border);
+  --color-event-system: var(--event-system);
+  --color-event-system-foreground: var(--event-system-foreground);
+  --color-event-system-border: var(--event-system-border);
+  --color-event-feedback: var(--event-feedback);
+  --color-event-feedback-foreground: var(--event-feedback-foreground);
+  --color-event-feedback-border: var(--event-feedback-border);
+  /* Binding matrix token */
+  --color-matrix-bound: var(--matrix-bound);
+  --color-matrix-bound-foreground: var(--matrix-bound-foreground);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -109,6 +131,28 @@
   --status-info: #e0f0ff;
   --status-info-foreground: #003366;
   --status-info-border: #92c5f9;
+  /* Event type badge tokens — light theme */
+  --event-tool: #e0f0ff;
+  --event-tool-foreground: #003366;
+  --event-tool-border: #b9dafc;
+  --event-user: #daf2f2;
+  --event-user-foreground: #004d4d;
+  --event-user-border: #b9e5e5;
+  --event-assistant: #ece6ff;
+  --event-assistant-foreground: #21134d;
+  --event-assistant-border: #d0c5f4;
+  --event-lifecycle: #f2f2f2;
+  --event-lifecycle-foreground: #383838;
+  --event-lifecycle-border: #e0e0e0;
+  --event-system: #f2f2f2;
+  --event-system-foreground: #4d4d4d;
+  --event-system-border: #e0e0e0;
+  --event-feedback: #ffe8cc;
+  --event-feedback-foreground: #732e00;
+  --event-feedback-border: #fccb8f;
+  /* Binding matrix */
+  --matrix-bound: #3d7317;
+  --matrix-bound-foreground: #ffffff;
   /* Links — interaction-blue */
   --link: #0066cc;
   --link-hover: #004d99;
@@ -159,6 +203,28 @@
   --status-info: #032142;
   --status-info-foreground: #e0f0ff;
   --status-info-border: #004d99;
+  /* Event type badge tokens — dark theme */
+  --event-tool: #032142;
+  --event-tool-foreground: #b9dafc;
+  --event-tool-border: #004d99;
+  --event-user: #003333;
+  --event-user-foreground: #b9e5e5;
+  --event-user-border: #006666;
+  --event-assistant: #1a1033;
+  --event-assistant-foreground: #d0c5f4;
+  --event-assistant-border: #3d2d6b;
+  --event-lifecycle: #292929;
+  --event-lifecycle-foreground: #a3a3a3;
+  --event-lifecycle-border: #383838;
+  --event-system: #292929;
+  --event-system-foreground: #a3a3a3;
+  --event-system-border: #383838;
+  --event-feedback: #3d1e00;
+  --event-feedback-foreground: #fccb8f;
+  --event-feedback-border: #8c4400;
+  /* Binding matrix */
+  --matrix-bound: #87bb62;
+  --matrix-bound-foreground: #151515;
   /* Links */
   --link: #4394e5;
   --link-hover: #92c5f9;

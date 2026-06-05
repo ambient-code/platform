@@ -1,7 +1,8 @@
-import type { Session, Project, Agent } from 'ambient-sdk'
+import type { Session, Project, Agent, Credential, RoleBinding } from 'ambient-sdk'
 import type {
   DomainSession, DomainProject, DomainSessionMessage, DomainAgent, SessionPhase, SessionEventType,
   DomainRepo, DomainReconciledRepo, DomainCondition, ReconciledRepoStatus, ConditionStatus,
+  DomainCredential, DomainRoleBinding,
 } from '@/domain/types'
 
 const VALID_PHASES: ReadonlySet<string> = new Set<string>([
@@ -217,5 +218,35 @@ export function mapSessionMessageToDomain(sdk: SdkSessionMessageShape): DomainSe
     payload: sdk.payload,
     seq: sdk.seq,
     createdAt: sdk.created_at ?? '',
+  }
+}
+
+export function mapSdkCredentialToDomain(sdk: Credential): DomainCredential {
+  return {
+    id: sdk.id,
+    name: sdk.name,
+    provider: sdk.provider,
+    description: emptyToNull(sdk.description),
+    email: emptyToNull(sdk.email),
+    url: emptyToNull(sdk.url),
+    annotations: parseJsonObject(sdk.annotations),
+    labels: parseJsonObject(sdk.labels),
+    createdAt: sdk.created_at ?? '',
+    updatedAt: sdk.updated_at ?? '',
+  }
+}
+
+export function mapSdkRoleBindingToDomain(sdk: RoleBinding): DomainRoleBinding {
+  return {
+    id: sdk.id,
+    roleId: sdk.role_id,
+    scope: sdk.scope,
+    userId: emptyToNull(sdk.user_id ?? ''),
+    projectId: emptyToNull(sdk.project_id ?? ''),
+    agentId: emptyToNull(sdk.agent_id ?? ''),
+    credentialId: emptyToNull(sdk.credential_id ?? ''),
+    sessionId: emptyToNull(sdk.session_id ?? ''),
+    createdAt: sdk.created_at ?? '',
+    updatedAt: sdk.updated_at ?? '',
   }
 }
