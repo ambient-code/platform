@@ -1,10 +1,20 @@
 type CredentialField = 'token' | 'url' | 'email'
 
+export type TokenFieldMeta = {
+  label: string
+  placeholder: string
+  hint?: string
+  multiline?: boolean
+}
+
 export type ProviderMeta = {
   provider: string
   label: string
   icon: string
   fields: CredentialField[]
+  tokenField?: TokenFieldMeta
+  namePlaceholder?: string
+  urlHint?: string
 }
 
 export type CredentialCategory = {
@@ -16,22 +26,54 @@ export const CREDENTIAL_CATEGORIES: readonly CredentialCategory[] = [
   {
     label: 'Source Control',
     providers: [
-      { provider: 'github', label: 'GitHub', icon: 'Github', fields: ['token', 'url'] },
-      { provider: 'gitlab', label: 'GitLab', icon: 'GitBranch', fields: ['token', 'url'] },
+      { provider: 'github', label: 'GitHub', icon: 'Github', fields: ['token', 'url'],
+        namePlaceholder: 'my-github-pat',
+        urlHint: 'Only required for GitHub Enterprise. Leave blank for github.com.',
+      },
+      { provider: 'gitlab', label: 'GitLab', icon: 'GitBranch', fields: ['token', 'url'],
+        namePlaceholder: 'my-gitlab-pat',
+        urlHint: 'Only required for self-hosted GitLab. Leave blank for gitlab.com.',
+      },
     ],
   },
   {
     label: 'Project Management',
     providers: [
-      { provider: 'jira', label: 'Jira', icon: 'Ticket', fields: ['token', 'email', 'url'] },
+      { provider: 'jira', label: 'Jira', icon: 'Ticket', fields: ['token', 'email', 'url'],
+        namePlaceholder: 'my-jira-token',
+      },
     ],
   },
   {
     label: 'Cloud & Infrastructure',
     providers: [
-      { provider: 'google', label: 'Google Cloud', icon: 'Cloud', fields: ['token'] },
-      { provider: 'vertex', label: 'Vertex AI', icon: 'Cloud', fields: ['token'] },
-      { provider: 'kubeconfig', label: 'Kubernetes', icon: 'Server', fields: ['token'] },
+      { provider: 'google', label: 'Google Cloud', icon: 'Cloud', fields: ['token'],
+        namePlaceholder: 'my-gcp-service-account',
+        tokenField: {
+          label: 'Service Account Key (JSON)',
+          placeholder: '{"type": "service_account", ...}',
+          hint: 'Paste the full JSON key file for a GCP service account.',
+          multiline: true,
+        },
+      },
+      { provider: 'vertex', label: 'Vertex AI', icon: 'Cloud', fields: ['token'],
+        namePlaceholder: 'my-vertex-service-account',
+        tokenField: {
+          label: 'Service Account Key (JSON)',
+          placeholder: '{"type": "service_account", ...}',
+          hint: 'Paste the full JSON key file for a GCP service account with Vertex AI API enabled.',
+          multiline: true,
+        },
+      },
+      { provider: 'kubeconfig', label: 'Kubernetes', icon: 'Server', fields: ['token'],
+        namePlaceholder: 'my-cluster-kubeconfig',
+        tokenField: {
+          label: 'Kubeconfig',
+          placeholder: 'apiVersion: v1\nkind: Config\nclusters:\n- ...',
+          hint: 'Paste the entire contents of your kubeconfig file (~/.kube/config).',
+          multiline: true,
+        },
+      },
     ],
   },
 ] as const
