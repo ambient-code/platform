@@ -14,6 +14,8 @@ The API server SHALL encrypt credential tokens before writing them to PostgreSQL
 
 Encryption and decryption SHALL occur at the service layer (inside `CredentialService`), not in handlers or presenters. This ensures all code paths that touch the token — including any future presenters — always receive plaintext after decryption and never accidentally expose ciphertext.
 
+Note: the `List` handler uses `GenericService.List()` which bypasses `CredentialService` and reads raw column values. This is safe because `PresentCredential` omits the `Token` field from list/get responses. If `PresentCredential` is ever modified to include `Token`, it MUST route through `CredentialService` to ensure decryption.
+
 No DDL or schema migration is required. The existing `token` column is PostgreSQL `TEXT` (unbounded) and accommodates the ciphertext format without modification.
 
 #### Scenario: Create credential with encryption enabled
@@ -62,6 +64,7 @@ The encryption key value MUST NOT appear in log output, error messages, API resp
 - WHEN the API server starts
 - THEN it SHALL start normally with encryption disabled
 - AND write and read tokens as plaintext (backward-compatible)
+- AND log a WARNING at startup: "credential encryption disabled — CREDENTIAL_ENCRYPTION_KEY not set"
 
 ### Requirement: Ciphertext Format
 
@@ -75,6 +78,10 @@ Where:
 - `enc:` is a fixed prefix distinguishing ciphertext from plaintext
 - `v{N}` is the key version (monotonically increasing integer, starting at `1`)
 - The base64 payload contains the 12-byte GCM nonce prepended to the ciphertext and authentication tag
+
+The credential ID SHALL be bound as Additional Authenticated Data (AAD) in the GCM `Seal()`/`Open()` calls. This prevents ciphertext from being swapped between credential rows — decryption will fail if the ciphertext is moved to a different credential's row.
+
+The version tag in the ciphertext prefix (`v{N}`) determines which key is used for decryption. The system SHALL NOT use try-decrypt fallback logic; a mismatched version tag is an error.
 
 Plaintext tokens (pre-migration) lack the `enc:` prefix, enabling the system to distinguish encrypted from unencrypted values.
 
@@ -148,6 +155,8 @@ The `encrypt-credentials` CLI command SHALL encrypt all existing plaintext token
 
 The `encrypt-credentials` command SHALL support a `--decrypt` flag that reverses all encrypted tokens to plaintext in the database.
 
+The `--decrypt` flag requires all encryption key versions referenced by stored ciphertext to be available. If tokens are tagged `v1` and `v2`, both `CREDENTIAL_ENCRYPTION_KEY` (v2) and `CREDENTIAL_ENCRYPTION_KEY_PREVIOUS` (v1) MUST be configured.
+
 #### Scenario: Bulk decrypt
 
 - GIVEN 50 credentials exist with encrypted tokens (all `enc:v1:...`)
@@ -211,7 +220,8 @@ No API, SDK, CLI, sidecar, or runner changes SHALL be required when the storage 
 
 | Decision | Rationale |
 |----------|-----------|
-| AES-256-GCM | Authenticated encryption. Go stdlib (`crypto/aes` + `crypto/cipher`). No external dependencies. Industry standard. |
+| AES-256-GCM | Authenticated encryption. Go stdlib (`crypto/aes` + `crypto/cipher`). No external dependencies. Industry standard. 96-bit random nonce; birthday collision risk negligible at credential-scale volumes (well under 2^32 encryptions). |
+| Credential ID as AAD | Binding the credential ID as GCM additional authenticated data prevents ciphertext swapping between database rows. Decryption fails if a ciphertext blob is copied to a different credential's row. |
 | Version-tagged ciphertext | Enables safe key rotation — the system always knows which key encrypted a given token. Also distinguishes encrypted from legacy plaintext. |
 | Env var for key, not file mount | Consistent with existing API server config pattern (DB credentials use env vars). Simpler code. Rotation requires pod restart, which is acceptable for a security-critical operation. |
 | Explicit CLI command for migration | Follows industry practice (Rails, Django, Kubernetes, Vault). Never auto-encrypt on startup — the operation is privileged, auditable, and must be recoverable from partial failure. |
