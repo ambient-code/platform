@@ -42,8 +42,8 @@ export function EventRow({ message, isToolResultFollowingToolUse }: EventRowProp
       aria-label={ariaLabel}
       className={cn(
         'flex gap-3 px-3 py-2 text-sm',
-        isError && 'border-l-2 border-l-[#f0561d] bg-[#ffe3d9]/20',
-        isToolResultFollowingToolUse && 'mt-0 pt-1 border-l-2 border-l-[#e0e0e0] ml-4',
+        isError && 'border-l-2 border-l-status-error-foreground bg-status-error/20',
+        isToolResultFollowingToolUse && 'mt-0 pt-1 border-l-2 border-l-border ml-4',
       )}
     >
       <span className="shrink-0 font-mono text-xs text-muted-foreground pt-0.5 min-w-[100px]">
@@ -51,7 +51,7 @@ export function EventRow({ message, isToolResultFollowingToolUse }: EventRowProp
       </span>
       <span className="shrink-0 pt-0.5 flex items-center gap-1">
         {isError && (
-          <AlertTriangle className="h-3.5 w-3.5 text-[#f0561d]" aria-hidden="true" />
+          <AlertTriangle className="h-3.5 w-3.5 text-status-error-foreground" aria-hidden="true" />
         )}
         <EventTypeBadge eventType={message.eventType} />
       </span>

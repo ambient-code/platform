@@ -1,0 +1,14 @@
+[
+  {
+    "id": "tab-url-persistence",
+    "description": "Tabbed views must persist active tab in URL via ?tab= query parameter",
+    "input": "Create a new page with two tabs: Overview and Settings",
+    "expected": "The page uses controlled <Tabs value={activeTab}> with useState + useEffect to read ?tab= from URL on mount, and replaceState on tab change"
+  },
+  {
+    "id": "port-adapter-pattern",
+    "description": "New API integrations must use port/adapter pattern with domain types",
+    "input": "Add a new API resource to the UI",
+    "expected": "Creates port interface, SDK adapter, domain types, and React Query hooks following the agents pattern"
+  }
+]

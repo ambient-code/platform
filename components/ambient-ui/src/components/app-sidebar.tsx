@@ -7,6 +7,8 @@ import {
   LayoutDashboard,
   Monitor,
   Bot,
+  KeyRound,
+  Globe,
   Moon,
   Sun,
 } from 'lucide-react'
@@ -14,6 +16,8 @@ import { useSessions } from '@/queries/use-sessions'
 import { getAttentionItems } from '@/app/(dashboard)/[projectId]/_components/dashboard-helpers'
 import { ProjectSelector } from '@/components/project-selector'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Separator } from '@/components/ui/separator'
 import {
   Sidebar,
   SidebarContent,
@@ -32,7 +36,7 @@ type AppSidebarProps = {
   projectId: string | null
 }
 
-type NavItem = { readonly label: string; readonly icon: typeof Monitor; readonly href: string }
+type NavItem = { readonly label: string; readonly icon: typeof Monitor; readonly href: string; readonly global?: boolean }
 
 const operateNavItems: readonly NavItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '' },
@@ -41,6 +45,10 @@ const operateNavItems: readonly NavItem[] = [
 
 const buildNavItems: readonly NavItem[] = [
   { label: 'Agents', icon: Bot, href: 'agents' },
+]
+
+const configureNavItems: readonly NavItem[] = [
+  { label: 'Credentials', icon: KeyRound, href: '/credentials', global: true },
 ]
 
 function NavGroup({
@@ -56,44 +64,62 @@ function NavGroup({
   pathname: string
   badgeCounts?: Record<string, number>
 }) {
-  const isDisabled = !projectId
-
   return (
     <SidebarGroup>
       <SidebarGroupLabel>{label}</SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((item) => {
-            const href = projectId
+            const isGlobal = item.global === true
+            const isDisabled = !isGlobal && !projectId
+
+            const href = isGlobal
               ? item.href
-                ? `/${projectId}/${item.href}`
-                : `/${projectId}`
-              : '#'
-            const isActive = item.href
+              : projectId
+                ? item.href
+                  ? `/${projectId}/${item.href}`
+                  : `/${projectId}`
+                : '#'
+
+            const isActive = isGlobal
               ? pathname === href || pathname.startsWith(href + '/')
-              : pathname === href
+              : item.href
+                ? pathname === href || pathname.startsWith(href + '/')
+                : pathname === href
+
             const badgeCount = badgeCounts?.[item.label] ?? 0
 
             return (
               <SidebarMenuItem key={item.label}>
-                <SidebarMenuButton
-                  asChild={!isDisabled}
-                  isActive={isActive}
-                  disabled={isDisabled}
-                  tooltip={item.label}
-                >
-                  {isDisabled ? (
-                    <>
-                      <item.icon />
-                      <span>{item.label}</span>
-                    </>
-                  ) : (
+                {isDisabled ? (
+                  <TooltipProvider delayDuration={300}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <SidebarMenuButton
+                          disabled
+                          tooltip={item.label}
+                        >
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </SidebarMenuButton>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        Select a project to access {item.label}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ) : (
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive}
+                    tooltip={item.label}
+                  >
                     <Link href={href}>
                       <item.icon />
                       <span>{item.label}</span>
                     </Link>
-                  )}
-                </SidebarMenuButton>
+                  </SidebarMenuButton>
+                )}
                 {badgeCount > 0 && (
                   <SidebarMenuBadge>{badgeCount}</SidebarMenuBadge>
                 )}
@@ -109,7 +135,7 @@ function NavGroup({
 export function AppSidebar({ projectId }: AppSidebarProps) {
   const pathname = usePathname()
   const { theme, setTheme } = useTheme()
-  const { data: sessionsData } = useSessions(projectId ?? '')
+  const { data: sessionsData } = useSessions(projectId ?? '', undefined)
 
   const operateBadges = (() => {
     if (!sessionsData?.items) return undefined
@@ -130,6 +156,8 @@ export function AppSidebar({ projectId }: AppSidebarProps) {
       <SidebarContent>
         <NavGroup label="Operate" items={operateNavItems} projectId={projectId} pathname={pathname} badgeCounts={operateBadges} />
         <NavGroup label="Build" items={buildNavItems} projectId={projectId} pathname={pathname} />
+        <Separator className="mx-2 my-1" />
+        <NavGroup label="Configure" items={configureNavItems} projectId={projectId} pathname={pathname} />
       </SidebarContent>
 
       <SidebarFooter>
