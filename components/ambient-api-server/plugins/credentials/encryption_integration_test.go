@@ -3,6 +3,7 @@ package credentials_test
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -113,9 +114,13 @@ func TestEncryptedCredentialViaAPI(t *testing.T) {
 	Expect(restyResp.StatusCode()).To(Equal(http.StatusOK))
 
 	// API returns plaintext (encryption is transparent)
-	body := restyResp.String()
-	Expect(body).To(ContainSubstring(`"token"`))
-	Expect(body).NotTo(ContainSubstring("enc:v1:"), "API must not return ciphertext")
+	var tokenResponse struct {
+		Token string `json:"token"`
+	}
+	err = json.Unmarshal(restyResp.Body(), &tokenResponse)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(tokenResponse.Token).To(Equal(*credentialInput.Token), "GET /token must return the original plaintext token")
+	Expect(tokenResponse.Token).NotTo(HavePrefix("enc:v1:"), "API must not return ciphertext")
 }
 
 func TestPlaintextTokenPassthrough(t *testing.T) {
@@ -178,8 +183,12 @@ func TestAADPreventsRowSwap(t *testing.T) {
 	cred2 := newEncryptedCredential(t, h.NewID(), "secret_B")
 
 	dao := credentials.NewCredentialDao(&environments.Environment().Database.SessionFactory)
-	raw1, _ := dao.Get(context.Background(), cred1.ID)
-	raw2, _ := dao.Get(context.Background(), cred2.ID)
+	raw1, err := dao.Get(context.Background(), cred1.ID)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(raw1.Token).NotTo(BeNil())
+	raw2, err := dao.Get(context.Background(), cred2.ID)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(raw2.Token).NotTo(BeNil())
 
 	// Swap ciphertexts
 	kr := testKeyring(t)

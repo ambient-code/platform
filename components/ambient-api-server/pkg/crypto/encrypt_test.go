@@ -280,6 +280,90 @@ func TestEncrypt_EmptyPlaintext(t *testing.T) {
 	}
 }
 
+func TestVersions(t *testing.T) {
+	key1 := testKey()
+	key2 := make([]byte, 32)
+	for i := range key2 {
+		key2[i] = byte(i + 50)
+	}
+
+	kr, err := NewKeyring(map[string]string{
+		"1": base64.StdEncoding.EncodeToString(key1),
+		"3": base64.StdEncoding.EncodeToString(key2),
+	}, 1)
+	if err != nil {
+		t.Fatalf("NewKeyring: %v", err)
+	}
+
+	versions := kr.Versions()
+	if len(versions) != 2 {
+		t.Fatalf("expected 2 versions, got %d", len(versions))
+	}
+	has1, has3 := false, false
+	for _, v := range versions {
+		if v == 1 {
+			has1 = true
+		}
+		if v == 3 {
+			has3 = true
+		}
+	}
+	if !has1 || !has3 {
+		t.Fatalf("expected versions [1, 3], got %v", versions)
+	}
+}
+
+func TestTokenVersion(t *testing.T) {
+	kr := testKeyring(t)
+	ct, err := kr.Encrypt("secret", "cred-001")
+	if err != nil {
+		t.Fatalf("Encrypt: %v", err)
+	}
+
+	tests := []struct {
+		name    string
+		input   string
+		wantVer int
+		wantOK  bool
+	}{
+		{"valid ciphertext", ct, 1, true},
+		{"plaintext PAT", "ghp_abc123", 0, false},
+		{"empty string", "", 0, false},
+		{"partial prefix", "enc:v1", 0, false},
+		{"non-integer version", "enc:vX:data", 0, false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			v, ok := TokenVersion(tc.input)
+			if ok != tc.wantOK {
+				t.Fatalf("TokenVersion(%q): ok=%v, want %v", tc.input, ok, tc.wantOK)
+			}
+			if v != tc.wantVer {
+				t.Fatalf("TokenVersion(%q): version=%d, want %d", tc.input, v, tc.wantVer)
+			}
+		})
+	}
+}
+
+func TestNewKeyring_DuplicateVersions(t *testing.T) {
+	key := base64.StdEncoding.EncodeToString(testKey())
+	key2 := make([]byte, 32)
+	for i := range key2 {
+		key2[i] = byte(i + 99)
+	}
+	_, err := NewKeyring(map[string]string{
+		"1":  key,
+		"01": base64.StdEncoding.EncodeToString(key2),
+	}, 1)
+	if err == nil {
+		t.Fatal("expected error for duplicate version (1 and 01)")
+	}
+	if !strings.Contains(err.Error(), "duplicate key version") {
+		t.Fatalf("expected duplicate error, got: %v", err)
+	}
+}
+
 func TestEncrypt_LargePayload(t *testing.T) {
 	kr := testKeyring(t)
 	large := strings.Repeat("a]kubeconfig-content-here[", 1000)
