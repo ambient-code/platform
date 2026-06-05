@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { User, Bot, Wrench, Send, ChevronDown, ChevronRight } from 'lucide-react'
@@ -88,46 +88,12 @@ export function tryFormatJson(payload: string): string {
   }
 }
 
-// ---- Message Enrichment ----
+// ---- Message Filtering ----
 
-export function extractLastAssistantMessage(payload: string): string | null {
-  try {
-    const parsed: unknown = JSON.parse(payload)
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
-    const obj = parsed as Record<string, unknown>
-    if (typeof obj.value !== 'object' || obj.value === null) return null
-    const value = obj.value as Record<string, unknown>
-    if (typeof value.last_assistant_message === 'string' && value.last_assistant_message.trim()) {
-      return value.last_assistant_message
-    }
-    return null
-  } catch {
-    return null
-  }
-}
-
-export function enrichMessages(messages: DomainSessionMessage[]): DomainSessionMessage[] {
-  const enriched: DomainSessionMessage[] = []
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i]
-    if (msg.eventType === 'assistant' && !msg.payload.trim()) {
-      for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
-        if (messages[j].eventType === 'system') {
-          const extracted = extractLastAssistantMessage(messages[j].payload)
-          if (extracted) {
-            enriched.push({ ...msg, payload: extracted })
-            break
-          }
-        }
-      }
-      // Empty assistant messages with no extractable text are dropped — the
-      // runner sometimes pushes an empty "assistant" record alongside a system
-      // event that contains the actual response in last_assistant_message.
-      continue
-    }
-    enriched.push(msg)
-  }
-  return enriched
+export function filterEmptyMessages(messages: DomainSessionMessage[]): DomainSessionMessage[] {
+  return messages.filter(
+    (msg) => !(msg.eventType === 'assistant' && !msg.payload.trim()),
+  )
 }
 
 // ---- Tool Call Grouping ----
@@ -314,13 +280,13 @@ function SimpleChatMessage({ message }: { message: DomainSessionMessage }) {
 // ---- Phase Status Indicator ----
 
 const PHASE_STYLES: Record<string, string> = {
-  Running: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-  Pending: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-  Creating: 'bg-blue-100 text-blue-800 border-blue-300',
-  Stopping: 'bg-orange-100 text-orange-800 border-orange-300',
-  Completed: 'bg-[#f2f2f2] text-[#4d4d4d] border-[#e0e0e0]',
-  Failed: 'bg-[#ffe3d9] text-[#731f00] border-[#fbbea8]',
-  Stopped: 'bg-[#f2f2f2] text-[#4d4d4d] border-[#e0e0e0]',
+  Running: 'bg-status-success text-status-success-foreground border-status-success-border',
+  Pending: 'bg-status-warning text-status-warning-foreground border-status-warning-border',
+  Creating: 'bg-status-info text-status-info-foreground border-status-info-border',
+  Stopping: 'bg-status-warning text-status-warning-foreground border-status-warning-border',
+  Completed: 'bg-event-system text-event-system-foreground border-event-system-border',
+  Failed: 'bg-status-error text-status-error-foreground border-status-error-border',
+  Stopped: 'bg-event-system text-event-system-foreground border-event-system-border',
 }
 
 export function PhaseIndicator({ phase }: { phase: string }) {
@@ -343,12 +309,56 @@ type ChatInputProps = {
   disabled: boolean
 }
 
+const DRAFT_PREFIX = 'ambient-draft:'
+const DRAFT_MAX_AGE_MS = 48 * 60 * 60 * 1000
+
+function readDraft(sessionId: string): string {
+  try {
+    const raw = localStorage.getItem(`${DRAFT_PREFIX}${sessionId}`)
+    if (!raw) return ''
+    const parsed: unknown = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null) return ''
+    const { text, ts } = parsed as Record<string, unknown>
+    if (typeof text !== 'string' || typeof ts !== 'number') return ''
+    if (Date.now() - ts > DRAFT_MAX_AGE_MS) {
+      localStorage.removeItem(`${DRAFT_PREFIX}${sessionId}`)
+      return ''
+    }
+    return text
+  } catch {
+    return ''
+  }
+}
+
+function saveDraft(sessionId: string, text: string): void {
+  try {
+    if (!text.trim()) {
+      localStorage.removeItem(`${DRAFT_PREFIX}${sessionId}`)
+      return
+    }
+    localStorage.setItem(`${DRAFT_PREFIX}${sessionId}`, JSON.stringify({ text, ts: Date.now() }))
+  } catch { /* quota exceeded — silently ignore */ }
+}
+
+function clearDraft(sessionId: string): void {
+  try { localStorage.removeItem(`${DRAFT_PREFIX}${sessionId}`) } catch { /* */ }
+}
+
 export function ChatInput({ sessionId, phase, disabled }: ChatInputProps) {
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState(() => readDraft(sessionId))
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const sendMessage = useSendMessage(sessionId)
   const isRunning = phase === 'Running'
   const canSend = isRunning && !disabled && input.trim().length > 0 && !sendMessage.isPending
+
+  useEffect(() => {
+    setInput(readDraft(sessionId))
+  }, [sessionId])
+
+  const handleChange = useCallback((text: string) => {
+    setInput(text)
+    saveDraft(sessionId, text)
+  }, [sessionId])
 
   const handleSend = useCallback(() => {
     const trimmed = input.trim()
@@ -356,10 +366,11 @@ export function ChatInput({ sessionId, phase, disabled }: ChatInputProps) {
     sendMessage.mutate(trimmed, {
       onSuccess: () => {
         setInput('')
+        clearDraft(sessionId)
         textareaRef.current?.focus()
       },
     })
-  }, [input, isRunning, sendMessage])
+  }, [input, isRunning, sendMessage, sessionId])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -391,7 +402,7 @@ export function ChatInput({ sessionId, phase, disabled }: ChatInputProps) {
         <Textarea
           ref={textareaRef}
           value={input}
-          onChange={e => setInput(e.target.value)}
+          onChange={e => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={isRunning ? 'Send a message...' : 'Session is not running'}
           disabled={!isRunning || sendMessage.isPending}
@@ -474,7 +485,7 @@ export function ChatItemsList({
 
 /** Filter and group raw messages into chat items */
 export function buildChatItems(messages: DomainSessionMessage[]): ChatItem[] {
-  const enriched = enrichMessages(messages)
-  const chatOnly = enriched.filter(m => CHAT_EVENT_TYPES.has(m.eventType))
+  const filtered = filterEmptyMessages(messages)
+  const chatOnly = filtered.filter(m => CHAT_EVENT_TYPES.has(m.eventType))
   return groupChatItems(chatOnly)
 }

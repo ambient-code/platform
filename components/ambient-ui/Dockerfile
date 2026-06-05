@@ -32,6 +32,9 @@ COPY ambient-ui/ .
 # Learn more here: https://nextjs.org/telemetry
 ENV NEXT_TELEMETRY_DISABLED=1
 
+ARG GIT_COMMIT=unknown
+ENV NEXT_PUBLIC_GIT_COMMIT=$GIT_COMMIT
+
 RUN npm run build
 
 # Prepare standalone output with OpenShift-compatible permissions in the builder

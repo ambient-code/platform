@@ -25,8 +25,8 @@ export const queryKeys = {
     list: (projectId: string, params?: ListParams) =>
       [...queryKeys.agents.lists(), projectId, params] as const,
     details: () => [...queryKeys.agents.all, 'detail'] as const,
-    detail: (agentId: string) =>
-      [...queryKeys.agents.details(), agentId] as const,
+    detail: (projectId: string, agentId: string) =>
+      [...queryKeys.agents.details(), projectId, agentId] as const,
     names: (projectId: string) =>
       [...queryKeys.agents.all, 'names', projectId] as const,
   },
@@ -35,5 +35,26 @@ export const queryKeys = {
     lists: () => [...queryKeys.messages.all, 'list'] as const,
     list: (sessionId: string) =>
       [...queryKeys.messages.lists(), sessionId] as const,
+  },
+  credentials: {
+    all: ['credentials'] as const,
+    lists: () => [...queryKeys.credentials.all, 'list'] as const,
+    list: (params?: ListParams) =>
+      [...queryKeys.credentials.lists(), params] as const,
+    details: () => [...queryKeys.credentials.all, 'detail'] as const,
+    detail: (id: string) =>
+      [...queryKeys.credentials.details(), id] as const,
+  },
+  roleBindings: {
+    all: ['roleBindings'] as const,
+    lists: () => [...queryKeys.roleBindings.all, 'list'] as const,
+    list: (params?: ListParams) =>
+      [...queryKeys.roleBindings.lists(), params] as const,
+  },
+  roles: {
+    all: ['roles'] as const,
+    lists: () => [...queryKeys.roles.all, 'list'] as const,
+    list: (params?: ListParams) =>
+      [...queryKeys.roles.lists(), params] as const,
   },
 } as const
