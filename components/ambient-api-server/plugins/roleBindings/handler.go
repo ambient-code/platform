@@ -44,7 +44,10 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 
 			// --- Escalation prevention ---
-			if h.sessionFactory != nil {
+			if h.sessionFactory == nil {
+				return nil, errors.Forbidden("authorization not available")
+			}
+			{
 				g := (*h.sessionFactory).New(ctx)
 
 				// a) Look up target role name and reject internal roles
@@ -155,7 +158,10 @@ func (h roleBindingHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			// --- Escalation prevention ---
 			username := auth.GetUsernameFromContext(ctx)
 
-			if h.sessionFactory != nil {
+			if h.sessionFactory == nil {
+				return nil, errors.Forbidden("authorization not available")
+			}
+			{
 				g := (*h.sessionFactory).New(ctx)
 
 				var callerRoleNames []string
@@ -188,6 +194,25 @@ func (h roleBindingHandler) Patch(w http.ResponseWriter, r *http.Request) {
 				// Prevent changing user_id (ownership transfer).
 				if patch.UserId != nil && (found.UserId == nil || *patch.UserId != *found.UserId) {
 					if callerLevel != 0 {
+						return nil, errors.Forbidden("Forbidden")
+					}
+				}
+
+				// Prevent scope widening — non-admins cannot change scope FKs.
+				if callerLevel != 0 {
+					if patch.Scope != nil && *patch.Scope != found.Scope {
+						return nil, errors.Forbidden("Forbidden")
+					}
+					if patch.ProjectId != nil && (found.ProjectId == nil || *patch.ProjectId != *found.ProjectId) {
+						return nil, errors.Forbidden("Forbidden")
+					}
+					if patch.AgentId != nil && (found.AgentId == nil || *patch.AgentId != *found.AgentId) {
+						return nil, errors.Forbidden("Forbidden")
+					}
+					if patch.SessionId != nil && (found.SessionId == nil || *patch.SessionId != *found.SessionId) {
+						return nil, errors.Forbidden("Forbidden")
+					}
+					if patch.CredentialId != nil && (found.CredentialId == nil || *patch.CredentialId != *found.CredentialId) {
 						return nil, errors.Forbidden("Forbidden")
 					}
 				}
@@ -323,7 +348,10 @@ func (h roleBindingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 
 			// --- Last-owner protection ---
-			if h.sessionFactory != nil {
+			if h.sessionFactory == nil {
+				return nil, errors.Forbidden("authorization not available")
+			}
+			{
 				binding, getErr := h.roleBinding.Get(ctx, id)
 				if getErr != nil {
 					return nil, getErr
