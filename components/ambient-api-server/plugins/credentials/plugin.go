@@ -25,6 +25,7 @@ func NewServiceLocator(env *environments.Env) ServiceLocator {
 			db.NewAdvisoryLockFactory(env.Database.SessionFactory),
 			NewCredentialDao(&env.Database.SessionFactory),
 			events.Service(&env.Services),
+			LoadKeyring(),
 		)
 	}
 }
