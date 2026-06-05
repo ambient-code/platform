@@ -675,11 +675,9 @@ The Credentials view SHALL be global (not project-scoped). Credentials SHALL be 
 - GIVEN credentials of various providers
 - WHEN the Credentials view renders
 - THEN credentials are grouped in collapsible sections by category:
-  - LLM Providers (Anthropic, Google/Vertex)
-  - Source Control (GitHub, GitLab, Gerrit)
+  - Source Control (GitHub, GitLab)
   - Project Management (Jira)
-  - Code Review (CodeRabbit, Gerrit)
-  - AI & Tooling (Google Workspace, MCP Servers)
+  - Cloud & Infrastructure (Google Cloud, Vertex AI, Kubernetes)
 
 ### Requirement: Credential-to-Agent Binding
 
