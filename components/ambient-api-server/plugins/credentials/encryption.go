@@ -1,11 +1,13 @@
 package credentials
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/crypto"
+	"gorm.io/gorm"
 )
 
 const (
@@ -17,6 +19,11 @@ const (
 func LoadKeyring() *crypto.Keyring {
 	raw := os.Getenv(envKeyring)
 	if raw == "" {
+		if !IsPlaintextAllowed() {
+			fmt.Fprintf(os.Stderr, "FATAL: credential encryption disabled — set %s or set %s=true to override\n", envKeyring, envAllowPlaintext)
+			os.Exit(1)
+		}
+		fmt.Fprintf(os.Stderr, "WARNING: credential encryption disabled — running in plaintext mode\n")
 		return nil
 	}
 
@@ -43,5 +50,45 @@ func LoadKeyring() *crypto.Keyring {
 }
 
 func IsPlaintextAllowed() bool {
-	return os.Getenv(envAllowPlaintext) == "true"
+	if os.Getenv(envAllowPlaintext) == "true" {
+		return true
+	}
+	env := os.Getenv("AMBIENT_ENV")
+	return env == "integration_testing" || env == "development"
+}
+
+func ValidateEncryptionStartup(db *gorm.DB, keyring *crypto.Keyring) {
+	if keyring != nil {
+		return
+	}
+
+	var count int64
+	if err := db.Table("credentials").Where("token LIKE 'enc:v%'").Count(&count).Error; err != nil {
+		fmt.Fprintf(os.Stderr, "WARNING: could not check for encrypted tokens: %v\n", err)
+		return
+	}
+
+	if count > 0 {
+		fmt.Fprintf(os.Stderr, "FATAL: %d encrypted credential tokens found but no keyring configured — set %s\n", count, envKeyring)
+		os.Exit(1)
+	}
+}
+
+func ValidateEncryptionStartupFromDAO(ctx context.Context, dao CredentialDao, keyring *crypto.Keyring) {
+	if keyring != nil {
+		return
+	}
+
+	all, err := dao.All(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "WARNING: could not check for encrypted tokens: %v\n", err)
+		return
+	}
+
+	for _, c := range all {
+		if c.Token != nil && crypto.IsEncrypted(*c.Token) {
+			fmt.Fprintf(os.Stderr, "FATAL: encrypted credential tokens found but no keyring configured — set %s\n", envKeyring)
+			os.Exit(1)
+		}
+	}
 }
