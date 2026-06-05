@@ -14,19 +14,10 @@ export type CredentialCategory = {
 
 export const CREDENTIAL_CATEGORIES: readonly CredentialCategory[] = [
   {
-    label: 'LLM Providers',
-    providers: [
-      { provider: 'anthropic', label: 'Anthropic', icon: 'Bot', fields: ['token'] },
-      { provider: 'google-vertex', label: 'Google / Vertex', icon: 'Cloud', fields: ['token', 'url'] },
-      { provider: 'openai', label: 'OpenAI', icon: 'Bot', fields: ['token'] },
-    ],
-  },
-  {
     label: 'Source Control',
     providers: [
       { provider: 'github', label: 'GitHub', icon: 'Github', fields: ['token', 'url'] },
       { provider: 'gitlab', label: 'GitLab', icon: 'GitBranch', fields: ['token', 'url'] },
-      { provider: 'gerrit', label: 'Gerrit', icon: 'GitBranch', fields: ['token', 'url'] },
     ],
   },
   {
@@ -36,15 +27,11 @@ export const CREDENTIAL_CATEGORIES: readonly CredentialCategory[] = [
     ],
   },
   {
-    label: 'Code Review',
+    label: 'Cloud & Infrastructure',
     providers: [
-      { provider: 'coderabbit', label: 'CodeRabbit', icon: 'Bot', fields: ['token'] },
-    ],
-  },
-  {
-    label: 'AI & Tooling',
-    providers: [
-      { provider: 'custom', label: 'Custom', icon: 'Key', fields: ['token', 'url', 'email'] },
+      { provider: 'google', label: 'Google Cloud', icon: 'Cloud', fields: ['token'] },
+      { provider: 'vertex', label: 'Vertex AI', icon: 'Cloud', fields: ['token'] },
+      { provider: 'kubeconfig', label: 'Kubernetes', icon: 'Server', fields: ['token'] },
     ],
   },
 ] as const
