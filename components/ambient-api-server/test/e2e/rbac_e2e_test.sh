@@ -172,19 +172,27 @@ get_binding_id() {
 CREATED_PROJECTS=()
 CREATED_CRED_IDS=()
 
+clean_db() {
+  local pod="${DB_POD:-$(kubectl get pods -n ambient-code -l app=ambient-api-server,component=database -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)}"
+  if [[ -n "$pod" ]]; then
+    kubectl exec -n ambient-code "$pod" -- psql -U ambient -d ambient_api_server -c "
+      DELETE FROM role_bindings WHERE project_id LIKE 'rbac-%' OR user_id LIKE 'rbac-%' OR credential_id IN (SELECT id FROM credentials WHERE name LIKE 'rbac-%');
+      DELETE FROM agents WHERE project_id LIKE 'rbac-%';
+      DELETE FROM credentials WHERE name LIKE 'rbac-%';
+      DELETE FROM projects WHERE name LIKE 'rbac-%';
+      DELETE FROM users WHERE username LIKE 'rbac-%';
+    " 2>/dev/null >/dev/null || true
+  fi
+}
+
 cleanup() {
   echo ""
   echo -e "${BOLD}Cleanup${NC}"
 
+  clean_db
+  echo "  DB cleaned (hard delete)"
+
   get_admin_token
-
-  # Delete test Keycloak users (DB records are auto-provisioned, best effort cleanup)
-  for proj in "${CREATED_PROJECTS[@]:-}"; do
-    if [[ -n "$proj" ]]; then
-      echo "  Test project created: $proj (will be cleaned up by test or left for manual cleanup)"
-    fi
-  done
-
   delete_keycloak_user "rbac-user-a"
   delete_keycloak_user "rbac-user-b"
   delete_keycloak_user "rbac-user-c"
@@ -199,9 +207,21 @@ echo "Keycloak: $KC_URL"
 echo ""
 
 # ============================================================
-echo -e "${BOLD}Phase 1: Setup${NC}"
+echo -e "${BOLD}Phase 0: Pre-clean stale data${NC}"
+
+clean_db
+echo "  DB cleaned"
 
 get_admin_token
+delete_keycloak_user "rbac-user-a"
+delete_keycloak_user "rbac-user-b"
+delete_keycloak_user "rbac-user-c"
+echo "  Keycloak users cleaned"
+
+# ============================================================
+echo ""
+echo -e "${BOLD}Phase 1: Setup${NC}"
+
 get_client_secret
 
 create_keycloak_user "rbac-user-a" "testpass" "rbac-a@test.dev" "Alice" "TestA"
@@ -729,23 +749,23 @@ MATRIX_VIEWER_BIND=$(echo "$HTTP_BODY" | jq -r '.id // empty')
 #
 # Format: "role_name:role_id_var:level:internal"
 GRANTABLE_ROLES=(
-  "project:owner:ROLE_PROJECT_OWNER:1:no"
-  "project:editor:ROLE_PROJECT_EDITOR:2:no"
-  "project:viewer:ROLE_PROJECT_VIEWER:3:no"
-  "agent:operator:ROLE_AGENT_OPERATOR:2:no"
-  "agent:observer:ROLE_AGENT_OBSERVER:3:no"
-  "agent:editor:ROLE_AGENT_EDITOR:2:no"
-  "credential:owner:ROLE_CREDENTIAL_OWNER:1:no"
-  "credential:viewer:ROLE_CREDENTIAL_VIEWER:2:no"
-  "agent:runner:ROLE_AGENT_RUNNER:0:yes"
-  "credential:token-reader:ROLE_CRED_TOKEN_READER:0:yes"
+  "project:owner|ROLE_PROJECT_OWNER|1|no"
+  "project:editor|ROLE_PROJECT_EDITOR|2|no"
+  "project:viewer|ROLE_PROJECT_VIEWER|3|no"
+  "agent:operator|ROLE_AGENT_OPERATOR|2|no"
+  "agent:observer|ROLE_AGENT_OBSERVER|3|no"
+  "agent:editor|ROLE_AGENT_EDITOR|2|no"
+  "credential:owner|ROLE_CREDENTIAL_OWNER|1|no"
+  "credential:viewer|ROLE_CREDENTIAL_VIEWER|2|no"
+  "agent:runner|ROLE_AGENT_RUNNER|0|yes"
+  "credential:token-reader|ROLE_CRED_TOKEN_READER|0|yes"
 )
 
-# Format: "label:token_var:level"
+# Format: "label|token_var|level"
 CALLERS=(
-  "owner(1):TOKEN_A:1"
-  "editor(2):TOKEN_B:2"
-  "viewer(3):TOKEN_C:3"
+  "owner(1)|TOKEN_A|1"
+  "editor(2)|TOKEN_B|2"
+  "viewer(3)|TOKEN_C|3"
 )
 
 echo "  Testing ${#CALLERS[@]} callers × ${#GRANTABLE_ROLES[@]} target roles = $(( ${#CALLERS[@]} * ${#GRANTABLE_ROLES[@]} )) combinations"
@@ -754,11 +774,11 @@ MATRIX_PASS=0
 MATRIX_FAIL=0
 
 for caller_entry in "${CALLERS[@]}"; do
-  IFS=: read -r caller_label token_var caller_level <<< "$caller_entry"
+  IFS='|' read -r caller_label token_var caller_level <<< "$caller_entry"
   caller_token="${!token_var}"
 
   for target_entry in "${GRANTABLE_ROLES[@]}"; do
-    IFS=: read -r role_name role_id_var target_level is_internal <<< "$target_entry"
+    IFS='|' read -r role_name role_id_var target_level is_internal <<< "$target_entry"
     role_id="${!role_id_var}"
 
     if [[ -z "$role_id" ]]; then
@@ -803,7 +823,7 @@ CROSS_PASS=0
 CROSS_FAIL=0
 
 for target_entry in "${GRANTABLE_ROLES[@]}"; do
-  IFS=: read -r role_name role_id_var target_level is_internal <<< "$target_entry"
+  IFS='|' read -r role_name role_id_var target_level is_internal <<< "$target_entry"
   role_id="${!role_id_var}"
   [[ -z "$role_id" ]] && continue
 
@@ -831,7 +851,7 @@ GLOBAL_PASS=0
 GLOBAL_FAIL=0
 
 for caller_entry in "${CALLERS[@]}"; do
-  IFS=: read -r caller_label token_var caller_level <<< "$caller_entry"
+  IFS='|' read -r caller_label token_var caller_level <<< "$caller_entry"
   caller_token="${!token_var}"
 
   # Try granting project:editor at global scope
@@ -860,46 +880,7 @@ echo ""
 echo -e "  ${BOLD}Escalation matrix total: $((MATRIX_PASS + CROSS_PASS + GLOBAL_PASS)) passed, $((MATRIX_FAIL + CROSS_FAIL + GLOBAL_FAIL)) failed (${TOTAL_MATRIX} tests)${NC}"
 
 # ============================================================
-echo ""
-echo -e "${BOLD}Phase 15: Cleanup Test Data${NC}"
-
-# Delete projects created during tests (owners can delete their own)
-api DELETE "/projects/rbac-proj-alpha" "$TOKEN_A"
-if [[ "$HTTP_STATUS" == "204" || "$HTTP_STATUS" == "200" ]]; then
-  pass "Cleanup: Deleted rbac-proj-alpha"
-else
-  echo "  WARN: Could not delete rbac-proj-alpha (status $HTTP_STATUS)"
-fi
-
-api DELETE "/projects/rbac-proj-beta" "$TOKEN_B"
-if [[ "$HTTP_STATUS" == "204" || "$HTTP_STATUS" == "200" ]]; then
-  pass "Cleanup: Deleted rbac-proj-beta"
-else
-  echo "  WARN: Could not delete rbac-proj-beta (status $HTTP_STATUS)"
-fi
-
-api DELETE "/projects/rbac-proj-charlie" "$TOKEN_C"
-if [[ "$HTTP_STATUS" == "204" || "$HTTP_STATUS" == "200" ]]; then
-  pass "Cleanup: Deleted rbac-proj-charlie"
-else
-  echo "  WARN: Could not delete rbac-proj-charlie (status $HTTP_STATUS)"
-fi
-
-# Delete credentials
-for cred_id in "${CREATED_CRED_IDS[@]:-}"; do
-  if [[ -n "$cred_id" ]]; then
-    # Try with each user token (owner can delete)
-    api DELETE "/credentials/${cred_id}" "$TOKEN_A"
-    if [[ "$HTTP_STATUS" != "204" && "$HTTP_STATUS" != "200" ]]; then
-      api DELETE "/credentials/${cred_id}" "$TOKEN_B"
-      if [[ "$HTTP_STATUS" != "204" && "$HTTP_STATUS" != "200" ]]; then
-        api DELETE "/credentials/${cred_id}" "$TOKEN_C"
-      fi
-    fi
-  fi
-done
-echo "  Test credentials cleaned up"
-
+# Cleanup is handled by the EXIT trap (clean_db + Keycloak user deletion)
 # ============================================================
 echo ""
 echo -e "${BOLD}Summary${NC}"

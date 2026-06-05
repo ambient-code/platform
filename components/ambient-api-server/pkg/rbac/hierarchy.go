@@ -9,6 +9,7 @@ var RoleLevel = map[string]int{
 
 	RoleProjectEditor:    2,
 	RoleAgentOperator:    2,
+	"agent:editor":       2,
 	RoleCredentialReader: 2,
 	"credential:viewer":  2,
 
