@@ -40,31 +40,39 @@ No DDL or schema migration is required. The existing `token` column is PostgreSQ
 
 ### Requirement: Encryption Key Management
 
-The encryption key SHALL be provided as an environment variable (`CREDENTIAL_ENCRYPTION_KEY`) sourced from a Kubernetes Secret. The key SHALL be exactly 32 bytes (256 bits), base64-encoded in the Secret.
+The encryption keyring SHALL be provided as an environment variable (`CREDENTIAL_ENCRYPTION_KEYRING`) sourced from a Kubernetes Secret. The value is a JSON object mapping version numbers (as strings) to base64-encoded 32-byte keys. The active version is specified by `CREDENTIAL_ENCRYPTION_KEY_VERSION`.
 
-The encryption key value MUST NOT appear in log output, error messages, API responses, or debug traces. Log messages about the key SHALL reference it by version number only (e.g., "using encryption key v2").
+Encryption key values MUST NOT appear in log output, error messages, API responses, or debug traces. Log messages about the keyring SHALL reference key versions only (e.g., "using encryption key v2, keyring contains versions: 1, 2").
 
-#### Scenario: Server startup with valid key
+#### Scenario: Server startup with valid keyring
 
-- GIVEN `CREDENTIAL_ENCRYPTION_KEY` is set to a valid base64-encoded 32-byte value
+- GIVEN `CREDENTIAL_ENCRYPTION_KEYRING` is set to a valid JSON keyring (e.g., `{"1":"base64key1"}`)
+- AND `CREDENTIAL_ENCRYPTION_KEY_VERSION` is set to `1`
 - WHEN the API server starts
 - THEN it initializes the encryption subsystem and serves requests normally
 
-#### Scenario: Server startup with missing key
+#### Scenario: Server startup with missing keyring and encrypted tokens
 
-- GIVEN `CREDENTIAL_ENCRYPTION_KEY` is not set
+- GIVEN `CREDENTIAL_ENCRYPTION_KEYRING` is not set
 - AND at least one credential in the database has an encrypted token (version-prefixed ciphertext)
 - WHEN the API server starts
-- THEN it SHALL refuse to start and log a fatal error: "encryption key required but not configured"
+- THEN it SHALL refuse to start and log a fatal error: "encryption keyring required but not configured"
 
-#### Scenario: Server startup with no key and no encrypted tokens
+#### Scenario: Server startup with no keyring and no encrypted tokens (fail-closed)
 
-- GIVEN `CREDENTIAL_ENCRYPTION_KEY` is not set
-- AND no credentials in the database have encrypted tokens (all plaintext or empty)
+- GIVEN `CREDENTIAL_ENCRYPTION_KEYRING` is not set
+- AND `CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT` is not set to `true`
+- WHEN the API server starts
+- THEN it SHALL refuse to start and log a fatal error: "credential encryption disabled — set CREDENTIAL_ENCRYPTION_KEYRING or set CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT=true to override"
+
+#### Scenario: Server startup with explicit plaintext opt-in
+
+- GIVEN `CREDENTIAL_ENCRYPTION_KEYRING` is not set
+- AND `CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT` is set to `true`
 - WHEN the API server starts
 - THEN it SHALL start normally with encryption disabled
 - AND write and read tokens as plaintext (backward-compatible)
-- AND log a WARNING at startup: "credential encryption disabled — CREDENTIAL_ENCRYPTION_KEY not set"
+- AND log a WARNING at startup: "credential encryption disabled — running in plaintext mode"
 
 ### Requirement: Ciphertext Format
 
@@ -85,7 +93,12 @@ The version tag in the ciphertext prefix (`v{N}`) determines which key is used f
 
 Plaintext tokens (pre-migration) lack the `enc:` prefix, enabling the system to distinguish encrypted from unencrypted values.
 
-Note: a credential token that legitimately begins with the literal string `enc:` would be misidentified as ciphertext. This is not expected for any supported provider's token format (GitHub PATs start with `ghp_`/`gho_`, GitLab with `glpat-`, Jira uses ATATT, kubeconfigs start with `apiVersion`, GCP keys start with `{`).
+Token recognition SHALL use strict envelope validation, not just prefix matching. A value is treated as ciphertext only when all of the following hold:
+1. It matches the pattern `enc:v{integer}:{base64}`
+2. The base64 payload decodes successfully
+3. The decoded payload is at least 28 bytes (12-byte nonce + 16-byte GCM tag minimum)
+
+If a value has the `enc:` prefix but fails any validation step, the system SHALL treat it as a decryption error (not silently fall back to plaintext) and return an error to the caller. This prevents silent data corruption if ciphertext is truncated or corrupted.
 
 #### Scenario: Distinguish encrypted from plaintext
 
@@ -124,12 +137,11 @@ The API server SHALL support rotating the encryption key via the `encrypt-creden
 
 #### Scenario: Key version tracking
 
-- GIVEN a K8s Secret containing the encryption key
+- GIVEN a K8s Secret containing the encryption keyring
 - WHEN the operator needs to rotate
-- THEN they update the Secret with a new 32-byte key
-- AND set `CREDENTIAL_ENCRYPTION_KEY_VERSION` to the new version number (e.g., `2`)
-- AND the previous key is retained in `CREDENTIAL_ENCRYPTION_KEY_PREVIOUS` for decryption during the migration window
-- AND `CREDENTIAL_ENCRYPTION_KEY_PREVIOUS` MUST be retained until `encrypt-credentials` completes successfully and all tokens are confirmed re-encrypted
+- THEN they add the new key to `CREDENTIAL_ENCRYPTION_KEYRING` with the next version number
+- AND set `CREDENTIAL_ENCRYPTION_KEY_VERSION` to the new version (e.g., `2`)
+- AND old keys MUST be retained in the keyring until `encrypt-credentials` re-encrypts all tokens to the current version
 
 ### Requirement: Initial Migration
 
@@ -138,7 +150,7 @@ The `encrypt-credentials` CLI command SHALL encrypt all existing plaintext token
 #### Scenario: First-time encryption
 
 - GIVEN 100 credentials exist with plaintext tokens (no `enc:` prefix)
-- AND `CREDENTIAL_ENCRYPTION_KEY` is configured with version 1
+- AND `CREDENTIAL_ENCRYPTION_KEYRING` is configured with version 1
 - WHEN the operator runs `ambient-api-server encrypt-credentials`
 - THEN all 100 tokens are encrypted with the version-1 key
 - AND each token is updated to `enc:v1:{ciphertext}`
@@ -155,7 +167,7 @@ The `encrypt-credentials` CLI command SHALL encrypt all existing plaintext token
 
 The `encrypt-credentials` command SHALL support a `--decrypt` flag that reverses all encrypted tokens to plaintext in the database.
 
-The `--decrypt` flag requires all encryption key versions referenced by stored ciphertext to be available. If tokens are tagged `v1` and `v2`, both `CREDENTIAL_ENCRYPTION_KEY` (v2) and `CREDENTIAL_ENCRYPTION_KEY_PREVIOUS` (v1) MUST be configured.
+The `--decrypt` flag requires all encryption key versions referenced by stored ciphertext to be present in the keyring. If tokens span `v1`, `v2`, and `v3`, all three keys MUST be in `CREDENTIAL_ENCRYPTION_KEYRING`.
 
 #### Scenario: Bulk decrypt
 
@@ -167,7 +179,7 @@ The `--decrypt` flag requires all encryption key versions referenced by stored c
 #### Scenario: Decrypt after partial rotation
 
 - GIVEN 30 credentials are `enc:v2` and 20 are `enc:v1`
-- AND both keys are available (`CREDENTIAL_ENCRYPTION_KEY` + `CREDENTIAL_ENCRYPTION_KEY_PREVIOUS`)
+- AND both keys are available in the keyring
 - WHEN the operator runs `encrypt-credentials --decrypt`
 - THEN all 50 tokens are decrypted to plaintext using their respective key versions
 
@@ -212,9 +224,9 @@ No API, SDK, CLI, sidecar, or runner changes SHALL be required when the storage 
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `CREDENTIAL_ENCRYPTION_KEY` | No (see startup scenarios) | Base64-encoded 32-byte AES-256 key. Sourced from K8s Secret. |
-| `CREDENTIAL_ENCRYPTION_KEY_VERSION` | When key is set | Integer version of the current key (e.g., `1`, `2`). |
-| `CREDENTIAL_ENCRYPTION_KEY_PREVIOUS` | During rotation only | Base64-encoded previous key. MUST be retained until `encrypt-credentials` completes. |
+| `CREDENTIAL_ENCRYPTION_KEYRING` | No (see startup scenarios) | JSON object mapping version numbers to base64-encoded 32-byte keys. E.g., `{"1":"base64key1","2":"base64key2"}`. Sourced from K8s Secret. All keys referenced by stored ciphertext MUST be present. |
+| `CREDENTIAL_ENCRYPTION_KEY_VERSION` | When keyring is set | Integer version of the active key used for new encryptions (e.g., `2`). Must exist in the keyring. |
+| `CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT` | No | Set to `true` to allow startup without encryption. Without this, the server fails closed if no keyring is configured. |
 
 ## Design Decisions
 
@@ -223,11 +235,11 @@ No API, SDK, CLI, sidecar, or runner changes SHALL be required when the storage 
 | AES-256-GCM | Authenticated encryption. Go stdlib (`crypto/aes` + `crypto/cipher`). No external dependencies. Industry standard. 96-bit random nonce; birthday collision risk negligible at credential-scale volumes (well under 2^32 encryptions). |
 | Credential ID as AAD | Binding the credential ID as GCM additional authenticated data prevents ciphertext swapping between database rows. Decryption fails if a ciphertext blob is copied to a different credential's row. |
 | Version-tagged ciphertext | Enables safe key rotation — the system always knows which key encrypted a given token. Also distinguishes encrypted from legacy plaintext. |
-| Env var for key, not file mount | Consistent with existing API server config pattern (DB credentials use env vars). Simpler code. Rotation requires pod restart, which is acceptable for a security-critical operation. |
+| JSON keyring env var | Supports arbitrary number of historical key versions in a single env var. Version-tagged ciphertext selects the correct key from the keyring — no try-decrypt fallback needed. Consistent with existing API server config pattern (env vars from K8s Secrets). |
 | Explicit CLI command for migration | Follows industry practice (Rails, Django, Kubernetes, Vault). Never auto-encrypt on startup — the operation is privileged, auditable, and must be recoverable from partial failure. |
 | Encryption at service layer | Decrypt in `CredentialService.Get()`, encrypt in `CredentialService.Create()`/`Replace()`. Handlers and presenters never see ciphertext. Prevents accidental exposure if new presenters are added. |
 | Encryption invisible to API consumers | The `GET /credentials/{id}/token` contract is unchanged. Sidecars, runners, SDK, CLI are unaware. This maximizes the migration surface to Vault later. |
-| Graceful degradation without key | If no key is configured and no encrypted tokens exist, the server runs in plaintext mode. Backward-compatible for dev environments and existing deployments before key provisioning. |
+| Fail-closed without key | Server refuses to start unless a keyring is configured or `CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT=true` is set. Prevents silent plaintext degradation in production. Dev environments opt in explicitly. |
 | No DDL migration required | The `token` column is PostgreSQL `TEXT` (unbounded). Ciphertext with the `enc:v1:...` prefix fits without schema changes. |
 | `--decrypt` rollback supported | The decrypt capability exists inherently (needed for `GET /token`). A `--decrypt` flag on the CLI command reverses encryption if the feature must be rolled back. |
 | Cobra subcommand, not gormigrate | `encrypt-credentials` is a standalone subcommand like `serve` and `migrate`, not a numbered migration. It's re-runnable, idempotent, and supports `--dry-run` and `--decrypt` flags. |
