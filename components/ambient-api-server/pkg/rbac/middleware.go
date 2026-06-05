@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/golang/glog"
+	"github.com/gorilla/mux"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/db"
@@ -64,6 +65,15 @@ func (m *DBAuthorizationMiddleware) AuthorizeApi(next http.Handler) http.Handler
 		scope := ExtractRequestScope(r)
 		resource := Resource(pathToResource(r.URL.Path))
 		action := Action(pathToAction(r.Method, r.URL.Path))
+
+		// Resolve scope for role_binding singleton operations.
+		// The URL /role_bindings/{id} carries no project or credential context,
+		// so we look up the binding's FK to populate the request scope.
+		if resource == ResourceRoleBinding && scope.ProjectID == "" && scope.CredentialID == "" {
+			if bindingID := mux.Vars(r)["id"]; bindingID != "" {
+				m.resolveRoleBindingScope(ctx, bindingID, &scope)
+			}
+		}
 
 		allowed, evalErr := m.evaluator.Evaluate(ctx, username, resource, action, scope)
 		if evalErr != nil {
@@ -311,4 +321,25 @@ func singularize(s string) string {
 		return s[:len(s)-1]
 	}
 	return s
+}
+
+// resolveRoleBindingScope looks up a role_binding's project_id and credential_id
+// from the database and populates the request scope so that bindingCoversScope
+// can match the caller's binding against the correct project/credential.
+func (m *DBAuthorizationMiddleware) resolveRoleBindingScope(ctx context.Context, bindingID string, scope *RequestScope) {
+	g := (*m.sessionFactory).New(ctx)
+	var result struct {
+		ProjectID    *string
+		CredentialID *string
+	}
+	err := g.Raw(`SELECT project_id, credential_id FROM role_bindings WHERE id = ? AND deleted_at IS NULL`, bindingID).Scan(&result).Error
+	if err != nil {
+		return
+	}
+	if result.ProjectID != nil && *result.ProjectID != "" {
+		scope.ProjectID = *result.ProjectID
+	}
+	if result.CredentialID != nil && *result.CredentialID != "" {
+		scope.CredentialID = *result.CredentialID
+	}
 }

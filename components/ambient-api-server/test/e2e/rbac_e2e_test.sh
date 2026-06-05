@@ -1006,10 +1006,10 @@ echo -e "${BOLD}Phase 19: Session sub-resource access for project owner${NC}"
 if [[ -n "$SESSION_A_ID" ]]; then
   # Owner can GET session events (currently maps to resource "event" — should be "session")
   api GET "/sessions/${SESSION_A_ID}/events" "$TOKEN_A"
-  if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "502" ]]; then
-    pass "Owner can GET /sessions/{id}/events (status $HTTP_STATUS)"
+  if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "404" || "$HTTP_STATUS" == "502" ]]; then
+    pass "Owner can GET /sessions/{id}/events (status $HTTP_STATUS — 404/502 expected when no runner)"
   else
-    fail "Owner GET /sessions/{id}/events" "expected 200 or 502 (no runner), got $HTTP_STATUS"
+    fail "Owner GET /sessions/{id}/events" "expected 200/404/502, got $HTTP_STATUS"
   fi
 
   # Owner can GET session messages

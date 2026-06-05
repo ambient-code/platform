@@ -158,6 +158,7 @@ func credentialTokenPermMigration() *gormigrate.Migration {
 			ownerPerms, _ := json.Marshal([]string{
 				"credential:create", "credential:read", "credential:update",
 				"credential:delete", "credential:list", "credential:fetch_token",
+				"role_binding:create", "role_binding:delete",
 			})
 			if err := tx.Exec(
 				`UPDATE roles SET permissions = ? WHERE name = 'credential:owner' AND deleted_at IS NULL`,
@@ -189,6 +190,33 @@ func credentialTokenPermMigration() *gormigrate.Migration {
 			return tx.Exec(
 				`UPDATE roles SET permissions = ? WHERE name = 'credential:token-reader' AND deleted_at IS NULL`,
 				string(tokenReaderPerms),
+			).Error
+		},
+	}
+}
+
+func credentialOwnerRoleBindingPermMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202606050004",
+		Migrate: func(tx *gorm.DB) error {
+			perms, _ := json.Marshal([]string{
+				"credential:create", "credential:read", "credential:update",
+				"credential:delete", "credential:list", "credential:fetch_token",
+				"role_binding:create", "role_binding:delete",
+			})
+			return tx.Exec(
+				`UPDATE roles SET permissions = ? WHERE name = 'credential:owner' AND deleted_at IS NULL`,
+				string(perms),
+			).Error
+		},
+		Rollback: func(tx *gorm.DB) error {
+			perms, _ := json.Marshal([]string{
+				"credential:create", "credential:read", "credential:update",
+				"credential:delete", "credential:list", "credential:fetch_token",
+			})
+			return tx.Exec(
+				`UPDATE roles SET permissions = ? WHERE name = 'credential:owner' AND deleted_at IS NULL`,
+				string(perms),
 			).Error
 		},
 	}
