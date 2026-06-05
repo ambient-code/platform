@@ -287,10 +287,13 @@ func TestVersions(t *testing.T) {
 		key2[i] = byte(i + 50)
 	}
 
-	kr, _ := NewKeyring(map[string]string{
+	kr, err := NewKeyring(map[string]string{
 		"1": base64.StdEncoding.EncodeToString(key1),
 		"3": base64.StdEncoding.EncodeToString(key2),
 	}, 1)
+	if err != nil {
+		t.Fatalf("NewKeyring: %v", err)
+	}
 
 	versions := kr.Versions()
 	if len(versions) != 2 {
@@ -310,23 +313,36 @@ func TestVersions(t *testing.T) {
 	}
 }
 
-func TestTokenVersion_Valid(t *testing.T) {
+func TestTokenVersion(t *testing.T) {
 	kr := testKeyring(t)
-	ct, _ := kr.Encrypt("secret", "cred-001")
-
-	v, ok := TokenVersion(ct)
-	if !ok {
-		t.Fatal("expected ok=true for valid ciphertext")
+	ct, err := kr.Encrypt("secret", "cred-001")
+	if err != nil {
+		t.Fatalf("Encrypt: %v", err)
 	}
-	if v != 1 {
-		t.Fatalf("expected version 1, got %d", v)
-	}
-}
 
-func TestTokenVersion_Plaintext(t *testing.T) {
-	_, ok := TokenVersion("ghp_abc123")
-	if ok {
-		t.Fatal("expected ok=false for plaintext")
+	tests := []struct {
+		name    string
+		input   string
+		wantVer int
+		wantOK  bool
+	}{
+		{"valid ciphertext", ct, 1, true},
+		{"plaintext PAT", "ghp_abc123", 0, false},
+		{"empty string", "", 0, false},
+		{"partial prefix", "enc:v1", 0, false},
+		{"non-integer version", "enc:vX:data", 0, false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			v, ok := TokenVersion(tc.input)
+			if ok != tc.wantOK {
+				t.Fatalf("TokenVersion(%q): ok=%v, want %v", tc.input, ok, tc.wantOK)
+			}
+			if v != tc.wantVer {
+				t.Fatalf("TokenVersion(%q): version=%d, want %d", tc.input, v, tc.wantVer)
+			}
+		})
 	}
 }
 
