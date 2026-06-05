@@ -280,13 +280,13 @@ function SimpleChatMessage({ message }: { message: DomainSessionMessage }) {
 // ---- Phase Status Indicator ----
 
 const PHASE_STYLES: Record<string, string> = {
-  Running: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-  Pending: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-  Creating: 'bg-blue-100 text-blue-800 border-blue-300',
-  Stopping: 'bg-orange-100 text-orange-800 border-orange-300',
-  Completed: 'bg-[#f2f2f2] text-[#4d4d4d] border-[#e0e0e0]',
-  Failed: 'bg-[#ffe3d9] text-[#731f00] border-[#fbbea8]',
-  Stopped: 'bg-[#f2f2f2] text-[#4d4d4d] border-[#e0e0e0]',
+  Running: 'bg-status-success text-status-success-foreground border-status-success-border',
+  Pending: 'bg-status-warning text-status-warning-foreground border-status-warning-border',
+  Creating: 'bg-status-info text-status-info-foreground border-status-info-border',
+  Stopping: 'bg-status-warning text-status-warning-foreground border-status-warning-border',
+  Completed: 'bg-event-system text-event-system-foreground border-event-system-border',
+  Failed: 'bg-status-error text-status-error-foreground border-status-error-border',
+  Stopped: 'bg-event-system text-event-system-foreground border-event-system-border',
 }
 
 export function PhaseIndicator({ phase }: { phase: string }) {

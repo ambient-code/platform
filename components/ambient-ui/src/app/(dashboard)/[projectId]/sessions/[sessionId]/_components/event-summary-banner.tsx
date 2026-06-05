@@ -1,5 +1,4 @@
 import type { SessionEventType } from '@/domain/types'
-import { cn } from '@/lib/utils'
 
 type EventSummaryBannerProps = {
   totalCount: number
@@ -21,7 +20,7 @@ export function EventSummaryBanner({
         {errorCount > 0 && (
           <>
             {' — '}
-            <span className="font-medium text-[#f0561d]">
+            <span className="font-medium text-status-error-foreground">
               {errorCount} {errorCount === 1 ? 'error' : 'errors'}
             </span>
           </>

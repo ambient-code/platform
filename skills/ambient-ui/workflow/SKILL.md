@@ -63,6 +63,7 @@ When testing, fakes are to be preferred over mocks. Tests that don't test realit
 
 - React/Next.js
 - shadcn/ui components
+- Tabbed views MUST persist the active tab in the URL via `?tab=` query parameter using controlled `<Tabs value={activeTab}>` with useState + useEffect + replaceState. Ensures tabs survive reload and support deep linking.
 
 ##### Colors
 

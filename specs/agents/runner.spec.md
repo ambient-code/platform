@@ -130,6 +130,8 @@ ambient_runner/
           - set_bot_token(token) — wires into get_bot_token() for all HTTP calls
           - Build gRPC channel with token
      b. GRPCSessionListener.start() → WatchSessionMessages RPC opens
+          - If RESUME_AFTER_SEQ set: listener initializes last_seq from env var,
+            skipping all historical messages (seq <= RESUME_AFTER_SEQ)
      c. await listener.ready.wait()  ← blocks until stream confirmed open
      d. Pre-register SSE queue for SESSION_ID (prevents race with backend)
 
@@ -276,6 +278,7 @@ WatchSessionMessages(session_id, last_seq)
 - Reconnects with exponential backoff (1s → 30s) on stream failure
 - On `UNAUTHENTICATED`: calls `grpc_client.reconnect()` before retry
 - Tracks `last_seq` to resume without replay
+- On session restart: reads `RESUME_AFTER_SEQ` env var and initializes `last_seq` to that value, causing `WatchSessionMessages` to skip all messages with `seq <= RESUME_AFTER_SEQ`. This prevents replay of historical user messages that would trigger duplicate Claude turns.
 
 ### `GRPCMessageWriter` (per-turn)
 
@@ -441,7 +444,8 @@ All env vars are injected by the CP at pod creation time.
 | `AMBIENT_CP_TOKEN_PUBLIC_KEY` | RSA public key PEM for CP token auth |
 | `AMBIENT_GRPC_ENABLED` | Enables gRPC listener path (default: `true` when `AMBIENT_GRPC_URL` set) |
 | `INITIAL_PROMPT` | Auto-execute prompt on startup |
-| `IS_RESUME` | Skip `INITIAL_PROMPT` auto-execute on pod restart |
+| `IS_RESUME` | Set to `"true"` on pod restart (session previously started); skips `INITIAL_PROMPT` auto-execute |
+| `RESUME_AFTER_SEQ` | Maximum message `seq` from the previous run; gRPC listener starts watching from this seq to skip historical messages |
 | `USE_VERTEX` | Enable Vertex AI (vs Anthropic API) |
 | `ANTHROPIC_VERTEX_PROJECT_ID` / `CLOUD_ML_REGION` | Vertex AI config |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Vertex service account path |
