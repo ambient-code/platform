@@ -1,6 +1,9 @@
 package rbac
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 
@@ -60,6 +63,10 @@ func ExtractRequestScope(r *http.Request) RequestScope {
 		}
 	}
 
+	if r.Method == http.MethodPost && scope.ProjectID == "" && scope.CredentialID == "" && r.Body != nil {
+		scope = extractScopeFromBody(r, scope)
+	}
+
 	if id := vars["id"]; id != "" && scope.ProjectID == "" && scope.SessionID == "" && scope.CredentialID == "" {
 		resource := pathToResource(r.URL.Path)
 		switch resource {
@@ -78,14 +85,35 @@ func ExtractRequestScope(r *http.Request) RequestScope {
 	return scope
 }
 
+func extractScopeFromBody(r *http.Request, scope RequestScope) RequestScope {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return scope
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+
+	var payload struct {
+		ProjectID    string `json:"project_id"`
+		CredentialID string `json:"credential_id"`
+	}
+	if json.Unmarshal(body, &payload) != nil {
+		return scope
+	}
+	if payload.ProjectID != "" && scope.ProjectID == "" {
+		scope.ProjectID = payload.ProjectID
+	}
+	if payload.CredentialID != "" && scope.CredentialID == "" {
+		scope.CredentialID = payload.CredentialID
+	}
+	return scope
+}
+
 func isAuthExempt(method, path string) bool {
 	normalized := strings.TrimSuffix(path, "/")
 	switch {
 	case method == http.MethodPost && normalized == "/api/ambient/v1/projects":
 		return true
 	case method == http.MethodPost && normalized == "/api/ambient/v1/credentials":
-		return true
-	case method == http.MethodPost && normalized == "/api/ambient/v1/role_bindings":
 		return true
 	case method == http.MethodGet && normalized == "/api/ambient/v1/roles":
 		return true
