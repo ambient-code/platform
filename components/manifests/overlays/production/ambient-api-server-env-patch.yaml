@@ -12,3 +12,5 @@ spec:
               value: production
             - name: BACKEND_URL
               value: "http://backend-service.ambient-code.svc:8080"
+            - name: CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT
+              value: "true"
