@@ -133,10 +133,10 @@ func TestIsSingletonGet(t *testing.T) {
 
 func TestBindingMatchesPermission(t *testing.T) {
 	tests := []struct {
-		name     string
+		name      string
 		permsJSON string
-		required string
-		want     bool
+		required  string
+		want      bool
 	}{
 		{"wildcard matches all", `["*:*"]`, "project:read", true},
 		{"exact match", `["project:read"]`, "project:read", true},

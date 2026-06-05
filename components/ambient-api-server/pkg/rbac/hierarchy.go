@@ -4,8 +4,8 @@ var RoleLevel = map[string]int{
 	RolePlatformAdmin:  0,
 	RolePlatformViewer: 0,
 
-	RoleProjectOwner:     1,
-	RoleCredentialOwner:  1,
+	RoleProjectOwner:    1,
+	RoleCredentialOwner: 1,
 
 	RoleProjectEditor:    2,
 	RoleAgentOperator:    2,
