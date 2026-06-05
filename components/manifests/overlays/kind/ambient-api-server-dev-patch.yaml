@@ -30,6 +30,8 @@ spec:
                 secretKeyRef:
                   key: token
                   name: ambient-control-plane-token
+            - name: CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT
+              value: "true"
           command:
             - /usr/local/bin/ambient-api-server
             - serve
