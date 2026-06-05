@@ -54,16 +54,48 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 					return nil, errors.Forbidden("cannot assign internal role")
 				}
 
-				// b) Level hierarchy check
+				// b) Level hierarchy check — scoped to the target resource
 				username := auth.GetUsernameFromContext(ctx)
 				var callerRoleNames []string
-				g.Raw(`SELECT r.name FROM role_bindings rb
-					   JOIN roles r ON r.id = rb.role_id
-					   WHERE rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL`,
-					username).Scan(&callerRoleNames)
+				if roleBinding.Scope == "project" && roleBinding.ProjectId != nil {
+					g.Raw(`SELECT r.name FROM role_bindings rb
+						   JOIN roles r ON r.id = rb.role_id
+						   WHERE rb.user_id = ? AND (rb.project_id = ? OR rb.scope = 'global')
+						   AND r.deleted_at IS NULL AND rb.deleted_at IS NULL`,
+						username, *roleBinding.ProjectId).Scan(&callerRoleNames)
+				} else if roleBinding.Scope == "credential" && roleBinding.CredentialId != nil {
+					g.Raw(`SELECT r.name FROM role_bindings rb
+						   JOIN roles r ON r.id = rb.role_id
+						   WHERE rb.user_id = ? AND (rb.credential_id = ? OR rb.scope = 'global')
+						   AND r.deleted_at IS NULL AND rb.deleted_at IS NULL`,
+						username, *roleBinding.CredentialId).Scan(&callerRoleNames)
+				} else {
+					g.Raw(`SELECT r.name FROM role_bindings rb
+						   JOIN roles r ON r.id = rb.role_id
+						   WHERE rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL`,
+						username).Scan(&callerRoleNames)
+				}
 				callerLevel := pkgrbac.HighestLevel(callerRoleNames)
 				if !pkgrbac.CanGrant(callerLevel, targetRoleName) {
 					return nil, errors.Forbidden("insufficient privileges to grant this role")
+				}
+
+				// b2) Global scope: only platform:admin can create global bindings
+				if roleBinding.Scope == "global" && callerLevel != 0 {
+					return nil, errors.Forbidden("only platform admins can create global bindings")
+				}
+
+				// b3) Project scope: caller must have a binding covering the target project
+				if roleBinding.Scope == "project" && roleBinding.ProjectId != nil {
+					var projCount int64
+					g.Raw(`SELECT COUNT(*) FROM role_bindings rb
+						   WHERE rb.user_id = ?
+						   AND (rb.project_id = ? OR rb.scope = 'global')
+						   AND rb.deleted_at IS NULL`,
+						username, *roleBinding.ProjectId).Scan(&projCount)
+					if projCount == 0 {
+						return nil, errors.Forbidden("caller has no access to this project")
+					}
 				}
 
 				// c) Credential scope: caller must be credential:owner AND project:owner

@@ -174,7 +174,7 @@ CREATED_CRED_IDS=()
 
 cleanup() {
   echo ""
-  echo -e "${BOLD}Phase 13: Cleanup${NC}"
+  echo -e "${BOLD}Cleanup${NC}"
 
   get_admin_token
 
@@ -223,10 +223,14 @@ ROLE_PROJECT_OWNER=$(lookup_role_id "project:owner")
 ROLE_PROJECT_EDITOR=$(lookup_role_id "project:editor")
 ROLE_PROJECT_VIEWER=$(lookup_role_id "project:viewer")
 ROLE_CREDENTIAL_OWNER=$(lookup_role_id "credential:owner")
-ROLE_CREDENTIAL_READER=$(lookup_role_id "credential:reader")
+ROLE_CREDENTIAL_VIEWER=$(lookup_role_id "credential:viewer")
 ROLE_AGENT_RUNNER=$(lookup_role_id "agent:runner")
 ROLE_CRED_TOKEN_READER=$(lookup_role_id "credential:token-reader")
 ROLE_PLATFORM_ADMIN=$(lookup_role_id "platform:admin")
+ROLE_PLATFORM_VIEWER=$(lookup_role_id "platform:viewer")
+ROLE_AGENT_OPERATOR=$(lookup_role_id "agent:operator")
+ROLE_AGENT_OBSERVER=$(lookup_role_id "agent:observer")
+ROLE_AGENT_EDITOR=$(lookup_role_id "agent:editor")
 
 if [[ -z "$ROLE_PROJECT_OWNER" ]]; then
   fail "Role lookup" "project:owner role not found in /roles response"
@@ -414,18 +418,18 @@ api GET "/credentials/${CRED_A_ID}" "$TOKEN_B"
 assert_status "404" "$HTTP_STATUS" "User B GET rbac-cred-a returns 404"
 
 # Scenario 20: Credential owner binds credential to own project -> 201
-api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_CREDENTIAL_READER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-a\",\"credential_id\":\"${CRED_A_ID}\",\"project_id\":\"rbac-proj-alpha\"}"
+api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_CREDENTIAL_VIEWER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-a\",\"credential_id\":\"${CRED_A_ID}\",\"project_id\":\"rbac-proj-alpha\"}"
 assert_status "201" "$HTTP_STATUS" "Scenario 20: Credential owner binds rbac-cred-a to own project rbac-proj-alpha"
 CRED_BIND_ID=$(echo "$HTTP_BODY" | jq -r '.id // empty')
 
 # Scenario 21: Non-project-owner cannot bind credential to project
 # User B owns rbac-cred-b but does NOT own rbac-proj-alpha
-api POST "/role_bindings" "$TOKEN_B" "{\"role_id\":\"${ROLE_CREDENTIAL_READER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-b\",\"credential_id\":\"${CRED_B_ID}\",\"project_id\":\"rbac-proj-alpha\"}"
+api POST "/role_bindings" "$TOKEN_B" "{\"role_id\":\"${ROLE_CREDENTIAL_VIEWER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-b\",\"credential_id\":\"${CRED_B_ID}\",\"project_id\":\"rbac-proj-alpha\"}"
 assert_status "403" "$HTTP_STATUS" "Scenario 21: Non-project-owner cannot bind credential to project"
 
 # Scenario 22: Non-credential-owner cannot bind credential to project
 # User B owns rbac-proj-beta but does NOT own rbac-cred-a (owned by User A)
-api POST "/role_bindings" "$TOKEN_B" "{\"role_id\":\"${ROLE_CREDENTIAL_READER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-b\",\"credential_id\":\"${CRED_A_ID}\",\"project_id\":\"rbac-proj-beta\"}"
+api POST "/role_bindings" "$TOKEN_B" "{\"role_id\":\"${ROLE_CREDENTIAL_VIEWER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-b\",\"credential_id\":\"${CRED_A_ID}\",\"project_id\":\"rbac-proj-beta\"}"
 assert_status "403" "$HTTP_STATUS" "Scenario 22: Non-credential-owner cannot bind credential to project"
 
 # Clean up the credential binding we just created (for cleaner test state)
@@ -500,12 +504,12 @@ api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_PROJECT_EDITOR}\",\"
 assert_status "403" "$HTTP_STATUS" "Scenario 30: User A (owner of proj-alpha) cannot grant on rbac-proj-beta"
 
 # Scenario 32: Non-credential-owner cannot grant credential roles -> 403
-# User B does NOT own cred-a; tries to grant credential:reader on cred-a
-if [[ -n "$ROLE_CREDENTIAL_READER" ]]; then
-  api POST "/role_bindings" "$TOKEN_B" "{\"role_id\":\"${ROLE_CREDENTIAL_READER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-c\",\"credential_id\":\"${CRED_A_ID}\"}"
+# User B does NOT own cred-a; tries to grant credential:viewer on cred-a
+if [[ -n "$ROLE_CREDENTIAL_VIEWER" ]]; then
+  api POST "/role_bindings" "$TOKEN_B" "{\"role_id\":\"${ROLE_CREDENTIAL_VIEWER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-c\",\"credential_id\":\"${CRED_A_ID}\"}"
   assert_status "403" "$HTTP_STATUS" "Scenario 32: Non-credential-owner cannot grant credential-scoped roles"
 else
-  skip "Scenario 32: credential:reader role not found"
+  skip "Scenario 32: credential:viewer role not found"
 fi
 
 # Scenario 33: Internal role (agent:runner) rejected -> 403
@@ -689,15 +693,175 @@ if [[ -n "$EDITOR_BINDING_ID_3" ]]; then
   api DELETE "/role_bindings/${EDITOR_BINDING_ID_3}" "$TOKEN_A"
 fi
 
+# --- Viewer cannot grant editor (level 3 cannot grant level 2) ---
+if [[ -n "$VIEWER_BINDING_C" ]]; then
+  # Re-grant viewer to User C for this test
+  api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_PROJECT_VIEWER}\",\"scope\":\"project\",\"user_id\":\"rbac-user-c\",\"project_id\":\"rbac-proj-alpha\"}"
+  VIEWER_BINDING_C2=$(echo "$HTTP_BODY" | jq -r '.id // empty')
+  # User C (viewer) tries to grant project:editor — should fail
+  api POST "/role_bindings" "$TOKEN_C" "{\"role_id\":\"${ROLE_PROJECT_EDITOR}\",\"scope\":\"project\",\"user_id\":\"rbac-user-b\",\"project_id\":\"rbac-proj-alpha\"}"
+  assert_status "403" "$HTTP_STATUS" "Viewer cannot grant editor (level 3 cannot grant level 2)"
+  # Clean up
+  if [[ -n "$VIEWER_BINDING_C2" ]]; then
+    api DELETE "/role_bindings/${VIEWER_BINDING_C2}" "$TOKEN_A"
+  fi
+fi
+
 # --- Scenario 9: Empty list for resources, not 403 ---
-# User C should get empty list for credentials of projects they have no cred bindings for
-# (User C has their own cred, but this tests the "no 403 on list" contract)
 api GET "/credentials?page=1&size=100" "$TOKEN_C"
 assert_status "200" "$HTTP_STATUS" "Scenario 9: Credential list always returns 200, never 403"
 
 # ============================================================
 echo ""
-echo -e "${BOLD}Phase 14: Cleanup Test Data${NC}"
+echo -e "${BOLD}Phase 14: Escalation Matrix (generative — all caller × target combos)${NC}"
+
+# Setup: give User B project:editor, User C project:viewer on proj-alpha
+api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_PROJECT_EDITOR}\",\"scope\":\"project\",\"user_id\":\"rbac-user-b\",\"project_id\":\"rbac-proj-alpha\"}"
+MATRIX_EDITOR_BIND=$(echo "$HTTP_BODY" | jq -r '.id // empty')
+api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_PROJECT_VIEWER}\",\"scope\":\"project\",\"user_id\":\"rbac-user-c\",\"project_id\":\"rbac-proj-alpha\"}"
+MATRIX_VIEWER_BIND=$(echo "$HTTP_BODY" | jq -r '.id // empty')
+
+# --- Generative grant matrix ---
+# Derive expected result from hierarchy rule:
+#   admin (0): can grant anything (including admin)
+#   others: can only grant strictly below (caller_level < target_level)
+#   internal roles: always 403
+#
+# Format: "role_name:role_id_var:level:internal"
+GRANTABLE_ROLES=(
+  "project:owner:ROLE_PROJECT_OWNER:1:no"
+  "project:editor:ROLE_PROJECT_EDITOR:2:no"
+  "project:viewer:ROLE_PROJECT_VIEWER:3:no"
+  "agent:operator:ROLE_AGENT_OPERATOR:2:no"
+  "agent:observer:ROLE_AGENT_OBSERVER:3:no"
+  "agent:editor:ROLE_AGENT_EDITOR:2:no"
+  "credential:owner:ROLE_CREDENTIAL_OWNER:1:no"
+  "credential:viewer:ROLE_CREDENTIAL_VIEWER:2:no"
+  "agent:runner:ROLE_AGENT_RUNNER:0:yes"
+  "credential:token-reader:ROLE_CRED_TOKEN_READER:0:yes"
+)
+
+# Format: "label:token_var:level"
+CALLERS=(
+  "owner(1):TOKEN_A:1"
+  "editor(2):TOKEN_B:2"
+  "viewer(3):TOKEN_C:3"
+)
+
+echo "  Testing ${#CALLERS[@]} callers × ${#GRANTABLE_ROLES[@]} target roles = $(( ${#CALLERS[@]} * ${#GRANTABLE_ROLES[@]} )) combinations"
+
+MATRIX_PASS=0
+MATRIX_FAIL=0
+
+for caller_entry in "${CALLERS[@]}"; do
+  IFS=: read -r caller_label token_var caller_level <<< "$caller_entry"
+  caller_token="${!token_var}"
+
+  for target_entry in "${GRANTABLE_ROLES[@]}"; do
+    IFS=: read -r role_name role_id_var target_level is_internal <<< "$target_entry"
+    role_id="${!role_id_var}"
+
+    if [[ -z "$role_id" ]]; then
+      skip "Matrix: ${caller_label} -> ${role_name} (role not found)"
+      continue
+    fi
+
+    # Derive expected result
+    if [[ "$is_internal" == "yes" ]]; then
+      expected="403"
+    elif (( caller_level == 0 )); then
+      expected="201"
+    elif (( caller_level < target_level )); then
+      expected="201"
+    else
+      expected="403"
+    fi
+
+    api POST "/role_bindings" "$caller_token" "{\"role_id\":\"${role_id}\",\"scope\":\"project\",\"user_id\":\"rbac-user-matrix-target\",\"project_id\":\"rbac-proj-alpha\"}"
+
+    if [[ "$HTTP_STATUS" == "$expected" ]]; then
+      MATRIX_PASS=$((MATRIX_PASS + 1))
+      # Clean up successful grants
+      if [[ "$HTTP_STATUS" == "201" ]]; then
+        local_bid=$(echo "$HTTP_BODY" | jq -r '.id // empty')
+        [[ -n "$local_bid" ]] && api DELETE "/role_bindings/${local_bid}" "$TOKEN_A"
+      fi
+    else
+      fail "Matrix: ${caller_label} -> ${role_name}" "expected ${expected}, got ${HTTP_STATUS}"
+      MATRIX_FAIL=$((MATRIX_FAIL + 1))
+    fi
+  done
+done
+
+echo -e "  Matrix same-project: ${GREEN}${MATRIX_PASS} passed${NC}, ${RED}${MATRIX_FAIL} failed${NC} (of $(( ${#CALLERS[@]} * ${#GRANTABLE_ROLES[@]} )))"
+PASS_COUNT=$((PASS_COUNT + MATRIX_PASS))
+
+# --- Cross-project grants (always 403) ---
+echo ""
+echo "  Cross-project grants (owner of proj-alpha granting on proj-beta):"
+CROSS_PASS=0
+CROSS_FAIL=0
+
+for target_entry in "${GRANTABLE_ROLES[@]}"; do
+  IFS=: read -r role_name role_id_var target_level is_internal <<< "$target_entry"
+  role_id="${!role_id_var}"
+  [[ -z "$role_id" ]] && continue
+
+  api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${role_id}\",\"scope\":\"project\",\"user_id\":\"rbac-user-matrix-target\",\"project_id\":\"rbac-proj-beta\"}"
+  if [[ "$HTTP_STATUS" == "403" ]]; then
+    CROSS_PASS=$((CROSS_PASS + 1))
+  else
+    fail "Cross-project: owner(proj-alpha) -> ${role_name} on proj-beta" "expected 403, got ${HTTP_STATUS}"
+    CROSS_FAIL=$((CROSS_FAIL + 1))
+    # Clean up accidental grants
+    if [[ "$HTTP_STATUS" == "201" ]]; then
+      local_bid=$(echo "$HTTP_BODY" | jq -r '.id // empty')
+      [[ -n "$local_bid" ]] && api DELETE "/role_bindings/${local_bid}" "$TOKEN_B"
+    fi
+  fi
+done
+
+echo -e "  Cross-project: ${GREEN}${CROSS_PASS} passed${NC}, ${RED}${CROSS_FAIL} failed${NC} (of ${#GRANTABLE_ROLES[@]})"
+PASS_COUNT=$((PASS_COUNT + CROSS_PASS))
+
+# --- Global scope grants (only admin allowed, all others 403) ---
+echo ""
+echo "  Global scope grants (non-admin callers):"
+GLOBAL_PASS=0
+GLOBAL_FAIL=0
+
+for caller_entry in "${CALLERS[@]}"; do
+  IFS=: read -r caller_label token_var caller_level <<< "$caller_entry"
+  caller_token="${!token_var}"
+
+  # Try granting project:editor at global scope
+  api POST "/role_bindings" "$caller_token" "{\"role_id\":\"${ROLE_PROJECT_EDITOR}\",\"scope\":\"global\",\"user_id\":\"rbac-user-matrix-target\"}"
+  if [[ "$HTTP_STATUS" == "403" ]]; then
+    GLOBAL_PASS=$((GLOBAL_PASS + 1))
+  else
+    fail "Global scope: ${caller_label} -> project:editor (global)" "expected 403, got ${HTTP_STATUS}"
+    GLOBAL_FAIL=$((GLOBAL_FAIL + 1))
+    if [[ "$HTTP_STATUS" == "201" ]]; then
+      local_bid=$(echo "$HTTP_BODY" | jq -r '.id // empty')
+      [[ -n "$local_bid" ]] && api DELETE "/role_bindings/${local_bid}" "$TOKEN_A"
+    fi
+  fi
+done
+
+echo -e "  Global scope: ${GREEN}${GLOBAL_PASS} passed${NC}, ${RED}${GLOBAL_FAIL} failed${NC} (of ${#CALLERS[@]})"
+PASS_COUNT=$((PASS_COUNT + GLOBAL_PASS))
+
+# Cleanup matrix bindings
+[[ -n "$MATRIX_EDITOR_BIND" ]] && api DELETE "/role_bindings/${MATRIX_EDITOR_BIND}" "$TOKEN_A"
+[[ -n "$MATRIX_VIEWER_BIND" ]] && api DELETE "/role_bindings/${MATRIX_VIEWER_BIND}" "$TOKEN_A"
+
+TOTAL_MATRIX=$((MATRIX_PASS + MATRIX_FAIL + CROSS_PASS + CROSS_FAIL + GLOBAL_PASS + GLOBAL_FAIL))
+echo ""
+echo -e "  ${BOLD}Escalation matrix total: $((MATRIX_PASS + CROSS_PASS + GLOBAL_PASS)) passed, $((MATRIX_FAIL + CROSS_FAIL + GLOBAL_FAIL)) failed (${TOTAL_MATRIX} tests)${NC}"
+
+# ============================================================
+echo ""
+echo -e "${BOLD}Phase 15: Cleanup Test Data${NC}"
 
 # Delete projects created during tests (owners can delete their own)
 api DELETE "/projects/rbac-proj-alpha" "$TOKEN_A"

@@ -9,7 +9,8 @@ var RoleLevel = map[string]int{
 
 	RoleProjectEditor:    2,
 	RoleAgentOperator:    2,
-	RoleCredentialReader: 2, // credential:viewer in spec maps to credential:reader in code
+	RoleCredentialReader: 2,
+	"credential:viewer":  2,
 
 	RoleProjectViewer: 3,
 	RoleAgentObserver: 3,
