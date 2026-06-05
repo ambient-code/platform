@@ -64,8 +64,8 @@ func ValidateEncryptionStartup(db *gorm.DB, keyring *crypto.Keyring) {
 
 	var count int64
 	if err := db.Table("credentials").Where("token LIKE 'enc:v%'").Count(&count).Error; err != nil {
-		fmt.Fprintf(os.Stderr, "WARNING: could not check for encrypted tokens: %v\n", err)
-		return
+		fmt.Fprintf(os.Stderr, "FATAL: could not check for encrypted tokens: %v\n", err)
+		os.Exit(1)
 	}
 
 	if count > 0 {
@@ -81,8 +81,8 @@ func ValidateEncryptionStartupFromDAO(ctx context.Context, dao CredentialDao, ke
 
 	all, err := dao.All(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "WARNING: could not check for encrypted tokens: %v\n", err)
-		return
+		fmt.Fprintf(os.Stderr, "FATAL: could not check for encrypted tokens: %v\n", err)
+		os.Exit(1)
 	}
 
 	for _, c := range all {
