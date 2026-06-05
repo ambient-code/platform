@@ -977,10 +977,131 @@ else
   fail "User C GET /project_settings" "unexpected status $HTTP_STATUS"
 fi
 
-# Phase 18: Top-level session_messages
-# This endpoint is internal (control plane only via service token).
-# Non-service callers get 404 (route not found) — this is safe.
-# No test needed; the route is not exposed to user callers.
+# ============================================================
+echo ""
+echo -e "${BOLD}Phase 18: CRITICAL — PATCH /role_bindings escalation prevention${NC}"
+
+# Get User A's own owner binding ID for proj-alpha
+OWNER_BIND_A=$(get_binding_id "$TOKEN_A" "user_id='rbac-user-a' and project_id='rbac-proj-alpha'")
+
+if [[ -n "$OWNER_BIND_A" ]]; then
+  # User B tries to PATCH User A's binding to change role to platform:admin -> must fail
+  api PATCH "/role_bindings/${OWNER_BIND_A}" "$TOKEN_B" "{\"role_id\":\"${ROLE_PLATFORM_ADMIN}\"}"
+  assert_status "403" "$HTTP_STATUS" "CRITICAL: User B cannot PATCH another user's binding to platform:admin"
+
+  # User B tries to PATCH binding to change user_id to themselves -> must fail
+  api PATCH "/role_bindings/${OWNER_BIND_A}" "$TOKEN_B" "{\"user_id\":\"rbac-user-b\"}"
+  assert_status "403" "$HTTP_STATUS" "CRITICAL: User B cannot PATCH binding to hijack ownership"
+else
+  fail "CRITICAL: Could not find User A's owner binding" "binding lookup returned empty"
+  fail "CRITICAL: Could not find User A's owner binding" "skipping PATCH escalation tests"
+fi
+
+# ============================================================
+echo ""
+echo -e "${BOLD}Phase 19: Session sub-resource access for project owner${NC}"
+
+# These test that the pathToResource mapping works for session sub-resources
+# Project:owner with session:* should be able to access all session sub-resources
+if [[ -n "$SESSION_A_ID" ]]; then
+  # Owner can GET session events (currently maps to resource "event" — should be "session")
+  api GET "/sessions/${SESSION_A_ID}/events" "$TOKEN_A"
+  if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "502" ]]; then
+    pass "Owner can GET /sessions/{id}/events (status $HTTP_STATUS)"
+  else
+    fail "Owner GET /sessions/{id}/events" "expected 200 or 502 (no runner), got $HTTP_STATUS"
+  fi
+
+  # Owner can GET session messages
+  api GET "/sessions/${SESSION_A_ID}/messages" "$TOKEN_A"
+  assert_status "200" "$HTTP_STATUS" "Owner can GET /sessions/{id}/messages"
+
+  # Owner can GET workspace list
+  api GET "/sessions/${SESSION_A_ID}/workspace" "$TOKEN_A"
+  if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "502" || "$HTTP_STATUS" == "503" ]]; then
+    pass "Owner can GET /sessions/{id}/workspace (status $HTTP_STATUS)"
+  else
+    fail "Owner GET /sessions/{id}/workspace" "expected 200/502/503, got $HTTP_STATUS"
+  fi
+
+  # Owner can GET git status
+  api GET "/sessions/${SESSION_A_ID}/git/status" "$TOKEN_A"
+  if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "502" || "$HTTP_STATUS" == "503" ]]; then
+    pass "Owner can GET /sessions/{id}/git/status (status $HTTP_STATUS)"
+  else
+    fail "Owner GET /sessions/{id}/git/status" "expected 200/502/503, got $HTTP_STATUS"
+  fi
+
+  # Owner can GET agui capabilities
+  api GET "/sessions/${SESSION_A_ID}/agui/capabilities" "$TOKEN_A"
+  if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "502" ]]; then
+    pass "Owner can GET /sessions/{id}/agui/capabilities (status $HTTP_STATUS)"
+  else
+    fail "Owner GET /sessions/{id}/agui/capabilities" "expected 200/502, got $HTTP_STATUS"
+  fi
+
+  # Owner can GET mcp status
+  api GET "/sessions/${SESSION_A_ID}/mcp/status" "$TOKEN_A"
+  if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "502" ]]; then
+    pass "Owner can GET /sessions/{id}/mcp/status (status $HTTP_STATUS)"
+  else
+    fail "Owner GET /sessions/{id}/mcp/status" "expected 200/502, got $HTTP_STATUS"
+  fi
+
+  # Owner can GET pod-events
+  api GET "/sessions/${SESSION_A_ID}/pod-events" "$TOKEN_A"
+  if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "502" ]]; then
+    pass "Owner can GET /sessions/{id}/pod-events (status $HTTP_STATUS)"
+  else
+    fail "Owner GET /sessions/{id}/pod-events" "expected 200/502, got $HTTP_STATUS"
+  fi
+
+  # Owner can GET export
+  api GET "/sessions/${SESSION_A_ID}/export" "$TOKEN_A"
+  if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "502" ]]; then
+    pass "Owner can GET /sessions/{id}/export (status $HTTP_STATUS)"
+  else
+    fail "Owner GET /sessions/{id}/export" "expected 200/502, got $HTTP_STATUS"
+  fi
+fi
+
+# ============================================================
+echo ""
+echo -e "${BOLD}Phase 20: Scheduled Sessions RBAC${NC}"
+
+# Create a scheduled session — project:owner should be able to
+api POST "/projects/rbac-proj-alpha/scheduled-sessions" "$TOKEN_A" '{"name":"rbac-sched-test","schedule":"0 9 * * 1-5","agent_id":"'"${AGENT_A_ID}"'","session_prompt":"test"}'
+if [[ "$HTTP_STATUS" == "201" || "$HTTP_STATUS" == "200" ]]; then
+  pass "Owner can create scheduled-session"
+  SCHED_ID=$(echo "$HTTP_BODY" | jq -r '.id // empty')
+else
+  fail "Owner create scheduled-session" "expected 201, got $HTTP_STATUS"
+  SCHED_ID=""
+fi
+
+# User B cannot list scheduled sessions in proj-alpha
+api GET "/projects/rbac-proj-alpha/scheduled-sessions" "$TOKEN_B"
+assert_status "404" "$HTTP_STATUS" "User B cannot list scheduled-sessions in proj-alpha"
+
+# Cleanup scheduled session
+if [[ -n "$SCHED_ID" ]]; then
+  api DELETE "/projects/rbac-proj-alpha/scheduled-sessions/${SCHED_ID}" "$TOKEN_A"
+fi
+
+# ============================================================
+echo ""
+echo -e "${BOLD}Phase 21: Credential Token Fetch RBAC${NC}"
+
+# Credential owner should be able to fetch token (GET /credentials/{id}/token)
+# This tests that pathToResource maps correctly for the /token sub-resource
+if [[ -n "$CRED_A_ID" ]]; then
+  api GET "/credentials/${CRED_A_ID}/token" "$TOKEN_A"
+  assert_status "200" "$HTTP_STATUS" "Credential owner can GET /credentials/{id}/token"
+
+  # Non-owner cannot fetch token
+  api GET "/credentials/${CRED_A_ID}/token" "$TOKEN_B"
+  assert_status "404" "$HTTP_STATUS" "Non-owner cannot GET /credentials/{id}/token"
+fi
 
 # ============================================================
 # Cleanup is handled by the EXIT trap (clean_db + Keycloak user deletion)
