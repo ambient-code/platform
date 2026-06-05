@@ -28,11 +28,16 @@ func NewKeyring(keys map[string]string, activeVersion int) (*Keyring, error) {
 	}
 
 	aeadMap := make(map[int]cipher.AEAD, len(keys))
+	seen := make(map[int]string, len(keys))
 	for vStr, encoded := range keys {
 		v, err := strconv.Atoi(vStr)
 		if err != nil {
 			return nil, fmt.Errorf("invalid key version %q: %w", vStr, err)
 		}
+		if prev, exists := seen[v]; exists {
+			return nil, fmt.Errorf("duplicate key version %d: %q conflicts with %q", v, vStr, prev)
+		}
+		seen[v] = vStr
 		raw, err := base64.StdEncoding.DecodeString(encoded)
 		if err != nil {
 			return nil, fmt.Errorf("key version %d: invalid base64: %w", v, err)
