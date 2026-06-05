@@ -300,6 +300,13 @@ else
   pass "Found project:editor role ID"
 fi
 
+OWNER_ROLE_ID=$(echo "$HTTP_BODY" | jq -r '.items[] | select(.name == "project:owner") | .id')
+if [[ -z "$OWNER_ROLE_ID" ]]; then
+  fail "Look up project:owner role" "role not found"
+else
+  pass "Found project:owner role ID"
+fi
+
 # Test 20: User A grants User B project:editor on proj-alpha
 api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${EDITOR_ROLE_ID}\",\"scope\":\"project\",\"user_id\":\"rbac-user-b\",\"project_id\":\"proj-alpha\"}"
 assert_status "201" "$HTTP_STATUS" "User A grants User B project:editor on proj-alpha"
@@ -322,8 +329,13 @@ assert_status "201" "$HTTP_STATUS" "User B creates agent in proj-alpha (shared)"
 echo ""
 echo -e "${BOLD}Phase 6: Escalation Prevention${NC}"
 
-skip "User B (editor) grants project:owner — not yet wired"
-skip "User A (owner) grants project:owner to B — not yet wired"
+# User B (editor on proj-alpha) tries to grant project:owner — should fail
+api POST "/role_bindings" "$TOKEN_B" "{\"role_id\":\"${OWNER_ROLE_ID}\",\"scope\":\"project\",\"user_id\":\"rbac-user-a\",\"project_id\":\"proj-alpha\"}"
+assert_status "403" "$HTTP_STATUS" "User B (editor) cannot grant project:owner"
+
+# User A (owner on proj-alpha) tries to grant project:owner to User B — should fail (no peer minting)
+api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${OWNER_ROLE_ID}\",\"scope\":\"project\",\"user_id\":\"rbac-user-b\",\"project_id\":\"proj-alpha\"}"
+assert_status "403" "$HTTP_STATUS" "User A (owner) cannot grant project:owner (no peer minting)"
 
 # ============================================================
 echo ""

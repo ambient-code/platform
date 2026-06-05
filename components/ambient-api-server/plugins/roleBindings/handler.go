@@ -6,7 +6,10 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
+	"github.com/openshift-online/rh-trex-ai/pkg/db"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
@@ -15,14 +18,16 @@ import (
 var _ handlers.RestHandler = roleBindingHandler{}
 
 type roleBindingHandler struct {
-	roleBinding RoleBindingService
-	generic     services.GenericService
+	roleBinding    RoleBindingService
+	generic        services.GenericService
+	sessionFactory *db.SessionFactory
 }
 
-func NewRoleBindingHandler(roleBinding RoleBindingService, generic services.GenericService) *roleBindingHandler {
+func NewRoleBindingHandler(roleBinding RoleBindingService, generic services.GenericService, sessionFactory *db.SessionFactory) *roleBindingHandler {
 	return &roleBindingHandler{
-		roleBinding: roleBinding,
-		generic:     generic,
+		roleBinding:    roleBinding,
+		generic:        generic,
+		sessionFactory: sessionFactory,
 	}
 }
 
@@ -35,6 +40,46 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 		},
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
+
+			// --- Escalation prevention ---
+			if h.sessionFactory != nil {
+				g := (*h.sessionFactory).New(ctx)
+
+				// a) Look up target role name and reject internal roles
+				var targetRoleName string
+				if err := g.Raw("SELECT name FROM roles WHERE id = ? AND deleted_at IS NULL", roleBinding.RoleId).Scan(&targetRoleName).Error; err != nil || targetRoleName == "" {
+					return nil, errors.Forbidden("target role not found")
+				}
+				if pkgrbac.InternalRoles[targetRoleName] {
+					return nil, errors.Forbidden("cannot assign internal role")
+				}
+
+				// b) Level hierarchy check
+				username := auth.GetUsernameFromContext(ctx)
+				var callerRoleNames []string
+				g.Raw(`SELECT r.name FROM role_bindings rb
+					   JOIN roles r ON r.id = rb.role_id
+					   WHERE rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL`,
+					username).Scan(&callerRoleNames)
+				callerLevel := pkgrbac.HighestLevel(callerRoleNames)
+				if !pkgrbac.CanGrant(callerLevel, targetRoleName) {
+					return nil, errors.Forbidden("insufficient privileges to grant this role")
+				}
+
+				// c) Credential scope: caller must be credential:owner on that credential
+				if roleBinding.Scope == "credential" && roleBinding.CredentialId != nil {
+					var ownerCount int64
+					g.Raw(`SELECT COUNT(*) FROM role_bindings rb
+						   JOIN roles r ON r.id = rb.role_id
+						   WHERE rb.user_id = ? AND r.name = ?
+						   AND rb.credential_id = ? AND rb.deleted_at IS NULL AND r.deleted_at IS NULL`,
+						username, pkgrbac.RoleCredentialOwner, *roleBinding.CredentialId).Scan(&ownerCount)
+					if ownerCount == 0 {
+						return nil, errors.Forbidden("caller must be credential owner to grant credential-scoped bindings")
+					}
+				}
+			}
+
 			roleBindingModel := ConvertRoleBinding(roleBinding)
 			roleBindingModel, err := h.roleBinding.Create(ctx, roleBindingModel)
 			if err != nil {
@@ -155,6 +200,38 @@ func (h roleBindingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		Action: func() (interface{}, *errors.ServiceError) {
 			id := mux.Vars(r)["id"]
 			ctx := r.Context()
+
+			// --- Last-owner protection ---
+			if h.sessionFactory != nil {
+				binding, getErr := h.roleBinding.Get(ctx, id)
+				if getErr != nil {
+					return nil, getErr
+				}
+
+				var roleName string
+				g := (*h.sessionFactory).New(ctx)
+				g.Raw("SELECT name FROM roles WHERE id = ? AND deleted_at IS NULL", binding.RoleId).Scan(&roleName)
+
+				if roleName == pkgrbac.RoleProjectOwner && binding.ProjectId != nil {
+					var count int64
+					g.Raw(`SELECT COUNT(*) FROM role_bindings
+						   WHERE role_id = ? AND project_id = ? AND deleted_at IS NULL`,
+						binding.RoleId, *binding.ProjectId).Scan(&count)
+					if count <= 1 {
+						return nil, errors.New(errors.ErrorConflict, "cannot delete the last owner binding")
+					}
+				}
+				if roleName == pkgrbac.RoleCredentialOwner && binding.CredentialId != nil {
+					var count int64
+					g.Raw(`SELECT COUNT(*) FROM role_bindings
+						   WHERE role_id = ? AND credential_id = ? AND deleted_at IS NULL`,
+						binding.RoleId, *binding.CredentialId).Scan(&count)
+					if count <= 1 {
+						return nil, errors.New(errors.ErrorConflict, "cannot delete the last owner binding")
+					}
+				}
+			}
+
 			err := h.roleBinding.Delete(ctx, id)
 			if err != nil {
 				return nil, err
