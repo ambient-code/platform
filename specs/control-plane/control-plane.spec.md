@@ -116,10 +116,31 @@ Each section is joined with `\n\n`. Empty sections are omitted. If all four are 
 | `AMBIENT_GRPC_USE_TLS` | CP config | TLS flag for gRPC |
 | `AMBIENT_CP_TOKEN_URL` | CP config | CP token endpoint URL (e.g. `http://ambient-control-plane.{ns}.svc:8080/token`) |
 | `INITIAL_PROMPT` | assembled prompt | Auto-execute on startup |
+| `IS_RESUME` | `"true"` | Set when `session.StartTime != nil` (session has been started before); tells the runner to skip `INITIAL_PROMPT` auto-execute |
+| `RESUME_AFTER_SEQ` | max `seq` from session_messages | Set alongside `IS_RESUME` when messages exist; runner's gRPC listener starts watching from this seq to prevent replay of historical messages |
 | `USE_VERTEX` / `ANTHROPIC_VERTEX_PROJECT_ID` / `CLOUD_ML_REGION` | CP config | Vertex AI config (when enabled) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | `/app/vertex/ambient-code-key.json` | Vertex service account path |
 | `LLM_MODEL` / `LLM_TEMPERATURE` / `LLM_MAX_TOKENS` | session fields | Per-session model config |
 | `CREDENTIAL_IDS` | JSON map `{provider: credential_id}` | Resolved credentials for this session; runner calls `/credentials/{id}/token` per provider |
+
+### Session Restart Behavior
+
+When the CP provisions a runner pod for a session that has been started before (`session.StartTime != nil`), it sets restart-specific env vars to prevent the runner from replaying the initial prompt and historical messages:
+
+```
+if session.StartTime != nil:
+    1. Set IS_RESUME=true
+    2. Query api-server: GET /api/ambient/v1/session_messages?search=session_id='...'&orderBy=seq desc&size=1
+    3. If messages exist, set RESUME_AFTER_SEQ=<max_seq>
+```
+
+The CP uses the Go SDK's `SessionMessages().List()` with `size=1`, `orderBy=seq desc` to resolve the maximum sequence number. This translates to a `GET /api/ambient/v1/session_messages` call against the api-server.
+
+On the runner side:
+- `IS_RESUME=true` causes `INITIAL_PROMPT` to be skipped (no auto-execute on startup)
+- `RESUME_AFTER_SEQ=N` causes the gRPC listener to start `WatchSessionMessages` from `last_seq=N`, skipping all messages with `seq <= N`
+
+This ensures a restarted session picks up from where it left off without replaying the initial prompt or re-processing historical user messages.
 
 ---
 
@@ -178,6 +199,8 @@ When `AMBIENT_GRPC_URL` is set (standard deployment):
      - MCP servers loaded
      - System prompt built
      - GRPCSessionListener instantiated and started
+       → If RESUME_AFTER_SEQ set: listener initializes last_seq from env var,
+         skipping all historical messages (seq <= RESUME_AFTER_SEQ)
        → WatchSessionMessages RPC opens
        → listener.ready asyncio.Event set
 5. await bridge._grpc_listener.ready.wait()

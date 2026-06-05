@@ -21,7 +21,7 @@ export default function DashboardPage() {
   if (error) {
     return (
       <div className="space-y-6">
-        <h1 className="text-xl font-semibold">Dashboard</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <p className="text-sm text-destructive">
           Failed to load dashboard data. Please try again later.
         </p>
@@ -32,7 +32,7 @@ export default function DashboardPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-xl font-semibold">Dashboard</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-48 w-full" />
         <Skeleton className="h-64 w-full" />
@@ -45,7 +45,7 @@ export default function DashboardPage() {
   if (sessions.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-xl font-semibold">Dashboard</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <EmptyState
           icon={LayoutDashboard}
           title="No sessions yet"
@@ -61,7 +61,7 @@ export default function DashboardPage() {
 
   return (
     <div className="@container space-y-6">
-      <h1 className="text-xl font-semibold">Dashboard</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
       <AttentionBanner items={attentionItems} projectId={projectId} />
       <ActiveWorkSection
         grouped={grouped}

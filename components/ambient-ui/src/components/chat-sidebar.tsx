@@ -273,7 +273,7 @@ function NewSessionButton({ projectId }: { projectId: string }) {
 }
 
 export function ChatSidebar() {
-  const { sessions, activeSessionId, isOpen, closeSidebar, closeSession, switchSession } = useChatSidebar()
+  const { sessions, activeSessionId, isOpen, collapseSidebar, closeSession, switchSession } = useChatSidebar()
   const router = useRouter()
   const params = useParams<{ projectId?: string }>()
   const projectId = params?.projectId ?? ''
@@ -371,11 +371,11 @@ export function ChatSidebar() {
       const active = document.activeElement
       if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return
       if (document.querySelector('[role="dialog"]')) return
-      closeSidebar()
+      collapseSidebar()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, closeSidebar])
+  }, [isOpen, collapseSidebar])
 
   if (!isOpen || !activeSessionId) return null
 
