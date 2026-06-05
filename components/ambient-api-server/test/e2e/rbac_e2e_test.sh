@@ -1104,6 +1104,45 @@ if [[ -n "$CRED_A_ID" ]]; then
 fi
 
 # ============================================================
+# ============================================================
+echo ""
+echo -e "${BOLD}Phase 22: PATCH Scope Widening Attack${NC}"
+
+# User B owns proj-beta. User B has NO access to proj-alpha.
+# User B gets their own project:owner binding ID on proj-beta.
+OWNER_BIND_B=$(get_binding_id "$TOKEN_B" "user_id='rbac-user-b' and project_id='rbac-proj-beta'")
+
+if [[ -n "$OWNER_BIND_B" ]]; then
+  # Attack: User B PATCHes their own binding to change project_id to proj-alpha
+  # This should be REJECTED — scope widening to an unauthorized project
+  api PATCH "/role_bindings/${OWNER_BIND_B}" "$TOKEN_B" '{"project_id":"rbac-proj-alpha"}'
+  assert_status "403" "$HTTP_STATUS" "PATCH scope widening: cannot change project_id to unauthorized project"
+
+  # Verify User B still cannot see proj-alpha (attack failed)
+  api GET "/projects/rbac-proj-alpha" "$TOKEN_B"
+  assert_status "404" "$HTTP_STATUS" "After failed scope widening, proj-alpha still invisible to User B"
+
+  # Also test: User B cannot widen scope to global
+  api PATCH "/role_bindings/${OWNER_BIND_B}" "$TOKEN_B" '{"scope":"global","project_id":null}'
+  assert_status "403" "$HTTP_STATUS" "PATCH scope widening: cannot change scope to global"
+else
+  fail "PATCH scope widening test" "could not find User B's owner binding on proj-beta"
+  fail "PATCH scope widening test" "skipping remaining tests"
+  fail "PATCH scope widening test" "skipping remaining tests"
+fi
+
+# ============================================================
+echo ""
+echo -e "${BOLD}Phase 23: Nil SessionFactory Guard${NC}"
+
+# This is a code-level guard, not directly testable via HTTP.
+# But we can verify the escalation checks ARE running by testing
+# that a zero-binding user cannot create an arbitrary binding.
+# If sessionFactory were nil, this would succeed (no checks).
+api POST "/role_bindings" "$TOKEN_C" "{\"role_id\":\"${ROLE_PLATFORM_ADMIN}\",\"scope\":\"global\",\"user_id\":\"rbac-user-c\"}"
+assert_status "403" "$HTTP_STATUS" "Zero-binding user cannot create platform:admin binding (escalation checks active)"
+
+# ============================================================
 # Cleanup is handled by the EXIT trap (clean_db + Keycloak user deletion)
 # ============================================================
 echo ""
