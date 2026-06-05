@@ -79,7 +79,8 @@ func runEncrypt(db *gorm.DB, keyring *crypto.Keyring, activeVersion int, dryRun 
 		glog.Fatalf("Failed to query credentials: %v", err)
 	}
 
-	var plaintext, reencrypt, current, failed int
+	var plaintextCandidates, reencryptCandidates, current int
+	var plaintextSuccess, reencryptSuccess, failed int
 	var failedIDs []string
 
 	for _, row := range rows {
@@ -90,7 +91,7 @@ func runEncrypt(db *gorm.DB, keyring *crypto.Keyring, activeVersion int, dryRun 
 		token := *row.Token
 
 		if !crypto.IsEncrypted(token) {
-			plaintext++
+			plaintextCandidates++
 			if dryRun {
 				continue
 			}
@@ -107,13 +108,14 @@ func runEncrypt(db *gorm.DB, keyring *crypto.Keyring, activeVersion int, dryRun 
 				fmt.Fprintf(os.Stderr, "ERROR: update %s: %v\n", row.ID, err)
 				continue
 			}
+			plaintextSuccess++
 		} else {
 			v, _ := crypto.TokenVersion(token)
 			if v == activeVersion {
 				current++
 				continue
 			}
-			reencrypt++
+			reencryptCandidates++
 			if dryRun {
 				continue
 			}
@@ -137,24 +139,25 @@ func runEncrypt(db *gorm.DB, keyring *crypto.Keyring, activeVersion int, dryRun 
 				fmt.Fprintf(os.Stderr, "ERROR: update %s: %v\n", row.ID, err)
 				continue
 			}
+			reencryptSuccess++
 		}
 	}
 
 	if dryRun {
-		fmt.Printf("Would encrypt: %d plaintext, Would re-encrypt: %d (→ v%d), Already current: %d\n", plaintext, reencrypt, activeVersion, current)
+		fmt.Printf("Would encrypt: %d plaintext, Would re-encrypt: %d (→ v%d), Already current: %d\n", plaintextCandidates, reencryptCandidates, activeVersion, current)
 		return
 	}
 
-	if plaintext+reencrypt == 0 && failed == 0 {
+	if plaintextSuccess+reencryptSuccess == 0 && failed == 0 {
 		fmt.Println("0 credentials need encryption. All up to date.")
 		return
 	}
 
-	if plaintext > 0 {
-		fmt.Printf("%d credentials encrypted (plaintext → v%d)\n", plaintext-failed, activeVersion)
+	if plaintextSuccess > 0 {
+		fmt.Printf("%d credentials encrypted (plaintext → v%d)\n", plaintextSuccess, activeVersion)
 	}
-	if reencrypt > 0 {
-		fmt.Printf("%d credentials re-encrypted to v%d\n", reencrypt, activeVersion)
+	if reencryptSuccess > 0 {
+		fmt.Printf("%d credentials re-encrypted to v%d\n", reencryptSuccess, activeVersion)
 	}
 	if failed > 0 {
 		fmt.Fprintf(os.Stderr, "%d credentials failed: %v\n", failed, failedIDs)
