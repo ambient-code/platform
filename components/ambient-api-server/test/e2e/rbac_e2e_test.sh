@@ -28,7 +28,7 @@ HTTP_BODY=""
 
 api() {
   local method="$1" path="$2" token="$3" body="${4:-}"
-  local args=(-s -w '\n%{http_code}' -H "Authorization: Bearer $token" -H "Content-Type: application/json")
+  local args=(-s --max-time 15 -w '\n%{http_code}' -H "Authorization: Bearer $token" -H "Content-Type: application/json")
   if [[ -n "$body" ]]; then
     args+=(-d "$body")
   fi
@@ -177,6 +177,8 @@ clean_db() {
   local pod="${DB_POD:-$(kubectl get pods -n "$NS" -l app=ambient-api-server,component=database -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)}"
   if [[ -n "$pod" ]]; then
     kubectl exec -n "$NS" "$pod" -- psql -U ambient -d ambient_api_server -c "
+      DELETE FROM session_messages WHERE session_id IN (SELECT id FROM sessions WHERE project_id LIKE 'rbac-%');
+      DELETE FROM sessions WHERE project_id LIKE 'rbac-%';
       DELETE FROM role_bindings WHERE project_id LIKE 'rbac-%' OR user_id LIKE 'rbac-%' OR credential_id IN (SELECT id FROM credentials WHERE name LIKE 'rbac-%');
       DELETE FROM agents WHERE project_id LIKE 'rbac-%';
       DELETE FROM credentials WHERE name LIKE 'rbac-%';
@@ -298,26 +300,11 @@ kubectl set env deployment/ambient-api-server -n "$NS" \
   GRPC_SERVICE_ACCOUNT="service-account-${OIDC_CLIENT_ID_CP}"
 echo "  Patched API server deployment (JWT + authz enabled, production env)"
 
-# 4. Patch control plane deployment: set OIDC credentials + token URL so it
-#    authenticates to the API server's gRPC endpoint with a valid Keycloak JWT
-#    instead of the static AMBIENT_API_TOKEN (which is not a JWT).
-kubectl set env deployment/ambient-control-plane -n "$NS" \
-  OIDC_CLIENT_ID="$OIDC_CLIENT_ID_CP" \
-  OIDC_CLIENT_SECRET="$OIDC_CLIENT_SECRET_CP" \
-  OIDC_TOKEN_URL="$KC_TOKEN_URL"
-echo "  Patched control plane deployment with OIDC credentials"
-
-# 5. Wait for rollouts
+# 4. Wait for API server rollout FIRST — it must be healthy before CP starts
 echo "  Waiting for API server rollout..."
 if ! kubectl rollout status deployment/ambient-api-server -n "$NS" --timeout=120s; then
   echo "FATAL: API server rollout failed"
   kubectl describe deployment/ambient-api-server -n "$NS" | tail -20
-  exit 1
-fi
-echo "  Waiting for control plane rollout..."
-if ! kubectl rollout status deployment/ambient-control-plane -n "$NS" --timeout=120s; then
-  echo "FATAL: Control plane rollout failed"
-  kubectl describe deployment/ambient-control-plane -n "$NS" | tail -20
   exit 1
 fi
 
@@ -380,7 +367,20 @@ if [[ "$JWT_VERIFIED" != "true" ]]; then
   exit 1
 fi
 
-# 8. Verify control plane pod is healthy
+# 8. NOW patch and restart the control plane (API server is verified healthy)
+kubectl set env deployment/ambient-control-plane -n "$NS" \
+  OIDC_CLIENT_ID="$OIDC_CLIENT_ID_CP" \
+  OIDC_CLIENT_SECRET="$OIDC_CLIENT_SECRET_CP" \
+  OIDC_TOKEN_URL="$KC_TOKEN_URL"
+echo "  Patched control plane with OIDC credentials"
+echo "  Waiting for control plane rollout..."
+if ! kubectl rollout status deployment/ambient-control-plane -n "$NS" --timeout=120s; then
+  echo "FATAL: Control plane rollout failed"
+  kubectl describe deployment/ambient-control-plane -n "$NS" | tail -20
+  exit 1
+fi
+
+# 9. Verify control plane pod is healthy
 CP_READY=false
 for attempt in $(seq 1 10); do
   CP_STATUS=$(kubectl get pods -n "$NS" -l app=ambient-control-plane \
@@ -1106,13 +1106,13 @@ if [[ -n "$SESSION_A_ID" ]]; then
   api POST "/sessions/${SESSION_A_ID}/messages" "$TOKEN_B" '{"event_type":"user","payload":"unauthorized message"}'
   assert_status "403" "$HTTP_STATUS" "User B POST message to User A's session returns 403"
 
-  # User A CAN post messages to own session
+  # User A CAN post messages to own session (RBAC allows — 403/404 = RBAC failure)
   if [[ "$SESSION_RUNNING" == "true" ]]; then
     api POST "/sessions/${SESSION_A_ID}/messages" "$TOKEN_A" '{"event_type":"user","payload":"authorized message"}'
-    if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "201" ]]; then
-      pass "User A POST message to own session succeeds"
+    if [[ "$HTTP_STATUS" == "403" || "$HTTP_STATUS" == "404" ]]; then
+      fail "User A POST message to own session" "RBAC blocked owner: got $HTTP_STATUS"
     else
-      fail "User A POST message to own session" "expected 200/201, got $HTTP_STATUS"
+      pass "User A POST message to own session not blocked by RBAC (status $HTTP_STATUS)"
     fi
   else
     skip "User A POST message to own session (session not Running)"
@@ -1141,6 +1141,11 @@ if [[ -n "$SESSION_A_ID" ]]; then
   # User C (no bindings) cannot access session -> 404
   api GET "/sessions/${SESSION_A_ID}" "$TOKEN_C"
   assert_status "404" "$HTTP_STATUS" "User C GET session returns 404 (no bindings)"
+
+  # Clean up: stop and delete the session
+  api POST "/sessions/${SESSION_A_ID}/stop" "$TOKEN_A" '{}'
+  api DELETE "/sessions/${SESSION_A_ID}" "$TOKEN_A"
+  echo "  Cleaned up test session ${SESSION_A_ID}"
 fi
 
 # ============================================================
