@@ -1015,8 +1015,7 @@ if [[ -n "$OWNER_BIND_A" ]]; then
   api PATCH "/role_bindings/${OWNER_BIND_A}" "$TOKEN_B" "{\"user_id\":\"rbac-user-b\"}"
   assert_status "403" "$HTTP_STATUS" "CRITICAL: User B cannot PATCH binding to hijack ownership"
 else
-  fail "CRITICAL: Could not find User A's owner binding" "binding lookup returned empty"
-  fail "CRITICAL: Could not find User A's owner binding" "skipping PATCH escalation tests"
+  fail "CRITICAL: Could not find User A's owner binding" "binding lookup returned empty — skipping PATCH escalation tests"
 fi
 
 # ============================================================
@@ -1123,9 +1122,7 @@ if [[ -n "$OWNER_BIND_B" ]]; then
   api PATCH "/role_bindings/${OWNER_BIND_B}" "$TOKEN_B" '{"scope":"global","project_id":null}'
   assert_status "403" "$HTTP_STATUS" "PATCH scope widening: cannot change scope to global"
 else
-  fail "PATCH scope widening test" "could not find User B's owner binding on proj-beta"
-  fail "PATCH scope widening test" "skipping remaining tests"
-  fail "PATCH scope widening test" "skipping remaining tests"
+  fail "PATCH scope widening test" "could not find User B's owner binding on proj-beta — skipping remaining tests"
 fi
 
 # ============================================================
@@ -1148,9 +1145,7 @@ echo -e "${BOLD}Phase 24: Platform Viewer Cannot Escalate to Admin${NC}"
 VIEWER_GLOBAL_BIND=""
 DB_POD_NAME=$(kubectl get pods -n ambient-code -l app=ambient-api-server,component=database -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
 if [[ -z "$DB_POD_NAME" ]]; then
-  fail "Phase 24 setup" "DB pod not found — cannot seed platform:viewer binding"
-  fail "CRITICAL: platform:viewer cannot grant platform:admin" "skipped — no DB pod"
-  fail "platform:viewer cannot grant platform:viewer (no self-mint)" "skipped — no DB pod"
+  fail "Phase 24 setup" "DB pod not found — cannot seed platform:viewer binding; skipping viewer escalation tests"
 else
   kubectl exec -n ambient-code "$DB_POD_NAME" -- psql -U ambient -d ambient_api_server -t -A -c "
     INSERT INTO role_bindings (id, role_id, scope, user_id, created_at, updated_at)

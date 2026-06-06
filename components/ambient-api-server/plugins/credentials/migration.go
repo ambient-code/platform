@@ -196,24 +196,64 @@ func credentialTokenPermMigration() *gormigrate.Migration {
 }
 
 func credentialOwnerRoleBindingPermMigration() *gormigrate.Migration {
+	newPerms := []string{"role_binding:create", "role_binding:delete"}
+
 	return &gormigrate.Migration{
 		ID: "202606050004",
 		Migrate: func(tx *gorm.DB) error {
-			perms, _ := json.Marshal([]string{
-				"credential:create", "credential:read", "credential:update",
-				"credential:delete", "credential:list", "credential:fetch_token",
-				"role_binding:create", "role_binding:delete",
-			})
+			// Read current permissions, append only the new ones.
+			var current string
+			if err := tx.Raw(
+				`SELECT permissions FROM roles WHERE name = 'credential:owner' AND deleted_at IS NULL`,
+			).Scan(&current).Error; err != nil {
+				return err
+			}
+			var existing []string
+			if current != "" {
+				if err := json.Unmarshal([]byte(current), &existing); err != nil {
+					return err
+				}
+			}
+			have := make(map[string]bool, len(existing))
+			for _, p := range existing {
+				have[p] = true
+			}
+			for _, p := range newPerms {
+				if !have[p] {
+					existing = append(existing, p)
+				}
+			}
+			merged, _ := json.Marshal(existing)
 			return tx.Exec(
 				`UPDATE roles SET permissions = ? WHERE name = 'credential:owner' AND deleted_at IS NULL`,
-				string(perms),
+				string(merged),
 			).Error
 		},
 		Rollback: func(tx *gorm.DB) error {
-			perms, _ := json.Marshal([]string{
-				"credential:create", "credential:read", "credential:update",
-				"credential:delete", "credential:list", "credential:fetch_token",
-			})
+			// Remove only the permissions this migration added.
+			var current string
+			if err := tx.Raw(
+				`SELECT permissions FROM roles WHERE name = 'credential:owner' AND deleted_at IS NULL`,
+			).Scan(&current).Error; err != nil {
+				return err
+			}
+			var existing []string
+			if current != "" {
+				if err := json.Unmarshal([]byte(current), &existing); err != nil {
+					return err
+				}
+			}
+			remove := make(map[string]bool, len(newPerms))
+			for _, p := range newPerms {
+				remove[p] = true
+			}
+			filtered := existing[:0]
+			for _, p := range existing {
+				if !remove[p] {
+					filtered = append(filtered, p)
+				}
+			}
+			perms, _ := json.Marshal(filtered)
 			return tx.Exec(
 				`UPDATE roles SET permissions = ? WHERE name = 'credential:owner' AND deleted_at IS NULL`,
 				string(perms),
