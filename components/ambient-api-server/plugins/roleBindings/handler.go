@@ -67,12 +67,16 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 						Joins("JOIN roles r ON r.id = rb.role_id").
 						Where("rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", username)
 				}
+				var scanErr error
 				if roleBinding.Scope == "project" && roleBinding.ProjectId.IsSet() {
-					baseQuery(g).Where("rb.project_id = ? OR rb.scope = 'global'", *roleBinding.ProjectId.Get()).Scan(&callerRoleNames)
+					scanErr = baseQuery(g).Where("rb.project_id = ? OR rb.scope = 'global'", *roleBinding.ProjectId.Get()).Scan(&callerRoleNames).Error
 				} else if roleBinding.Scope == "credential" && roleBinding.CredentialId.IsSet() {
-					baseQuery(g).Where("rb.credential_id = ? OR rb.scope = 'global'", *roleBinding.CredentialId.Get()).Scan(&callerRoleNames)
+					scanErr = baseQuery(g).Where("rb.credential_id = ? OR rb.scope = 'global'", *roleBinding.CredentialId.Get()).Scan(&callerRoleNames).Error
 				} else {
-					baseQuery(g).Scan(&callerRoleNames)
+					scanErr = baseQuery(g).Scan(&callerRoleNames).Error
+				}
+				if scanErr != nil {
+					return nil, errors.GeneralError("failed to query caller roles: %v", scanErr)
 				}
 				callerLevel := pkgrbac.HighestLevel(callerRoleNames)
 				if !pkgrbac.CanGrant(callerLevel, targetRoleName) {
@@ -87,10 +91,12 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 				// b3) Project scope: caller must have a binding covering the target project
 				if roleBinding.Scope == "project" && roleBinding.ProjectId.IsSet() {
 					var projCount int64
-					g.Table("role_bindings").
+					if dbErr := g.Table("role_bindings").
 						Where("user_id = ? AND (project_id = ? OR scope = 'global') AND deleted_at IS NULL",
 							username, *roleBinding.ProjectId.Get()).
-						Count(&projCount)
+						Count(&projCount).Error; dbErr != nil {
+						return nil, errors.GeneralError("failed to check project access: %v", dbErr)
+					}
 					if projCount == 0 {
 						return nil, errors.Forbidden("caller has no access to this project")
 					}
@@ -99,21 +105,25 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 				// c) Credential scope: caller must be credential:owner AND project:owner
 				if roleBinding.Scope == "credential" && roleBinding.CredentialId.IsSet() {
 					var credOwnerCount int64
-					g.Table("role_bindings").
+					if dbErr := g.Table("role_bindings").
 						Joins("JOIN roles ON roles.id = role_bindings.role_id").
 						Where("role_bindings.user_id = ? AND roles.name = ? AND role_bindings.credential_id = ? AND role_bindings.deleted_at IS NULL AND roles.deleted_at IS NULL",
 							username, pkgrbac.RoleCredentialOwner, *roleBinding.CredentialId.Get()).
-						Count(&credOwnerCount)
+						Count(&credOwnerCount).Error; dbErr != nil {
+						return nil, errors.GeneralError("failed to check credential ownership: %v", dbErr)
+					}
 					if credOwnerCount == 0 {
 						return nil, errors.Forbidden("caller must be credential owner to grant credential-scoped bindings")
 					}
 					if roleBinding.ProjectId.IsSet() {
 						var projOwnerCount int64
-						g.Table("role_bindings").
+						if dbErr := g.Table("role_bindings").
 							Joins("JOIN roles ON roles.id = role_bindings.role_id").
 							Where("role_bindings.user_id = ? AND roles.name = ? AND role_bindings.project_id = ? AND role_bindings.deleted_at IS NULL AND roles.deleted_at IS NULL",
 								username, pkgrbac.RoleProjectOwner, *roleBinding.ProjectId.Get()).
-							Count(&projOwnerCount)
+							Count(&projOwnerCount).Error; dbErr != nil {
+							return nil, errors.GeneralError("failed to check project ownership: %v", dbErr)
+						}
 						if projOwnerCount == 0 {
 							return nil, errors.Forbidden("caller must be project owner to bind credentials to a project")
 						}
@@ -158,11 +168,13 @@ func (h roleBindingHandler) Patch(w http.ResponseWriter, r *http.Request) {
 				g := (*h.sessionFactory).New(ctx)
 
 				var callerRoleNames []string
-				g.Table("role_bindings rb").
+				if dbErr := g.Table("role_bindings rb").
 					Select("r.name").
 					Joins("JOIN roles r ON r.id = rb.role_id").
 					Where("rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", username).
-					Scan(&callerRoleNames)
+					Scan(&callerRoleNames).Error; dbErr != nil {
+					return nil, errors.GeneralError("failed to query caller roles: %v", dbErr)
+				}
 				callerLevel := pkgrbac.HighestLevel(callerRoleNames)
 
 				// Non-admin callers can only PATCH their own bindings.
@@ -351,24 +363,30 @@ func (h roleBindingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 				var roleName string
 				g := (*h.sessionFactory).New(ctx)
-				g.Table("roles").Select("name").Where("id = ? AND deleted_at IS NULL", binding.RoleId).Scan(&roleName)
+				if dbErr := g.Table("roles").Select("name").Where("id = ? AND deleted_at IS NULL", binding.RoleId).Scan(&roleName).Error; dbErr != nil {
+					return nil, errors.GeneralError("failed to look up role: %v", dbErr)
+				}
 
 				if roleName == pkgrbac.RoleProjectOwner && binding.ProjectId != nil {
 					var count int64
-					g.Table("role_bindings").
+					if dbErr := g.Table("role_bindings").
 						Where("role_id = ? AND project_id = ? AND deleted_at IS NULL",
 							binding.RoleId, *binding.ProjectId).
-						Count(&count)
+						Count(&count).Error; dbErr != nil {
+						return nil, errors.GeneralError("failed to count owner bindings: %v", dbErr)
+					}
 					if count <= 1 {
 						return nil, errors.New(errors.ErrorConflict, "cannot delete the last owner binding")
 					}
 				}
 				if roleName == pkgrbac.RoleCredentialOwner && binding.CredentialId != nil {
 					var count int64
-					g.Table("role_bindings").
+					if dbErr := g.Table("role_bindings").
 						Where("role_id = ? AND credential_id = ? AND deleted_at IS NULL",
 							binding.RoleId, *binding.CredentialId).
-						Count(&count)
+						Count(&count).Error; dbErr != nil {
+						return nil, errors.GeneralError("failed to count owner bindings: %v", dbErr)
+					}
 					if count <= 1 {
 						return nil, errors.New(errors.ErrorConflict, "cannot delete the last owner binding")
 					}

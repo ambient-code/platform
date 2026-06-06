@@ -36,12 +36,14 @@ func ensureBuiltInRoles(t *testing.T) {
 		{"credential:token-reader", `["credential:fetch_token"]`},
 	}
 	for _, r := range roles {
-		g.Exec(
+		if err := g.Exec(
 			`INSERT INTO roles (id, name, display_name, description, permissions, built_in, created_at, updated_at)
 			 VALUES (?, ?, ?, ?, ?, true, NOW(), NOW())
 			 ON CONFLICT (name) DO NOTHING`,
 			api.NewID(), r.name, r.name, r.name, r.perm,
-		)
+		).Error; err != nil {
+			t.Fatalf("failed to seed role %s: %v", r.name, err)
+		}
 	}
 }
 

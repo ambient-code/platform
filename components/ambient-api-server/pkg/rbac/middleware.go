@@ -98,8 +98,16 @@ func (m *DBAuthorizationMiddleware) AuthorizeApi(next http.Handler) http.Handler
 
 		if !allowed {
 			if isListEndpoint(r.Method, r.URL.Path) {
-				projectIDs, isGlobal, _ := m.evaluator.AuthorizedProjectIDs(ctx, username)
-				credentialIDs, credGlobal, _ := m.evaluator.AuthorizedCredentialIDs(ctx, username)
+				projectIDs, isGlobal, projErr := m.evaluator.AuthorizedProjectIDs(ctx, username)
+				if projErr != nil {
+					http.Error(w, `{"kind":"Error","reason":"Service Unavailable"}`, http.StatusServiceUnavailable)
+					return
+				}
+				credentialIDs, credGlobal, credErr := m.evaluator.AuthorizedCredentialIDs(ctx, username)
+				if credErr != nil {
+					http.Error(w, `{"kind":"Error","reason":"Service Unavailable"}`, http.StatusServiceUnavailable)
+					return
+				}
 
 				resolvedProjectID := scope.ProjectID
 				if resolvedProjectID == "" && scope.SessionID != "" {
@@ -147,8 +155,16 @@ func (m *DBAuthorizationMiddleware) AuthorizeApi(next http.Handler) http.Handler
 						}
 					}
 					if resolvedProjectID != "" {
-						projectIDs, isGlobal, _ := m.evaluator.AuthorizedProjectIDs(ctx, username)
-						credentialIDs, credGlobal, _ := m.evaluator.AuthorizedCredentialIDs(ctx, username)
+						projectIDs, isGlobal, projErr := m.evaluator.AuthorizedProjectIDs(ctx, username)
+						if projErr != nil {
+							http.Error(w, `{"kind":"Error","reason":"Service Unavailable"}`, http.StatusServiceUnavailable)
+							return
+						}
+						credentialIDs, credGlobal, credErr := m.evaluator.AuthorizedCredentialIDs(ctx, username)
+						if credErr != nil {
+							http.Error(w, `{"kind":"Error","reason":"Service Unavailable"}`, http.StatusServiceUnavailable)
+							return
+						}
 						hasAccess := isGlobal
 						if !hasAccess {
 							for _, pid := range projectIDs {
@@ -174,8 +190,16 @@ func (m *DBAuthorizationMiddleware) AuthorizeApi(next http.Handler) http.Handler
 				// For credential sub-resource GETs (e.g. /credentials/{id}/token),
 				// check whether the caller has a binding covering the credential.
 				if scope.CredentialID != "" {
-					credentialIDs, credGlobal, _ := m.evaluator.AuthorizedCredentialIDs(ctx, username)
-					projectIDs, isGlobal, _ := m.evaluator.AuthorizedProjectIDs(ctx, username)
+					credentialIDs, credGlobal, credErr := m.evaluator.AuthorizedCredentialIDs(ctx, username)
+					if credErr != nil {
+						http.Error(w, `{"kind":"Error","reason":"Service Unavailable"}`, http.StatusServiceUnavailable)
+						return
+					}
+					projectIDs, isGlobal, projErr := m.evaluator.AuthorizedProjectIDs(ctx, username)
+					if projErr != nil {
+						http.Error(w, `{"kind":"Error","reason":"Service Unavailable"}`, http.StatusServiceUnavailable)
+						return
+					}
 					hasAccess := credGlobal
 					if !hasAccess {
 						for _, cid := range credentialIDs {
@@ -209,8 +233,16 @@ func (m *DBAuthorizationMiddleware) AuthorizeApi(next http.Handler) http.Handler
 			return
 		}
 
-		projectIDs, isGlobal, _ := m.evaluator.AuthorizedProjectIDs(ctx, username)
-		credentialIDs, credGlobal, _ := m.evaluator.AuthorizedCredentialIDs(ctx, username)
+		projectIDs, isGlobal, projErr := m.evaluator.AuthorizedProjectIDs(ctx, username)
+		if projErr != nil {
+			http.Error(w, `{"kind":"Error","reason":"Service Unavailable"}`, http.StatusServiceUnavailable)
+			return
+		}
+		credentialIDs, credGlobal, credErr := m.evaluator.AuthorizedCredentialIDs(ctx, username)
+		if credErr != nil {
+			http.Error(w, `{"kind":"Error","reason":"Service Unavailable"}`, http.StatusServiceUnavailable)
+			return
+		}
 		ctx = SetAuthResult(ctx, &AuthResult{
 			Username:      username,
 			IsGlobalAdmin: isGlobal && credGlobal,
