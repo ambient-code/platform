@@ -2709,7 +2709,6 @@ paths:
       summary: Mark an inbox message as read
   /api/ambient/v1/credentials:
     get:
-      operationId: listCredentials
       parameters:
       - description: Page number of record list when record list exceeds specified
           page size
@@ -2798,7 +2797,6 @@ paths:
       - Bearer: []
       summary: Returns a list of credentials
     post:
-      operationId: createCredential
       requestBody:
         content:
           application/json:
@@ -2848,7 +2846,6 @@ paths:
       summary: Create a new credential
   /api/ambient/v1/credentials/{cred_id}:
     delete:
-      operationId: deleteCredential
       parameters:
       - description: The id of the credential
         in: path
@@ -2887,7 +2884,6 @@ paths:
       - Bearer: []
       summary: Delete a credential
     get:
-      operationId: getCredential
       parameters:
       - description: The id of the credential
         in: path
@@ -2930,7 +2926,6 @@ paths:
       - Bearer: []
       summary: Get a credential by id
     patch:
-      operationId: updateCredential
       parameters:
       - description: The id of the credential
         in: path
@@ -2995,7 +2990,6 @@ paths:
     get:
       description: Returns the decrypted token value for the given credential. Requires
         token-reader role.
-      operationId: getCredentialToken
       parameters:
       - description: The id of the credential
         in: path
@@ -3039,7 +3033,6 @@ paths:
       summary: Get a decrypted token for a credential
   /api/ambient/v1/projects/{id}/credentials:
     get:
-      operationId: listProjectCredentials
       parameters:
       - description: The id of record
         explode: false
@@ -3136,7 +3129,6 @@ paths:
       - Bearer: []
       summary: Returns a list of credentials for a project
     post:
-      operationId: createProjectCredential
       parameters:
       - description: The id of record
         explode: false
@@ -3195,7 +3187,6 @@ paths:
       summary: Create a new credential in a project
   /api/ambient/v1/projects/{id}/credentials/{cred_id}:
     delete:
-      operationId: deleteProjectCredential
       parameters:
       - description: The id of record
         explode: false
@@ -3242,7 +3233,6 @@ paths:
       - Bearer: []
       summary: Delete a project credential
     get:
-      operationId: getProjectCredential
       parameters:
       - description: The id of record
         explode: false
@@ -3293,7 +3283,6 @@ paths:
       - Bearer: []
       summary: Get a project credential by id
     patch:
-      operationId: updateProjectCredential
       parameters:
       - description: The id of record
         explode: false
@@ -3366,7 +3355,6 @@ paths:
     get:
       description: Returns the decrypted token value for the given credential. Requires
         token-reader role.
-      operationId: getProjectCredentialToken
       parameters:
       - description: The id of record
         explode: false
