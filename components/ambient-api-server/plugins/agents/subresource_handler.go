@@ -56,8 +56,8 @@ func (h *agentSubresourceHandler) ListRoleBindings(w http.ResponseWriter, r *htt
 			}
 
 			listArgs := services.NewListArguments(r.URL.Query())
-			scopeFilter, err := pkgrbac.TSLEqual("scope_id", agentID)
-			if err != nil {
+			scopeFilter, valErr := pkgrbac.TSLEqual("scope_id", agentID)
+			if valErr != nil {
 				return nil, pkgerrors.Validation("invalid agent id")
 			}
 			pkgrbac.PrependTSLFilter(listArgs, scopeFilter)
@@ -105,8 +105,8 @@ func (h *agentSubresourceHandler) ListSessions(w http.ResponseWriter, r *http.Re
 			}
 
 			listArgs := services.NewListArguments(r.URL.Query())
-			agentFilter, err := pkgrbac.TSLEqual("agent_id", agentID)
-			if err != nil {
+			agentFilter, valErr := pkgrbac.TSLEqual("agent_id", agentID)
+			if valErr != nil {
 				return nil, pkgerrors.Validation("invalid agent id")
 			}
 			pkgrbac.PrependTSLFilter(listArgs, agentFilter)

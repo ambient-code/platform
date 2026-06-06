@@ -67,10 +67,10 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 						Joins("JOIN roles r ON r.id = rb.role_id").
 						Where("rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", username)
 				}
-				if roleBinding.Scope == "project" && roleBinding.ProjectId != nil {
-					baseQuery(g).Where("rb.project_id = ? OR rb.scope = 'global'", *roleBinding.ProjectId).Scan(&callerRoleNames)
-				} else if roleBinding.Scope == "credential" && roleBinding.CredentialId != nil {
-					baseQuery(g).Where("rb.credential_id = ? OR rb.scope = 'global'", *roleBinding.CredentialId).Scan(&callerRoleNames)
+				if roleBinding.Scope == "project" && roleBinding.ProjectId.IsSet() {
+					baseQuery(g).Where("rb.project_id = ? OR rb.scope = 'global'", *roleBinding.ProjectId.Get()).Scan(&callerRoleNames)
+				} else if roleBinding.Scope == "credential" && roleBinding.CredentialId.IsSet() {
+					baseQuery(g).Where("rb.credential_id = ? OR rb.scope = 'global'", *roleBinding.CredentialId.Get()).Scan(&callerRoleNames)
 				} else {
 					baseQuery(g).Scan(&callerRoleNames)
 				}
@@ -85,11 +85,11 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 				}
 
 				// b3) Project scope: caller must have a binding covering the target project
-				if roleBinding.Scope == "project" && roleBinding.ProjectId != nil {
+				if roleBinding.Scope == "project" && roleBinding.ProjectId.IsSet() {
 					var projCount int64
 					g.Table("role_bindings").
 						Where("user_id = ? AND (project_id = ? OR scope = 'global') AND deleted_at IS NULL",
-							username, *roleBinding.ProjectId).
+							username, *roleBinding.ProjectId.Get()).
 						Count(&projCount)
 					if projCount == 0 {
 						return nil, errors.Forbidden("caller has no access to this project")
@@ -97,22 +97,22 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 				}
 
 				// c) Credential scope: caller must be credential:owner AND project:owner
-				if roleBinding.Scope == "credential" && roleBinding.CredentialId != nil {
+				if roleBinding.Scope == "credential" && roleBinding.CredentialId.IsSet() {
 					var credOwnerCount int64
 					g.Table("role_bindings").
 						Joins("JOIN roles ON roles.id = role_bindings.role_id").
 						Where("role_bindings.user_id = ? AND roles.name = ? AND role_bindings.credential_id = ? AND role_bindings.deleted_at IS NULL AND roles.deleted_at IS NULL",
-							username, pkgrbac.RoleCredentialOwner, *roleBinding.CredentialId).
+							username, pkgrbac.RoleCredentialOwner, *roleBinding.CredentialId.Get()).
 						Count(&credOwnerCount)
 					if credOwnerCount == 0 {
 						return nil, errors.Forbidden("caller must be credential owner to grant credential-scoped bindings")
 					}
-					if roleBinding.ProjectId != nil {
+					if roleBinding.ProjectId.IsSet() {
 						var projOwnerCount int64
 						g.Table("role_bindings").
 							Joins("JOIN roles ON roles.id = role_bindings.role_id").
 							Where("role_bindings.user_id = ? AND roles.name = ? AND role_bindings.project_id = ? AND role_bindings.deleted_at IS NULL AND roles.deleted_at IS NULL",
-								username, pkgrbac.RoleProjectOwner, *roleBinding.ProjectId).
+								username, pkgrbac.RoleProjectOwner, *roleBinding.ProjectId.Get()).
 							Count(&projOwnerCount)
 						if projOwnerCount == 0 {
 							return nil, errors.Forbidden("caller must be project owner to bind credentials to a project")
@@ -186,7 +186,7 @@ func (h roleBindingHandler) Patch(w http.ResponseWriter, r *http.Request) {
 				}
 
 				// Prevent changing user_id (ownership transfer).
-				if patch.UserId != nil && (found.UserId == nil || *patch.UserId != *found.UserId) {
+				if patch.UserId.IsSet() && (found.UserId == nil || *patch.UserId.Get() != *found.UserId) {
 					if callerLevel != 0 {
 						return nil, errors.Forbidden("Forbidden")
 					}
@@ -197,16 +197,16 @@ func (h roleBindingHandler) Patch(w http.ResponseWriter, r *http.Request) {
 					if patch.Scope != nil && *patch.Scope != found.Scope {
 						return nil, errors.Forbidden("Forbidden")
 					}
-					if patch.ProjectId != nil && (found.ProjectId == nil || *patch.ProjectId != *found.ProjectId) {
+					if patch.ProjectId.IsSet() && (found.ProjectId == nil || *patch.ProjectId.Get() != *found.ProjectId) {
 						return nil, errors.Forbidden("Forbidden")
 					}
-					if patch.AgentId != nil && (found.AgentId == nil || *patch.AgentId != *found.AgentId) {
+					if patch.AgentId.IsSet() && (found.AgentId == nil || *patch.AgentId.Get() != *found.AgentId) {
 						return nil, errors.Forbidden("Forbidden")
 					}
-					if patch.SessionId != nil && (found.SessionId == nil || *patch.SessionId != *found.SessionId) {
+					if patch.SessionId.IsSet() && (found.SessionId == nil || *patch.SessionId.Get() != *found.SessionId) {
 						return nil, errors.Forbidden("Forbidden")
 					}
-					if patch.CredentialId != nil && (found.CredentialId == nil || *patch.CredentialId != *found.CredentialId) {
+					if patch.CredentialId.IsSet() && (found.CredentialId == nil || *patch.CredentialId.Get() != *found.CredentialId) {
 						return nil, errors.Forbidden("Forbidden")
 					}
 				}
@@ -218,20 +218,20 @@ func (h roleBindingHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			if patch.Scope != nil {
 				found.Scope = *patch.Scope
 			}
-			if patch.UserId != nil {
-				found.UserId = patch.UserId
+			if patch.UserId.IsSet() {
+				found.UserId = patch.UserId.Get()
 			}
-			if patch.ProjectId != nil {
-				found.ProjectId = patch.ProjectId
+			if patch.ProjectId.IsSet() {
+				found.ProjectId = patch.ProjectId.Get()
 			}
-			if patch.AgentId != nil {
-				found.AgentId = patch.AgentId
+			if patch.AgentId.IsSet() {
+				found.AgentId = patch.AgentId.Get()
 			}
-			if patch.SessionId != nil {
-				found.SessionId = patch.SessionId
+			if patch.SessionId.IsSet() {
+				found.SessionId = patch.SessionId.Get()
 			}
-			if patch.CredentialId != nil {
-				found.CredentialId = patch.CredentialId
+			if patch.CredentialId.IsSet() {
+				found.CredentialId = patch.CredentialId.Get()
 			}
 
 			roleBindingModel, err := h.roleBinding.Replace(ctx, found)

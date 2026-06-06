@@ -22,12 +22,6 @@ Method | HTTP request | Description
 [**ApiAmbientV1ProjectsIdAgentsAgentIdStartPost**](DefaultAPI.md#ApiAmbientV1ProjectsIdAgentsAgentIdStartPost) | **Post** /api/ambient/v1/projects/{id}/agents/{agent_id}/start | Start an agent — creates a Session (idempotent)
 [**ApiAmbientV1ProjectsIdAgentsGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdAgentsGet) | **Get** /api/ambient/v1/projects/{id}/agents | Returns a list of agents in a project
 [**ApiAmbientV1ProjectsIdAgentsPost**](DefaultAPI.md#ApiAmbientV1ProjectsIdAgentsPost) | **Post** /api/ambient/v1/projects/{id}/agents | Create an agent in a project
-[**ApiAmbientV1ProjectsIdCredentialsCredIdDelete**](DefaultAPI.md#ApiAmbientV1ProjectsIdCredentialsCredIdDelete) | **Delete** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Delete a credential
-[**ApiAmbientV1ProjectsIdCredentialsCredIdGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdCredentialsCredIdGet) | **Get** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Get a credential by id
-[**ApiAmbientV1ProjectsIdCredentialsCredIdPatch**](DefaultAPI.md#ApiAmbientV1ProjectsIdCredentialsCredIdPatch) | **Patch** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Update a credential
-[**ApiAmbientV1ProjectsIdCredentialsCredIdTokenGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdCredentialsCredIdTokenGet) | **Get** /api/ambient/v1/projects/{id}/credentials/{cred_id}/token | Get a decrypted token for a credential
-[**ApiAmbientV1ProjectsIdCredentialsGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdCredentialsGet) | **Get** /api/ambient/v1/projects/{id}/credentials | Returns a list of credentials in a project
-[**ApiAmbientV1ProjectsIdCredentialsPost**](DefaultAPI.md#ApiAmbientV1ProjectsIdCredentialsPost) | **Post** /api/ambient/v1/projects/{id}/credentials | Create a new credential in a project
 [**ApiAmbientV1ProjectsIdDelete**](DefaultAPI.md#ApiAmbientV1ProjectsIdDelete) | **Delete** /api/ambient/v1/projects/{id} | Delete a project by id
 [**ApiAmbientV1ProjectsIdGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdGet) | **Get** /api/ambient/v1/projects/{id} | Get a project by id
 [**ApiAmbientV1ProjectsIdHomeGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdHomeGet) | **Get** /api/ambient/v1/projects/{id}/home | Project home — latest status for every Agent in this project
@@ -66,6 +60,18 @@ Method | HTTP request | Description
 [**ApiAmbientV1UsersIdGet**](DefaultAPI.md#ApiAmbientV1UsersIdGet) | **Get** /api/ambient/v1/users/{id} | Get an user by id
 [**ApiAmbientV1UsersIdPatch**](DefaultAPI.md#ApiAmbientV1UsersIdPatch) | **Patch** /api/ambient/v1/users/{id} | Update an user
 [**ApiAmbientV1UsersPost**](DefaultAPI.md#ApiAmbientV1UsersPost) | **Post** /api/ambient/v1/users | Create a new user
+[**CreateCredential**](DefaultAPI.md#CreateCredential) | **Post** /api/ambient/v1/credentials | Create a new credential
+[**CreateProjectCredential**](DefaultAPI.md#CreateProjectCredential) | **Post** /api/ambient/v1/projects/{id}/credentials | Create a new credential in a project
+[**DeleteCredential**](DefaultAPI.md#DeleteCredential) | **Delete** /api/ambient/v1/credentials/{cred_id} | Delete a credential
+[**DeleteProjectCredential**](DefaultAPI.md#DeleteProjectCredential) | **Delete** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Delete a project credential
+[**GetCredential**](DefaultAPI.md#GetCredential) | **Get** /api/ambient/v1/credentials/{cred_id} | Get a credential by id
+[**GetCredentialToken**](DefaultAPI.md#GetCredentialToken) | **Get** /api/ambient/v1/credentials/{cred_id}/token | Get a decrypted token for a credential
+[**GetProjectCredential**](DefaultAPI.md#GetProjectCredential) | **Get** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Get a project credential by id
+[**GetProjectCredentialToken**](DefaultAPI.md#GetProjectCredentialToken) | **Get** /api/ambient/v1/projects/{id}/credentials/{cred_id}/token | Get a decrypted token for a project credential
+[**ListCredentials**](DefaultAPI.md#ListCredentials) | **Get** /api/ambient/v1/credentials | Returns a list of credentials
+[**ListProjectCredentials**](DefaultAPI.md#ListProjectCredentials) | **Get** /api/ambient/v1/projects/{id}/credentials | Returns a list of credentials for a project
+[**UpdateCredential**](DefaultAPI.md#UpdateCredential) | **Patch** /api/ambient/v1/credentials/{cred_id} | Update a credential
+[**UpdateProjectCredential**](DefaultAPI.md#UpdateProjectCredential) | **Patch** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Update a project credential
 
 
 
@@ -119,9 +125,9 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
  **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria |
- **orderBy** | **string** | Specifies the order by criteria |
- **fields** | **string** | Supplies a comma-separated list of fields to be returned |
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
 
 ### Return type
 
@@ -178,7 +184,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -246,7 +252,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -315,7 +321,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -325,7 +331,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1ProjectSetting
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **projectSettingsPatchRequest** | [**ProjectSettingsPatchRequest**](ProjectSettingsPatchRequest.md) | Updated project settings data |
+ **projectSettingsPatchRequest** | [**ProjectSettingsPatchRequest**](ProjectSettingsPatchRequest.md) | Updated project settings data | 
 
 ### Return type
 
@@ -389,7 +395,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1ProjectSetting
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **projectSettings** | [**ProjectSettings**](ProjectSettings.md) | Project settings data |
+ **projectSettings** | [**ProjectSettings**](ProjectSettings.md) | Project settings data | 
 
 ### Return type
 
@@ -459,9 +465,9 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
  **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria |
- **orderBy** | **string** | Specifies the order by criteria |
- **fields** | **string** | Supplies a comma-separated list of fields to be returned |
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
 
 ### Return type
 
@@ -519,8 +525,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**agentId** | **string** | The id of the agent |
+**id** | **string** | The id of record | 
+**agentId** | **string** | The id of the agent | 
 
 ### Other Parameters
 
@@ -590,8 +596,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**agentId** | **string** | The id of the agent |
+**id** | **string** | The id of record | 
+**agentId** | **string** | The id of the agent | 
 
 ### Other Parameters
 
@@ -661,8 +667,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**agentId** | **string** | The id of the agent |
+**id** | **string** | The id of record | 
+**agentId** | **string** | The id of the agent | 
 
 ### Other Parameters
 
@@ -734,8 +740,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**agentId** | **string** | The id of the agent |
+**id** | **string** | The id of record | 
+**agentId** | **string** | The id of the agent | 
 
 ### Other Parameters
 
@@ -806,9 +812,9 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**agentId** | **string** | The id of the agent |
-**msgId** | **string** | The id of the inbox message |
+**id** | **string** | The id of record | 
+**agentId** | **string** | The id of the agent | 
+**msgId** | **string** | The id of the inbox message | 
 
 ### Other Parameters
 
@@ -881,9 +887,9 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**agentId** | **string** | The id of the agent |
-**msgId** | **string** | The id of the inbox message |
+**id** | **string** | The id of record | 
+**agentId** | **string** | The id of the agent | 
+**msgId** | **string** | The id of the inbox message | 
 
 ### Other Parameters
 
@@ -895,7 +901,7 @@ Name | Type | Description  | Notes
 
 
 
- **inboxMessagePatchRequest** | [**InboxMessagePatchRequest**](InboxMessagePatchRequest.md) | Inbox message patch |
+ **inboxMessagePatchRequest** | [**InboxMessagePatchRequest**](InboxMessagePatchRequest.md) | Inbox message patch | 
 
 ### Return type
 
@@ -956,8 +962,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**agentId** | **string** | The id of the agent |
+**id** | **string** | The id of record | 
+**agentId** | **string** | The id of the agent | 
 
 ### Other Parameters
 
@@ -968,7 +974,7 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
 
- **inboxMessage** | [**InboxMessage**](InboxMessage.md) | Inbox message to send |
+ **inboxMessage** | [**InboxMessage**](InboxMessage.md) | Inbox message to send | 
 
 ### Return type
 
@@ -1029,8 +1035,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**agentId** | **string** | The id of the agent |
+**id** | **string** | The id of record | 
+**agentId** | **string** | The id of the agent | 
 
 ### Other Parameters
 
@@ -1041,7 +1047,7 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
 
- **agentPatchRequest** | [**AgentPatchRequest**](AgentPatchRequest.md) | Updated agent data |
+ **agentPatchRequest** | [**AgentPatchRequest**](AgentPatchRequest.md) | Updated agent data | 
 
 ### Return type
 
@@ -1103,8 +1109,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**agentId** | **string** | The id of the agent |
+**id** | **string** | The id of record | 
+**agentId** | **string** | The id of the agent | 
 
 ### Other Parameters
 
@@ -1179,8 +1185,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**agentId** | **string** | The id of the agent |
+**id** | **string** | The id of record | 
+**agentId** | **string** | The id of the agent | 
 
 ### Other Parameters
 
@@ -1191,7 +1197,7 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
 
- **startRequest** | [**StartRequest**](StartRequest.md) | Optional start parameters |
+ **startRequest** | [**StartRequest**](StartRequest.md) | Optional start parameters | 
 
 ### Return type
 
@@ -1255,7 +1261,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -1267,9 +1273,9 @@ Name | Type | Description  | Notes
 
  **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
  **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria |
- **orderBy** | **string** | Specifies the order by criteria |
- **fields** | **string** | Supplies a comma-separated list of fields to be returned |
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
 
 ### Return type
 
@@ -1329,7 +1335,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -1339,447 +1345,11 @@ Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdAgen
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **agent** | [**Agent**](Agent.md) | Agent data |
+ **agent** | [**Agent**](Agent.md) | Agent data | 
 
 ### Return type
 
 [**Agent**](Agent.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: application/json
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## ApiAmbientV1ProjectsIdCredentialsCredIdDelete
-
-> ApiAmbientV1ProjectsIdCredentialsCredIdDelete(ctx, id, credId).Execute()
-
-Delete a credential
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	id := "id_example" // string | The id of record
-	credId := "credId_example" // string | The id of the credential
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsCredIdDelete(context.Background(), id, credId).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdCredentialsCredIdDelete``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-}
-```
-
-### Path Parameters
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**credId** | **string** | The id of the credential |
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdCredentialsCredIdDeleteRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-
-
-
-### Return type
-
- (empty response body)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: Not defined
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## ApiAmbientV1ProjectsIdCredentialsCredIdGet
-
-> Credential ApiAmbientV1ProjectsIdCredentialsCredIdGet(ctx, id, credId).Execute()
-
-Get a credential by id
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	id := "id_example" // string | The id of record
-	credId := "credId_example" // string | The id of the credential
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsCredIdGet(context.Background(), id, credId).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdCredentialsCredIdGet``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1ProjectsIdCredentialsCredIdGet`: Credential
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdCredentialsCredIdGet`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**credId** | **string** | The id of the credential |
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdCredentialsCredIdGetRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-
-
-
-### Return type
-
-[**Credential**](Credential.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: Not defined
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## ApiAmbientV1ProjectsIdCredentialsCredIdPatch
-
-> Credential ApiAmbientV1ProjectsIdCredentialsCredIdPatch(ctx, id, credId).CredentialPatchRequest(credentialPatchRequest).Execute()
-
-Update a credential
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	id := "id_example" // string | The id of record
-	credId := "credId_example" // string | The id of the credential
-	credentialPatchRequest := *openapiclient.NewCredentialPatchRequest() // CredentialPatchRequest | Updated credential data
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsCredIdPatch(context.Background(), id, credId).CredentialPatchRequest(credentialPatchRequest).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdCredentialsCredIdPatch``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1ProjectsIdCredentialsCredIdPatch`: Credential
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdCredentialsCredIdPatch`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**credId** | **string** | The id of the credential |
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdCredentialsCredIdPatchRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-
-
- **credentialPatchRequest** | [**CredentialPatchRequest**](CredentialPatchRequest.md) | Updated credential data |
-
-### Return type
-
-[**Credential**](Credential.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: application/json
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## ApiAmbientV1ProjectsIdCredentialsCredIdTokenGet
-
-> CredentialTokenResponse ApiAmbientV1ProjectsIdCredentialsCredIdTokenGet(ctx, id, credId).Execute()
-
-Get a decrypted token for a credential
-
-
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	id := "id_example" // string | The id of record
-	credId := "credId_example" // string | The id of the credential
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsCredIdTokenGet(context.Background(), id, credId).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdCredentialsCredIdTokenGet``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1ProjectsIdCredentialsCredIdTokenGet`: CredentialTokenResponse
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdCredentialsCredIdTokenGet`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**credId** | **string** | The id of the credential |
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdCredentialsCredIdTokenGetRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-
-
-
-### Return type
-
-[**CredentialTokenResponse**](CredentialTokenResponse.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: Not defined
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## ApiAmbientV1ProjectsIdCredentialsGet
-
-> CredentialList ApiAmbientV1ProjectsIdCredentialsGet(ctx, id).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Provider(provider).Execute()
-
-Returns a list of credentials in a project
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	id := "id_example" // string | The id of record
-	page := int32(56) // int32 | Page number of record list when record list exceeds specified page size (optional) (default to 1)
-	size := int32(56) // int32 | Maximum number of records to return (optional) (default to 100)
-	search := "search_example" // string | Specifies the search criteria (optional)
-	orderBy := "orderBy_example" // string | Specifies the order by criteria (optional)
-	fields := "fields_example" // string | Supplies a comma-separated list of fields to be returned (optional)
-	provider := "provider_example" // string | Filter credentials by provider (optional)
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsGet(context.Background(), id).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Provider(provider).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdCredentialsGet``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1ProjectsIdCredentialsGet`: CredentialList
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdCredentialsGet`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdCredentialsGetRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-
- **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
- **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria |
- **orderBy** | **string** | Specifies the order by criteria |
- **fields** | **string** | Supplies a comma-separated list of fields to be returned |
- **provider** | **string** | Filter credentials by provider |
-
-### Return type
-
-[**CredentialList**](CredentialList.md)
-
-### Authorization
-
-[Bearer](../README.md#Bearer)
-
-### HTTP request headers
-
-- **Content-Type**: Not defined
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## ApiAmbientV1ProjectsIdCredentialsPost
-
-> Credential ApiAmbientV1ProjectsIdCredentialsPost(ctx, id).Credential(credential).Execute()
-
-Create a new credential in a project
-
-### Example
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
-)
-
-func main() {
-	id := "id_example" // string | The id of record
-	credential := *openapiclient.NewCredential("ProjectId_example", "Name_example", "Provider_example") // Credential | Credential data
-
-	configuration := openapiclient.NewConfiguration()
-	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsPost(context.Background(), id).Credential(credential).Execute()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdCredentialsPost``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-	}
-	// response from `ApiAmbientV1ProjectsIdCredentialsPost`: Credential
-	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdCredentialsPost`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdCredentialsPostRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-
- **credential** | [**Credential**](Credential.md) | Credential data |
-
-### Return type
-
-[**Credential**](Credential.md)
 
 ### Authorization
 
@@ -1832,7 +1402,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -1900,7 +1470,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -1968,7 +1538,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -2037,7 +1607,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -2047,7 +1617,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdPatc
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **projectPatchRequest** | [**ProjectPatchRequest**](ProjectPatchRequest.md) | Updated project data |
+ **projectPatchRequest** | [**ProjectPatchRequest**](ProjectPatchRequest.md) | Updated project data | 
 
 ### Return type
 
@@ -2111,7 +1681,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -2123,9 +1693,9 @@ Name | Type | Description  | Notes
 
  **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
  **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria |
- **orderBy** | **string** | Specifies the order by criteria |
- **fields** | **string** | Supplies a comma-separated list of fields to be returned |
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
 
 ### Return type
 
@@ -2185,7 +1755,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -2195,7 +1765,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdSche
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **scheduledSession** | [**ScheduledSession**](ScheduledSession.md) | Scheduled session data |
+ **scheduledSession** | [**ScheduledSession**](ScheduledSession.md) | Scheduled session data | 
 
 ### Return type
 
@@ -2253,8 +1823,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**ssId** | **string** | The id of the scheduled session |
+**id** | **string** | The id of record | 
+**ssId** | **string** | The id of the scheduled session | 
 
 ### Other Parameters
 
@@ -2324,8 +1894,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**ssId** | **string** | The id of the scheduled session |
+**id** | **string** | The id of record | 
+**ssId** | **string** | The id of the scheduled session | 
 
 ### Other Parameters
 
@@ -2396,8 +1966,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**ssId** | **string** | The id of the scheduled session |
+**id** | **string** | The id of record | 
+**ssId** | **string** | The id of the scheduled session | 
 
 ### Other Parameters
 
@@ -2408,7 +1978,7 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
 
- **scheduledSessionPatchRequest** | [**ScheduledSessionPatchRequest**](ScheduledSessionPatchRequest.md) | Updated scheduled session data |
+ **scheduledSessionPatchRequest** | [**ScheduledSessionPatchRequest**](ScheduledSessionPatchRequest.md) | Updated scheduled session data | 
 
 ### Return type
 
@@ -2468,8 +2038,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**ssId** | **string** | The id of the scheduled session |
+**id** | **string** | The id of record | 
+**ssId** | **string** | The id of the scheduled session | 
 
 ### Other Parameters
 
@@ -2541,8 +2111,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**ssId** | **string** | The id of the scheduled session |
+**id** | **string** | The id of record | 
+**ssId** | **string** | The id of the scheduled session | 
 
 ### Other Parameters
 
@@ -2614,8 +2184,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**ssId** | **string** | The id of the scheduled session |
+**id** | **string** | The id of record | 
+**ssId** | **string** | The id of the scheduled session | 
 
 ### Other Parameters
 
@@ -2685,8 +2255,8 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
-**ssId** | **string** | The id of the scheduled session |
+**id** | **string** | The id of record | 
+**ssId** | **string** | The id of the scheduled session | 
 
 ### Other Parameters
 
@@ -2760,7 +2330,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsPostRe
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **project** | [**Project**](Project.md) | Project data |
+ **project** | [**Project**](Project.md) | Project data | 
 
 ### Return type
 
@@ -2830,9 +2400,9 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
  **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria |
- **orderBy** | **string** | Specifies the order by criteria |
- **fields** | **string** | Supplies a comma-separated list of fields to be returned |
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
 
 ### Return type
 
@@ -2889,7 +2459,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -2957,7 +2527,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -3026,7 +2596,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -3036,7 +2606,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1RoleBindingsId
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **roleBindingPatchRequest** | [**RoleBindingPatchRequest**](RoleBindingPatchRequest.md) | Updated roleBinding data |
+ **roleBindingPatchRequest** | [**RoleBindingPatchRequest**](RoleBindingPatchRequest.md) | Updated roleBinding data | 
 
 ### Return type
 
@@ -3075,7 +2645,7 @@ import (
 )
 
 func main() {
-	roleBinding := *openapiclient.NewRoleBinding("UserId_example", "RoleId_example", "Scope_example") // RoleBinding | RoleBinding data
+	roleBinding := *openapiclient.NewRoleBinding("RoleId_example", "Scope_example") // RoleBinding | RoleBinding data
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
@@ -3100,7 +2670,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1RoleBindingsPo
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **roleBinding** | [**RoleBinding**](RoleBinding.md) | RoleBinding data |
+ **roleBinding** | [**RoleBinding**](RoleBinding.md) | RoleBinding data | 
 
 ### Return type
 
@@ -3170,9 +2740,9 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
  **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria |
- **orderBy** | **string** | Specifies the order by criteria |
- **fields** | **string** | Supplies a comma-separated list of fields to be returned |
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
 
 ### Return type
 
@@ -3229,7 +2799,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -3297,7 +2867,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -3366,7 +2936,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -3376,7 +2946,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1RolesIdPatchRe
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **rolePatchRequest** | [**RolePatchRequest**](RolePatchRequest.md) | Updated role data |
+ **rolePatchRequest** | [**RolePatchRequest**](RolePatchRequest.md) | Updated role data | 
 
 ### Return type
 
@@ -3440,7 +3010,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1RolesPostReque
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **role** | [**Role**](Role.md) | Role data |
+ **role** | [**Role**](Role.md) | Role data | 
 
 ### Return type
 
@@ -3510,9 +3080,9 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
  **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria |
- **orderBy** | **string** | Specifies the order by criteria |
- **fields** | **string** | Supplies a comma-separated list of fields to be returned |
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
 
 ### Return type
 
@@ -3569,7 +3139,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -3637,7 +3207,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -3708,7 +3278,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -3760,7 +3330,7 @@ import (
 
 func main() {
 	id := "id_example" // string | The id of record
-	sessionMessagePushRequest := *openapiclient.NewSessionMessagePushRequest() // SessionMessagePushRequest |
+	sessionMessagePushRequest := *openapiclient.NewSessionMessagePushRequest() // SessionMessagePushRequest | 
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
@@ -3780,7 +3350,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -3790,7 +3360,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1SessionsIdMess
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **sessionMessagePushRequest** | [**SessionMessagePushRequest**](SessionMessagePushRequest.md) |  |
+ **sessionMessagePushRequest** | [**SessionMessagePushRequest**](SessionMessagePushRequest.md) |  | 
 
 ### Return type
 
@@ -3850,7 +3420,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -3860,7 +3430,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1SessionsIdPatc
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **sessionPatchRequest** | [**SessionPatchRequest**](SessionPatchRequest.md) | Updated session data |
+ **sessionPatchRequest** | [**SessionPatchRequest**](SessionPatchRequest.md) | Updated session data | 
 
 ### Return type
 
@@ -3921,7 +3491,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -3992,7 +3562,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -4002,7 +3572,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1SessionsIdStat
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **sessionStatusPatchRequest** | [**SessionStatusPatchRequest**](SessionStatusPatchRequest.md) | Session status fields to update |
+ **sessionStatusPatchRequest** | [**SessionStatusPatchRequest**](SessionStatusPatchRequest.md) | Session status fields to update | 
 
 ### Return type
 
@@ -4063,7 +3633,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -4136,7 +3706,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1SessionsPostRe
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **session** | [**Session**](Session.md) | Session data |
+ **session** | [**Session**](Session.md) | Session data | 
 
 ### Return type
 
@@ -4206,9 +3776,9 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
  **size** | **int32** | Maximum number of records to return | [default to 100]
- **search** | **string** | Specifies the search criteria |
- **orderBy** | **string** | Specifies the order by criteria |
- **fields** | **string** | Supplies a comma-separated list of fields to be returned |
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
 
 ### Return type
 
@@ -4267,7 +3837,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -4336,7 +3906,7 @@ func main() {
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 **ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | The id of record |
+**id** | **string** | The id of record | 
 
 ### Other Parameters
 
@@ -4346,7 +3916,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1UsersIdPatchRe
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **userPatchRequest** | [**UserPatchRequest**](UserPatchRequest.md) | Updated user data |
+ **userPatchRequest** | [**UserPatchRequest**](UserPatchRequest.md) | Updated user data | 
 
 ### Return type
 
@@ -4410,7 +3980,7 @@ Other parameters are passed through a pointer to a apiApiAmbientV1UsersPostReque
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **user** | [**User**](User.md) | User data |
+ **user** | [**User**](User.md) | User data | 
 
 ### Return type
 
@@ -4428,3 +3998,852 @@ Name | Type | Description  | Notes
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
 [[Back to Model list]](../README.md#documentation-for-models)
 [[Back to README]](../README.md)
+
+
+## CreateCredential
+
+> Credential CreateCredential(ctx).Credential(credential).Execute()
+
+Create a new credential
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	credential := *openapiclient.NewCredential("Name_example", "Provider_example") // Credential | Credential data
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.CreateCredential(context.Background()).Credential(credential).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.CreateCredential``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `CreateCredential`: Credential
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.CreateCredential`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiCreateCredentialRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **credential** | [**Credential**](Credential.md) | Credential data | 
+
+### Return type
+
+[**Credential**](Credential.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## CreateProjectCredential
+
+> Credential CreateProjectCredential(ctx, id).Credential(credential).Execute()
+
+Create a new credential in a project
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	credential := *openapiclient.NewCredential("Name_example", "Provider_example") // Credential | Credential data
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.CreateProjectCredential(context.Background(), id).Credential(credential).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.CreateProjectCredential``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `CreateProjectCredential`: Credential
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.CreateProjectCredential`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiCreateProjectCredentialRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+ **credential** | [**Credential**](Credential.md) | Credential data | 
+
+### Return type
+
+[**Credential**](Credential.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## DeleteCredential
+
+> DeleteCredential(ctx, credId).Execute()
+
+Delete a credential
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	credId := "credId_example" // string | The id of the credential
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	r, err := apiClient.DefaultAPI.DeleteCredential(context.Background(), credId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.DeleteCredential``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**credId** | **string** | The id of the credential | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiDeleteCredentialRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+### Return type
+
+ (empty response body)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## DeleteProjectCredential
+
+> DeleteProjectCredential(ctx, id, credId).Execute()
+
+Delete a project credential
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	credId := "credId_example" // string | The id of the credential
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	r, err := apiClient.DefaultAPI.DeleteProjectCredential(context.Background(), id, credId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.DeleteProjectCredential``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**credId** | **string** | The id of the credential | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiDeleteProjectCredentialRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+
+### Return type
+
+ (empty response body)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## GetCredential
+
+> Credential GetCredential(ctx, credId).Execute()
+
+Get a credential by id
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	credId := "credId_example" // string | The id of the credential
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.GetCredential(context.Background(), credId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.GetCredential``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `GetCredential`: Credential
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.GetCredential`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**credId** | **string** | The id of the credential | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiGetCredentialRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+### Return type
+
+[**Credential**](Credential.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## GetCredentialToken
+
+> CredentialTokenResponse GetCredentialToken(ctx, credId).Execute()
+
+Get a decrypted token for a credential
+
+
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	credId := "credId_example" // string | The id of the credential
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.GetCredentialToken(context.Background(), credId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.GetCredentialToken``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `GetCredentialToken`: CredentialTokenResponse
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.GetCredentialToken`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**credId** | **string** | The id of the credential | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiGetCredentialTokenRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+### Return type
+
+[**CredentialTokenResponse**](CredentialTokenResponse.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## GetProjectCredential
+
+> Credential GetProjectCredential(ctx, id, credId).Execute()
+
+Get a project credential by id
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	credId := "credId_example" // string | The id of the credential
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.GetProjectCredential(context.Background(), id, credId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.GetProjectCredential``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `GetProjectCredential`: Credential
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.GetProjectCredential`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**credId** | **string** | The id of the credential | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiGetProjectCredentialRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+
+### Return type
+
+[**Credential**](Credential.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## GetProjectCredentialToken
+
+> CredentialTokenResponse GetProjectCredentialToken(ctx, id, credId).Execute()
+
+Get a decrypted token for a project credential
+
+
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	credId := "credId_example" // string | The id of the credential
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.GetProjectCredentialToken(context.Background(), id, credId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.GetProjectCredentialToken``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `GetProjectCredentialToken`: CredentialTokenResponse
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.GetProjectCredentialToken`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**credId** | **string** | The id of the credential | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiGetProjectCredentialTokenRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+
+### Return type
+
+[**CredentialTokenResponse**](CredentialTokenResponse.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ListCredentials
+
+> CredentialList ListCredentials(ctx).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Provider(provider).Execute()
+
+Returns a list of credentials
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	page := int32(56) // int32 | Page number of record list when record list exceeds specified page size (optional) (default to 1)
+	size := int32(56) // int32 | Maximum number of records to return (optional) (default to 100)
+	search := "search_example" // string | Specifies the search criteria (optional)
+	orderBy := "orderBy_example" // string | Specifies the order by criteria (optional)
+	fields := "fields_example" // string | Supplies a comma-separated list of fields to be returned (optional)
+	provider := "provider_example" // string | Filter credentials by provider (optional)
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ListCredentials(context.Background()).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Provider(provider).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ListCredentials``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ListCredentials`: CredentialList
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ListCredentials`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiListCredentialsRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
+ **size** | **int32** | Maximum number of records to return | [default to 100]
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
+ **provider** | **string** | Filter credentials by provider | 
+
+### Return type
+
+[**CredentialList**](CredentialList.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ListProjectCredentials
+
+> CredentialList ListProjectCredentials(ctx, id).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Provider(provider).Execute()
+
+Returns a list of credentials for a project
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	page := int32(56) // int32 | Page number of record list when record list exceeds specified page size (optional) (default to 1)
+	size := int32(56) // int32 | Maximum number of records to return (optional) (default to 100)
+	search := "search_example" // string | Specifies the search criteria (optional)
+	orderBy := "orderBy_example" // string | Specifies the order by criteria (optional)
+	fields := "fields_example" // string | Supplies a comma-separated list of fields to be returned (optional)
+	provider := "provider_example" // string | Filter credentials by provider (optional)
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ListProjectCredentials(context.Background(), id).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Provider(provider).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ListProjectCredentials``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ListProjectCredentials`: CredentialList
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ListProjectCredentials`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiListProjectCredentialsRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+ **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
+ **size** | **int32** | Maximum number of records to return | [default to 100]
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
+ **provider** | **string** | Filter credentials by provider | 
+
+### Return type
+
+[**CredentialList**](CredentialList.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## UpdateCredential
+
+> Credential UpdateCredential(ctx, credId).CredentialPatchRequest(credentialPatchRequest).Execute()
+
+Update a credential
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	credId := "credId_example" // string | The id of the credential
+	credentialPatchRequest := *openapiclient.NewCredentialPatchRequest() // CredentialPatchRequest | Updated credential data
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.UpdateCredential(context.Background(), credId).CredentialPatchRequest(credentialPatchRequest).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.UpdateCredential``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `UpdateCredential`: Credential
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.UpdateCredential`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**credId** | **string** | The id of the credential | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiUpdateCredentialRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+ **credentialPatchRequest** | [**CredentialPatchRequest**](CredentialPatchRequest.md) | Updated credential data | 
+
+### Return type
+
+[**Credential**](Credential.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## UpdateProjectCredential
+
+> Credential UpdateProjectCredential(ctx, id, credId).CredentialPatchRequest(credentialPatchRequest).Execute()
+
+Update a project credential
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	credId := "credId_example" // string | The id of the credential
+	credentialPatchRequest := *openapiclient.NewCredentialPatchRequest() // CredentialPatchRequest | Updated credential data
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.UpdateProjectCredential(context.Background(), id, credId).CredentialPatchRequest(credentialPatchRequest).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.UpdateProjectCredential``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `UpdateProjectCredential`: Credential
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.UpdateProjectCredential`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**credId** | **string** | The id of the credential | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiUpdateProjectCredentialRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+ **credentialPatchRequest** | [**CredentialPatchRequest**](CredentialPatchRequest.md) | Updated credential data | 
+
+### Return type
+
+[**Credential**](Credential.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
