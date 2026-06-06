@@ -46,8 +46,45 @@ func (m *DBAuthorizationMiddleware) AuthorizeApi(next http.Handler) http.Handler
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
+		// Detect service caller from JWT username on the HTTP path.
+		// The gRPC interceptor sets CallerTypeService in pre-auth;
+		// on HTTP we must detect it here from the authenticated JWT.
+		if !middleware.IsServiceCaller(ctx) {
+			username := auth.GetUsernameFromContext(ctx)
+			if username != "" && middleware.IsConfiguredServiceAccount(username) {
+				ctx = middleware.WithCallerType(ctx, middleware.CallerTypeService)
+			}
+		}
+
+		// Service callers go through normal RBAC via their platform:admin
+		// binding instead of bypassing. Auto-provision the user record
+		// and the binding, then populate AuthResult from the evaluator.
 		if middleware.IsServiceCaller(ctx) {
-			next.ServeHTTP(w, r)
+			username := auth.GetUsernameFromContext(ctx)
+			if username == "" {
+				// Raw service token (no JWT) — preserve legacy bypass
+				// for backward compatibility with AMBIENT_API_TOKEN callers.
+				next.ServeHTTP(w, r)
+				return
+			}
+			m.autoProvisionServiceAccount(ctx, username)
+			projectIDs, isGlobal, projErr := m.evaluator.AuthorizedProjectIDs(ctx, username)
+			if projErr != nil {
+				http.Error(w, `{"kind":"Error","reason":"Service Unavailable"}`, http.StatusServiceUnavailable)
+				return
+			}
+			credentialIDs, credGlobal, credErr := m.evaluator.AuthorizedCredentialIDs(ctx, username)
+			if credErr != nil {
+				http.Error(w, `{"kind":"Error","reason":"Service Unavailable"}`, http.StatusServiceUnavailable)
+				return
+			}
+			ctx = SetAuthResult(ctx, &AuthResult{
+				Username:      username,
+				IsGlobalAdmin: isGlobal && credGlobal,
+				ProjectIDs:    projectIDs,
+				CredentialIDs: credentialIDs,
+			})
+			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
 
@@ -290,6 +327,82 @@ func (m *DBAuthorizationMiddleware) autoProvisionUser(ctx context.Context) {
 	if result.Error != nil {
 		glog.Warningf("user auto-provision failed for %s: %v", username, result.Error)
 	}
+}
+
+// autoProvisionServiceAccount upserts a User record for the service account
+// and ensures it has a platform:admin global RoleBinding. This is the
+// bootstrap mechanism that replaces the old RBAC bypass: the service account
+// gains access through a real binding rather than skipping evaluation.
+//
+// The method is idempotent — concurrent requests will not duplicate records.
+func (m *DBAuthorizationMiddleware) autoProvisionServiceAccount(ctx context.Context, username string) {
+	g := (*m.sessionFactory).New(ctx)
+	now := time.Now()
+
+	// Upsert the user record.
+	row := userRow{
+		ID:        api.NewID(),
+		Username:  username,
+		Name:      username,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	result := g.Clauses(clause.OnConflict{DoNothing: true}).Create(&row)
+	if result.Error != nil {
+		glog.Warningf("service account user auto-provision failed for %s: %v", username, result.Error)
+		return
+	}
+
+	// Check whether a platform:admin binding already exists.
+	var count int64
+	err := g.Table("role_bindings").
+		Joins("JOIN roles ON roles.id = role_bindings.role_id").
+		Where("role_bindings.user_id = ? AND role_bindings.deleted_at IS NULL", username).
+		Where("roles.name = ? AND roles.deleted_at IS NULL", RolePlatformAdmin).
+		Count(&count).Error
+	if err != nil {
+		glog.Warningf("service account binding check failed for %s: %v", username, err)
+		return
+	}
+	if count > 0 {
+		return // binding already exists
+	}
+
+	// Look up the platform:admin role ID.
+	var roleID string
+	err = g.Table("roles").
+		Select("id").
+		Where("name = ? AND deleted_at IS NULL", RolePlatformAdmin).
+		Scan(&roleID).Error
+	if err != nil || roleID == "" {
+		glog.Warningf("service account binding: platform:admin role not found for %s", username)
+		return
+	}
+
+	// Create the global binding.
+	type bindingInsert struct {
+		ID        string     `gorm:"primaryKey"`
+		RoleID    string     `gorm:"column:role_id"`
+		Scope     string     `gorm:"column:scope"`
+		UserID    string     `gorm:"column:user_id"`
+		CreatedAt time.Time  `gorm:"column:created_at"`
+		UpdatedAt time.Time  `gorm:"column:updated_at"`
+		DeletedAt *time.Time `gorm:"column:deleted_at"`
+	}
+	newBinding := bindingInsert{
+		ID:        api.NewID(),
+		RoleID:    roleID,
+		Scope:     string(ScopeGlobal),
+		UserID:    username,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	insertResult := g.Table("role_bindings").Create(&newBinding)
+	if insertResult.Error != nil {
+		glog.Warningf("service account binding creation failed for %s: %v", username, insertResult.Error)
+		return
+	}
+	glog.Infof("auto-provisioned platform:admin binding for service account %s", username)
 }
 
 func httpMethodToAction(method string) string {

@@ -285,6 +285,8 @@ func (h *sessionGRPCHandler) WatchSessionMessages(req *pb.WatchSessionMessagesRe
 
 	ctx := stream.Context()
 
+	// Service callers (legacy token) and global admins (platform:admin binding)
+	// may watch any session. Other callers need a project-scoped binding.
 	if !middleware.IsServiceCaller(ctx) {
 		authResult := rbac.GetAuthResult(ctx)
 		if authResult == nil || authResult.Username == "" {
@@ -349,7 +351,10 @@ func (h *sessionGRPCHandler) WatchSessions(req *pb.WatchSessionsRequest, stream 
 
 	ctx := stream.Context()
 	authResult := rbac.GetAuthResult(ctx)
-	isService := middleware.IsServiceCaller(ctx)
+	// Service callers (legacy token) and global admins (platform:admin
+	// binding) may watch all sessions without project filtering.
+	isPrivileged := middleware.IsServiceCaller(ctx) ||
+		(authResult != nil && authResult.IsGlobalAdmin)
 
 	sub, err := broker.Subscribe(ctx)
 	if err != nil {
@@ -381,7 +386,7 @@ func (h *sessionGRPCHandler) WatchSessions(req *pb.WatchSessionsRequest, stream 
 					continue
 				}
 
-				if !isService && authResult != nil && !authResult.IsGlobalAdmin {
+				if !isPrivileged && authResult != nil {
 					projectID := ""
 					if session.ProjectId != nil {
 						projectID = *session.ProjectId
