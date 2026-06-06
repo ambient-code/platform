@@ -64,7 +64,12 @@ func (m *DBAuthorizationMiddleware) AuthorizeApi(next http.Handler) http.Handler
 			if username == "" {
 				// Raw service token (no JWT) — preserve legacy bypass
 				// for backward compatibility with AMBIENT_API_TOKEN callers.
-				next.ServeHTTP(w, r)
+				// Set a well-defined AuthResult so handlers never see nil.
+				ctx = SetAuthResult(ctx, &AuthResult{
+					Username:      "service-token",
+					IsGlobalAdmin: true,
+				})
+				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 			m.autoProvisionServiceAccount(ctx, username)

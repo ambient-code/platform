@@ -386,7 +386,7 @@ func (h *sessionGRPCHandler) WatchSessions(req *pb.WatchSessionsRequest, stream 
 					continue
 				}
 
-				if !isPrivileged && authResult != nil {
+				if !isPrivileged {
 					projectID := ""
 					if session.ProjectId != nil {
 						projectID = *session.ProjectId
@@ -397,6 +397,10 @@ func (h *sessionGRPCHandler) WatchSessions(req *pb.WatchSessionsRequest, stream 
 				}
 
 				watchEvent.Session = sessionToProto(session)
+			} else if !isPrivileged {
+				// Delete events: can't verify project scope (session gone),
+				// so suppress for non-privileged watchers to prevent ID leakage
+				continue
 			}
 
 			if err := stream.Send(watchEvent); err != nil {
@@ -407,7 +411,10 @@ func (h *sessionGRPCHandler) WatchSessions(req *pb.WatchSessionsRequest, stream 
 }
 
 func isProjectAuthorized(authResult *rbac.AuthResult, projectID string) bool {
-	if authResult == nil || authResult.IsGlobalAdmin {
+	if authResult == nil {
+		return false
+	}
+	if authResult.IsGlobalAdmin {
 		return true
 	}
 	if projectID == "" {
