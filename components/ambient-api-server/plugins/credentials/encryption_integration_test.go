@@ -96,10 +96,9 @@ func TestEncryptedCredentialViaAPI(t *testing.T) {
 	ctx := h.NewAuthenticatedContext(account)
 
 	credentialInput := openapi.Credential{
-		ProjectId: openapi.PtrString(testProjectID),
-		Name:      h.NewID(),
-		Provider:  "github",
-		Token:     openapi.PtrString("ghp_apiTestToken456"),
+		Name:     h.NewID(),
+		Provider: "github",
+		Token:    openapi.PtrString("ghp_apiTestToken456"),
 	}
 
 	credentialOutput, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsPost(ctx, testProjectID).Credential(credentialInput).Execute()

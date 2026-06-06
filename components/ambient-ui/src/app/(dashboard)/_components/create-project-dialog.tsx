@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useCreateProject } from '@/queries/use-projects'
 
-const DNS_1123_REGEX = /^[a-z][a-z0-9-]*[a-z0-9]$/
+const DNS_1123_REGEX = /^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z][a-z0-9]?$/
 
 function validateProjectName(name: string): string | null {
   if (name.length < 2) return 'Name must be at least 2 characters'
@@ -116,9 +116,7 @@ export function CreateProjectDialog() {
             </div>
             {createProject.isError && (
               <p className="text-sm text-destructive">
-                {createProject.error instanceof Error
-                  ? createProject.error.message
-                  : 'Failed to create project'}
+                Failed to create project. Please try again.
               </p>
             )}
           </div>

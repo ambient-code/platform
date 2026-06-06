@@ -1147,7 +1147,11 @@ echo -e "${BOLD}Phase 24: Platform Viewer Cannot Escalate to Admin${NC}"
 # We can't grant global from a non-admin, so we use the seed-admin pattern via kubectl
 VIEWER_GLOBAL_BIND=""
 DB_POD_NAME=$(kubectl get pods -n ambient-code -l app=ambient-api-server,component=database -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
-if [[ -n "$DB_POD_NAME" ]]; then
+if [[ -z "$DB_POD_NAME" ]]; then
+  fail "Phase 24 setup" "DB pod not found — cannot seed platform:viewer binding"
+  fail "CRITICAL: platform:viewer cannot grant platform:admin" "skipped — no DB pod"
+  fail "platform:viewer cannot grant platform:viewer (no self-mint)" "skipped — no DB pod"
+else
   kubectl exec -n ambient-code "$DB_POD_NAME" -- psql -U ambient -d ambient_api_server -t -A -c "
     INSERT INTO role_bindings (id, role_id, scope, user_id, created_at, updated_at)
     SELECT '$(date +%s)viewerbind', r.id, 'global', 'rbac-user-c', NOW(), NOW()
