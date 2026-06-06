@@ -4,13 +4,38 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/config"
 	"github.com/openshift-online/rh-trex-ai/pkg/db/db_session"
 	"github.com/spf13/cobra"
+	"gorm.io/gorm/clause"
 )
+
+// seedUser is a local struct for the seed-admin command's user upsert.
+type seedUser struct {
+	ID        string `gorm:"primaryKey"`
+	Username  string `gorm:"uniqueIndex:idx_users_username_active"`
+	Name      string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+func (seedUser) TableName() string { return "users" }
+
+// seedRoleBinding is a local struct for the seed-admin command's binding insert.
+type seedRoleBinding struct {
+	ID        string  `gorm:"primaryKey"`
+	RoleId    string  `gorm:"column:role_id;not null"`
+	Scope     string  `gorm:"not null"`
+	UserId    *string `gorm:"column:user_id"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+func (seedRoleBinding) TableName() string { return "role_bindings" }
 
 func NewSeedAdminCommand() *cobra.Command {
 	dbConfig := config.NewDatabaseConfig()
@@ -26,49 +51,59 @@ func NewSeedAdminCommand() *cobra.Command {
 			}
 
 			connection := db_session.NewProdFactory(dbConfig)
-			db := connection.New(context.Background())
+			g := connection.New(context.Background())
 
 			// Upsert user
-			userID := api.NewID()
-			result := db.Exec(
-				`INSERT INTO users (id, username, name, created_at, updated_at)
-				 VALUES (?, ?, ?, NOW(), NOW())
-				 ON CONFLICT (username) WHERE deleted_at IS NULL DO NOTHING`,
-				userID, username, username,
-			)
+			now := time.Now()
+			user := seedUser{
+				ID:        api.NewID(),
+				Username:  username,
+				Name:      username,
+				CreatedAt: now,
+				UpdatedAt: now,
+			}
+			result := g.Clauses(clause.OnConflict{DoNothing: true}).Create(&user)
 			if result.Error != nil {
 				glog.Fatalf("Failed to upsert user: %v", result.Error)
 			}
 
 			// Resolve actual user ID (may already exist)
 			var resolvedUserID string
-			if err := db.Raw(`SELECT id FROM users WHERE username = ? AND deleted_at IS NULL`, username).Scan(&resolvedUserID).Error; err != nil {
+			if err := g.Table("users").Select("id").
+				Where("username = ? AND deleted_at IS NULL", username).
+				Scan(&resolvedUserID).Error; err != nil {
 				glog.Fatalf("Failed to resolve user ID: %v", err)
 			}
 
 			// Look up platform:admin role
 			var roleID string
-			if err := db.Raw(`SELECT id FROM roles WHERE name = 'platform:admin' AND deleted_at IS NULL`).Scan(&roleID).Error; err != nil || roleID == "" {
+			if err := g.Table("roles").Select("id").
+				Where("name = ? AND deleted_at IS NULL", "platform:admin").
+				Scan(&roleID).Error; err != nil || roleID == "" {
 				glog.Fatal("platform:admin role not found — run migrations first")
 			}
 
-			// Create global binding (idempotent)
-			bindingResult := db.Exec(
-				`INSERT INTO role_bindings (id, role_id, scope, user_id, created_at, updated_at)
-				 SELECT ?, ?, 'global', ?, NOW(), NOW()
-				 WHERE NOT EXISTS (
-				   SELECT 1 FROM role_bindings
-				   WHERE role_id = ? AND scope = 'global' AND user_id = ? AND deleted_at IS NULL
-				 )`,
-				api.NewID(), roleID, resolvedUserID, roleID, resolvedUserID,
-			)
-			if bindingResult.Error != nil {
-				glog.Fatalf("Failed to create admin binding: %v", bindingResult.Error)
-			}
+			// Create global binding (idempotent) — check existence first, then insert
+			var existingCount int64
+			g.Table("role_bindings").
+				Where("role_id = ? AND scope = ? AND user_id = ? AND deleted_at IS NULL",
+					roleID, "global", resolvedUserID).
+				Count(&existingCount)
 
-			if bindingResult.RowsAffected == 0 {
+			if existingCount > 0 {
 				fmt.Printf("platform:admin binding already exists for user %q\n", username)
 			} else {
+				binding := seedRoleBinding{
+					ID:        api.NewID(),
+					RoleId:    roleID,
+					Scope:     "global",
+					UserId:    &resolvedUserID,
+					CreatedAt: now,
+					UpdatedAt: now,
+				}
+				if err := g.Create(&binding).Error; err != nil {
+					glog.Fatalf("Failed to create admin binding: %v", err)
+				}
 				fmt.Printf("platform:admin binding created for user %q (id=%s)\n", username, resolvedUserID)
 			}
 		},

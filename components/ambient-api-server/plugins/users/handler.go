@@ -1,9 +1,7 @@
 package users
 
 import (
-	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/gorilla/mux"
 
@@ -100,12 +98,11 @@ func (h userHandler) List(w http.ResponseWriter, r *http.Request) {
 			if authResult != nil && !authResult.IsGlobalAdmin {
 				username := auth.GetUsernameFromContext(ctx)
 				if username != "" {
-					scopeFilter := fmt.Sprintf("username = '%s'", strings.ReplaceAll(username, "'", "''"))
-					if listArgs.Search != "" {
-						listArgs.Search = fmt.Sprintf("(%s) and (%s)", listArgs.Search, scopeFilter)
-					} else {
-						listArgs.Search = scopeFilter
+					scopeFilter, err := pkgrbac.TSLEqual("username", username)
+					if err != nil {
+						return nil, errors.Forbidden("invalid username")
 					}
+					pkgrbac.AppendTSLFilter(listArgs, scopeFilter)
 				}
 			}
 

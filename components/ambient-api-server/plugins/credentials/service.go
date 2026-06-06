@@ -3,6 +3,7 @@ package credentials
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/crypto"
 	"github.com/golang/glog"
@@ -13,6 +14,20 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/logger"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
 )
+
+// credRoleBindingRow is a local struct for creating role_bindings rows via
+// GORM, avoiding circular imports with the roleBindings plugin package.
+type credRoleBindingRow struct {
+	ID           string  `gorm:"primaryKey"`
+	RoleId       string  `gorm:"column:role_id;not null"`
+	Scope        string  `gorm:"not null"`
+	UserId       *string `gorm:"column:user_id"`
+	CredentialId *string `gorm:"column:credential_id"`
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+func (credRoleBindingRow) TableName() string { return "role_bindings" }
 
 const credentialsLockType db.LockType = "credentials"
 
@@ -157,15 +172,27 @@ func (s *sqlCredentialService) createOwnerBinding(ctx context.Context, credentia
 		return
 	}
 	g := (*s.sessionFactory).New(ctx)
-	result := g.Exec(
-		`INSERT INTO role_bindings (id, role_id, scope, user_id, credential_id, created_at, updated_at)
-		 SELECT ?, r.id, 'credential', ?, ?, NOW(), NOW()
-		 FROM roles r WHERE r.name = 'credential:owner' AND r.deleted_at IS NULL
-		 LIMIT 1`,
-		api.NewID(), username, credentialID,
-	)
-	if result.Error != nil {
-		glog.Warningf("failed to create owner binding for credential %s: %v", credentialID, result.Error)
+
+	var roleID string
+	if err := g.Table("roles").Select("id").
+		Where("name = ? AND deleted_at IS NULL", "credential:owner").
+		Limit(1).Scan(&roleID).Error; err != nil || roleID == "" {
+		glog.Warningf("failed to find credential:owner role for credential %s: %v", credentialID, err)
+		return
+	}
+
+	now := time.Now()
+	row := credRoleBindingRow{
+		ID:           api.NewID(),
+		RoleId:       roleID,
+		Scope:        "credential",
+		UserId:       &username,
+		CredentialId: &credentialID,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := g.Create(&row).Error; err != nil {
+		glog.Warningf("failed to create owner binding for credential %s: %v", credentialID, err)
 	}
 }
 

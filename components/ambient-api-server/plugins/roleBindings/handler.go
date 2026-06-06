@@ -1,9 +1,7 @@
 package roleBindings
 
 import (
-	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/gorilla/mux"
 
@@ -15,6 +13,7 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
+	"gorm.io/gorm"
 )
 
 var _ handlers.RestHandler = roleBindingHandler{}
@@ -52,7 +51,7 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 				// a) Look up target role name and reject internal roles
 				var targetRoleName string
-				if err := g.Raw("SELECT name FROM roles WHERE id = ? AND deleted_at IS NULL", roleBinding.RoleId).Scan(&targetRoleName).Error; err != nil || targetRoleName == "" {
+				if err := g.Table("roles").Select("name").Where("id = ? AND deleted_at IS NULL", roleBinding.RoleId).Scan(&targetRoleName).Error; err != nil || targetRoleName == "" {
 					return nil, errors.Forbidden("target role not found")
 				}
 				if pkgrbac.InternalRoles[targetRoleName] {
@@ -62,23 +61,18 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 				// b) Level hierarchy check — scoped to the target resource
 				username := auth.GetUsernameFromContext(ctx)
 				var callerRoleNames []string
+				baseQuery := func(g *gorm.DB) *gorm.DB {
+					return g.Table("role_bindings rb").
+						Select("r.name").
+						Joins("JOIN roles r ON r.id = rb.role_id").
+						Where("rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", username)
+				}
 				if roleBinding.Scope == "project" && roleBinding.ProjectId != nil {
-					g.Raw(`SELECT r.name FROM role_bindings rb
-						   JOIN roles r ON r.id = rb.role_id
-						   WHERE rb.user_id = ? AND (rb.project_id = ? OR rb.scope = 'global')
-						   AND r.deleted_at IS NULL AND rb.deleted_at IS NULL`,
-						username, *roleBinding.ProjectId).Scan(&callerRoleNames)
+					baseQuery(g).Where("rb.project_id = ? OR rb.scope = 'global'", *roleBinding.ProjectId).Scan(&callerRoleNames)
 				} else if roleBinding.Scope == "credential" && roleBinding.CredentialId != nil {
-					g.Raw(`SELECT r.name FROM role_bindings rb
-						   JOIN roles r ON r.id = rb.role_id
-						   WHERE rb.user_id = ? AND (rb.credential_id = ? OR rb.scope = 'global')
-						   AND r.deleted_at IS NULL AND rb.deleted_at IS NULL`,
-						username, *roleBinding.CredentialId).Scan(&callerRoleNames)
+					baseQuery(g).Where("rb.credential_id = ? OR rb.scope = 'global'", *roleBinding.CredentialId).Scan(&callerRoleNames)
 				} else {
-					g.Raw(`SELECT r.name FROM role_bindings rb
-						   JOIN roles r ON r.id = rb.role_id
-						   WHERE rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL`,
-						username).Scan(&callerRoleNames)
+					baseQuery(g).Scan(&callerRoleNames)
 				}
 				callerLevel := pkgrbac.HighestLevel(callerRoleNames)
 				if !pkgrbac.CanGrant(callerLevel, targetRoleName) {
@@ -93,11 +87,10 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 				// b3) Project scope: caller must have a binding covering the target project
 				if roleBinding.Scope == "project" && roleBinding.ProjectId != nil {
 					var projCount int64
-					g.Raw(`SELECT COUNT(*) FROM role_bindings rb
-						   WHERE rb.user_id = ?
-						   AND (rb.project_id = ? OR rb.scope = 'global')
-						   AND rb.deleted_at IS NULL`,
-						username, *roleBinding.ProjectId).Scan(&projCount)
+					g.Table("role_bindings").
+						Where("user_id = ? AND (project_id = ? OR scope = 'global') AND deleted_at IS NULL",
+							username, *roleBinding.ProjectId).
+						Count(&projCount)
 					if projCount == 0 {
 						return nil, errors.Forbidden("caller has no access to this project")
 					}
@@ -106,21 +99,21 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 				// c) Credential scope: caller must be credential:owner AND project:owner
 				if roleBinding.Scope == "credential" && roleBinding.CredentialId != nil {
 					var credOwnerCount int64
-					g.Raw(`SELECT COUNT(*) FROM role_bindings rb
-						   JOIN roles r ON r.id = rb.role_id
-						   WHERE rb.user_id = ? AND r.name = ?
-						   AND rb.credential_id = ? AND rb.deleted_at IS NULL AND r.deleted_at IS NULL`,
-						username, pkgrbac.RoleCredentialOwner, *roleBinding.CredentialId).Scan(&credOwnerCount)
+					g.Table("role_bindings").
+						Joins("JOIN roles ON roles.id = role_bindings.role_id").
+						Where("role_bindings.user_id = ? AND roles.name = ? AND role_bindings.credential_id = ? AND role_bindings.deleted_at IS NULL AND roles.deleted_at IS NULL",
+							username, pkgrbac.RoleCredentialOwner, *roleBinding.CredentialId).
+						Count(&credOwnerCount)
 					if credOwnerCount == 0 {
 						return nil, errors.Forbidden("caller must be credential owner to grant credential-scoped bindings")
 					}
 					if roleBinding.ProjectId != nil {
 						var projOwnerCount int64
-						g.Raw(`SELECT COUNT(*) FROM role_bindings rb
-							   JOIN roles r ON r.id = rb.role_id
-							   WHERE rb.user_id = ? AND r.name = 'project:owner'
-							   AND rb.project_id = ? AND rb.deleted_at IS NULL AND r.deleted_at IS NULL`,
-							username, *roleBinding.ProjectId).Scan(&projOwnerCount)
+						g.Table("role_bindings").
+							Joins("JOIN roles ON roles.id = role_bindings.role_id").
+							Where("role_bindings.user_id = ? AND roles.name = ? AND role_bindings.project_id = ? AND role_bindings.deleted_at IS NULL AND roles.deleted_at IS NULL",
+								username, pkgrbac.RoleProjectOwner, *roleBinding.ProjectId).
+							Count(&projOwnerCount)
 						if projOwnerCount == 0 {
 							return nil, errors.Forbidden("caller must be project owner to bind credentials to a project")
 						}
@@ -165,10 +158,11 @@ func (h roleBindingHandler) Patch(w http.ResponseWriter, r *http.Request) {
 				g := (*h.sessionFactory).New(ctx)
 
 				var callerRoleNames []string
-				g.Raw(`SELECT r.name FROM role_bindings rb
-					   JOIN roles r ON r.id = rb.role_id
-					   WHERE rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL`,
-					username).Scan(&callerRoleNames)
+				g.Table("role_bindings rb").
+					Select("r.name").
+					Joins("JOIN roles r ON r.id = rb.role_id").
+					Where("rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", username).
+					Scan(&callerRoleNames)
 				callerLevel := pkgrbac.HighestLevel(callerRoleNames)
 
 				// Non-admin callers can only PATCH their own bindings.
@@ -180,7 +174,7 @@ func (h roleBindingHandler) Patch(w http.ResponseWriter, r *http.Request) {
 				// Prevent changing role_id to a role the caller cannot grant.
 				if patch.RoleId != nil && *patch.RoleId != found.RoleId {
 					var targetRoleName string
-					if dbErr := g.Raw("SELECT name FROM roles WHERE id = ? AND deleted_at IS NULL", *patch.RoleId).Scan(&targetRoleName).Error; dbErr != nil || targetRoleName == "" {
+					if dbErr := g.Table("roles").Select("name").Where("id = ? AND deleted_at IS NULL", *patch.RoleId).Scan(&targetRoleName).Error; dbErr != nil || targetRoleName == "" {
 						return nil, errors.Forbidden("target role not found")
 					}
 					if pkgrbac.InternalRoles[targetRoleName] {
@@ -266,31 +260,29 @@ func (h roleBindingHandler) List(w http.ResponseWriter, r *http.Request) {
 				// 1. user_id matches caller (own bindings), OR
 				// 2. project_id is in caller's authorized projects (team bindings), OR
 				// 3. credential_id is in caller's authorized credentials
-				var conditions []string
-				conditions = append(conditions, fmt.Sprintf("user_id = '%s'", strings.ReplaceAll(username, "'", "''")))
+				userFilter, err := pkgrbac.TSLEqual("user_id", username)
+				if err != nil {
+					return nil, errors.Forbidden("invalid username")
+				}
+				scopeFilter := userFilter
 
 				if len(authResult.ProjectIDs) > 0 {
-					quoted := make([]string, len(authResult.ProjectIDs))
-					for i, id := range authResult.ProjectIDs {
-						quoted[i] = fmt.Sprintf("'%s'", strings.ReplaceAll(id, "'", "''"))
+					projFilter, err := pkgrbac.TSLIn("project_id", authResult.ProjectIDs)
+					if err != nil {
+						return nil, errors.Forbidden("invalid project id")
 					}
-					conditions = append(conditions, fmt.Sprintf("project_id in (%s)", strings.Join(quoted, ",")))
+					scopeFilter = pkgrbac.TSLOr(scopeFilter, projFilter)
 				}
 
 				if len(authResult.CredentialIDs) > 0 {
-					quoted := make([]string, len(authResult.CredentialIDs))
-					for i, id := range authResult.CredentialIDs {
-						quoted[i] = fmt.Sprintf("'%s'", strings.ReplaceAll(id, "'", "''"))
+					credFilter, err := pkgrbac.TSLIn("credential_id", authResult.CredentialIDs)
+					if err != nil {
+						return nil, errors.Forbidden("invalid credential id")
 					}
-					conditions = append(conditions, fmt.Sprintf("credential_id in (%s)", strings.Join(quoted, ",")))
+					scopeFilter = pkgrbac.TSLOr(scopeFilter, credFilter)
 				}
 
-				scopeFilter := strings.Join(conditions, " or ")
-				if listArgs.Search != "" {
-					listArgs.Search = fmt.Sprintf("(%s) and (%s)", listArgs.Search, scopeFilter)
-				} else {
-					listArgs.Search = scopeFilter
-				}
+				pkgrbac.AppendTSLFilter(listArgs, scopeFilter)
 			}
 
 			var roleBindings []RoleBinding
@@ -359,22 +351,24 @@ func (h roleBindingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 				var roleName string
 				g := (*h.sessionFactory).New(ctx)
-				g.Raw("SELECT name FROM roles WHERE id = ? AND deleted_at IS NULL", binding.RoleId).Scan(&roleName)
+				g.Table("roles").Select("name").Where("id = ? AND deleted_at IS NULL", binding.RoleId).Scan(&roleName)
 
 				if roleName == pkgrbac.RoleProjectOwner && binding.ProjectId != nil {
 					var count int64
-					g.Raw(`SELECT COUNT(*) FROM role_bindings
-						   WHERE role_id = ? AND project_id = ? AND deleted_at IS NULL`,
-						binding.RoleId, *binding.ProjectId).Scan(&count)
+					g.Table("role_bindings").
+						Where("role_id = ? AND project_id = ? AND deleted_at IS NULL",
+							binding.RoleId, *binding.ProjectId).
+						Count(&count)
 					if count <= 1 {
 						return nil, errors.New(errors.ErrorConflict, "cannot delete the last owner binding")
 					}
 				}
 				if roleName == pkgrbac.RoleCredentialOwner && binding.CredentialId != nil {
 					var count int64
-					g.Raw(`SELECT COUNT(*) FROM role_bindings
-						   WHERE role_id = ? AND credential_id = ? AND deleted_at IS NULL`,
-						binding.RoleId, *binding.CredentialId).Scan(&count)
+					g.Table("role_bindings").
+						Where("role_id = ? AND credential_id = ? AND deleted_at IS NULL",
+							binding.RoleId, *binding.CredentialId).
+						Count(&count)
 					if count <= 1 {
 						return nil, errors.New(errors.ErrorConflict, "cannot delete the last owner binding")
 					}

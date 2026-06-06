@@ -3,10 +3,90 @@ package rbac
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
 )
+
+// safeTSLValuePattern matches values safe for interpolation into TSL search
+// expressions (KSUIDs, usernames, etc.). Rejects SQL/TSL metacharacters.
+var safeTSLValuePattern = regexp.MustCompile(`^[a-zA-Z0-9_.@:\-]+$`)
+
+// ValidateTSLValues checks that every value in the slice is safe for
+// interpolation into a TSL search string. Returns an error naming the
+// first invalid value found.
+func ValidateTSLValues(values []string) error {
+	for _, v := range values {
+		if !safeTSLValuePattern.MatchString(v) {
+			return fmt.Errorf("unsafe value for TSL interpolation: %q", v)
+		}
+	}
+	return nil
+}
+
+// --- TSL expression builders ---
+// These helpers construct Tree Search Language (TSL) filter expressions
+// without raw fmt.Sprintf, enforcing value validation at construction time.
+
+// TSLEqual builds a TSL equality expression: column = 'value'.
+// Returns an error if the value contains unsafe characters.
+func TSLEqual(column, value string) (string, error) {
+	if err := ValidateTSLValues([]string{value}); err != nil {
+		return "", err
+	}
+	return column + " = '" + value + "'", nil
+}
+
+// TSLIn builds a TSL set-membership expression: column in ('v1','v2',...).
+// Returns an error if any value contains unsafe characters or if values is empty.
+func TSLIn(column string, values []string) (string, error) {
+	if len(values) == 0 {
+		return "", fmt.Errorf("TSLIn requires at least one value")
+	}
+	if err := ValidateTSLValues(values); err != nil {
+		return "", err
+	}
+	quoted := make([]string, len(values))
+	for i, v := range values {
+		quoted[i] = "'" + v + "'"
+	}
+	return column + " in (" + strings.Join(quoted, ",") + ")", nil
+}
+
+// TSLAnd combines two non-empty TSL expressions with " and ".
+// Empty operands are skipped; if both are empty, returns "".
+func TSLAnd(a, b string) string {
+	if a == "" {
+		return b
+	}
+	if b == "" {
+		return a
+	}
+	return "(" + a + ") and (" + b + ")"
+}
+
+// TSLOr combines two non-empty TSL expressions with " or ".
+// Empty operands are skipped; if both are empty, returns "".
+func TSLOr(a, b string) string {
+	if a == "" {
+		return b
+	}
+	if b == "" {
+		return a
+	}
+	return a + " or " + b
+}
+
+// AppendTSLFilter merges a new filter into listArgs.Search with " and ".
+func AppendTSLFilter(listArgs *services.ListArguments, filter string) {
+	listArgs.Search = TSLAnd(listArgs.Search, filter)
+}
+
+// PrependTSLFilter merges a new filter before listArgs.Search with " and ".
+func PrependTSLFilter(listArgs *services.ListArguments, filter string) {
+	listArgs.Search = TSLAnd(filter, listArgs.Search)
+}
 
 type authResultKey struct{}
 
@@ -50,16 +130,11 @@ func ApplyListFilter(ctx context.Context, listArgs *services.ListArguments, filt
 		return false
 	}
 
-	quoted := make([]string, len(ids))
-	for i, id := range ids {
-		quoted[i] = fmt.Sprintf("'%s'", strings.ReplaceAll(id, "'", "''"))
+	scopeFilter, err := TSLIn(filterColumn, ids)
+	if err != nil {
+		return false
 	}
-	scopeFilter := fmt.Sprintf("%s in (%s)", filterColumn, strings.Join(quoted, ","))
 
-	if listArgs.Search != "" {
-		listArgs.Search = fmt.Sprintf("(%s) and (%s)", listArgs.Search, scopeFilter)
-	} else {
-		listArgs.Search = scopeFilter
-	}
+	AppendTSLFilter(listArgs, scopeFilter)
 	return true
 }

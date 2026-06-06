@@ -3,6 +3,7 @@ package projects
 import (
 	"context"
 	"regexp"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
@@ -12,6 +13,20 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/logger"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
 )
+
+// roleBindingRow is a local struct for creating role_bindings rows via GORM,
+// avoiding circular imports with the roleBindings plugin package.
+type roleBindingRow struct {
+	ID        string  `gorm:"primaryKey"`
+	RoleId    string  `gorm:"column:role_id;not null"`
+	Scope     string  `gorm:"not null"`
+	UserId    *string `gorm:"column:user_id"`
+	ProjectId *string `gorm:"column:project_id"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+func (roleBindingRow) TableName() string { return "role_bindings" }
 
 const projectsLockType db.LockType = "projects"
 
@@ -121,15 +136,27 @@ func (s *sqlProjectService) createOwnerBinding(ctx context.Context, projectID st
 		return
 	}
 	g := (*s.sessionFactory).New(ctx)
-	result := g.Exec(
-		`INSERT INTO role_bindings (id, role_id, scope, user_id, project_id, created_at, updated_at)
-		 SELECT ?, r.id, 'project', ?, ?, NOW(), NOW()
-		 FROM roles r WHERE r.name = 'project:owner' AND r.deleted_at IS NULL
-		 LIMIT 1`,
-		api.NewID(), username, projectID,
-	)
-	if result.Error != nil {
-		glog.Warningf("failed to create owner binding for project %s: %v", projectID, result.Error)
+
+	var roleID string
+	if err := g.Table("roles").Select("id").
+		Where("name = ? AND deleted_at IS NULL", "project:owner").
+		Limit(1).Scan(&roleID).Error; err != nil || roleID == "" {
+		glog.Warningf("failed to find project:owner role for project %s: %v", projectID, err)
+		return
+	}
+
+	now := time.Now()
+	row := roleBindingRow{
+		ID:        api.NewID(),
+		RoleId:    roleID,
+		Scope:     "project",
+		UserId:    &username,
+		ProjectId: &projectID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := g.Create(&row).Error; err != nil {
+		glog.Warningf("failed to create owner binding for project %s: %v", projectID, err)
 	}
 }
 

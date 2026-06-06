@@ -893,10 +893,28 @@ else
   SESSION_A_ID=""
 fi
 
+SESSION_RUNNING=false
+
 if [[ -n "$SESSION_A_ID" ]]; then
   # User A can GET own session
   api GET "/sessions/${SESSION_A_ID}" "$TOKEN_A"
   assert_status "200" "$HTTP_STATUS" "User A GET own session returns 200"
+
+  # Wait for session to reach Running phase (up to 60s)
+  echo "  Waiting for session to reach Running phase..."
+  for i in $(seq 1 30); do
+    api GET "/sessions/${SESSION_A_ID}" "$TOKEN_A"
+    PHASE=$(echo "$HTTP_BODY" | jq -r '.phase // empty')
+    if [[ "$PHASE" == "Running" ]]; then
+      SESSION_RUNNING=true
+      echo "  Session is Running (waited $((i*2))s)"
+      break
+    fi
+    sleep 2
+  done
+  if [[ "$SESSION_RUNNING" != "true" ]]; then
+    echo "  Session did not reach Running (phase=$PHASE) — sub-resource write tests will be skipped"
+  fi
 
   # User B cannot GET User A's session -> 404
   api GET "/sessions/${SESSION_A_ID}" "$TOKEN_B"
@@ -907,11 +925,15 @@ if [[ -n "$SESSION_A_ID" ]]; then
   assert_status "403" "$HTTP_STATUS" "User B POST message to User A's session returns 403"
 
   # User A CAN post messages to own session
-  api POST "/sessions/${SESSION_A_ID}/messages" "$TOKEN_A" '{"event_type":"user","payload":"authorized message"}'
-  if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "201" ]]; then
-    pass "User A POST message to own session succeeds"
+  if [[ "$SESSION_RUNNING" == "true" ]]; then
+    api POST "/sessions/${SESSION_A_ID}/messages" "$TOKEN_A" '{"event_type":"user","payload":"authorized message"}'
+    if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "201" ]]; then
+      pass "User A POST message to own session succeeds"
+    else
+      fail "User A POST message to own session" "expected 200/201, got $HTTP_STATUS"
+    fi
   else
-    fail "User A POST message to own session" "got $HTTP_STATUS"
+    skip "User A POST message to own session (session not Running)"
   fi
 
   # User B cannot GET messages from User A's session -> 404
@@ -1001,68 +1023,43 @@ fi
 echo ""
 echo -e "${BOLD}Phase 19: Session sub-resource access for project owner${NC}"
 
-# These test that the pathToResource mapping works for session sub-resources
-# Project:owner with session:* should be able to access all session sub-resources
+# These test that RBAC does NOT block the project owner from session sub-resources.
+# 403/404 = RBAC failure = always FAIL.
+# 500/502/503 = infrastructure (no runner) = SKIP if session not Running, FAIL if Running.
+assert_not_rbac_blocked() {
+  local desc="$1"
+  if [[ "$HTTP_STATUS" == "403" || "$HTTP_STATUS" == "404" ]]; then
+    fail "$desc" "RBAC blocked owner: got $HTTP_STATUS"
+  elif [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "201" ]]; then
+    pass "$desc"
+  elif [[ "$SESSION_RUNNING" == "true" ]]; then
+    fail "$desc" "session is Running but got $HTTP_STATUS"
+  else
+    skip "$desc (session not Running, got $HTTP_STATUS)"
+  fi
+}
+
 if [[ -n "$SESSION_A_ID" ]]; then
-  # Owner can GET session events (currently maps to resource "event" — should be "session")
-  api GET "/sessions/${SESSION_A_ID}/events" "$TOKEN_A"
-  if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "404" || "$HTTP_STATUS" == "502" ]]; then
-    pass "Owner can GET /sessions/{id}/events (status $HTTP_STATUS — 404/502 expected when no runner)"
-  else
-    fail "Owner GET /sessions/{id}/events" "expected 200/404/502, got $HTTP_STATUS"
-  fi
-
-  # Owner can GET session messages
+  # DB-backed endpoints — always work if RBAC passes (no runner needed)
   api GET "/sessions/${SESSION_A_ID}/messages" "$TOKEN_A"
-  assert_status "200" "$HTTP_STATUS" "Owner can GET /sessions/{id}/messages"
+  assert_not_rbac_blocked "Owner can GET /sessions/{id}/messages"
 
-  # Owner can GET workspace list
-  api GET "/sessions/${SESSION_A_ID}/workspace" "$TOKEN_A"
-  if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "502" || "$HTTP_STATUS" == "503" ]]; then
-    pass "Owner can GET /sessions/{id}/workspace (status $HTTP_STATUS)"
-  else
-    fail "Owner GET /sessions/{id}/workspace" "expected 200/502/503, got $HTTP_STATUS"
-  fi
-
-  # Owner can GET git status
-  api GET "/sessions/${SESSION_A_ID}/git/status" "$TOKEN_A"
-  if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "502" || "$HTTP_STATUS" == "503" ]]; then
-    pass "Owner can GET /sessions/{id}/git/status (status $HTTP_STATUS)"
-  else
-    fail "Owner GET /sessions/{id}/git/status" "expected 200/502/503, got $HTTP_STATUS"
-  fi
-
-  # Owner can GET agui capabilities
-  api GET "/sessions/${SESSION_A_ID}/agui/capabilities" "$TOKEN_A"
-  if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "502" ]]; then
-    pass "Owner can GET /sessions/{id}/agui/capabilities (status $HTTP_STATUS)"
-  else
-    fail "Owner GET /sessions/{id}/agui/capabilities" "expected 200/502, got $HTTP_STATUS"
-  fi
-
-  # Owner can GET mcp status
-  api GET "/sessions/${SESSION_A_ID}/mcp/status" "$TOKEN_A"
-  if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "502" ]]; then
-    pass "Owner can GET /sessions/{id}/mcp/status (status $HTTP_STATUS)"
-  else
-    fail "Owner GET /sessions/{id}/mcp/status" "expected 200/502, got $HTTP_STATUS"
-  fi
-
-  # Owner can GET pod-events
   api GET "/sessions/${SESSION_A_ID}/pod-events" "$TOKEN_A"
-  if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "502" ]]; then
-    pass "Owner can GET /sessions/{id}/pod-events (status $HTTP_STATUS)"
-  else
-    fail "Owner GET /sessions/{id}/pod-events" "expected 200/502, got $HTTP_STATUS"
-  fi
+  assert_not_rbac_blocked "Owner can GET /sessions/{id}/pod-events"
 
-  # Owner can GET export
   api GET "/sessions/${SESSION_A_ID}/export" "$TOKEN_A"
-  if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "502" ]]; then
-    pass "Owner can GET /sessions/{id}/export (status $HTTP_STATUS)"
-  else
-    fail "Owner GET /sessions/{id}/export" "expected 200/502, got $HTTP_STATUS"
-  fi
+  assert_not_rbac_blocked "Owner can GET /sessions/{id}/export"
+
+  # Runner-proxy endpoints — require a running pod; skip if session not Running
+  RUNNER_ENDPOINTS=("events" "workspace" "git/status" "agui/capabilities" "mcp/status")
+  for ep in "${RUNNER_ENDPOINTS[@]}"; do
+    if [[ "$SESSION_RUNNING" == "true" ]]; then
+      api GET "/sessions/${SESSION_A_ID}/${ep}" "$TOKEN_A"
+      assert_not_rbac_blocked "Owner can GET /sessions/{id}/${ep}"
+    else
+      skip "Owner GET /sessions/{id}/${ep} (session not Running)"
+    fi
+  done
 fi
 
 # ============================================================

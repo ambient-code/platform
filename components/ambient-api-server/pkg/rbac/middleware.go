@@ -3,15 +3,30 @@ package rbac
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/db"
+	"gorm.io/gorm/clause"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/middleware"
 )
+
+// userRow is a local struct for GORM auto-provision inserts, avoiding
+// circular imports with the users plugin package.
+type userRow struct {
+	ID        string `gorm:"primaryKey"`
+	Username  string `gorm:"uniqueIndex:idx_users_username_active"`
+	Name      string
+	Email     *string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+func (userRow) TableName() string { return "users" }
 
 type DBAuthorizationMiddleware struct {
 	evaluator      *Evaluator
@@ -226,16 +241,20 @@ func (m *DBAuthorizationMiddleware) autoProvisionUser(ctx context.Context) {
 	}
 
 	g := (*m.sessionFactory).New(ctx)
-	var emailPtr interface{} = nil
+	now := time.Now()
+	var emailPtr *string
 	if email != "" {
-		emailPtr = email
+		emailPtr = &email
 	}
-	result := g.Exec(
-		`INSERT INTO users (id, username, name, email, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, NOW(), NOW())
-		 ON CONFLICT (username) WHERE deleted_at IS NULL DO NOTHING`,
-		api.NewID(), username, name, emailPtr,
-	)
+	row := userRow{
+		ID:        api.NewID(),
+		Username:  username,
+		Name:      name,
+		Email:     emailPtr,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	result := g.Clauses(clause.OnConflict{DoNothing: true}).Create(&row)
 	if result.Error != nil {
 		glog.Warningf("user auto-provision failed for %s: %v", username, result.Error)
 	}
@@ -332,7 +351,10 @@ func (m *DBAuthorizationMiddleware) resolveRoleBindingScope(ctx context.Context,
 		ProjectID    *string
 		CredentialID *string
 	}
-	err := g.Raw(`SELECT project_id, credential_id FROM role_bindings WHERE id = ? AND deleted_at IS NULL`, bindingID).Scan(&result).Error
+	err := g.Table("role_bindings").
+		Select("project_id, credential_id").
+		Where("id = ? AND deleted_at IS NULL", bindingID).
+		Scan(&result).Error
 	if err != nil {
 		return
 	}

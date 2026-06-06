@@ -544,7 +544,7 @@ func (h sessionHandler) StreamRunnerEvents(w http.ResponseWriter, r *http.Reques
 	}
 
 	if session.KubeCrName == nil || session.KubeNamespace == nil {
-		http.Error(w, "session has no associated runner pod", http.StatusNotFound)
+		http.Error(w, "session has no associated runner pod", http.StatusBadGateway)
 		return
 	}
 

@@ -31,17 +31,11 @@ func NewEvaluator(sessionFactory *db.SessionFactory) *Evaluator {
 
 func (e *Evaluator) fetchBindings(g *gorm.DB, username string) ([]bindingRow, error) {
 	var rows []bindingRow
-	err := g.Raw(`
-		SELECT rb.role_id, r.name AS role_name, rb.scope,
-		       rb.user_id, rb.project_id, rb.agent_id,
-		       rb.session_id, rb.credential_id,
-		       r.permissions
-		FROM role_bindings rb
-		JOIN roles r ON r.id = rb.role_id
-		WHERE rb.user_id = ?
-		  AND rb.deleted_at IS NULL
-		  AND r.deleted_at IS NULL
-	`, username).Scan(&rows).Error
+	err := g.Table("role_bindings rb").
+		Select("rb.role_id, r.name AS role_name, rb.scope, rb.user_id, rb.project_id, rb.agent_id, rb.session_id, rb.credential_id, r.permissions").
+		Joins("JOIN roles r ON r.id = rb.role_id").
+		Where("rb.user_id = ? AND rb.deleted_at IS NULL AND r.deleted_at IS NULL", username).
+		Scan(&rows).Error
 	return rows, err
 }
 
@@ -125,7 +119,10 @@ func (e *Evaluator) AuthorizedCredentialIDs(ctx context.Context, username string
 
 func (e *Evaluator) resolveSessionProject(g *gorm.DB, sessionID string) (string, error) {
 	var projectID string
-	err := g.Raw(`SELECT COALESCE(project_id, '') FROM sessions WHERE id = ? AND deleted_at IS NULL`, sessionID).Scan(&projectID).Error
+	err := g.Table("sessions").
+		Select("COALESCE(project_id, '')").
+		Where("id = ? AND deleted_at IS NULL", sessionID).
+		Scan(&projectID).Error
 	return projectID, err
 }
 
