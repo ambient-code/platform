@@ -7,6 +7,7 @@ KC_REALM="ambient-code"
 KC_ADMIN_USER="admin"
 KC_ADMIN_PASS="admin"
 KC_CLIENT_ID="ambient-frontend"
+NS="${NAMESPACE:-ambient-code}"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -173,9 +174,9 @@ CREATED_PROJECTS=()
 CREATED_CRED_IDS=()
 
 clean_db() {
-  local pod="${DB_POD:-$(kubectl get pods -n ambient-code -l app=ambient-api-server,component=database -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)}"
+  local pod="${DB_POD:-$(kubectl get pods -n "$NS" -l app=ambient-api-server,component=database -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)}"
   if [[ -n "$pod" ]]; then
-    kubectl exec -n ambient-code "$pod" -- psql -U ambient -d ambient_api_server -c "
+    kubectl exec -n "$NS" "$pod" -- psql -U ambient -d ambient_api_server -c "
       DELETE FROM role_bindings WHERE project_id LIKE 'rbac-%' OR user_id LIKE 'rbac-%' OR credential_id IN (SELECT id FROM credentials WHERE name LIKE 'rbac-%');
       DELETE FROM agents WHERE project_id LIKE 'rbac-%';
       DELETE FROM credentials WHERE name LIKE 'rbac-%';
@@ -217,6 +218,187 @@ delete_keycloak_user "rbac-user-a"
 delete_keycloak_user "rbac-user-b"
 delete_keycloak_user "rbac-user-c"
 echo "  Keycloak users cleaned"
+
+# ============================================================
+echo ""
+echo -e "${BOLD}Phase 0.5: Enable JWT + RBAC enforcement${NC}"
+# The test manages its own infrastructure setup so it works identically
+# in local Kind clusters and GitHub Actions CI.
+
+KC_INTERNAL_URL="http://keycloak-service.${NS}.svc:8080"
+KC_JWKS_URL="${KC_INTERNAL_URL}/realms/${KC_REALM}/protocol/openid-connect/certs"
+KC_TOKEN_URL="${KC_INTERNAL_URL}/realms/${KC_REALM}/protocol/openid-connect/token"
+# The ambient-e2e Keycloak client has serviceAccountsEnabled=true
+# and a well-known secret baked into the Kind realm JSON.
+OIDC_CLIENT_ID_CP="ambient-e2e"
+OIDC_CLIENT_SECRET_CP="e2e-secret-do-not-use-in-prod"
+
+# 1. Fetch Keycloak JWKS and update the API server auth ConfigMap so the
+#    API server can validate JWTs signed by this Keycloak instance.
+echo "  Fetching Keycloak JWKS..."
+KC_JWKS=$(curl -sf "${KC_URL}/realms/${KC_REALM}/protocol/openid-connect/certs" || true)
+if [[ -z "$KC_JWKS" || "$KC_JWKS" == "null" ]]; then
+  echo "FATAL: Cannot fetch Keycloak JWKS from ${KC_URL}/realms/${KC_REALM}/protocol/openid-connect/certs"
+  exit 1
+fi
+kubectl create configmap ambient-api-server-auth \
+  --from-literal="jwks.json=${KC_JWKS}" \
+  --from-literal="acl.yml=" \
+  -n "$NS" --dry-run=client -o yaml | kubectl apply -f -
+echo "  Updated ambient-api-server-auth ConfigMap with Keycloak JWKS"
+
+# 2. Patch ambient-api-server secret to include OIDC client credentials.
+#    The control plane reads clientId / clientSecret from this secret to
+#    authenticate to the API server via OIDC client_credentials grant.
+kubectl patch secret ambient-api-server -n "$NS" -p \
+  "{\"stringData\":{\"clientId\":\"${OIDC_CLIENT_ID_CP}\",\"clientSecret\":\"${OIDC_CLIENT_SECRET_CP}\"}}"
+echo "  Patched ambient-api-server secret with OIDC client credentials"
+
+# 3. Patch API server deployment:
+#    - AMBIENT_ENV=production  (dev env overrides --enable-jwt to false)
+#    - JWK_CERT_URL            (Keycloak JWKS for the production env fallback)
+#    - GRPC_SERVICE_ACCOUNT    (so the pre-auth interceptor tags OIDC SAs as CallerTypeService)
+#    - command args            (--enable-jwt=true --enable-authz=true)
+kubectl patch deployment/ambient-api-server -n "$NS" --type=json -p "$(cat <<'EOF'
+[
+  {"op":"replace","path":"/spec/template/spec/containers/0/command","value":[
+    "/usr/local/bin/ambient-api-server","serve",
+    "--db-host-file=/secrets/db/db.host",
+    "--db-port-file=/secrets/db/db.port",
+    "--db-user-file=/secrets/db/db.user",
+    "--db-password-file=/secrets/db/db.password",
+    "--db-name-file=/secrets/db/db.name",
+    "--enable-jwt=true",
+    "--enable-authz=true",
+    "--jwk-cert-file=/configs/authentication/jwks.json",
+    "--enable-https=false",
+    "--enable-grpc=true",
+    "--grpc-enable-tls=false",
+    "--api-server-bindaddress=:8000",
+    "--metrics-server-bindaddress=:4433",
+    "--health-check-server-bindaddress=:4434",
+    "--enable-health-check-https=false",
+    "--db-sslmode=disable",
+    "--db-max-open-connections=50",
+    "--enable-db-debug=false",
+    "--enable-metrics-https=false",
+    "--http-read-timeout=5s",
+    "--http-write-timeout=30s",
+    "--cors-allowed-origins=*",
+    "--cors-allowed-headers=X-Ambient-Project",
+    "--grpc-server-bindaddress=:9000",
+    "--alsologtostderr","-v=10"
+  ]}
+]
+EOF
+)"
+kubectl set env deployment/ambient-api-server -n "$NS" \
+  AMBIENT_ENV=production \
+  JWK_CERT_URL="$KC_JWKS_URL" \
+  GRPC_SERVICE_ACCOUNT="service-account-${OIDC_CLIENT_ID_CP}"
+echo "  Patched API server deployment (JWT + authz enabled, production env)"
+
+# 4. Patch control plane deployment: set OIDC credentials + token URL so it
+#    authenticates to the API server's gRPC endpoint with a valid Keycloak JWT
+#    instead of the static AMBIENT_API_TOKEN (which is not a JWT).
+kubectl set env deployment/ambient-control-plane -n "$NS" \
+  OIDC_CLIENT_ID="$OIDC_CLIENT_ID_CP" \
+  OIDC_CLIENT_SECRET="$OIDC_CLIENT_SECRET_CP" \
+  OIDC_TOKEN_URL="$KC_TOKEN_URL"
+echo "  Patched control plane deployment with OIDC credentials"
+
+# 5. Wait for rollouts
+echo "  Waiting for API server rollout..."
+if ! kubectl rollout status deployment/ambient-api-server -n "$NS" --timeout=120s; then
+  echo "FATAL: API server rollout failed"
+  kubectl describe deployment/ambient-api-server -n "$NS" | tail -20
+  exit 1
+fi
+echo "  Waiting for control plane rollout..."
+if ! kubectl rollout status deployment/ambient-control-plane -n "$NS" --timeout=120s; then
+  echo "FATAL: Control plane rollout failed"
+  kubectl describe deployment/ambient-control-plane -n "$NS" | tail -20
+  exit 1
+fi
+
+# 6. Re-establish port-forwards if API_URL / KC_URL point to localhost
+#    (deployment rollout kills existing port-forward connections)
+_reforward() {
+  local svc="$1" local_port="$2" remote_port="$3"
+  # Kill any stale port-forward for this local port (works even without lsof)
+  if command -v lsof &>/dev/null; then
+    lsof -ti :"$local_port" 2>/dev/null | xargs -r kill 2>/dev/null || true
+  elif command -v fuser &>/dev/null; then
+    fuser -k "${local_port}/tcp" 2>/dev/null || true
+  fi
+  kubectl port-forward -n "$NS" "svc/${svc}" "${local_port}:${remote_port}" &>/dev/null &
+  # Give the port-forward a moment to bind
+  for _i in $(seq 1 10); do
+    if curl -sf -o /dev/null "http://localhost:${local_port}/" 2>/dev/null || \
+       curl -sf -o /dev/null "http://localhost:${local_port}/healthcheck" 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "WARNING: port-forward svc/${svc} ${local_port}:${remote_port} may not be ready"
+}
+
+# Only re-forward the API server (its pod restarted); Keycloak was untouched.
+if [[ "$API_URL" == *"localhost"* ]]; then
+  API_PORT=$(echo "$API_URL" | sed -n 's|.*localhost:\([0-9]*\).*|\1|p' | head -1)
+  if [[ -n "$API_PORT" ]]; then
+    echo "  Re-establishing port-forward for API server (localhost:${API_PORT} -> 8000)..."
+    _reforward ambient-api-server "$API_PORT" 8000
+  fi
+fi
+
+# 7. Verify API server accepts Keycloak JWTs (smoke test with client_credentials token)
+echo "  Verifying API server JWT auth..."
+VERIFY_TOKEN=$(curl -sf -X POST "${KC_URL}/realms/${KC_REALM}/protocol/openid-connect/token" \
+  -d "client_id=${OIDC_CLIENT_ID_CP}" \
+  -d "client_secret=${OIDC_CLIENT_SECRET_CP}" \
+  -d "grant_type=client_credentials" | jq -r '.access_token // empty')
+if [[ -z "$VERIFY_TOKEN" ]]; then
+  echo "FATAL: Cannot get OIDC token from Keycloak for ${OIDC_CLIENT_ID_CP}"
+  exit 1
+fi
+JWT_VERIFIED=false
+for attempt in $(seq 1 15); do
+  VERIFY_RESP=$(curl -s -w '\n%{http_code}' -H "Authorization: Bearer $VERIFY_TOKEN" "${API_URL}/roles?page=1&size=1" 2>/dev/null || true)
+  VERIFY_STATUS=$(echo "$VERIFY_RESP" | tail -1)
+  if [[ "$VERIFY_STATUS" == "200" ]]; then
+    echo "  API server JWT auth verified (attempt $attempt)"
+    JWT_VERIFIED=true
+    break
+  fi
+  sleep 2
+done
+if [[ "$JWT_VERIFIED" != "true" ]]; then
+  echo "FATAL: API server not accepting Keycloak JWTs after 30s (last status=$VERIFY_STATUS)"
+  echo "  API server logs:"
+  kubectl logs -n "$NS" deploy/ambient-api-server -c api-server --tail=30 2>/dev/null || true
+  exit 1
+fi
+
+# 8. Verify control plane pod is healthy
+CP_READY=false
+for attempt in $(seq 1 10); do
+  CP_STATUS=$(kubectl get pods -n "$NS" -l app=ambient-control-plane \
+    -o jsonpath='{.items[0].status.containerStatuses[0].ready}' 2>/dev/null || true)
+  if [[ "$CP_STATUS" == "true" ]]; then
+    echo "  Control plane is ready (attempt $attempt)"
+    CP_READY=true
+    break
+  fi
+  sleep 2
+done
+if [[ "$CP_READY" != "true" ]]; then
+  echo "WARNING: Control plane pod not ready after 20s — sessions may stay Pending"
+  echo "  Control plane logs:"
+  kubectl logs -n "$NS" deploy/ambient-control-plane --tail=20 2>/dev/null || true
+fi
+
+echo "  Phase 0.5 complete: JWT + RBAC enforcement enabled"
 
 # ============================================================
 echo ""
@@ -1143,11 +1325,11 @@ echo -e "${BOLD}Phase 24: Platform Viewer Cannot Escalate to Admin${NC}"
 # Grant User C platform:viewer (via direct DB insert since we need a global binding)
 # We can't grant global from a non-admin, so we use the seed-admin pattern via kubectl
 VIEWER_GLOBAL_BIND=""
-DB_POD_NAME=$(kubectl get pods -n ambient-code -l app=ambient-api-server,component=database -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+DB_POD_NAME=$(kubectl get pods -n "$NS" -l app=ambient-api-server,component=database -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
 if [[ -z "$DB_POD_NAME" ]]; then
   fail "Phase 24 setup" "DB pod not found — cannot seed platform:viewer binding; skipping viewer escalation tests"
 else
-  kubectl exec -n ambient-code "$DB_POD_NAME" -- psql -U ambient -d ambient_api_server -t -A -c "
+  kubectl exec -n "$NS" "$DB_POD_NAME" -- psql -U ambient -d ambient_api_server -t -A -c "
     INSERT INTO role_bindings (id, role_id, scope, user_id, created_at, updated_at)
     SELECT '$(date +%s)viewerbind', r.id, 'global', 'rbac-user-c', NOW(), NOW()
     FROM roles r WHERE r.name = 'platform:viewer' AND r.deleted_at IS NULL
