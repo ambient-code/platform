@@ -4,6 +4,9 @@ import (
 	"context"
 	"os"
 	"strings"
+
+	"github.com/golang/glog"
+	pkgserver "github.com/openshift-online/rh-trex-ai/pkg/server"
 )
 
 type callerTypeKey struct{}
@@ -23,6 +26,25 @@ const keycloakServiceAccountPrefix = "service-account-"
 
 func init() {
 	configuredServiceAccount = strings.TrimSpace(os.Getenv("GRPC_SERVICE_ACCOUNT"))
+
+	// Register pre-auth gRPC interceptors here (not in bearer_token.go)
+	// to guarantee configuredServiceAccount is already set. Go runs init
+	// functions in source-file alphabetical order within a package, so
+	// bearer_token.go's init would execute before this file's init,
+	// seeing an empty service account and skipping registration.
+	token := os.Getenv("AMBIENT_API_TOKEN")
+	if token == "" && configuredServiceAccount == "" {
+		glog.Infof("Service token auth disabled: neither AMBIENT_API_TOKEN nor GRPC_SERVICE_ACCOUNT set")
+		return
+	}
+	if token != "" {
+		glog.Infof("Service token auth enabled via AMBIENT_API_TOKEN (gRPC only)")
+	}
+	if configuredServiceAccount != "" {
+		glog.Infof("OIDC service account username: %s", configuredServiceAccount)
+	}
+	pkgserver.RegisterPreAuthGRPCUnaryInterceptor(bearerTokenGRPCUnaryInterceptor(token, configuredServiceAccount))
+	pkgserver.RegisterPreAuthGRPCStreamInterceptor(bearerTokenGRPCStreamInterceptor(token, configuredServiceAccount))
 }
 
 // WithCallerType sets the caller type (service or user) on the context.

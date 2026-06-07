@@ -33,7 +33,7 @@ api() {
     args+=(-d "$body")
   fi
   local response
-  response=$(curl "${args[@]}" -X "$method" "${API_URL}${path}")
+  response=$(curl "${args[@]}" -X "$method" "${API_URL}${path}" || true)
   HTTP_STATUS=$(echo "$response" | tail -1)
   HTTP_BODY=$(echo "$response" | sed '$d')
 }
@@ -1208,12 +1208,21 @@ echo ""
 echo -e "${BOLD}Phase 19: Session sub-resource access for project owner${NC}"
 
 # These test that RBAC does NOT block the project owner from session sub-resources.
-# 403/404 = RBAC failure = always FAIL.
-# 500/502/503 = infrastructure (no runner) = SKIP if session not Running, FAIL if Running.
+# 403 = RBAC blocked = always FAIL.
+# 404 with {"kind":"Error"} = RBAC 404 (resource hidden) = FAIL.
+# 404 with {"detail":"Not Found"} = runner endpoint missing (passed RBAC) = PASS.
+# 200/201 = PASS.
+# 500/502/503 = infrastructure = SKIP if not Running, FAIL if Running.
 assert_not_rbac_blocked() {
   local desc="$1"
-  if [[ "$HTTP_STATUS" == "403" || "$HTTP_STATUS" == "404" ]]; then
+  if [[ "$HTTP_STATUS" == "403" ]]; then
     fail "$desc" "RBAC blocked owner: got $HTTP_STATUS"
+  elif [[ "$HTTP_STATUS" == "404" ]]; then
+    if echo "$HTTP_BODY" | grep -q '"kind"'; then
+      fail "$desc" "RBAC blocked owner: got $HTTP_STATUS"
+    else
+      pass "$desc"
+    fi
   elif [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "201" ]]; then
     pass "$desc"
   elif [[ "$SESSION_RUNNING" == "true" ]]; then
@@ -1234,8 +1243,20 @@ if [[ -n "$SESSION_A_ID" ]]; then
   api GET "/sessions/${SESSION_A_ID}/export" "$TOKEN_A"
   assert_not_rbac_blocked "Owner can GET /sessions/{id}/export"
 
-  # Runner-proxy endpoints — require a running pod; skip if session not Running
+  # Runner-proxy endpoints — require a running pod; skip if session not Running.
+  # Wait for the runner's HTTP server to become reachable (the CP marks the
+  # session Running as soon as the pod is created, but the AGUI server inside
+  # the container may need a few more seconds to bind).
   RUNNER_ENDPOINTS=("events" "workspace" "git/status" "agui/capabilities" "mcp/status")
+  if [[ "$SESSION_RUNNING" == "true" ]]; then
+    for _wait in $(seq 1 15); do
+      _probe=$(curl -sf -o /dev/null -w '%{http_code}' --max-time 3 \
+        -H "Authorization: Bearer $TOKEN_A" \
+        "${API_URL}/sessions/${SESSION_A_ID}/events" 2>/dev/null || true)
+      [[ "$_probe" != "502" && "$_probe" != "503" && "$_probe" != "000" && "$_probe" != "" ]] && break
+      sleep 2
+    done
+  fi
   for ep in "${RUNNER_ENDPOINTS[@]}"; do
     if [[ "$SESSION_RUNNING" == "true" ]]; then
       api GET "/sessions/${SESSION_A_ID}/${ep}" "$TOKEN_A"
