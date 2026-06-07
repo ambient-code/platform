@@ -26,6 +26,23 @@ skip() { SKIP_COUNT=$((SKIP_COUNT + 1)); echo -e "  ${YELLOW}[SKIP]${NC} $1"; }
 HTTP_STATUS=""
 HTTP_BODY=""
 
+_ensure_port_forward() {
+  local port
+  port=$(echo "$API_URL" | sed -n 's|.*localhost:\([0-9]*\).*|\1|p' | head -1)
+  [[ -z "$port" ]] && return 0
+  if command -v lsof &>/dev/null; then
+    lsof -ti :"$port" 2>/dev/null | xargs -r kill 2>/dev/null || true
+  elif command -v fuser &>/dev/null; then
+    fuser -k "${port}/tcp" 2>/dev/null || true
+  fi
+  sleep 1
+  kubectl port-forward -n "${NS}" svc/ambient-api-server "${port}:8000" &>/dev/null &
+  for _i in $(seq 1 10); do
+    curl -s -o /dev/null --max-time 2 "http://localhost:${port}/healthcheck" 2>/dev/null && return 0
+    sleep 1
+  done
+}
+
 api() {
   local method="$1" path="$2" token="$3" body="${4:-}"
   local args=(-s --max-time 15 -w '\n%{http_code}' -H "Authorization: Bearer $token" -H "Content-Type: application/json")
@@ -36,6 +53,13 @@ api() {
   response=$(curl "${args[@]}" -X "$method" "${API_URL}${path}" || true)
   HTTP_STATUS=$(echo "$response" | tail -1)
   HTTP_BODY=$(echo "$response" | sed '$d')
+  # Auto-recover from port-forward death (000 = connection refused/timeout)
+  if [[ "$HTTP_STATUS" == "000" ]]; then
+    _ensure_port_forward
+    response=$(curl "${args[@]}" -X "$method" "${API_URL}${path}" || true)
+    HTTP_STATUS=$(echo "$response" | tail -1)
+    HTTP_BODY=$(echo "$response" | sed '$d')
+  fi
 }
 
 assert_status() {
