@@ -46,12 +46,14 @@ func (m *DBAuthorizationMiddleware) AuthorizeApi(next http.Handler) http.Handler
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		// Detect service caller from JWT username on the HTTP path.
-		// The gRPC interceptor sets CallerTypeService in pre-auth;
-		// on HTTP we must detect it here from the authenticated JWT.
+		// Detect service caller from verified JWT username on the HTTP path.
+		// On HTTP, GetAuthPayloadFromContext only succeeds for signature-verified
+		// JWTs (upstream JWTHandler validates before we run). This prevents
+		// forged JWTs from triggering auto-provisioning.
 		if !middleware.IsServiceCaller(ctx) {
-			username := auth.GetUsernameFromContext(ctx)
-			if username != "" && middleware.IsConfiguredServiceAccount(username) {
+			payload, payloadErr := auth.GetAuthPayloadFromContext(ctx)
+			if payloadErr == nil && payload != nil && payload.Username != "" &&
+				middleware.IsConfiguredServiceAccount(payload.Username) {
 				ctx = middleware.WithCallerType(ctx, middleware.CallerTypeService)
 			}
 		}
