@@ -1141,11 +1141,6 @@ if [[ -n "$SESSION_A_ID" ]]; then
   # User C (no bindings) cannot access session -> 404
   api GET "/sessions/${SESSION_A_ID}" "$TOKEN_C"
   assert_status "404" "$HTTP_STATUS" "User C GET session returns 404 (no bindings)"
-
-  # Clean up: stop and delete the session
-  api POST "/sessions/${SESSION_A_ID}/stop" "$TOKEN_A" '{}'
-  api DELETE "/sessions/${SESSION_A_ID}" "$TOKEN_A"
-  echo "  Cleaned up test session ${SESSION_A_ID}"
 fi
 
 # ============================================================
@@ -1246,6 +1241,13 @@ if [[ -n "$SESSION_A_ID" ]]; then
       skip "Owner GET /sessions/{id}/${ep} (session not Running)"
     fi
   done
+fi
+
+# Clean up test session (after Phase 19 uses it)
+if [[ -n "$SESSION_A_ID" ]]; then
+  api POST "/sessions/${SESSION_A_ID}/stop" "$TOKEN_A" '{}'
+  api DELETE "/sessions/${SESSION_A_ID}" "$TOKEN_A"
+  echo "  Cleaned up test session ${SESSION_A_ID}"
 fi
 
 # ============================================================
