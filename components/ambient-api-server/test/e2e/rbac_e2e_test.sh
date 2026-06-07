@@ -372,7 +372,10 @@ kubectl set env deployment/ambient-control-plane -n "$NS" \
   OIDC_CLIENT_ID="$OIDC_CLIENT_ID_CP" \
   OIDC_CLIENT_SECRET="$OIDC_CLIENT_SECRET_CP" \
   OIDC_TOKEN_URL="$KC_TOKEN_URL"
-echo "  Patched control plane with OIDC credentials"
+# Always restart CP to get fresh gRPC watch streams (set env is a no-op
+# if values unchanged, which means no rollout and stale streams persist)
+kubectl rollout restart deployment/ambient-control-plane -n "$NS" 2>/dev/null || true
+echo "  Patched and restarted control plane"
 echo "  Waiting for control plane rollout..."
 if ! kubectl rollout status deployment/ambient-control-plane -n "$NS" --timeout=120s; then
   echo "FATAL: Control plane rollout failed"
