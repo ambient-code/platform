@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"ambient-code-backend/jwtauth"
 	"ambient-code-backend/server"
 
 	"github.com/gin-gonic/gin"
@@ -88,38 +89,50 @@ func getK8sClientsDefault(c *gin.Context) (kubernetes.Interface, dynamic.Interfa
 	// All requests must provide a valid user token. No environment variable checks.
 	// No fallback to service account credentials.
 
-	if token != "" && BaseKubeConfig != nil {
-		cfg := *BaseKubeConfig
-		cfg.BearerToken = token
-		// Ensure we do NOT fall back to the in-cluster SA token or other auth providers
-		cfg.BearerTokenFile = ""
-		cfg.AuthProvider = nil
-		cfg.ExecProvider = nil
-		cfg.Username = ""
-		cfg.Password = ""
-
-		kc, err1 := kubernetes.NewForConfig(&cfg)
-		dc, err2 := dynamic.NewForConfig(&cfg)
-
-		if err1 == nil && err2 == nil {
-
-			// Best-effort update last-used for service account tokens
-			updateAccessKeyLastUsedAnnotation(c)
-			return kc, dc
-		}
-		// Token provided but client build failed – treat as invalid token
-		log.Printf("Failed to build user-scoped k8s clients (source=%s tokenLen=%d) typedErr=%v dynamicErr=%v for %s", tokenSource, len(token), err1, err2, c.FullPath())
+	if token == "" {
+		log.Printf("No user token found for %s (tokenSource=%s hasAuthHeader=%t hasFwdToken=%t)", c.FullPath(), tokenSource, hasAuthHeader, hasFwdToken)
 		return nil, nil
 	}
 
-	if token != "" && BaseKubeConfig == nil {
-		// Token was provided but the backend is misconfigured; don't pretend it's a missing token.
+	if BaseKubeConfig == nil {
 		log.Printf("Cannot build user-scoped k8s clients: BaseKubeConfig is nil (source=%s tokenLen=%d) for %s", tokenSource, len(token), c.FullPath())
 		return nil, nil
 	}
 
-	// No token provided (or headers present but parsed to empty token)
-	log.Printf("No user token found for %s (tokenSource=%s hasAuthHeader=%t hasFwdToken=%t)", c.FullPath(), tokenSource, hasAuthHeader, hasFwdToken)
+	// SSO path: use K8s impersonation with validated JWT or API key
+	if SSOEnabled() {
+		// Reuse JWT claims validated by forwardedIdentityMiddleware
+		if claims, exists := c.Get("ssoValidatedClaims"); exists {
+			updateAccessKeyLastUsedAnnotation(c)
+			return buildImpersonatingClients(claims.(*jwtauth.Claims))
+		}
+		// JWT validation failed in middleware — try TokenReview fallback for API keys
+		if userName, groups, ok := tokenReviewIdentity(c, token); ok {
+			setIdentityFromTokenReview(c, userName, groups)
+			updateAccessKeyLastUsedAnnotation(c)
+			return buildImpersonatingClientsFromIdentity(userName, groups)
+		}
+		log.Printf("SSO: token failed both JWT and TokenReview for %s (source=%s tokenLen=%d)", c.FullPath(), tokenSource, len(token))
+		return nil, nil
+	}
+
+	// Legacy path: use raw token as BearerToken
+	cfg := *BaseKubeConfig
+	cfg.BearerToken = token
+	cfg.BearerTokenFile = ""
+	cfg.AuthProvider = nil
+	cfg.ExecProvider = nil
+	cfg.Username = ""
+	cfg.Password = ""
+
+	kc, err1 := kubernetes.NewForConfig(&cfg)
+	dc, err2 := dynamic.NewForConfig(&cfg)
+
+	if err1 == nil && err2 == nil {
+		updateAccessKeyLastUsedAnnotation(c)
+		return kc, dc
+	}
+	log.Printf("Failed to build user-scoped k8s clients (source=%s tokenLen=%d) typedErr=%v dynamicErr=%v for %s", tokenSource, len(token), err1, err2, c.FullPath())
 	return nil, nil
 }
 
@@ -312,8 +325,14 @@ func ValidateProjectContext() gin.HandlerFunc {
 
 		// Ensure the caller has at least list permission on agenticsessions in the namespace.
 		// Check the SSAR cache first to avoid hitting the K8s API on every request.
+		// Under SSO, use the authenticated identity (not the shared SA token) to prevent
+		// cross-user cache leaks.
 		token, _, _, _ := extractRequestToken(c)
-		cacheKey := ssarCacheKey(token, projectHeader, "list", "vteam.ambient-code", "agenticsessions")
+		cacheIdentity := c.GetString("authIdentity")
+		if cacheIdentity == "" {
+			cacheIdentity = token
+		}
+		cacheKey := ssarCacheKey(cacheIdentity, projectHeader, "list", "vteam.ambient-code", "agenticsessions")
 
 		if cachedAllowed, found := globalSSARCache.check(cacheKey); found {
 			if !cachedAllowed {

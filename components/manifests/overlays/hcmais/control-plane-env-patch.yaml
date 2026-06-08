@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-control-plane
+spec:
+  template:
+    spec:
+      containers:
+        - name: ambient-control-plane
+          env:
+            - name: AMBIENT_API_SERVER_URL
+              value: "http://ambient-api-server.ambient-api.svc:8000"
+            - name: AMBIENT_GRPC_SERVER_ADDR
+              value: "ambient-api-server.ambient-api.svc:9000"
+            - name: AMBIENT_GRPC_USE_TLS
+              value: "false"
+            - name: CP_TOKEN_URL
+              value: "http://ambient-control-plane.ambient-api.svc:8080/token"
+            - name: AMBIENT_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ambient-control-plane-token
+                  key: token
