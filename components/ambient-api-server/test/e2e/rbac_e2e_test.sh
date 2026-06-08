@@ -1437,6 +1437,33 @@ else
 fi
 
 # ============================================================
+echo ""
+echo -e "${BOLD}Phase 25: Delete Hierarchy — owner cannot delete higher-privilege bindings${NC}"
+
+# Seed a platform:admin binding scoped to proj-alpha via direct DB insert.
+# No user can grant platform:admin on a project via the API, so we seed it.
+DB_POD=$(kubectl get pods -n "$NS" -l app=ambient-api-server,component=database -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+F5_BIND_ID="f5_test_admin_bind"
+if [[ -n "$DB_POD" ]]; then
+  kubectl exec -n "$NS" "$DB_POD" -- psql -U ambient -d ambient_api_server -qc "
+    INSERT INTO role_bindings (id, role_id, scope, project_id, user_id, created_at, updated_at)
+    SELECT '${F5_BIND_ID}', r.id, 'project', 'rbac-proj-alpha', 'rbac-admin-ghost', NOW(), NOW()
+    FROM roles r WHERE r.name = 'platform:admin' AND r.deleted_at IS NULL
+    ON CONFLICT DO NOTHING;
+  " 2>/dev/null || true
+
+  # User A (project:owner level 1) tries to delete platform:admin's binding (level 0) → must fail
+  api DELETE "/role_bindings/${F5_BIND_ID}" "$TOKEN_A"
+  assert_status "403" "$HTTP_STATUS" "F5: project:owner cannot delete platform:admin binding"
+
+  # Clean up
+  kubectl exec -n "$NS" "$DB_POD" -- psql -U ambient -d ambient_api_server -qc \
+    "DELETE FROM role_bindings WHERE id = '${F5_BIND_ID}';" 2>/dev/null || true
+else
+  skip "F5: DB pod not found"
+fi
+
+# ============================================================
 # Cleanup is handled by the EXIT trap (clean_db + Keycloak user deletion)
 # ============================================================
 echo ""
