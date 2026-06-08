@@ -145,12 +145,8 @@ jobs:
            docker tag quay.io/ambient_code/vteam_claude_runner:latest quay.io/ambient_code/vteam_claude_runner:e2e-test) &
           pull_pids+=($!)
         fi
-        PULL_API_SERVER="${{ needs.detect-changes.outputs.api-server }}"
-        if [ "$PULL_API_SERVER" != "true" ]; then
-          (docker pull quay.io/ambient_code/vteam_api_server:latest && \
-           docker tag quay.io/ambient_code/vteam_api_server:latest quay.io/ambient_code/vteam_api_server:e2e-test) &
-          pull_pids+=($!)
-        fi
+        # api-server is always built from branch code (no pull fallback)
+        # because RBAC e2e tests require the branch's middleware
         for pid in "${pull_pids[@]}"; do
           wait "$pid" || exit 1
         done
@@ -195,8 +191,7 @@ jobs:
           type=gha,scope=e2e-ambient-runner
         cache-to: type=gha,mode=max,scope=e2e-ambient-runner
 
-    - name: Build changed api-server image
-      if: needs.detect-changes.outputs.api-server == 'true'
+    - name: Build api-server image
       uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
       with:
         context: components/ambient-api-server
