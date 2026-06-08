@@ -1,0 +1,240 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-rh-text);
+  --font-mono: var(--font-rh-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-status-success: var(--status-success);
+  --color-status-success-foreground: var(--status-success-foreground);
+  --color-status-success-border: var(--status-success-border);
+  --color-status-error: var(--status-error);
+  --color-status-error-foreground: var(--status-error-foreground);
+  --color-status-error-border: var(--status-error-border);
+  --color-status-warning: var(--status-warning);
+  --color-status-warning-foreground: var(--status-warning-foreground);
+  --color-status-warning-border: var(--status-warning-border);
+  --color-status-info: var(--status-info);
+  --color-status-info-foreground: var(--status-info-foreground);
+  --color-status-info-border: var(--status-info-border);
+  --color-link: var(--link);
+  --color-link-hover: var(--link-hover);
+  /* Event type badge tokens */
+  --color-event-tool: var(--event-tool);
+  --color-event-tool-foreground: var(--event-tool-foreground);
+  --color-event-tool-border: var(--event-tool-border);
+  --color-event-user: var(--event-user);
+  --color-event-user-foreground: var(--event-user-foreground);
+  --color-event-user-border: var(--event-user-border);
+  --color-event-assistant: var(--event-assistant);
+  --color-event-assistant-foreground: var(--event-assistant-foreground);
+  --color-event-assistant-border: var(--event-assistant-border);
+  --color-event-lifecycle: var(--event-lifecycle);
+  --color-event-lifecycle-foreground: var(--event-lifecycle-foreground);
+  --color-event-lifecycle-border: var(--event-lifecycle-border);
+  --color-event-system: var(--event-system);
+  --color-event-system-foreground: var(--event-system-foreground);
+  --color-event-system-border: var(--event-system-border);
+  --color-event-feedback: var(--event-feedback);
+  --color-event-feedback-foreground: var(--event-feedback-foreground);
+  --color-event-feedback-border: var(--event-feedback-border);
+  /* Binding matrix token */
+  --color-matrix-bound: var(--matrix-bound);
+  --color-matrix-bound-foreground: var(--matrix-bound-foreground);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.625rem;
+  /* Red Hat neutral palette for backgrounds */
+  --background: #ffffff;
+  --foreground: #151515;
+  --card: #ffffff;
+  --card-foreground: #151515;
+  --popover: #ffffff;
+  --popover-foreground: #151515;
+  /* Red Hat red as primary brand color */
+  --primary: #ee0000;
+  --primary-foreground: #ffffff;
+  --secondary: #f2f2f2;
+  --secondary-foreground: #151515;
+  --muted: #f2f2f2;
+  --muted-foreground: #707070;
+  --accent: #f2f2f2;
+  --accent-foreground: #151515;
+  /* danger-orange for destructive actions (not red — red is brand) */
+  --destructive: #f0561d;
+  --border: #e0e0e0;
+  --input: #e0e0e0;
+  --ring: #0066cc;
+  /* Chart colors from secondary palette */
+  --chart-1: #ee0000;
+  --chart-2: #0066cc;
+  --chart-3: #63993d;
+  --chart-4: #5e40be;
+  --chart-5: #37a3a3;
+  /* Sidebar */
+  --sidebar: #f2f2f2;
+  --sidebar-foreground: #151515;
+  --sidebar-primary: #ee0000;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e0e0e0;
+  --sidebar-accent-foreground: #151515;
+  --sidebar-border: #e0e0e0;
+  --sidebar-ring: #0066cc;
+  /* Status badges — light theme (pastel backgrounds) */
+  --status-success: #e9f7df;
+  --status-success-foreground: #204d00;
+  --status-success-border: #afdc8f;
+  --status-error: #ffe3d9;
+  --status-error-foreground: #731f00;
+  --status-error-border: #f89b78;
+  --status-warning: #fff4cc;
+  --status-warning-foreground: #73480b;
+  --status-warning-border: #ffe072;
+  --status-info: #e0f0ff;
+  --status-info-foreground: #003366;
+  --status-info-border: #92c5f9;
+  /* Event type badge tokens — light theme */
+  --event-tool: #e0f0ff;
+  --event-tool-foreground: #003366;
+  --event-tool-border: #b9dafc;
+  --event-user: #daf2f2;
+  --event-user-foreground: #004d4d;
+  --event-user-border: #b9e5e5;
+  --event-assistant: #ece6ff;
+  --event-assistant-foreground: #21134d;
+  --event-assistant-border: #d0c5f4;
+  --event-lifecycle: #f2f2f2;
+  --event-lifecycle-foreground: #383838;
+  --event-lifecycle-border: #e0e0e0;
+  --event-system: #f2f2f2;
+  --event-system-foreground: #4d4d4d;
+  --event-system-border: #e0e0e0;
+  --event-feedback: #ffe8cc;
+  --event-feedback-foreground: #732e00;
+  --event-feedback-border: #fccb8f;
+  /* Binding matrix */
+  --matrix-bound: #3d7317;
+  --matrix-bound-foreground: #ffffff;
+  /* Links — interaction-blue */
+  --link: #0066cc;
+  --link-hover: #004d99;
+}
+
+.dark {
+  --background: #151515;
+  --foreground: #f2f2f2;
+  --card: #1f1f1f;
+  --card-foreground: #f2f2f2;
+  --popover: #1f1f1f;
+  --popover-foreground: #f2f2f2;
+  --primary: #f56e6e;
+  --primary-foreground: #151515;
+  --secondary: #292929;
+  --secondary-foreground: #f2f2f2;
+  --muted: #292929;
+  --muted-foreground: #a3a3a3;
+  --accent: #292929;
+  --accent-foreground: #f2f2f2;
+  --destructive: #f4784a;
+  --border: #383838;
+  --input: #383838;
+  --ring: #4394e5;
+  --chart-1: #f56e6e;
+  --chart-2: #4394e5;
+  --chart-3: #87bb62;
+  --chart-4: #876fd4;
+  --chart-5: #63bdbd;
+  --sidebar: #1f1f1f;
+  --sidebar-foreground: #f2f2f2;
+  --sidebar-primary: #f56e6e;
+  --sidebar-primary-foreground: #151515;
+  --sidebar-accent: #292929;
+  --sidebar-accent-foreground: #f2f2f2;
+  --sidebar-border: #383838;
+  --sidebar-ring: #4394e5;
+  /* Status badges — dark theme (solid backgrounds) */
+  --status-success: #204d00;
+  --status-success-foreground: #e9f7df;
+  --status-success-border: #3d7317;
+  --status-error: #731f00;
+  --status-error-foreground: #ffe3d9;
+  --status-error-border: #b1380b;
+  --status-warning: #54330b;
+  --status-warning-foreground: #fff4cc;
+  --status-warning-border: #96640f;
+  --status-info: #032142;
+  --status-info-foreground: #e0f0ff;
+  --status-info-border: #004d99;
+  /* Event type badge tokens — dark theme */
+  --event-tool: #032142;
+  --event-tool-foreground: #b9dafc;
+  --event-tool-border: #004d99;
+  --event-user: #003333;
+  --event-user-foreground: #b9e5e5;
+  --event-user-border: #006666;
+  --event-assistant: #1a1033;
+  --event-assistant-foreground: #d0c5f4;
+  --event-assistant-border: #3d2d6b;
+  --event-lifecycle: #292929;
+  --event-lifecycle-foreground: #a3a3a3;
+  --event-lifecycle-border: #383838;
+  --event-system: #292929;
+  --event-system-foreground: #a3a3a3;
+  --event-system-border: #383838;
+  --event-feedback: #3d1e00;
+  --event-feedback-foreground: #fccb8f;
+  --event-feedback-border: #8c4400;
+  /* Binding matrix */
+  --matrix-bound: #87bb62;
+  --matrix-bound-foreground: #151515;
+  /* Links */
+  --link: #4394e5;
+  --link-hover: #92c5f9;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}

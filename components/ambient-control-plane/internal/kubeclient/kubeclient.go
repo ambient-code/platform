@@ -205,6 +205,16 @@ func (kc *KubeClient) DeletePodsByLabel(ctx context.Context, namespace, labelSel
 	return kc.deleteCollectionWithFallback(ctx, PodGVR, namespace, labelSelector)
 }
 
+func (kc *KubeClient) ListPodsByLabel(ctx context.Context, namespace, labelSelector string) (*unstructured.UnstructuredList, error) {
+	opts := metav1.ListOptions{LabelSelector: labelSelector}
+	return kc.dynamic.Resource(PodGVR).Namespace(namespace).List(ctx, opts)
+}
+
+func (kc *KubeClient) ListNamespacesByLabel(ctx context.Context, labelSelector string) (*unstructured.UnstructuredList, error) {
+	opts := metav1.ListOptions{LabelSelector: labelSelector}
+	return kc.dynamic.Resource(NamespaceGVR).List(ctx, opts)
+}
+
 // Service operations
 func (kc *KubeClient) GetService(ctx context.Context, namespace, name string) (*unstructured.Unstructured, error) {
 	return kc.dynamic.Resource(ServiceGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
@@ -298,6 +308,23 @@ func (kc *KubeClient) GetNetworkPolicy(ctx context.Context, namespace, name stri
 
 func (kc *KubeClient) CreateNetworkPolicy(ctx context.Context, obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	return kc.dynamic.Resource(NetworkPolicyGVR).Namespace(obj.GetNamespace()).Create(ctx, obj, metav1.CreateOptions{})
+}
+
+func (kc *KubeClient) UpdateNetworkPolicy(ctx context.Context, obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	return kc.dynamic.Resource(NetworkPolicyGVR).Namespace(obj.GetNamespace()).Update(ctx, obj, metav1.UpdateOptions{})
+}
+
+func (kc *KubeClient) ListTenantNamespaces(ctx context.Context, namespace, labelSelector string) (*unstructured.UnstructuredList, error) {
+	gvr := schema.GroupVersionResource{
+		Group:    "tenant.paas.redhat.com",
+		Version:  "v1alpha1",
+		Resource: "tenantnamespaces",
+	}
+	opts := metav1.ListOptions{}
+	if labelSelector != "" {
+		opts.LabelSelector = labelSelector
+	}
+	return kc.dynamic.Resource(gvr).Namespace(namespace).List(ctx, opts)
 }
 
 func (kc *KubeClient) GetResource(ctx context.Context, gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {

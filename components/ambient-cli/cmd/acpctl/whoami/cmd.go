@@ -11,11 +11,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var showToken bool
+
 var Cmd = &cobra.Command{
 	Use:   "whoami",
 	Short: "Display current user information",
 	Args:  cobra.NoArgs,
 	RunE:  run,
+}
+
+func init() {
+	Cmd.Flags().BoolVarP(&showToken, "show-token", "t", false, "Print the current API token and exit")
 }
 
 func run(cmd *cobra.Command, _ []string) error {
@@ -30,6 +36,11 @@ func run(cmd *cobra.Command, _ []string) error {
 	}
 
 	out := cmd.OutOrStdout()
+
+	if showToken {
+		fmt.Fprint(out, token)
+		return nil
+	}
 
 	if strings.HasPrefix(token, "sha256~") {
 		fmt.Fprintf(out, "Token type: OpenShift service account\n")

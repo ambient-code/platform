@@ -455,7 +455,8 @@ func getRoleBindings(ctx context.Context, client *sdkclient.Client, printer *out
 		if printer.Format() == output.FormatJSON {
 			return printer.PrintJSON(rb)
 		}
-		return printRoleBindingTable(printer, []sdktypes.RoleBinding{*rb})
+		names := buildRoleBindingNameResolver(ctx, client, []sdktypes.RoleBinding{*rb})
+		return printRoleBindingTable(printer, []sdktypes.RoleBinding{*rb}, names)
 	}
 	opts := sdktypes.NewListOptions().Size(args.limit).Build()
 	list, err := client.RoleBindings().List(ctx, opts)
@@ -465,7 +466,8 @@ func getRoleBindings(ctx context.Context, client *sdkclient.Client, printer *out
 	if printer.Format() == output.FormatJSON {
 		return printer.PrintJSON(list)
 	}
-	return printRoleBindingTable(printer, list.Items)
+	names := buildRoleBindingNameResolver(ctx, client, list.Items)
+	return printRoleBindingTable(printer, list.Items, names)
 }
 
 func getCredentials(ctx context.Context, client *sdkclient.Client, printer *output.Printer, name string) error {
@@ -510,11 +512,11 @@ func printCredentialTable(printer *output.Printer, credentials []sdktypes.Creden
 	return nil
 }
 
-func printRoleBindingTable(printer *output.Printer, rbs []sdktypes.RoleBinding) error {
+func printRoleBindingTable(printer *output.Printer, rbs []sdktypes.RoleBinding, names map[string]string) error {
 	columns := []output.Column{
 		{Name: "ID", Width: 27},
 		{Name: "USER", Width: 27},
-		{Name: "ROLE", Width: 27},
+		{Name: "ROLE", Width: 30},
 		{Name: "SCOPE", Width: 10},
 		{Name: "TARGET", Width: 27},
 	}
@@ -525,20 +527,61 @@ func printRoleBindingTable(printer *output.Printer, rbs []sdktypes.RoleBinding) 
 		if rb.UserID != nil {
 			userID = *rb.UserID
 		}
+		roleName := resolvedName(names, rb.RoleID)
 		target := ""
 		switch {
 		case rb.ProjectID != nil:
-			target = *rb.ProjectID
+			target = resolvedName(names, *rb.ProjectID)
 		case rb.AgentID != nil:
-			target = *rb.AgentID
+			target = resolvedName(names, *rb.AgentID)
 		case rb.SessionID != nil:
-			target = *rb.SessionID
+			target = resolvedName(names, *rb.SessionID)
 		case rb.CredentialID != nil:
-			target = *rb.CredentialID
+			target = resolvedName(names, *rb.CredentialID)
 		}
-		table.WriteRow(rb.ID, userID, rb.RoleID, rb.Scope, target)
+		table.WriteRow(rb.ID, userID, roleName, rb.Scope, target)
 	}
 	return nil
+}
+
+func resolvedName(names map[string]string, id string) string {
+	if n, ok := names[id]; ok {
+		return n
+	}
+	return id
+}
+
+func buildRoleBindingNameResolver(ctx context.Context, client *sdkclient.Client, rbs []sdktypes.RoleBinding) map[string]string {
+	names := make(map[string]string)
+	roleIDs := make(map[string]bool)
+	credIDs := make(map[string]bool)
+	for _, rb := range rbs {
+		roleIDs[rb.RoleID] = true
+		if rb.CredentialID != nil {
+			credIDs[*rb.CredentialID] = true
+		}
+	}
+	if len(roleIDs) > 0 {
+		opts := sdktypes.NewListOptions().Size(100).Build()
+		if roles, err := client.Roles().List(ctx, opts); err == nil {
+			for _, r := range roles.Items {
+				if roleIDs[r.ID] {
+					names[r.ID] = r.Name
+				}
+			}
+		}
+	}
+	if len(credIDs) > 0 {
+		opts := sdktypes.NewListOptions().Size(100).Build()
+		if creds, err := client.Credentials().List(ctx, opts); err == nil {
+			for _, c := range creds.Items {
+				if credIDs[c.ID] {
+					names[c.ID] = c.Name
+				}
+			}
+		}
+	}
+	return names
 }
 
 func watchSessions(cmd *cobra.Command, client *sdkclient.Client, printer *output.Printer) error {

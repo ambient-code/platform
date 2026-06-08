@@ -18,11 +18,23 @@ import (
 	_ "github.com/openshift-online/rh-trex-ai/plugins/generic"
 )
 
+var testHelper *test.Helper
+
 func TestMain(m *testing.M) {
 	flag.Parse()
 	glog.Infof("Starting integration test using go version %s", runtime.Version())
-	helper := test.NewHelper(&testing.T{})
+	testHelper = test.NewHelper(&testing.T{})
 	exitCode := m.Run()
-	helper.Teardown()
+	testHelper.Teardown()
 	os.Exit(exitCode)
+}
+
+func TestServerStarts(t *testing.T) {
+	if testHelper == nil {
+		t.Fatal("test helper not initialized — TestMain did not run")
+	}
+	url := testHelper.RestURL("/api/ambient")
+	if url == "" {
+		t.Fatal("server URL is empty — server did not start")
+	}
 }

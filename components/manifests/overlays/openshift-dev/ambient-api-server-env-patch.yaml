@@ -15,3 +15,5 @@ spec:
                 secretKeyRef:
                   name: ambient-control-plane-token
                   key: token
+            - name: CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT
+              value: "true"
