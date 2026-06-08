@@ -1,5 +1,7 @@
 ## OpenShift OAuth Setup (with oauth-proxy sidecar)
 
+> **Legacy**: This document describes the OAuth proxy sidecar model which is being replaced by SSO/OIDC authentication via Keycloak. The OAuth proxy is still used in deployments where the `sso-authentication` feature flag is off. See [`specs/security/sso-authentication.spec.md`](../../../specs/security/sso-authentication.spec.md) for the new model.
+
 This project secures the frontend using the OpenShift oauth-proxy sidecar. The proxy handles login against the cluster and forwards authenticated requests to the Next.js app.
 
 You only need to do two one-time items per cluster: create an OAuthClient and provide its secret to the app. Also ensure the Route host uses your cluster apps domain.

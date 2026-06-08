@@ -967,47 +967,87 @@ platform resources
 
 ## Sidecar Deployment
 
-### Annotation
+### Platform MCP Sidecar (`ambient-mcp`)
 
-Sessions opt into the MCP sidecar by setting the annotation:
+Sessions opt into the platform MCP sidecar by setting the annotation:
 
 ```
 ambient-code.io/mcp-sidecar: "true"
 ```
 
-This annotation is set on the Session resource at creation time. The operator reads it and injects the `ambient-mcp` container into the runner Job pod.
+This annotation is set on the Session resource at creation time. The CP reads it and injects the `ambient-mcp` container into the runner Job pod.
+
+### Integration Credential Sidecars
+
+For each credential bound to the session's Project (via `CREDENTIAL_IDS`), the CP
+injects an additional sidecar container running the corresponding MCP server. Each
+sidecar has its own isolated environment containing only its credential. The runner
+container has **no** integration credential tokens in its environment or filesystem.
+
+| Credential Provider | Sidecar Name | Image | Port | Env Vars Injected |
+|---|---|---|---|---|
+| `github` | `credential-github` | `ghcr.io/github/github-mcp-server` (via `mcp-proxy`) | `:8091` | `GITHUB_PERSONAL_ACCESS_TOKEN`, `AMBIENT_API_URL`, `AMBIENT_CP_TOKEN_URL`, `SESSION_ID` |
+| `jira` | `credential-jira` | `mcp-atlassian` (native SSE) | `:8092` | `JIRA_URL`, `JIRA_API_TOKEN`, `JIRA_EMAIL`, `AMBIENT_API_URL`, `AMBIENT_CP_TOKEN_URL`, `SESSION_ID` |
+| `kubeconfig` | `credential-k8s` | `kubernetes-mcp-server` (Go binary) | `:8093` | `KUBECONFIG` (file mount), `AMBIENT_API_URL`, `AMBIENT_CP_TOKEN_URL`, `SESSION_ID` |
+| `google` | `credential-google` | `workspace-mcp` (init + run) | `:8094` | `GOOGLE_OAUTH_*`, `USER_GOOGLE_EMAIL`, `AMBIENT_API_URL`, `AMBIENT_CP_TOKEN_URL`, `SESSION_ID` |
+
+The runner connects to each sidecar as an SSE MCP client on `http://localhost:{port}/sse`.
+
+Each credential sidecar receives `AMBIENT_API_URL`, `AMBIENT_CP_TOKEN_URL`, and
+`SESSION_ID` so it can re-fetch tokens from the backend API when credentials
+approach expiry. The sidecar authenticates to the backend using the same
+RSA-OAEP token exchange mechanism as the `ambient-mcp` sidecar.
+
+When no credentials are bound to the Project, no credential sidecars are injected.
+The runner operates without integration credentials — this is the credential-free
+fallback.
+
+### Git Operations Without Token Exposure
+
+The runner container has no git credential helper and no GitHub/GitLab tokens.
+The agent performs git operations exclusively through MCP tools:
+
+- **Push commits**: `github-mcp` → `PushFiles` tool (commits and pushes in one call)
+- **Create PRs**: `github-mcp` → `CreatePullRequest` tool
+- **Clone repos**: Init container (runs before the agent, has its own isolated credentials)
+
+The agent SHOULD NOT use `git push` or `gh pr create` directly — these require
+tokens in the runner environment, which violates the isolation model. System
+prompts instruct the agent to use MCP tools for all git write operations.
 
 ### Pod Layout
 
 ```
 Job Pod (session-{id}-runner)
-├── container: claude-code-runner
-│     CLAUDE_CODE_MCP_CONFIG=/etc/mcp/config.json
-│     reads config → connects to ambient-mcp via stdio
+├── container: runner
+│     Environment:
+│       SESSION_ID, PROJECT_NAME, WORKSPACE_PATH, LLM_MODEL, ...
+│       USE_VERTEX, ANTHROPIC_API_KEY or GOOGLE_APPLICATION_CREDENTIALS
+│       AMBIENT_MCP_URL=http://localhost:8090
+│       CREDENTIAL_MCP_URLS={"github":"http://localhost:8091", ...}
+│     NO integration tokens: no GITHUB_TOKEN, JIRA_API_TOKEN, etc.
+│     NO token files: no /tmp/.ambient_github_token, etc.
+│     Connects to sidecars via SSE MCP on localhost ports
 │
-└── container: ambient-mcp
-      image: localhost/vteam_ambient_mcp:latest
-      MCP_TRANSPORT=stdio
-      AMBIENT_API_URL=http://ambient-api-server.ambient-code.svc:8000
-      AMBIENT_TOKEN={session bearer token from projected volume}
-```
-
-### MCP Config (injected by operator)
-
-```json
-{
-  "mcpServers": {
-    "ambient": {
-      "command": "./ambient-mcp",
-      "args": [],
-      "env": {
-        "MCP_TRANSPORT": "stdio",
-        "AMBIENT_API_URL": "http://ambient-api-server.ambient-code.svc:8000",
-        "AMBIENT_TOKEN": "${AMBIENT_TOKEN}"
-      }
-    }
-  }
-}
+├── container: ambient-mcp
+│     image: localhost/vteam_ambient_mcp:latest
+│     MCP_TRANSPORT=sse, MCP_BIND_ADDR=:8090
+│     AMBIENT_API_URL, AMBIENT_CP_TOKEN_URL, AMBIENT_CP_TOKEN_PUBLIC_KEY
+│     SESSION_ID (for RSA-OAEP token exchange)
+│
+├── container: github-mcp          (only if github credential bound)
+│     image: ghcr.io/github/github-mcp-server
+│     GITHUB_PERSONAL_ACCESS_TOKEN={from backend API}
+│     GITHUB_TOOLSETS=repos,issues,pull_requests,code_security
+│     AMBIENT_API_URL, AMBIENT_CP_TOKEN_URL, SESSION_ID
+│     Listens :8091 (SSE)
+│
+├── container: jira-mcp            (only if jira credential bound)
+│     JIRA_URL, JIRA_API_TOKEN, JIRA_EMAIL
+│     AMBIENT_API_URL, AMBIENT_CP_TOKEN_URL, SESSION_ID
+│     Listens :8092
+│
+└── ... (additional credential sidecars as needed)
 ```
 
 ---

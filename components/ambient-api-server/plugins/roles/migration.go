@@ -89,6 +89,12 @@ func seedBuiltInRoles(tx *gorm.DB) error {
 			description: "Runtime identity for agent pods — check in, send messages, update blackboard",
 			permissions: []string{"session:read", "session_message:*", "blackboard:read", "blackboard:watch"},
 		},
+		{
+			name:        "credential:viewer",
+			displayName: "Credential Viewer",
+			description: "View and use credentials bound to a project or agent",
+			permissions: []string{"credential:read", "credential:list"},
+		},
 	}
 
 	for _, r := range builtInRoles {

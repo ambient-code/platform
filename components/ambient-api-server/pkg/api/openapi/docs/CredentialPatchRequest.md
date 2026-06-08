@@ -4,14 +4,14 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**Name** | Pointer to **string** |  | [optional] 
-**Description** | Pointer to **string** |  | [optional] 
-**Provider** | Pointer to **string** |  | [optional] 
-**Token** | Pointer to **string** | Credential token value; write-only, never returned in GET/LIST responses | [optional] 
-**Url** | Pointer to **string** |  | [optional] 
-**Email** | Pointer to **string** |  | [optional] 
-**Labels** | Pointer to **string** |  | [optional] 
-**Annotations** | Pointer to **string** |  | [optional] 
+**Name** | Pointer to **string** |  | [optional]
+**Description** | Pointer to **string** |  | [optional]
+**Provider** | Pointer to **string** |  | [optional]
+**Token** | Pointer to **string** | Credential token value; write-only, never returned in GET/LIST responses | [optional]
+**Url** | Pointer to **string** |  | [optional]
+**Email** | Pointer to **string** |  | [optional]
+**Labels** | Pointer to **string** |  | [optional]
+**Annotations** | Pointer to **string** |  | [optional]
 
 ## Methods
 
@@ -234,5 +234,3 @@ HasAnnotations returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
-
-

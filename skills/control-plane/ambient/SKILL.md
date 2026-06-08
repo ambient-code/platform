@@ -31,6 +31,15 @@ You are an expert in deploying the Ambient Code Platform to OpenShift clusters. 
 
 Runner pods (`vteam_claude_runner`, `vteam_state_sync`) are spawned dynamically by the operator — they are not standing deployments.
 
+Credential sidecar containers are injected into session pods when the corresponding credential type is configured:
+
+ < /dev/null |  Sidecar Container | Image | Port | Provider |
+|-------------------|-------|------|----------|
+| `credential-github` | `quay.io/ambient_code/vteam_credential_github` | 8091 | GitHub PAT / App |
+| `credential-jira` | `quay.io/ambient_code/vteam_credential_jira` | 8092 | Jira / Atlassian |
+| `credential-k8s` | `quay.io/ambient_code/vteam_credential_k8s` | 8093 | Kubeconfig |
+| `credential-google` | `quay.io/ambient_code/vteam_credential_google` | 8094 | Google Workspace |
+
 ---
 
 ## Prerequisites
@@ -88,6 +97,25 @@ oc create secret generic github-app-secret -n $NAMESPACE \
 ```
 
 Use `--dry-run=client -o yaml | oc apply -f -` to make secret creation idempotent on re-runs.
+
+### Credential Encryption Key (required for production)
+
+Credential tokens are encrypted at rest with AES-256-GCM. Generate a key and create the secret:
+
+```bash
+ENCRYPTION_KEY=$(openssl rand -base64 32)
+oc create secret generic credential-encryption-key -n $NAMESPACE \
+  --from-literal=keyring="{\"1\":\"$ENCRYPTION_KEY\"}" \
+  --from-literal=version=1
+```
+
+The hcmais overlay mounts this as `CREDENTIAL_ENCRYPTION_KEYRING` and `CREDENTIAL_ENCRYPTION_KEY_VERSION`. After first deploy, encrypt existing tokens:
+
+```bash
+oc exec deploy/ambient-api-server -n $NAMESPACE -- ambient-api-server encrypt-credentials
+```
+
+To rotate: add new key to keyring JSON, bump version, restart, re-run `encrypt-credentials`. To skip in dev: set `CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT=true`. See `specs/security/credential-encryption.spec.md`.
 
 ### Anthropic API Key (required for runner pods)
 
@@ -152,6 +180,12 @@ kustomize edit set image \
   quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:$IMAGE_TAG
 
 oc apply -k . -n $NAMESPACE
+
+oc set env deployment/ambient-control-plane -n $NAMESPACE \
+  GITHUB_MCP_IMAGE=quay.io/ambient_code/vteam_credential_github:$IMAGE_TAG \
+  JIRA_MCP_IMAGE=quay.io/ambient_code/vteam_credential_jira:$IMAGE_TAG \
+  K8S_MCP_IMAGE=quay.io/ambient_code/vteam_credential_k8s:$IMAGE_TAG \
+  GOOGLE_MCP_IMAGE=quay.io/ambient_code/vteam_credential_google:$IMAGE_TAG
 popd
 rm -rf "$TMPDIR"
 ```

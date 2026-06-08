@@ -47,14 +47,14 @@ func agentSchemaExpansionMigration() *gormigrate.Migration {
 		Migrate: func(tx *gorm.DB) error {
 			stmts := []string{
 				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS parent_agent_id TEXT`,
-				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS owner_user_id TEXT`,
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS owner_user_id TEXT NOT NULL DEFAULT ''`,
 				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS display_name TEXT`,
 				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS description TEXT`,
 				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS repo_url TEXT`,
 				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS workflow_id TEXT`,
-				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS llm_model TEXT`,
-				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS llm_temperature DOUBLE PRECISION`,
-				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS llm_max_tokens INTEGER`,
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS llm_model TEXT DEFAULT 'claude-sonnet-4-6'`,
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS llm_temperature DOUBLE PRECISION DEFAULT 0.7`,
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS llm_max_tokens INTEGER DEFAULT 4000`,
 				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS bot_account_name TEXT`,
 				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS resource_overrides TEXT`,
 				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS environment_variables TEXT`,

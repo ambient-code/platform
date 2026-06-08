@@ -74,8 +74,26 @@ func (h agentHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			if patch.Name != nil {
 				found.Name = *patch.Name
 			}
+			if patch.DisplayName != nil {
+				found.DisplayName = patch.DisplayName
+			}
+			if patch.Description != nil {
+				found.Description = patch.Description
+			}
 			if patch.Prompt != nil {
 				found.Prompt = patch.Prompt
+			}
+			if patch.RepoUrl != nil {
+				found.RepoUrl = patch.RepoUrl
+			}
+			if patch.LlmModel != nil {
+				found.LlmModel = *patch.LlmModel
+			}
+			if patch.LlmTemperature != nil {
+				found.LlmTemperature = *patch.LlmTemperature
+			}
+			if patch.LlmMaxTokens != nil {
+				found.LlmMaxTokens = *patch.LlmMaxTokens
 			}
 			if patch.Labels != nil {
 				found.Labels = patch.Labels

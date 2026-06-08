@@ -20,6 +20,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
@@ -28,10 +29,10 @@ import (
 var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constants.LabelHandlers), func() {
 	var (
 		httpTestUtils       *test_utils.HTTPTestUtils
-		originalK8s         = K8sClient
-		originalNs          = Namespace
-		originalK8sClientMw = K8sClientMw
-		originalDynClient   = DynamicClient
+		originalK8s         kubernetes.Interface
+		originalNs          string
+		originalK8sClientMw kubernetes.Interface
+		originalDynClient   dynamic.Interface
 		validManifest       string
 	)
 
@@ -54,6 +55,11 @@ var _ = Describe("Models Handler", Label(test_constants.LabelUnit, test_constant
 	}
 
 	BeforeEach(func() {
+		originalK8s = K8sClient
+		originalNs = Namespace
+		originalK8sClientMw = K8sClientMw
+		originalDynClient = DynamicClient
+
 		httpTestUtils = test_utils.NewHTTPTestUtils()
 		manifestBytes, err := json.Marshal(validManifestObj)
 		Expect(err).NotTo(HaveOccurred())
