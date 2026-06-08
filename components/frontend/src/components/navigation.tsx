@@ -11,6 +11,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetClose } from "@/comp
 import { Button } from "@/components/ui/button";
 import { Plug, LogOut, Menu, Home, MessageSquare } from "lucide-react";
 import { useVersion } from "@/services/queries/use-version";
+import { useCurrentUser } from "@/services/queries";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 type NavigationProps = {
@@ -22,13 +23,16 @@ export function Navigation({ feedbackUrl }: NavigationProps) {
   // const segments = pathname?.split("/").filter(Boolean) || [];
   const router = useRouter();
   const { data: version } = useVersion();
+  const { data: me } = useCurrentUser();
   const isMobile = useIsMobile();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
-    // Redirect to oauth-proxy logout endpoint
-    // This clears the OpenShift OAuth session and redirects back to login
-    window.location.href = '/oauth/sign_out';
+    if (me?.ssoEnabled) {
+      window.location.href = '/api/auth/sso/logout';
+    } else {
+      window.location.href = '/oauth/sign_out';
+    }
   };
 
   const handleMobileNav = (path: string) => {

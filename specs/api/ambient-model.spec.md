@@ -704,6 +704,38 @@ GET    /api/ambient/v1/sessions/{id}/events                                  SSE
 GET    /api/ambient/v1/sessions/{id}/role_bindings                           RBAC bindings
 ```
 
+#### Session Messages (Top-Level)
+
+```
+GET    /api/ambient/v1/session_messages                                      list messages across sessions (SDK access)
+```
+
+Top-level endpoint for SDK and internal consumers (e.g. the control plane). Supports TSL search, ordering, and size limit via query parameters:
+
+| Parameter | Example | Purpose |
+|-----------|---------|---------|
+| `search` | `session_id='01HABC...'` | TSL filter; must contain `session_id = '...'` |
+| `orderBy` | `seq desc` | Column + direction (`seq asc`, `seq desc`, `created_at desc`) |
+| `size` | `1` | Max rows returned |
+
+Example — fetch the latest message for a session:
+```
+GET /api/ambient/v1/session_messages?search=session_id='01HABC...'&orderBy=seq desc&size=1
+```
+
+Response shape:
+```json
+{
+  "kind": "SessionMessageList",
+  "page": 1,
+  "size": 1,
+  "total": 1,
+  "items": [{ "id": "...", "session_id": "...", "seq": 42, "event_type": "assistant", "payload": "...", "created_at": "..." }]
+}
+```
+
+Used by the control plane at session restart to resolve the maximum `seq` for `RESUME_AFTER_SEQ`.
+
 #### Workspace Files
 
 Read and write files in a running session's workspace. Session must be in `Running` phase.
@@ -1242,6 +1274,7 @@ _Last updated: 2026-04-28. Use this as the authoritative index — click into co
 | **Sessions — CRUD** | ✅ | ✅ `SessionAPI.{Get,List,Create,Update,Delete}` | ✅ `get/create/delete session` | |
 | **Sessions — start/stop** | ✅ `/start` `/stop` | ✅ `SessionAPI.{Start,Stop}` | ✅ `start`/`stop` commands | |
 | **Sessions — messages (list/push/watch)** | ✅ `/messages` | ✅ `PushMessage`, `ListMessages`, `WatchSessionMessages` (gRPC) | ✅ `session messages`, `session send` | gRPC watch via `session_watch.go` |
+| **Session messages (top-level)** | ✅ `GET /session_messages` | ✅ `SessionMessages().List()` | n/a | SDK/CP-internal; used by CP to resolve max seq on restart |
 | **Sessions — live events (SSE proxy)** | ✅ `/events` → runner pod | ✅ `SessionAPI.StreamEvents` → `io.ReadCloser` | ✅ `session events` | Runner must be Running; 502 if unreachable |
 | **Sessions — labels/annotations** | ✅ PATCH accepts `labels`/`annotations` | ✅ fields on `Session` type; `SessionAPI.Update(patch map[string]any)` | ⚠️ no dedicated subcommand; use `acpctl get session -o json` + manual PATCH | |
 | **Sessions — workspace files** | ✅ sessions plugin; stubs empty list when no runner; 503 per-file-op | 🔲 | 🔲 `session workspace list/get/put/delete` | Requires running session for file ops |

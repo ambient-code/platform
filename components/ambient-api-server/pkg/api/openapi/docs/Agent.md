@@ -4,29 +4,29 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**Id** | Pointer to **string** |  | [optional] 
-**Kind** | Pointer to **string** |  | [optional] 
-**Href** | Pointer to **string** |  | [optional] 
-**CreatedAt** | Pointer to **time.Time** |  | [optional] 
-**UpdatedAt** | Pointer to **time.Time** |  | [optional] 
-**ProjectId** | **string** | The project this agent belongs to | 
-**ParentAgentId** | Pointer to **string** |  | [optional] 
-**OwnerUserId** | Pointer to **string** |  | [optional] 
-**Name** | **string** | Human-readable identifier; unique within the project | 
-**DisplayName** | Pointer to **string** |  | [optional] 
-**Description** | Pointer to **string** |  | [optional] 
-**Prompt** | Pointer to **string** | Defines who this agent is. Mutable via PATCH. Access controlled by RBAC. | [optional] 
-**RepoUrl** | Pointer to **string** |  | [optional] 
-**WorkflowId** | Pointer to **string** |  | [optional] 
-**LlmModel** | Pointer to **string** |  | [optional] 
-**LlmTemperature** | Pointer to **float64** |  | [optional] 
-**LlmMaxTokens** | Pointer to **int32** |  | [optional] 
-**BotAccountName** | Pointer to **string** |  | [optional] 
-**ResourceOverrides** | Pointer to **string** |  | [optional] 
-**EnvironmentVariables** | Pointer to **string** |  | [optional] 
-**CurrentSessionId** | Pointer to **string** | Denormalized for fast reads — the active session, if any | [optional] [readonly] 
-**Labels** | Pointer to **string** |  | [optional] 
-**Annotations** | Pointer to **string** |  | [optional] 
+**Id** | Pointer to **string** |  | [optional]
+**Kind** | Pointer to **string** |  | [optional]
+**Href** | Pointer to **string** |  | [optional]
+**CreatedAt** | Pointer to **time.Time** |  | [optional]
+**UpdatedAt** | Pointer to **time.Time** |  | [optional]
+**ProjectId** | **string** | The project this agent belongs to |
+**ParentAgentId** | Pointer to **string** |  | [optional]
+**OwnerUserId** | Pointer to **string** |  | [optional]
+**Name** | **string** | Human-readable identifier; unique within the project |
+**DisplayName** | Pointer to **string** |  | [optional]
+**Description** | Pointer to **string** |  | [optional]
+**Prompt** | Pointer to **string** | Defines who this agent is. Mutable via PATCH. Access controlled by RBAC. | [optional]
+**RepoUrl** | Pointer to **string** |  | [optional]
+**WorkflowId** | Pointer to **string** |  | [optional]
+**LlmModel** | Pointer to **string** |  | [optional]
+**LlmTemperature** | Pointer to **float64** |  | [optional]
+**LlmMaxTokens** | Pointer to **int32** |  | [optional]
+**BotAccountName** | Pointer to **string** |  | [optional]
+**ResourceOverrides** | Pointer to **string** |  | [optional]
+**EnvironmentVariables** | Pointer to **string** |  | [optional]
+**CurrentSessionId** | Pointer to **string** | Denormalized for fast reads — the active session, if any | [optional] [readonly]
+**Labels** | Pointer to **string** |  | [optional]
+**Annotations** | Pointer to **string** |  | [optional]
 
 ## Methods
 
@@ -614,5 +614,3 @@ HasAnnotations returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
-
-

@@ -165,23 +165,62 @@ bound to. Credential tokens SHALL be write-only in the API.
 - WHEN the caller is not cluster-internal
 - THEN the request is denied to prevent token exfiltration
 
+### Requirement: Agent Credential Isolation
+
+Integration credentials (GitHub, GitLab, Jira, Google, kubeconfig) SHALL
+NOT be visible to the agent process. The runner container's environment SHALL NOT
+contain integration credential tokens. The agent SHALL access external services
+exclusively through MCP tools exposed by sidecar containers with isolated environments.
+
+LLM provider credentials (Anthropic API key, Vertex AI service account) are exempt
+from this requirement — they are necessary for the agent's own inference and MAY
+remain in the runner container.
+
+#### Scenario: Agent cannot read integration tokens
+
+- GIVEN a runner pod with bound GitHub and Jira credentials
+- WHEN the agent enumerates environment variables or reads `/tmp/`
+- THEN no integration tokens are present — `GITHUB_TOKEN`, `JIRA_API_TOKEN`, etc. are absent
+- AND the agent can only interact with GitHub/Jira via MCP tools
+
+#### Scenario: Credential sidecar holds tokens in isolation
+
+- GIVEN a GitHub credential bound to a Project
+- WHEN the CP provisions the session pod
+- THEN a `github-mcp` sidecar container is added to the pod spec
+- AND the sidecar's environment contains `GITHUB_PERSONAL_ACCESS_TOKEN`
+- AND the sidecar exposes MCP tools on a localhost port
+- AND the runner container does NOT have `GITHUB_TOKEN` in its environment
+
+#### Scenario: Git write operations use MCP tools, not tokens
+
+- GIVEN the agent needs to push commits to a GitHub repository
+- WHEN the agent performs the push
+- THEN the agent calls the `github-mcp` sidecar's `PushFiles` or `CreatePullRequest` MCP tools
+- AND the sidecar executes the GitHub API call using its isolated token
+- AND the runner container never has a git credential helper or token
+- AND direct `git push` / `gh pr create` from the runner container SHALL fail (no credentials available)
+
 ### Requirement: MCP Credential Lifecycle
 
 MCP server credentials SHALL follow the same RoleBinding-scoped access model as other
-integration credentials. The Control Plane SHOULD support dynamic credential updates
-without requiring full pod restarts.
+integration credentials. Each integration credential bound to a Project SHALL be
+materialized as a sidecar container with its own isolated environment. The sidecar
+SHALL manage its own credential refresh cycle.
 
-#### Scenario: Sidecar mode credential update
+#### Scenario: Sidecar credential refresh
 
-- GIVEN an MCP sidecar running alongside a runner
-- WHEN the Project's MCP credentials are updated
-- THEN the CP triggers a pod rolling restart with updated environment
+- GIVEN a credential MCP sidecar running alongside a runner
+- WHEN the credential token approaches expiry
+- THEN the sidecar re-fetches the token from the backend API using its own auth
+- AND the agent is not interrupted or restarted
 
-#### Scenario: Pod mode credential update (proposed)
+#### Scenario: Credential-free fallback
 
-- GIVEN an MCP server running as an independent Pod
-- WHEN the Project's MCP credentials are updated
-- THEN the CP updates the MCP Pod configuration without affecting the runner
+- GIVEN a Project with no bound credentials
+- WHEN a session is provisioned
+- THEN no credential sidecars are injected
+- AND the runner operates without integration credentials
 
 ### Requirement: Per-Session Service Account Isolation
 
@@ -380,7 +419,8 @@ These endpoints MUST validate the caller is cluster-internal to prevent token ex
 2. No runner session can operate beyond the user's own authorization scope
 3. Integration credentials are global, bound to Projects via RoleBindings, and fetched at runtime, never baked in
 4. The Control Plane SA is the only identity that spans Projects
-5. MCP lifecycle (sidecar vs. pod) is determined by operational requirements, not security compromise
+5. Integration credentials are isolated in sidecar containers; the agent process has no access to integration tokens via environment, filesystem, or process inheritance
+6. LLM provider credentials (Anthropic API key, Vertex SA) are exempt from sidecar isolation — they remain in the runner container
 
 ## Design Decisions
 
@@ -396,6 +436,7 @@ These endpoints MUST validate the caller is cluster-internal to prevent token ex
 | Union-only permissions | No deny rules — simpler mental model for fleet operators. |
 | Token stored in database, encrypted at rest | Single authoritative store. A future Vault integration can be adopted by pointing the DB row at a Vault path without changing the API surface. |
 | `google` token serialized as a string | Service Account JSON is serialized into the single `token` field. Keeps the schema uniform across all providers. |
+| Integration credentials isolated in sidecars, not runner env | Prevents token exfiltration by the agent via `Bash`/`Read` tools. The agent interacts with external services only through MCP tools. Sidecar containers have isolated environments containing only their own credentials. |
 | No validation on creation | First-use error is acceptable. Avoids a network call to the provider at creation time and the failure modes that come with it. |
 | Credential rotation is user-managed | Users update the token via `PATCH` or `acpctl credential update`. No platform-side rotation or expiry tracking. |
 | No migration utility for existing K8s Secrets | Users re-enter credentials via the new API. The old Secret-based path is removed when the new API is live. |
