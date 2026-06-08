@@ -38,7 +38,9 @@ _ensure_port_forward() {
   sleep 1
   kubectl port-forward -n "${NS}" svc/ambient-api-server "${port}:8000" &>/dev/null &
   for _i in $(seq 1 10); do
-    curl -s -o /dev/null --max-time 2 "http://localhost:${port}/healthcheck" 2>/dev/null && return 0
+    local _s
+    _s=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "http://localhost:${port}/healthcheck" 2>/dev/null || true)
+    [[ "$_s" != "000" && -n "$_s" ]] && return 0
     sleep 1
   done
 }
@@ -342,13 +344,13 @@ _reforward() {
   elif command -v fuser &>/dev/null; then
     fuser -k "${local_port}/tcp" 2>/dev/null || true
   fi
+  sleep 1
   kubectl port-forward -n "$NS" "svc/${svc}" "${local_port}:${remote_port}" &>/dev/null &
-  # Give the port-forward a moment to bind
+  # Wait for TCP connectivity (any HTTP status — even 401 — means the forward is up)
   for _i in $(seq 1 10); do
-    if curl -sf -o /dev/null "http://localhost:${local_port}/" 2>/dev/null || \
-       curl -sf -o /dev/null "http://localhost:${local_port}/healthcheck" 2>/dev/null; then
-      return 0
-    fi
+    local _status
+    _status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "http://localhost:${local_port}/healthcheck" 2>/dev/null || true)
+    [[ "$_status" != "000" && -n "$_status" ]] && return 0
     sleep 1
   done
   echo "WARNING: port-forward svc/${svc} ${local_port}:${remote_port} may not be ready"
