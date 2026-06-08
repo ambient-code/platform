@@ -8,6 +8,16 @@ KC_ADMIN_USER="admin"
 KC_ADMIN_PASS="admin"
 KC_CLIENT_ID="ambient-frontend"
 NS="${NAMESPACE:-ambient-code}"
+KUBE_CONTEXT="${KUBE_CONTEXT:-}"
+
+# All kubectl calls go through this wrapper so we never touch the wrong cluster.
+kubectl() {
+  if [[ -n "$KUBE_CONTEXT" ]]; then
+    command kubectl --context "$KUBE_CONTEXT" "$@"
+  else
+    command kubectl "$@"
+  fi
+}
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -51,17 +61,17 @@ api() {
   if [[ -n "$body" ]]; then
     args+=(-d "$body")
   fi
-  local response
-  response=$(curl "${args[@]}" -X "$method" "${API_URL}${path}" || true)
-  HTTP_STATUS=$(echo "$response" | tail -1)
-  HTTP_BODY=$(echo "$response" | sed '$d')
-  # Auto-recover from port-forward death (000 = connection refused/timeout)
-  if [[ "$HTTP_STATUS" == "000" ]]; then
-    _ensure_port_forward
+  local response _retry
+  for _retry in 1 2 3; do
     response=$(curl "${args[@]}" -X "$method" "${API_URL}${path}" || true)
     HTTP_STATUS=$(echo "$response" | tail -1)
     HTTP_BODY=$(echo "$response" | sed '$d')
-  fi
+    case "$HTTP_STATUS" in
+      000) _ensure_port_forward ;;            # port-forward died
+      500|502|503) sleep $((_retry * 2)) ;;   # transient server error
+      *) return 0 ;;                          # success or expected client error
+    esac
+  done
 }
 
 assert_status() {
@@ -425,6 +435,21 @@ if [[ "$CP_READY" != "true" ]]; then
   echo "WARNING: Control plane pod not ready after 20s — sessions may stay Pending"
   echo "  Control plane logs:"
   kubectl logs -n "$NS" deploy/ambient-control-plane --tail=20 2>/dev/null || true
+fi
+
+# 10. Wait for the CP's gRPC watch streams to be established.
+#     The CP pod becomes Ready before its watch streams connect to the API
+#     server (~10s lag). Sessions created in that gap are missed.
+CP_STREAMS=false
+for attempt in $(seq 1 20); do
+  if kubectl logs -n "$NS" deploy/ambient-control-plane --tail=50 2>/dev/null | grep -q "session watch stream established"; then
+    CP_STREAMS=true
+    break
+  fi
+  sleep 1
+done
+if [[ "$CP_STREAMS" != "true" ]]; then
+  echo "WARNING: CP session watch stream not established after 20s"
 fi
 
 echo "  Phase 0.5 complete: JWT + RBAC enforcement enabled"
