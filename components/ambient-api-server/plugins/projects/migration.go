@@ -11,7 +11,6 @@ func migration() *gormigrate.Migration {
 	type Project struct {
 		db.Model
 		Name        string `gorm:"uniqueIndex;not null"`
-		DisplayName *string
 		Description *string
 		Labels      *string
 		Annotations *string
@@ -43,7 +42,7 @@ func promptMigration() *gormigrate.Migration {
 
 func dropDisplayNameMigration() *gormigrate.Migration {
 	return &gormigrate.Migration{
-		ID: "202505090001",
+		ID: "202605060002",
 		Migrate: func(tx *gorm.DB) error {
 			return tx.Exec(`ALTER TABLE IF EXISTS projects DROP COLUMN IF EXISTS display_name`).Error
 		},

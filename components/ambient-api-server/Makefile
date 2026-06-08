@@ -9,7 +9,8 @@ git_sha:=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 git_dirty:=$(shell git diff --quiet 2>/dev/null || echo "-modified")
 build_version:=$(git_sha)$(git_dirty)
 build_time:=$(shell date -u '+%Y-%m-%d %H:%M:%S UTC')
-ldflags=-X github.com/ambient-code/platform/components/ambient-api-server/pkg/api.Version=$(build_version) -X 'github.com/ambient-code/platform/components/ambient-api-server/pkg/api.BuildTime=$(build_time)'
+git_tag:=$(shell git describe --tags --always --dirty 2>/dev/null || echo "unknown")
+ldflags=-X github.com/ambient-code/platform/components/ambient-api-server/pkg/api.Version=$(build_version) -X 'github.com/ambient-code/platform/components/ambient-api-server/pkg/api.BuildTime=$(build_time)' -X github.com/ambient-code/platform/components/ambient-api-server/pkg/api.GitTag=$(git_tag)
 
 .PHONY: binary
 binary:
@@ -102,4 +103,8 @@ migrate: binary
 .PHONY: build-image
 build-image: binary
 	@echo "Building container image..."
-	$(CONTAINER_ENGINE) build -t vteam_api_server:latest .
+	$(CONTAINER_ENGINE) build \
+		--build-arg GIT_VERSION=$(build_version) \
+		--build-arg GIT_TAG=$(git_tag) \
+		--build-arg BUILD_TIME="$(build_time)" \
+		-t vteam_api_server:latest .

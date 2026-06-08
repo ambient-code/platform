@@ -2,7 +2,10 @@ package server
 
 import (
 	"fmt"
+	"log"
 	"os"
+
+	"ambient-code-backend/jwtauth"
 
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -19,6 +22,7 @@ var (
 	BaseKubeConfig  *rest.Config
 	OperatorImage   string
 	ImagePullPolicy string
+	JWTValidator    *jwtauth.Validator
 )
 
 // InitK8sClients initializes Kubernetes clients and configuration
@@ -60,6 +64,32 @@ func InitK8sClients() error {
 	BaseKubeConfig = config
 
 	return nil
+}
+
+// InitJWTValidator initializes the JWT validator for SSO authentication.
+// Non-fatal: if SSO_ISSUER_URL is not configured, the validator is left nil
+// and SSO auth is unavailable (the feature flag will also be off).
+func InitJWTValidator() {
+	issuerURL := os.Getenv("SSO_ISSUER_URL")
+	audience := os.Getenv("SSO_AUDIENCE")
+	if issuerURL == "" {
+		log.Printf("SSO: JWT validation not configured (SSO_ISSUER_URL not set)")
+		return
+	}
+
+	v, err := jwtauth.NewValidator(issuerURL, audience)
+	if err != nil {
+		log.Printf("SSO: failed to initialize JWT validator: %v", err)
+		return
+	}
+
+	if altIssuer := os.Getenv("SSO_PUBLIC_ISSUER_URL"); altIssuer != "" {
+		v.AddAltIssuer(altIssuer)
+		log.Printf("SSO: added alt issuer %s", altIssuer)
+	}
+
+	JWTValidator = v
+	log.Printf("SSO: JWT validator initialized (issuer=%s, audience=%s)", issuerURL, audience)
 }
 
 // InitConfig initializes configuration from environment variables
