@@ -91,3 +91,8 @@ rules:
 - apiGroups: ["authorization.k8s.io"]
   resources: ["subjectaccessreviews", "selfsubjectaccessreviews"]
   verbs: ["create"]
+
+# User/group impersonation for SSO JWT-authenticated requests
+- apiGroups: [""]
+  resources: ["users", "groups", "serviceaccounts"]
+  verbs: ["impersonate"]

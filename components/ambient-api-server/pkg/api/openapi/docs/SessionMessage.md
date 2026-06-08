@@ -4,15 +4,15 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**Id** | Pointer to **string** |  | [optional] 
-**Kind** | Pointer to **string** |  | [optional] 
-**Href** | Pointer to **string** |  | [optional] 
-**CreatedAt** | Pointer to **time.Time** |  | [optional] 
-**UpdatedAt** | Pointer to **time.Time** |  | [optional] 
-**SessionId** | Pointer to **string** | ID of the parent session | [optional] [readonly] 
-**Seq** | Pointer to **int64** | Monotonically increasing sequence number within the session | [optional] [readonly] 
+**Id** | Pointer to **string** |  | [optional]
+**Kind** | Pointer to **string** |  | [optional]
+**Href** | Pointer to **string** |  | [optional]
+**CreatedAt** | Pointer to **time.Time** |  | [optional]
+**UpdatedAt** | Pointer to **time.Time** |  | [optional]
+**SessionId** | Pointer to **string** | ID of the parent session | [optional] [readonly]
+**Seq** | Pointer to **int64** | Monotonically increasing sequence number within the session | [optional] [readonly]
 **EventType** | Pointer to **string** | Event type tag. Common values: &#x60;user&#x60; (human turn), &#x60;assistant&#x60; (model reply), &#x60;tool_use&#x60;, &#x60;tool_result&#x60;, &#x60;system&#x60;, &#x60;error&#x60;. | [optional] [default to "user"]
-**Payload** | Pointer to **string** | Message body (plain text or JSON-encoded event payload) | [optional] 
+**Payload** | Pointer to **string** | Message body (plain text or JSON-encoded event payload) | [optional]
 
 ## Methods
 
@@ -260,5 +260,3 @@ HasPayload returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
-
-

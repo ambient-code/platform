@@ -4963,7 +4963,6 @@ components:
             type: string
         required:
         - name
-        - project_id
         - provider
         type: object
       example:
@@ -4975,7 +4974,6 @@ components:
         token: token
         labels: labels
         updated_at: 2000-01-23T04:56:07.000+00:00
-        project_id: project_id
         provider: github
         name: name
         id: id

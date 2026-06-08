@@ -18,6 +18,10 @@ resources:
 - postgresql-init-scripts.yaml
 - ldap-config.yaml
 - ldap-credentials.yaml
+# SSO: Keycloak for local OIDC authentication
+- keycloak-deployment.yaml
+- sso-credentials.yaml
+- e2e-rolebinding.yaml
 
 # Patches for e2e environment
 patches:
@@ -114,6 +118,34 @@ patches:
     version: v1
     kind: Deployment
     name: postgresql
+# API server: relax runAsNonRoot for Kind (upstream image runs as root)
+- path: api-server-security-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-api-server
+# Backend: SSO issuer URL and audience for JWT validation
+- path: backend-sso-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: backend-api
+# Control plane: make OIDC env vars optional, use HTTP for Kind
+- path: control-plane-env-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-control-plane
+
+configMapGenerator:
+- name: keycloak-realm-config
+  files:
+  - ambient-code-realm.json=keycloak-realm.json
+  options:
+    disableNameSuffixHash: true
 
 # Kind overlay: Use Quay.io production images by default
 # For local development with local images, use overlays/kind-local/ instead

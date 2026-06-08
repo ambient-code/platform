@@ -12,11 +12,34 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/output"
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
 	"github.com/spf13/cobra"
+)
+
+var (
+	sseColorDim     = lipgloss.Color("240")
+	sseColorCyan    = lipgloss.Color("36")
+	sseColorBlue    = lipgloss.Color("69")
+	sseColorGreen   = lipgloss.Color("28")
+	sseColorRed     = lipgloss.Color("196")
+	sseColorYellow  = lipgloss.Color("214")
+	sseColorMagenta = lipgloss.Color("134")
+
+	sseThinkTag   = lipgloss.NewStyle().Foreground(sseColorDim).Bold(true)
+	sseThinkText  = lipgloss.NewStyle().Foreground(sseColorDim).Italic(true)
+	sseToolTag    = lipgloss.NewStyle().Foreground(sseColorCyan).Bold(true)
+	sseToolResult = lipgloss.NewStyle().Foreground(sseColorDim)
+	sseAssistant  = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
+	sseRunTag     = lipgloss.NewStyle().Foreground(sseColorGreen).Bold(true)
+	sseErrorTag   = lipgloss.NewStyle().Foreground(sseColorRed).Bold(true)
+	sseAgentTag   = lipgloss.NewStyle().Foreground(sseColorYellow).Bold(true)
+	sseStepTag    = lipgloss.NewStyle().Foreground(sseColorMagenta).Bold(true)
+	sseArrow      = lipgloss.NewStyle().Foreground(sseColorDim)
 )
 
 var msgArgs struct {
@@ -469,7 +492,17 @@ func streamMessagesContinuous(cmd *cobra.Command, client *sdkclient.Client, sess
 }
 
 func renderSSEStream(stream io.Reader, out io.Writer, jsonMode, exitOnRunFinished bool) error {
+	colorEnabled := output.IsTerminalWriter(out)
+	cw := &compactWriter{w: out}
+	r := &sseRenderer{
+		out:          cw,
+		color:        colorEnabled,
+		toolArgsBuf:  &strings.Builder{},
+		lastToolName: "",
+	}
+
 	scanner := bufio.NewScanner(stream)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	var reasoningBuf strings.Builder
 	var inText bool
 	for scanner.Scan() {
@@ -489,58 +522,71 @@ func renderSSEStream(stream io.Reader, out io.Writer, jsonMode, exitOnRunFinishe
 			Delta        string `json:"delta"`
 			ToolCallName string `json:"toolCallName"`
 			Content      string `json:"content"`
+			Message      string `json:"message"`
+			StepName     string `json:"stepName"`
 		}
 		if err := json.Unmarshal([]byte(data), &evt); err != nil {
 			continue
 		}
 		switch evt.Type {
+		case "RUN_STARTED":
+			r.renderRunStarted()
 		case "REASONING_MESSAGE_CONTENT":
 			reasoningBuf.WriteString(evt.Delta)
 		case "REASONING_END":
 			if reasoningBuf.Len() > 0 {
-				fmt.Fprintf(out, "[thinking] %s\n", strings.TrimSpace(reasoningBuf.String()))
+				r.renderThinking(strings.TrimSpace(reasoningBuf.String()))
 				reasoningBuf.Reset()
 			}
 		case "TEXT_MESSAGE_CONTENT":
 			if evt.Delta != "" {
 				inText = true
-				fmt.Fprint(out, evt.Delta)
+				r.renderTextDelta(evt.Delta)
 			}
 		case "TEXT_MESSAGE_END":
 			if inText {
-				fmt.Fprintln(out)
+				fmt.Fprintln(cw)
 				inText = false
 			}
 		case "TOOL_CALL_START":
+			r.flushToolArgs()
 			if evt.ToolCallName != "" {
-				fmt.Fprintf(out, "[%s] ", evt.ToolCallName)
+				r.lastToolName = evt.ToolCallName
+				r.renderToolStart(evt.ToolCallName)
 			}
+		case "TOOL_CALL_ARGS":
+			r.toolArgsBuf.WriteString(evt.Delta)
+		case "TOOL_CALL_END":
+			r.flushToolArgs()
+			r.lastToolName = ""
 		case "TOOL_CALL_RESULT":
+			r.flushToolArgs()
 			if evt.Content != "" {
-				var content string
-				if err := json.Unmarshal([]byte(evt.Content), &content); err != nil {
-					content = evt.Content
-				}
-				lines := strings.SplitN(strings.TrimSpace(content), "\n", 4)
-				preview := strings.Join(lines, " | ")
-				if len(lines) >= 4 {
-					preview += " ..."
-				}
-				fmt.Fprintf(out, "→ %s\n", preview)
+				r.renderToolResult(evt.Content)
+			}
+		case "STEP_STARTED":
+			if evt.StepName != "" {
+				r.renderStep(evt.StepName)
 			}
 		case "RUN_FINISHED":
 			if inText {
-				fmt.Fprintln(out)
+				fmt.Fprintln(cw)
 				inText = false
 			}
+			r.renderRunFinished()
 			if exitOnRunFinished {
 				return nil
 			}
 		case "RUN_ERROR":
 			if inText {
-				fmt.Fprintln(out)
+				fmt.Fprintln(cw)
 				inText = false
 			}
+			msg := evt.Message
+			if msg == "" {
+				msg = evt.Content
+			}
+			r.renderRunError(msg)
 			if exitOnRunFinished {
 				return fmt.Errorf("run failed")
 			}
@@ -548,11 +594,111 @@ func renderSSEStream(stream io.Reader, out io.Writer, jsonMode, exitOnRunFinishe
 	}
 
 	if inText {
-		fmt.Fprintln(out)
+		fmt.Fprintln(cw)
 	}
 
 	if scanErr := scanner.Err(); scanErr != nil {
 		return fmt.Errorf("stream error: %w", scanErr)
 	}
 	return nil
+}
+
+type compactWriter struct {
+	w      io.Writer
+	lastNL bool
+}
+
+func (cw *compactWriter) Write(p []byte) (int, error) {
+	origLen := len(p)
+	var buf []byte
+	for _, b := range p {
+		if b == '\n' {
+			if cw.lastNL {
+				continue
+			}
+			cw.lastNL = true
+		} else if b == '\r' {
+			continue
+		} else {
+			cw.lastNL = false
+		}
+		buf = append(buf, b)
+	}
+	if len(buf) > 0 {
+		if _, err := cw.w.Write(buf); err != nil {
+			return 0, err
+		}
+	}
+	return origLen, nil
+}
+
+type sseRenderer struct {
+	out          io.Writer
+	color        bool
+	toolArgsBuf  *strings.Builder
+	lastToolName string
+}
+
+func (r *sseRenderer) styled(s lipgloss.Style, text string) string {
+	if !r.color {
+		return text
+	}
+	return s.Render(text)
+}
+
+func (r *sseRenderer) renderRunStarted() {
+	fmt.Fprintln(r.out, r.styled(sseRunTag, "▶ run started"))
+}
+
+func (r *sseRenderer) renderRunFinished() {
+	fmt.Fprintln(r.out, r.styled(sseRunTag, "■ run finished"))
+}
+
+func (r *sseRenderer) renderRunError(msg string) {
+	if msg != "" {
+		fmt.Fprintf(r.out, "%s %s\n", r.styled(sseErrorTag, "✗ error:"), r.styled(sseErrorTag, msg))
+	} else {
+		fmt.Fprintln(r.out, r.styled(sseErrorTag, "✗ run failed"))
+	}
+}
+
+func (r *sseRenderer) renderThinking(text string) {
+	tag := r.styled(sseThinkTag, "[thinking]")
+	body := r.styled(sseThinkText, text)
+	fmt.Fprintf(r.out, "%s %s\n", tag, body)
+}
+
+func (r *sseRenderer) renderTextDelta(delta string) {
+	fmt.Fprint(r.out, delta)
+}
+
+func (r *sseRenderer) renderToolStart(name string) {
+	tag := r.styled(sseToolTag, "["+name+"]")
+	fmt.Fprintf(r.out, "%s ", tag)
+}
+
+func (r *sseRenderer) renderToolResult(content string) {
+	var decoded string
+	if err := json.Unmarshal([]byte(content), &decoded); err != nil {
+		decoded = content
+	}
+	lines := strings.SplitN(strings.TrimSpace(decoded), "\n", 4)
+	preview := strings.Join(lines, " | ")
+	if len(lines) >= 4 {
+		preview += " ..."
+	}
+	arrow := r.styled(sseArrow, "→")
+	body := r.styled(sseToolResult, preview)
+	fmt.Fprintf(r.out, "%s %s\n", arrow, body)
+}
+
+func (r *sseRenderer) renderStep(name string) {
+	fmt.Fprintln(r.out, r.styled(sseStepTag, "⦿ step: "+name))
+}
+
+func (r *sseRenderer) flushToolArgs() {
+	if r.toolArgsBuf.Len() == 0 {
+		return
+	}
+	r.toolArgsBuf.Reset()
 }

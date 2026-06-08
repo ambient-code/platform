@@ -29,7 +29,9 @@ func (l CredentialList) Index() CredentialIndex {
 }
 
 func (d *Credential) BeforeCreate(tx *gorm.DB) error {
-	d.ID = api.NewID()
+	if d.ID == "" {
+		d.ID = api.NewID()
+	}
 	return nil
 }
 

@@ -1,0 +1,34 @@
+[
+  {
+    "input": "test PR 1599 on OpenShift",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "ambient-pr-test"
+    },
+    "description": "Deploy a PR for testing on OpenShift"
+  },
+  {
+    "input": "deploy this PR to my namespace for testing",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "ambient-pr-test"
+    },
+    "description": "Natural language trigger for PR deployment"
+  },
+  {
+    "input": "run the ambient control plane from PR 1599 on the dev cluster",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "ambient-pr-test"
+    },
+    "description": "Request to test a specific PR on a dev cluster"
+  },
+  {
+    "input": "tear down the PR test environment",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "ambient-pr-test"
+    },
+    "description": "Request to clean up a PR test deployment"
+  }
+]

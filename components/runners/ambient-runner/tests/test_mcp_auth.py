@@ -2,7 +2,6 @@
 
 import json
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from ambient_runner.bridges.claude.mcp import check_mcp_authentication
 

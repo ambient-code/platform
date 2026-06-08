@@ -14,3 +14,9 @@ const (
 )
 
 var NewID = trexapi.NewID
+
+var (
+	Version   = ""
+	BuildTime = ""
+	GitTag    = ""
+)
