@@ -391,6 +391,26 @@ func (h roleBindingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 						return nil, errors.New(errors.ErrorConflict, "cannot delete the last owner binding")
 					}
 				}
+
+				// --- Hierarchy check: caller must outrank the binding's role ---
+				username := auth.GetUsernameFromContext(ctx)
+				var callerRoleNames []string
+				baseQuery := g.Table("role_bindings rb").
+					Select("r.name").
+					Joins("JOIN roles r ON r.id = rb.role_id").
+					Where("rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", username)
+				if binding.Scope == "project" && binding.ProjectId != nil {
+					baseQuery = baseQuery.Where("rb.project_id = ? OR rb.scope = 'global'", *binding.ProjectId)
+				} else if binding.Scope == "credential" && binding.CredentialId != nil {
+					baseQuery = baseQuery.Where("rb.credential_id = ? OR rb.scope = 'global'", *binding.CredentialId)
+				}
+				if dbErr := baseQuery.Scan(&callerRoleNames).Error; dbErr != nil {
+					return nil, errors.GeneralError("failed to query caller roles: %v", dbErr)
+				}
+				callerLevel := pkgrbac.HighestLevel(callerRoleNames)
+				if !pkgrbac.CanGrant(callerLevel, roleName) {
+					return nil, errors.Forbidden("insufficient privileges to delete this binding")
+				}
 			}
 
 			err := h.roleBinding.Delete(ctx, id)

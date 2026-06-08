@@ -138,3 +138,24 @@ func ApplyListFilter(ctx context.Context, listArgs *services.ListArguments, filt
 	AppendTSLFilter(listArgs, scopeFilter)
 	return true
 }
+
+// IsProjectAuthorized checks whether the caller's AuthResult grants access
+// to the given projectID. Returns false if authResult is nil, the caller has
+// no project bindings, or the projectID is not in the authorized list.
+func IsProjectAuthorized(authResult *AuthResult, projectID string) bool {
+	if authResult == nil {
+		return false
+	}
+	if authResult.IsGlobalAdmin {
+		return true
+	}
+	if projectID == "" {
+		return false
+	}
+	for _, id := range authResult.ProjectIDs {
+		if id == projectID {
+			return true
+		}
+	}
+	return false
+}

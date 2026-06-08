@@ -228,6 +228,12 @@ func (h *sessionGRPCHandler) ListSessions(ctx context.Context, req *pb.ListSessi
 		Size: int64(size),
 	}
 
+	if !middleware.IsServiceCaller(ctx) {
+		if !rbac.ApplyListFilter(ctx, &listArgs, "project_id", false) {
+			return &pb.ListSessionsResponse{Items: []*pb.Session{}, Metadata: &pb.ListMeta{Page: int32(page), Size: int32(size), Total: 0}}, nil
+		}
+	}
+
 	var sessions []Session
 	paging, svcErr := h.generic.List(ctx, "id", &listArgs, &sessions)
 	if svcErr != nil {
@@ -301,7 +307,7 @@ func (h *sessionGRPCHandler) WatchSessionMessages(req *pb.WatchSessionMessagesRe
 			if session.ProjectId != nil {
 				projectID = *session.ProjectId
 			}
-			if !isProjectAuthorized(authResult, projectID) {
+			if !rbac.IsProjectAuthorized(authResult, projectID) {
 				return status.Error(codes.PermissionDenied, "not authorized to watch this session")
 			}
 		}
@@ -391,7 +397,7 @@ func (h *sessionGRPCHandler) WatchSessions(req *pb.WatchSessionsRequest, stream 
 					if session.ProjectId != nil {
 						projectID = *session.ProjectId
 					}
-					if !isProjectAuthorized(authResult, projectID) {
+					if !rbac.IsProjectAuthorized(authResult, projectID) {
 						continue
 					}
 				}
@@ -410,20 +416,3 @@ func (h *sessionGRPCHandler) WatchSessions(req *pb.WatchSessionsRequest, stream 
 	}
 }
 
-func isProjectAuthorized(authResult *rbac.AuthResult, projectID string) bool {
-	if authResult == nil {
-		return false
-	}
-	if authResult.IsGlobalAdmin {
-		return true
-	}
-	if projectID == "" {
-		return false
-	}
-	for _, id := range authResult.ProjectIDs {
-		if id == projectID {
-			return true
-		}
-	}
-	return false
-}
