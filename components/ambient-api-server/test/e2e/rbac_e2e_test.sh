@@ -404,6 +404,10 @@ for attempt in $(seq 1 15); do
 done
 if [[ "$JWT_VERIFIED" != "true" ]]; then
   echo "FATAL: API server not accepting Keycloak JWTs after 30s (last status=$VERIFY_STATUS)"
+  echo "  API server image: $(kubectl get pod -n "$NS" -l app=ambient-api-server,component!=database -o jsonpath='{.items[0].spec.containers[0].image}' 2>/dev/null)"
+  echo "  API server imageID: $(kubectl get pod -n "$NS" -l app=ambient-api-server,component!=database -o jsonpath='{.items[0].status.containerStatuses[0].imageID}' 2>/dev/null)"
+  echo "  API server env AMBIENT_ENV: $(kubectl get pod -n "$NS" -l app=ambient-api-server,component!=database -o jsonpath='{.items[0].spec.containers[0].env}' 2>/dev/null | grep -o 'AMBIENT_ENV[^}]*' || echo 'not set')"
+  echo "  API server command: $(kubectl get pod -n "$NS" -l app=ambient-api-server,component!=database -o jsonpath='{.items[0].spec.containers[0].command}' 2>/dev/null | tr ',' '\n' | grep -E 'jwt|authz|jwk' || echo 'no relevant flags')"
   echo "  API server logs:"
   kubectl logs -n "$NS" deploy/ambient-api-server -c api-server --tail=30 2>/dev/null || true
   exit 1
