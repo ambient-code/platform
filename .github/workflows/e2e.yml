@@ -319,29 +319,29 @@ jobs:
 
     - name: Run RBAC enforcement E2E tests
       run: |
-        # Port-forward api-server for RBAC tests
+        # Port-forward api-server and keycloak for RBAC tests
         kubectl port-forward -n ambient-code svc/ambient-api-server 13592:8000 &
-        APIPF=$!
-        sleep 2
+        kubectl port-forward -n ambient-code svc/keycloak-service 18592:8080 &
+        sleep 3
 
         # Enable JWT + RBAC enforcement on api-server
         kubectl set env deployment/ambient-api-server -n ambient-code \
           AMBIENT_ENV=production \
-          JWK_CERT_URL=http://keycloak-service:8080/realms/ambient-code/protocol/openid-connect/certs
+          JWK_CERT_URL=http://keycloak-service.ambient-code.svc:8080/realms/ambient-code/protocol/openid-connect/certs \
+          GRPC_SERVICE_ACCOUNT=service-account-ambient-e2e
         kubectl get deployment ambient-api-server -n ambient-code -o json \
           | sed 's/--enable-jwt=false/--enable-jwt=true/' \
           | sed 's/--enable-authz=false/--enable-authz=true/' \
           | kubectl apply -f -
         kubectl rollout status deployment/ambient-api-server -n ambient-code --timeout=120s
 
-        # Restart port-forward after rollout
-        kill $APIPF 2>/dev/null || true
+        # Restart port-forwards after rollout
+        kill $(lsof -ti :13592) 2>/dev/null || true
         kubectl port-forward -n ambient-code svc/ambient-api-server 13592:8000 &
         sleep 2
 
-        # Run RBAC e2e tests (Keycloak on NodePort 30090)
         API_URL=http://localhost:13592/api/ambient/v1 \
-        KC_URL=http://localhost:30090 \
+        KC_URL=http://localhost:18592 \
         bash components/ambient-api-server/test/e2e/rbac_e2e_test.sh
 
     - name: Upload test results

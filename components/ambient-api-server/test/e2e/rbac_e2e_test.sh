@@ -117,14 +117,14 @@ assert_list_count() {
 KC_ADMIN_TOKEN=""
 
 get_admin_token() {
-  KC_ADMIN_TOKEN=$(curl -s -X POST "${KC_URL}/realms/master/protocol/openid-connect/token" \
+  KC_ADMIN_TOKEN=$(curl -s --max-time 10 -X POST "${KC_URL}/realms/master/protocol/openid-connect/token" \
     -d "client_id=admin-cli" \
     -d "grant_type=password" \
     -d "username=${KC_ADMIN_USER}" \
-    -d "password=${KC_ADMIN_PASS}" | jq -r '.access_token')
+    -d "password=${KC_ADMIN_PASS}" 2>/dev/null | jq -r '.access_token // empty')
   if [[ -z "$KC_ADMIN_TOKEN" || "$KC_ADMIN_TOKEN" == "null" ]]; then
-    echo "ERROR: Failed to get Keycloak admin token"
-    exit 1
+    echo "ERROR: Failed to get Keycloak admin token from ${KC_URL}"
+    return 1
   fi
 }
 
@@ -225,17 +225,23 @@ clean_db() {
 }
 
 cleanup() {
+  # Cleanup must never fail — it runs in the EXIT trap.
+  set +e
   echo ""
   echo -e "${BOLD}Cleanup${NC}"
 
   clean_db
   echo "  DB cleaned (hard delete)"
 
-  get_admin_token
-  delete_keycloak_user "rbac-user-a"
-  delete_keycloak_user "rbac-user-b"
-  delete_keycloak_user "rbac-user-c"
-  echo "  Keycloak users cleaned up"
+  get_admin_token 2>/dev/null
+  if [[ -n "$KC_ADMIN_TOKEN" && "$KC_ADMIN_TOKEN" != "null" ]]; then
+    delete_keycloak_user "rbac-user-a"
+    delete_keycloak_user "rbac-user-b"
+    delete_keycloak_user "rbac-user-c"
+    echo "  Keycloak users cleaned up"
+  else
+    echo "  Keycloak unreachable — skipping user cleanup"
+  fi
 }
 trap cleanup EXIT
 
