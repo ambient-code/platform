@@ -415,4 +415,3 @@ func (h *sessionGRPCHandler) WatchSessions(req *pb.WatchSessionsRequest, stream 
 		}
 	}
 }
-
