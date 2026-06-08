@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-api
+spec:
+  template:
+    spec:
+      containers:
+        - name: backend-api
+          env:
+            - name: SSO_ISSUER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sso-credentials
+                  key: SSO_ISSUER_URL
+                  optional: true
+            - name: SSO_AUDIENCE
+              valueFrom:
+                secretKeyRef:
+                  name: sso-credentials
+                  key: SSO_AUDIENCE
+                  optional: true
+            - name: SSO_PUBLIC_ISSUER_URL
+              value: "http://localhost/sso/realms/ambient-code"

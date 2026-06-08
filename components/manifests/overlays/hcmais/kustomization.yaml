@@ -1,0 +1,186 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ambient-api
+
+resources:
+- ../../base
+- ambient-ui-route.yaml
+- api-server-route.yaml
+
+components:
+- ../../components/postgresql-rhel
+- ../../components/ambient-api-server-db
+
+patches:
+# --- Delete unwanted deployments ---
+- target: { group: apps, version: v1, kind: Deployment, name: backend-api }
+  patch: |
+    $patch: delete
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: { name: backend-api }
+- target: { group: apps, version: v1, kind: Deployment, name: frontend }
+  patch: |
+    $patch: delete
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: { name: frontend }
+- target: { group: apps, version: v1, kind: Deployment, name: agentic-operator }
+  patch: |
+    $patch: delete
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: { name: agentic-operator }
+- target: { group: apps, version: v1, kind: Deployment, name: public-api }
+  patch: |
+    $patch: delete
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: { name: public-api }
+- target: { group: apps, version: v1, kind: Deployment, name: unleash }
+  patch: |
+    $patch: delete
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: { name: unleash }
+- target: { group: apps, version: v1, kind: Deployment, name: minio }
+  patch: |
+    $patch: delete
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: { name: minio }
+- target: { group: apps, version: v1, kind: Deployment, name: observability-dashboard }
+  patch: |
+    $patch: delete
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: { name: observability-dashboard }
+# --- Delete unwanted services ---
+- target: { version: v1, kind: Service, name: backend-service }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: Service
+    metadata: { name: backend-service }
+- target: { version: v1, kind: Service, name: frontend-service }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: Service
+    metadata: { name: frontend-service }
+- target: { version: v1, kind: Service, name: public-api-service }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: Service
+    metadata: { name: public-api-service }
+- target: { version: v1, kind: Service, name: minio }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: Service
+    metadata: { name: minio }
+- target: { version: v1, kind: Service, name: unleash }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: Service
+    metadata: { name: unleash }
+- target: { version: v1, kind: Service, name: observability-dashboard-service }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: Service
+    metadata: { name: observability-dashboard-service }
+# --- Delete unwanted service accounts ---
+- target: { version: v1, kind: ServiceAccount, name: agentic-operator }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata: { name: agentic-operator }
+- target: { version: v1, kind: ServiceAccount, name: backend-api }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata: { name: backend-api }
+- target: { version: v1, kind: ServiceAccount, name: frontend }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata: { name: frontend }
+- target: { version: v1, kind: ServiceAccount, name: public-api }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata: { name: public-api }
+# --- Delete unwanted PVCs ---
+- target: { version: v1, kind: PersistentVolumeClaim, name: backend-state-pvc }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata: { name: backend-state-pvc }
+- target: { version: v1, kind: PersistentVolumeClaim, name: minio-data }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata: { name: minio-data }
+# --- Delete unwanted configmaps ---
+- target: { version: v1, kind: ConfigMap, name: ambient-agent-registry }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: ConfigMap
+    metadata: { name: ambient-agent-registry }
+- target: { version: v1, kind: ConfigMap, name: ambient-flags }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: ConfigMap
+    metadata: { name: ambient-flags }
+- target: { version: v1, kind: ConfigMap, name: ambient-models }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: ConfigMap
+    metadata: { name: ambient-models }
+# --- Delete unwanted misc ---
+- target: { version: v1, kind: LimitRange, name: ambient-default-limits }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: LimitRange
+    metadata: { name: ambient-default-limits }
+- target: { group: policy, version: v1, kind: PodDisruptionBudget, name: public-api-pdb }
+  patch: |
+    $patch: delete
+    apiVersion: policy/v1
+    kind: PodDisruptionBudget
+    metadata: { name: public-api-pdb }
+- target: { group: networking.k8s.io, version: v1, kind: NetworkPolicy, name: allow-from-runner-namespaces }
+  patch: |
+    $patch: delete
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata: { name: allow-from-runner-namespaces }
+# --- Env patches for retained components ---
+- path: ambient-api-server-env-patch.yaml
+  target: { group: apps, version: v1, kind: Deployment, name: ambient-api-server }
+- path: control-plane-env-patch.yaml
+  target: { group: apps, version: v1, kind: Deployment, name: ambient-control-plane }
+- path: ambient-ui-env-patch.yaml
+  target: { group: apps, version: v1, kind: Deployment, name: ambient-ui }
+
+images:
+- name: quay.io/ambient_code/vteam_api_server
+  newTag: latest
+- name: quay.io/ambient_code/vteam_control_plane
+  newTag: latest
+- name: quay.io/ambient_code/vteam_ambient_ui
+  newTag: latest

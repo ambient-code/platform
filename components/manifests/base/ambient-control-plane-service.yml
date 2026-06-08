@@ -59,6 +59,14 @@ spec:
           value: "quay.io/ambient_code/vteam_claude_runner:latest"
         - name: MCP_IMAGE
           value: "quay.io/ambient_code/vteam_mcp:latest"
+        - name: GITHUB_MCP_IMAGE
+          value: "quay.io/ambient_code/vteam_credential_github:latest"
+        - name: JIRA_MCP_IMAGE
+          value: "quay.io/ambient_code/vteam_credential_jira:latest"
+        - name: K8S_MCP_IMAGE
+          value: "quay.io/ambient_code/vteam_credential_k8s:latest"
+        - name: GOOGLE_MCP_IMAGE
+          value: "quay.io/ambient_code/vteam_credential_google:latest"
         - name: USE_VERTEX
           valueFrom:
             configMapKeyRef:

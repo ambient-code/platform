@@ -27,6 +27,13 @@ type EnvConfig = {
   OC_EMAIL?: string;
   ENABLE_OC_WHOAMI?: boolean;
 
+  // SSO/OIDC configuration (server-side only, optional)
+  SSO_ISSUER_URL?: string;
+  SSO_CLIENT_ID?: string;
+  SSO_CLIENT_SECRET?: string;
+  SSO_ENABLED?: boolean;
+  SESSION_SECRET?: string;
+
   // Unleash feature flags (server-side only, optional)
   UNLEASH_URL?: string;
   UNLEASH_CLIENT_KEY?: string;
@@ -74,6 +81,11 @@ export const env: EnvConfig = {
   OC_USER: getOptionalEnv('OC_USER'),
   OC_EMAIL: getOptionalEnv('OC_EMAIL'),
   ENABLE_OC_WHOAMI: getBooleanEnv('ENABLE_OC_WHOAMI', false),
+  SSO_ISSUER_URL: getOptionalEnv('SSO_ISSUER_URL'),
+  SSO_CLIENT_ID: getOptionalEnv('SSO_CLIENT_ID'),
+  SSO_CLIENT_SECRET: getOptionalEnv('SSO_CLIENT_SECRET'),
+  SSO_ENABLED: getBooleanEnv('SSO_ENABLED', false),
+  SESSION_SECRET: getOptionalEnv('SESSION_SECRET'),
   UNLEASH_URL: getOptionalEnv('UNLEASH_URL'),
   UNLEASH_CLIENT_KEY: getOptionalEnv('UNLEASH_CLIENT_KEY'),
   UNLEASH_APP_NAME: getOptionalEnv('UNLEASH_APP_NAME') || 'ambient-code-platform',

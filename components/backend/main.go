@@ -81,6 +81,7 @@ func main() {
 	}
 
 	server.InitConfig()
+	server.InitJWTValidator()
 
 	// Optional: Unleash feature flags (when UNLEASH_URL and UNLEASH_CLIENT_KEY are set)
 	featureflags.Init()

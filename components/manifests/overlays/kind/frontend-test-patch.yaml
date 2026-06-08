@@ -31,3 +31,42 @@ spec:
           value: "system:serviceaccount:ambient-code:test-user"
         - name: OC_EMAIL
           value: "test-user@vteam.local"
+        # Enable E2E test helper routes (e.g. /api/auth/sso/e2e-login).
+        # Kind dev only — the route is double-guarded in code (also checks
+        # AMBIENT_ENV !== "production") but avoid exposing Kind clusters
+        # on shared networks while this is enabled.
+        - name: E2E_TEST_HELPERS
+          value: "true"
+        # SSO/OIDC configuration (disabled by default; enable with make kind-sso-toggle)
+        - name: SSO_ENABLED
+          value: "false"
+        - name: NEXT_PUBLIC_SSO_ENABLED
+          value: "false"
+        - name: SSO_ISSUER_URL
+          valueFrom:
+            secretKeyRef:
+              name: sso-credentials
+              key: SSO_ISSUER_URL
+              optional: true
+        - name: SSO_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: sso-credentials
+              key: SSO_CLIENT_ID
+              optional: true
+        - name: SSO_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: sso-credentials
+              key: SSO_CLIENT_SECRET
+              optional: true
+        - name: SESSION_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: sso-credentials
+              key: SESSION_SECRET
+              optional: true
+        - name: SSO_REDIRECT_URI
+          value: "http://localhost/api/auth/sso/callback"
+        - name: SSO_PUBLIC_ISSUER_URL
+          value: "http://localhost/sso/realms/ambient-code"

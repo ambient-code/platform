@@ -108,7 +108,7 @@ func rolesMigration() *gormigrate.Migration {
 
 func dropProjectIDMigration() *gormigrate.Migration {
 	return &gormigrate.Migration{
-		ID: "202505120001",
+		ID: "202605060003",
 		Migrate: func(tx *gorm.DB) error {
 			return tx.Exec(`ALTER TABLE IF EXISTS credentials DROP COLUMN IF EXISTS project_id`).Error
 		},

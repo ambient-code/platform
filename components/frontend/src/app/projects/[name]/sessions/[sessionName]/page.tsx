@@ -1565,11 +1565,12 @@ export default function ProjectSessionDetailPage({
   }, [removeFileMutation]);
 
   // Keep task tab status badges in sync with live AG-UI state
+  const updateTaskStatus = fileTabs.updateTaskStatus;
   useEffect(() => {
     for (const [taskId, task] of aguiState.backgroundTasks) {
-      fileTabs.updateTaskStatus(taskId, task.status);
+      updateTaskStatus(taskId, task.status);
     }
-  }, [aguiState.backgroundTasks, fileTabs.updateTaskStatus]);
+  }, [aguiState.backgroundTasks, updateTaskStatus]);
 
   // Loading state
   if (isLoading || !projectName || !sessionName) {

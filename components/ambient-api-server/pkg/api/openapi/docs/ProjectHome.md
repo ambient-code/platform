@@ -4,8 +4,8 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**ProjectId** | Pointer to **string** |  | [optional] 
-**Agents** | Pointer to [**[]ProjectHomeAgent**](ProjectHomeAgent.md) |  | [optional] 
+**ProjectId** | Pointer to **string** |  | [optional]
+**Agents** | Pointer to [**[]ProjectHomeAgent**](ProjectHomeAgent.md) |  | [optional]
 
 ## Methods
 
@@ -78,5 +78,3 @@ HasAgents returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
-
-
