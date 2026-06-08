@@ -62,6 +62,7 @@ Handles `session ADDED` and `session MODIFIED (phase=Pending)` events by provisi
 3. ServiceAccount (no automount)
 4. Pod (runner image + env vars)
 5. Service (ClusterIP on port 8001 pointing at the pod)
+6. RoleBinding granting `system:image-builder` ClusterRole to `session-{id}-sa` (enables push to the OpenShift internal image registry)
 
 On `phase=Stopping` → calls `deprovisionSession` (deletes pods).
 On `DELETED` → calls `cleanupSession` (deletes pod, secret, service account, service, namespace).
@@ -86,6 +87,8 @@ The CP creates a Pod (not a Job) for each session. Key pod attributes:
 | `automountServiceAccountToken` | `true` | Runner uses the SA token to authenticate to the CP token endpoint |
 | CPU request/limit | 500m / 2000m | Generous for Claude Code |
 | Memory request/limit | 512Mi / 4Gi | Claude Code is memory-intensive |
+
+The CP binds the `system:image-builder` ClusterRole to `session-{id}-sa` via a namespace-scoped RoleBinding at provision time. This grants the runner pod push access to the OpenShift internal image registry (`image-registry.openshift-image-registry.svc:5000`), enabling agents to build and push images using daemonless tools such as `crane`. Pull access is provided automatically to all SAs in the namespace by OpenShift via the `system:image-pullers` RoleBinding created at namespace initialization.
 
 ### Start Context Assembly
 
@@ -555,3 +558,4 @@ The `ambient-control-plane` ServiceAccount does not have `delete` on `namespaces
 | CP token endpoint over Secret-write renewal | Secret writes are async push with no synchronization guarantee vs. token TTL; synchronous pull from CP eliminates the race entirely |
 | Runner SA token for CP auth | K8s SA tokens are already mounted in every pod, long-lived, and K8s-managed — no new secrets or out-of-band key distribution required |
 | CP is sole token source — no BOT_TOKEN Secret | CP creates the runner pod, so it is always reachable before the runner's first token request; retaining a Secret adds complexity and a second failure mode with the same blast radius |
+| `system:image-builder` bound to session SA at provision time | Agents need push access to the internal image registry to build and distribute images; OpenShift grants pull automatically via `system:image-pullers` at namespace init but push requires an explicit RoleBinding; co-locating it with the other session SA grants keeps all RBAC provisioning in one place |
