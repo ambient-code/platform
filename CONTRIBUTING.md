@@ -395,7 +395,8 @@ make kind-up
 This command will:
 - Create Kind cluster (~30 seconds)
 - Deploy all components (backend, frontend, operator)
-- Set up ingress and port forwarding
+- Deploy Keycloak with a pre-configured dev realm
+- Set up port forwarding
 - Load container images
 
 The setup takes ~2 minutes on first run.
@@ -403,10 +404,11 @@ The setup takes ~2 minutes on first run.
 #### Access the Application
 
 ```bash
-# Access at http://localhost:8080
+make kind-port-forward  # In another terminal
+# Open the frontend URL shown in the output
 ```
 
-Simple! Kind automatically sets up port forwarding to localhost.
+You'll be redirected to Keycloak for login. Use `developer` / `developer`.
 
 #### Stopping and Restarting
 
