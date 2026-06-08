@@ -62,6 +62,7 @@ Handles `session ADDED` and `session MODIFIED (phase=Pending)` events by provisi
 3. ServiceAccount (no automount)
 4. Pod (runner image + env vars)
 5. Service (ClusterIP on port 8001 pointing at the pod)
+6. RoleBinding granting `system:image-builder` ClusterRole to `session-{id}-sa` (enables push to the OpenShift internal image registry)
 
 On `phase=Stopping` → calls `deprovisionSession` (deletes pods).
 On `DELETED` → calls `cleanupSession` (deletes pod, secret, service account, service, namespace).
@@ -86,6 +87,8 @@ The CP creates a Pod (not a Job) for each session. Key pod attributes:
 | `automountServiceAccountToken` | `true` | Runner uses the SA token to authenticate to the CP token endpoint |
 | CPU request/limit | 500m / 2000m | Generous for Claude Code |
 | Memory request/limit | 512Mi / 4Gi | Claude Code is memory-intensive |
+
+The CP binds the `system:image-builder` ClusterRole to `session-{id}-sa` via a namespace-scoped RoleBinding at provision time. This grants the runner pod push access to the OpenShift internal image registry (`image-registry.openshift-image-registry.svc:5000`), enabling agents to build and push images using daemonless tools such as `crane`. Pull access is provided automatically to all SAs in the namespace by OpenShift via the `system:image-pullers` RoleBinding created at namespace initialization.
 
 ### Start Context Assembly
 
@@ -113,10 +116,31 @@ Each section is joined with `\n\n`. Empty sections are omitted. If all four are 
 | `AMBIENT_GRPC_USE_TLS` | CP config | TLS flag for gRPC |
 | `AMBIENT_CP_TOKEN_URL` | CP config | CP token endpoint URL (e.g. `http://ambient-control-plane.{ns}.svc:8080/token`) |
 | `INITIAL_PROMPT` | assembled prompt | Auto-execute on startup |
+| `IS_RESUME` | `"true"` | Set when `session.StartTime != nil` (session has been started before); tells the runner to skip `INITIAL_PROMPT` auto-execute |
+| `RESUME_AFTER_SEQ` | max `seq` from session_messages | Set alongside `IS_RESUME` when messages exist; runner's gRPC listener starts watching from this seq to prevent replay of historical messages |
 | `USE_VERTEX` / `ANTHROPIC_VERTEX_PROJECT_ID` / `CLOUD_ML_REGION` | CP config | Vertex AI config (when enabled) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | `/app/vertex/ambient-code-key.json` | Vertex service account path |
 | `LLM_MODEL` / `LLM_TEMPERATURE` / `LLM_MAX_TOKENS` | session fields | Per-session model config |
 | `CREDENTIAL_IDS` | JSON map `{provider: credential_id}` | Resolved credentials for this session; runner calls `/credentials/{id}/token` per provider |
+
+### Session Restart Behavior
+
+When the CP provisions a runner pod for a session that has been started before (`session.StartTime != nil`), it sets restart-specific env vars to prevent the runner from replaying the initial prompt and historical messages:
+
+```
+if session.StartTime != nil:
+    1. Set IS_RESUME=true
+    2. Query api-server: GET /api/ambient/v1/session_messages?search=session_id='...'&orderBy=seq desc&size=1
+    3. If messages exist, set RESUME_AFTER_SEQ=<max_seq>
+```
+
+The CP uses the Go SDK's `SessionMessages().List()` with `size=1`, `orderBy=seq desc` to resolve the maximum sequence number. This translates to a `GET /api/ambient/v1/session_messages` call against the api-server.
+
+On the runner side:
+- `IS_RESUME=true` causes `INITIAL_PROMPT` to be skipped (no auto-execute on startup)
+- `RESUME_AFTER_SEQ=N` causes the gRPC listener to start `WatchSessionMessages` from `last_seq=N`, skipping all messages with `seq <= N`
+
+This ensures a restarted session picks up from where it left off without replaying the initial prompt or re-processing historical user messages.
 
 ---
 
@@ -175,6 +199,8 @@ When `AMBIENT_GRPC_URL` is set (standard deployment):
      - MCP servers loaded
      - System prompt built
      - GRPCSessionListener instantiated and started
+       → If RESUME_AFTER_SEQ set: listener initializes last_seq from env var,
+         skipping all historical messages (seq <= RESUME_AFTER_SEQ)
        → WatchSessionMessages RPC opens
        → listener.ready asyncio.Event set
 5. await bridge._grpc_listener.ready.wait()
@@ -532,3 +558,4 @@ The `ambient-control-plane` ServiceAccount does not have `delete` on `namespaces
 | CP token endpoint over Secret-write renewal | Secret writes are async push with no synchronization guarantee vs. token TTL; synchronous pull from CP eliminates the race entirely |
 | Runner SA token for CP auth | K8s SA tokens are already mounted in every pod, long-lived, and K8s-managed — no new secrets or out-of-band key distribution required |
 | CP is sole token source — no BOT_TOKEN Secret | CP creates the runner pod, so it is always reachable before the runner's first token request; retaining a Secret adds complexity and a second failure mode with the same blast radius |
+| `system:image-builder` bound to session SA at provision time | Agents need push access to the internal image registry to build and distribute images; OpenShift grants pull automatically via `system:image-pullers` at namespace init but push requires an explicit RoleBinding; co-locating it with the other session SA grants keeps all RBAC provisioning in one place |

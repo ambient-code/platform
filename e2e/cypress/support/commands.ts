@@ -20,20 +20,30 @@ Cypress.Commands.add('setAuthToken', (token: string) => {
   }).as('authInterceptor')
 })
 
-// Add global beforeEach to set up auth
-// Note: In e2e environment, NEXT_PUBLIC_E2E_TOKEN is baked into the frontend build
-// This intercept is kept as backup for direct backend API calls (if any)
+// Set up auth before each test.
+// In SSO mode, creates a session cookie via the E2E login route so that
+// cy.visit() page navigations pass the middleware without Keycloak redirect.
+// Also intercepts all fetch/XHR requests to add the Authorization header.
 beforeEach(() => {
   const token = Cypress.env('TEST_TOKEN')
-  if (token) {
-    // Intercept all requests and add auth header (backup)
-    cy.intercept('**', (req) => {
-      // Only add header if not already present (frontend adds it automatically in e2e)
-      if (!req.headers['Authorization']) {
-        req.headers['Authorization'] = `Bearer ${token}`
-      }
+  if (!token) return
+
+  // Create SSO session cookie if the frontend is in SSO mode
+  if (Cypress.env('SSO_MODE')) {
+    cy.request({
+      method: 'POST',
+      url: '/api/auth/sso/e2e-login',
+      body: { token },
+      failOnStatusCode: false,
     })
   }
+
+  // Intercept all fetch/XHR requests and add auth header
+  cy.intercept('**', (req) => {
+    if (!req.headers['Authorization']) {
+      req.headers['Authorization'] = `Bearer ${token}`
+    }
+  })
 })
 
 // Prevent TypeScript from reading file as legacy script

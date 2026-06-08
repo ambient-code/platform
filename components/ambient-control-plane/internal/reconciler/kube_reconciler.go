@@ -21,6 +21,30 @@ const (
 	mcpSidecarURL  = "http://localhost:8090"
 )
 
+type credentialSidecarSpec struct {
+	Name string
+	Port int64
+}
+
+var credentialSidecarRegistry = map[string]credentialSidecarSpec{
+	"github": {
+		Name: "credential-github",
+		Port: 8091,
+	},
+	"jira": {
+		Name: "credential-jira",
+		Port: 8092,
+	},
+	"kubeconfig": {
+		Name: "credential-k8s",
+		Port: 8093,
+	},
+	"google": {
+		Name: "credential-google",
+		Port: 8094,
+	},
+}
+
 type KubeReconcilerConfig struct {
 	RunnerImage           string
 	BackendURL            string
@@ -36,6 +60,10 @@ type KubeReconcilerConfig struct {
 	RunnerImageNamespace  string
 	MCPImage              string
 	MCPAPIServerURL       string
+	GitHubMCPImage        string
+	JiraMCPImage          string
+	K8sMCPImage           string
+	GoogleMCPImage        string
 	RunnerLogLevel        string
 	CPRuntimeNamespace    string
 	CPTokenURL            string
@@ -43,6 +71,9 @@ type KubeReconcilerConfig struct {
 	HTTPProxy             string
 	HTTPSProxy            string
 	NoProxy               string
+	ImagePullSecret       string
+	PlatformMode          string
+	MPPConfigNamespace    string
 }
 
 type SimpleKubeReconciler struct {
@@ -281,9 +312,11 @@ func (r *SimpleKubeReconciler) ensureNamespaceExists(ctx context.Context, namesp
 
 func (r *SimpleKubeReconciler) ensureAPIServerNetworkPolicy(ctx context.Context, namespace string) error {
 	name := "allow-ambient-api-server"
+	myNS := r.cfg.CPRuntimeNamespace
 
-	if _, err := r.nsKube().GetNetworkPolicy(ctx, namespace, name); err == nil {
-		return nil
+	existing, err := r.nsKube().GetNetworkPolicy(ctx, namespace, name)
+	if err == nil {
+		return r.reconcileAPIServerNetworkPolicy(ctx, existing, myNS)
 	}
 
 	np := &unstructured.Unstructured{
@@ -306,7 +339,7 @@ func (r *SimpleKubeReconciler) ensureAPIServerNetworkPolicy(ctx context.Context,
 							map[string]interface{}{
 								"namespaceSelector": map[string]interface{}{
 									"matchLabels": map[string]interface{}{
-										"kubernetes.io/metadata.name": r.cfg.CPRuntimeNamespace,
+										"kubernetes.io/metadata.name": myNS,
 									},
 								},
 							},
@@ -329,6 +362,58 @@ func (r *SimpleKubeReconciler) ensureAPIServerNetworkPolicy(ctx context.Context,
 	}
 
 	r.logger.Debug().Str("namespace", namespace).Str("policy", name).Msg("api-server network policy created")
+	return nil
+}
+
+func (r *SimpleKubeReconciler) reconcileAPIServerNetworkPolicy(ctx context.Context, np *unstructured.Unstructured, cpNamespace string) error {
+	ingress, _, _ := unstructured.NestedSlice(np.Object, "spec", "ingress")
+	if len(ingress) == 0 {
+		return nil
+	}
+
+	rule, ok := ingress[0].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	fromList, _, _ := unstructured.NestedSlice(rule, "from")
+
+	for _, entry := range fromList {
+		entryMap, ok := entry.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		nsSelector, _, _ := unstructured.NestedStringMap(entryMap, "namespaceSelector", "matchLabels")
+		if nsSelector["kubernetes.io/metadata.name"] == cpNamespace {
+			return nil
+		}
+	}
+
+	fromList = append(fromList, map[string]interface{}{
+		"namespaceSelector": map[string]interface{}{
+			"matchLabels": map[string]interface{}{
+				"kubernetes.io/metadata.name": cpNamespace,
+			},
+		},
+	})
+
+	if err := unstructured.SetNestedSlice(rule, fromList, "from"); err != nil {
+		return fmt.Errorf("setting ingress from list: %w", err)
+	}
+	ingress[0] = rule
+	if err := unstructured.SetNestedSlice(np.Object, ingress, "spec", "ingress"); err != nil {
+		return fmt.Errorf("setting ingress spec: %w", err)
+	}
+
+	if _, err := r.nsKube().UpdateNetworkPolicy(ctx, np); err != nil {
+		return fmt.Errorf("updating network policy %s in %s: %w", np.GetName(), np.GetNamespace(), err)
+	}
+
+	r.logger.Info().
+		Str("namespace", np.GetNamespace()).
+		Str("policy", np.GetName()).
+		Str("added_cp_namespace", cpNamespace).
+		Msg("api-server network policy updated with additional CP namespace")
 	return nil
 }
 
@@ -430,7 +515,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 			"resources": map[string]interface{}{
 				"requests": map[string]interface{}{
 					"cpu":    "500m",
-					"memory": "512Mi",
+					"memory": "1Gi",
 				},
 				"limits": map[string]interface{}{
 					"cpu":    "2000m",
@@ -451,6 +536,34 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 		r.logger.Info().Str("session_id", session.ID).Msg("MCP sidecar enabled for session")
 	}
 
+	credentialSidecarMode := false
+	var credTmpVolumes []interface{}
+	if r.cfg.CPTokenURL != "" && r.cfg.CPTokenPublicKey != "" {
+		credSidecars, credMCPURLs, credTmpVols := r.buildCredentialSidecars(session.ID, namespace, credentialIDs)
+		credTmpVolumes = credTmpVols
+		containers = append(containers, credSidecars...)
+		if len(credMCPURLs) > 0 {
+			raw, err := json.Marshal(credMCPURLs)
+			if err != nil {
+				r.logger.Error().Err(err).Str("session_id", session.ID).Msg("failed to marshal credential MCP URLs")
+			} else {
+				appendRunnerEnv(&containers, envVar("CREDENTIAL_MCP_URLS", string(raw)))
+				appendRunnerEnv(&containers, envVar("CREDENTIAL_SIDECAR_MODE", "true"))
+				credentialSidecarMode = true
+			}
+			r.logger.Info().Int("count", len(credSidecars)).Str("session_id", session.ID).Msg("credential sidecars injected")
+		}
+	} else if len(credentialIDs) > 0 {
+		r.logger.Warn().Str("session_id", session.ID).Msg("credential sidecars skipped: CPTokenURL or CPTokenPublicKey not configured")
+	}
+
+	if !credentialSidecarMode && len(credentialIDs) > 0 {
+		raw, err := json.Marshal(credentialIDs)
+		if err == nil {
+			appendRunnerEnv(&containers, envVar("CREDENTIAL_IDS", string(raw)))
+		}
+	}
+
 	pod := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "v1",
@@ -469,10 +582,16 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 				"automountServiceAccountToken":  true,
 				"restartPolicy":                 "Never",
 				"terminationGracePeriodSeconds": int64(60),
-				"volumes":                       r.buildVolumes(),
+				"volumes":                       r.buildVolumes(credTmpVolumes),
 				"containers":                    containers,
 			},
 		},
+	}
+
+	if r.cfg.ImagePullSecret != "" {
+		pod.Object["spec"].(map[string]interface{})["imagePullSecrets"] = []interface{}{
+			map[string]interface{}{"name": r.cfg.ImagePullSecret},
+		}
 	}
 
 	if _, err := r.nsKube().CreatePod(ctx, pod); err != nil && !k8serrors.IsAlreadyExists(err) {
@@ -483,7 +602,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 	return nil
 }
 
-func (r *SimpleKubeReconciler) buildVolumes() []interface{} {
+func (r *SimpleKubeReconciler) buildVolumes(extraVolumes []interface{}) []interface{} {
 	vols := []interface{}{
 		map[string]interface{}{
 			"name":     "workspace",
@@ -505,6 +624,7 @@ func (r *SimpleKubeReconciler) buildVolumes() []interface{} {
 			},
 		})
 	}
+	vols = append(vols, extraVolumes...)
 	return vols
 }
 
@@ -599,6 +719,10 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 		envVar("REQUESTS_CA_BUNDLE", "/etc/pki/ca-trust/extracted/pem/service-ca.crt"),
 	}
 
+	if session.StartTime != nil {
+		env = append(env, envVar("IS_RESUME", "true"))
+	}
+
 	if r.cfg.AnthropicAPIKey != "" {
 		env = append(env, envVar("ANTHROPIC_API_KEY", r.cfg.AnthropicAPIKey))
 	}
@@ -634,13 +758,6 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 	}
 	if session.RepoURL != "" {
 		env = append(env, envVar("REPOS_JSON", fmt.Sprintf(`[{"url":%q}]`, session.RepoURL)))
-	}
-
-	if len(credentialIDs) > 0 {
-		raw, err := json.Marshal(credentialIDs)
-		if err == nil {
-			env = append(env, envVar("CREDENTIAL_IDS", string(raw)))
-		}
 	}
 
 	if r.cfg.HTTPProxy != "" {
@@ -820,11 +937,149 @@ func envVar(name, value string) interface{} {
 	return map[string]interface{}{"name": name, "value": value}
 }
 
+func appendRunnerEnv(containers *[]interface{}, envEntry interface{}) {
+	for _, c := range *containers {
+		ctr, ok := c.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if ctr["name"] == "ambient-code-runner" {
+			ctr["env"] = append(ctr["env"].([]interface{}), envEntry)
+			return
+		}
+	}
+}
+
 func boolToStr(b bool) string {
 	if b {
 		return "true"
 	}
 	return "false"
+}
+
+func (r *SimpleKubeReconciler) credentialSidecarImage(provider string) string {
+	switch provider {
+	case "github":
+		return r.cfg.GitHubMCPImage
+	case "jira":
+		return r.cfg.JiraMCPImage
+	case "kubeconfig":
+		return r.cfg.K8sMCPImage
+	case "google":
+		return r.cfg.GoogleMCPImage
+	default:
+		return ""
+	}
+}
+
+func (r *SimpleKubeReconciler) buildCredentialSidecars(sessionID string, namespace string, credentialIDs map[string]string) ([]interface{}, map[string]string, []interface{}) {
+	var sidecars []interface{}
+	var tmpVolumes []interface{}
+	mcpURLs := map[string]string{}
+
+	for provider, credID := range credentialIDs {
+		spec, ok := credentialSidecarRegistry[provider]
+		if !ok {
+			continue
+		}
+		image := r.credentialSidecarImage(provider)
+		if image == "" {
+			continue
+		}
+
+		imagePullPolicy := "Always"
+		if strings.HasPrefix(image, "localhost/") {
+			imagePullPolicy = "IfNotPresent"
+		}
+
+		sidecarCredIDs := map[string]string{provider: credID}
+		sidecarCredIDsRaw, _ := json.Marshal(sidecarCredIDs)
+
+		env := []interface{}{
+			envVar("SESSION_ID", sessionID),
+			envVar("CREDENTIAL_IDS", string(sidecarCredIDsRaw)),
+			envVar("CREDENTIAL_PROVIDER", provider),
+			envVar("AGENTIC_SESSION_NAMESPACE", namespace),
+			envVar("AMBIENT_API_URL", r.cfg.MCPAPIServerURL),
+			envVar("AMBIENT_CP_TOKEN_URL", r.cfg.CPTokenURL),
+			envVar("AMBIENT_CP_TOKEN_PUBLIC_KEY", r.cfg.CPTokenPublicKey),
+			envVar("SSL_CERT_FILE", "/etc/pki/ca-trust/extracted/pem/service-ca.crt"),
+		}
+		if r.cfg.HTTPProxy != "" {
+			env = append(env, envVar("HTTP_PROXY", r.cfg.HTTPProxy))
+		}
+		if r.cfg.HTTPSProxy != "" {
+			env = append(env, envVar("HTTPS_PROXY", r.cfg.HTTPSProxy))
+		}
+		if r.cfg.NoProxy != "" {
+			env = append(env, envVar("NO_PROXY", r.cfg.NoProxy))
+		}
+		if r.cfg.PlatformMode != "" {
+			env = append(env, envVar("PLATFORM_MODE", r.cfg.PlatformMode))
+		}
+		if r.cfg.MPPConfigNamespace != "" {
+			env = append(env, envVar("MPP_CONFIG_NAMESPACE", r.cfg.MPPConfigNamespace))
+		}
+
+		sidecar := map[string]interface{}{
+			"name":            spec.Name,
+			"image":           image,
+			"imagePullPolicy": imagePullPolicy,
+			"ports": []interface{}{
+				map[string]interface{}{
+					"name":          fmt.Sprintf("cred-%s", provider),
+					"containerPort": spec.Port,
+					"protocol":      "TCP",
+				},
+			},
+			"env": env,
+			"volumeMounts": []interface{}{
+				map[string]interface{}{
+					"name":      "service-ca",
+					"mountPath": "/etc/pki/ca-trust/extracted/pem/service-ca.crt",
+					"subPath":   "service-ca.crt",
+					"readOnly":  true,
+				},
+			},
+			"resources": map[string]interface{}{
+				"requests": map[string]interface{}{
+					"cpu":    "100m",
+					"memory": "256Mi",
+				},
+				"limits": map[string]interface{}{
+					"cpu":    "500m",
+					"memory": "512Mi",
+				},
+			},
+			"securityContext": map[string]interface{}{
+				"allowPrivilegeEscalation": false,
+				"runAsNonRoot":             true,
+				"readOnlyRootFilesystem":   true,
+				"capabilities": map[string]interface{}{
+					"drop": []interface{}{"ALL"},
+				},
+			},
+		}
+
+		tmpVolName := "cred-tmp-" + provider
+		sidecar["volumeMounts"] = append(
+			sidecar["volumeMounts"].([]interface{}),
+			map[string]interface{}{
+				"name":      tmpVolName,
+				"mountPath": "/tmp",
+			},
+		)
+
+		sidecars = append(sidecars, sidecar)
+		tmpVolumes = append(tmpVolumes, map[string]interface{}{
+			"name":     tmpVolName,
+			"emptyDir": map[string]interface{}{"sizeLimit": "10Mi"},
+		})
+		mcpURLs[provider] = fmt.Sprintf("http://localhost:%d", spec.Port)
+		r.logger.Debug().Str("provider", provider).Str("image", image).Int64("port", spec.Port).Msg("credential sidecar configured")
+	}
+
+	return sidecars, mcpURLs, tmpVolumes
 }
 
 func (r *SimpleKubeReconciler) buildMCPSidecar(sessionID string) interface{} {

@@ -151,7 +151,10 @@ func pathToResource(path string) string {
 	for i, p := range parts {
 		if p == "v1" && i+1 < len(parts) {
 			seg := parts[i+1]
-			return strings.ReplaceAll(strings.TrimSuffix(seg, "s"), "_", "_")
+			if seg == "projects" && i+3 < len(parts) {
+				seg = parts[i+3]
+			}
+			return strings.TrimSuffix(seg, "s")
 		}
 	}
 	return "unknown"

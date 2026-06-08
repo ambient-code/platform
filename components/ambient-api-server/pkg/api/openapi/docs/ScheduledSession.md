@@ -4,25 +4,25 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**Id** | Pointer to **string** |  | [optional] 
-**Kind** | Pointer to **string** |  | [optional] 
-**Href** | Pointer to **string** |  | [optional] 
-**CreatedAt** | Pointer to **time.Time** |  | [optional] 
-**UpdatedAt** | Pointer to **time.Time** |  | [optional] 
-**Name** | **string** | Human-readable name for the scheduled session | 
-**Description** | Pointer to **string** |  | [optional] 
-**ProjectId** | **string** | The project this scheduled session belongs to | 
-**AgentId** | Pointer to **string** | Optional agent to run when triggered | [optional] 
-**Schedule** | **string** | Cron expression defining the schedule | 
-**Timezone** | Pointer to **string** | IANA timezone for the schedule (default UTC) | [optional] 
-**Enabled** | Pointer to **bool** | Whether the schedule is active | [optional] 
-**SessionPrompt** | Pointer to **string** | Prompt passed to each triggered session | [optional] 
-**LastRunAt** | Pointer to **time.Time** |  | [optional] 
-**NextRunAt** | Pointer to **time.Time** |  | [optional] 
-**Timeout** | Pointer to **int32** | Session timeout in seconds | [optional] 
-**InactivityTimeout** | Pointer to **int32** | Session inactivity timeout in seconds | [optional] 
-**StopOnRunFinished** | Pointer to **bool** | Whether to stop the session when the run finishes | [optional] 
-**RunnerType** | Pointer to **string** | Runner type override for triggered sessions | [optional] 
+**Id** | Pointer to **string** |  | [optional]
+**Kind** | Pointer to **string** |  | [optional]
+**Href** | Pointer to **string** |  | [optional]
+**CreatedAt** | Pointer to **time.Time** |  | [optional]
+**UpdatedAt** | Pointer to **time.Time** |  | [optional]
+**Name** | **string** | Human-readable name for the scheduled session |
+**Description** | Pointer to **string** |  | [optional]
+**ProjectId** | **string** | The project this scheduled session belongs to |
+**AgentId** | Pointer to **string** | Optional agent to run when triggered | [optional]
+**Schedule** | **string** | Cron expression defining the schedule |
+**Timezone** | Pointer to **string** | IANA timezone for the schedule (default UTC) | [optional]
+**Enabled** | Pointer to **bool** | Whether the schedule is active | [optional]
+**SessionPrompt** | Pointer to **string** | Prompt passed to each triggered session | [optional]
+**LastRunAt** | Pointer to **time.Time** |  | [optional]
+**NextRunAt** | Pointer to **time.Time** |  | [optional]
+**Timeout** | Pointer to **int32** | Session timeout in seconds | [optional]
+**InactivityTimeout** | Pointer to **int32** | Session inactivity timeout in seconds | [optional]
+**StopOnRunFinished** | Pointer to **bool** | Whether to stop the session when the run finishes | [optional]
+**RunnerType** | Pointer to **string** | Runner type override for triggered sessions | [optional]
 
 ## Methods
 
@@ -505,5 +505,3 @@ HasRunnerType returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
-
-

@@ -5,7 +5,7 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **EventType** | Pointer to **string** | Event type tag. Defaults to &#x60;user&#x60; if omitted. | [optional] [default to "user"]
-**Payload** | Pointer to **string** | Message body | [optional] 
+**Payload** | Pointer to **string** | Message body | [optional]
 
 ## Methods
 
@@ -78,5 +78,3 @@ HasPayload returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
-
-
