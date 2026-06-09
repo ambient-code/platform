@@ -36,6 +36,7 @@ func main() {
 		pkgcmd.NewMigrateCommand("ambient-api-server"),
 		pkgcmd.NewServeCommand(localapi.GetOpenAPISpec),
 		localcmd.NewEncryptCredentialsCommand(),
+		localcmd.NewSeedAdminCommand(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {

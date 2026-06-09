@@ -6,6 +6,7 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/ambient-code/platform/components/ambient-api-server/plugins/common"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
@@ -93,6 +94,10 @@ func (h projectSettingsHandler) List(w http.ResponseWriter, r *http.Request) {
 			listArgs := services.NewListArguments(r.URL.Query())
 			if err := common.ApplyProjectScope(r, listArgs); err != nil {
 				return nil, err
+			}
+			// RBAC: restrict to caller's authorized projects
+			if !pkgrbac.ApplyListFilter(ctx, listArgs, "project_id", false) {
+				return openapi.ProjectSettingsList{Kind: "ProjectSettingsList", Page: 1, Size: 0, Total: 0, Items: []openapi.ProjectSettings{}}, nil
 			}
 			var items []ProjectSettings
 			paging, err := h.generic.List(ctx, "id", listArgs, &items)
