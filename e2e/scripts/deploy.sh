@@ -50,13 +50,14 @@ echo "   Using overlay: kind"
 # Check for image overrides in .env (already sourced above)
 if [ -f ".env" ]; then
   # Log image overrides
-  if [ -n "${IMAGE_BACKEND:-}${IMAGE_FRONTEND:-}${IMAGE_OPERATOR:-}${IMAGE_RUNNER:-}${IMAGE_STATE_SYNC:-}" ]; then
+  if [ -n "${IMAGE_BACKEND:-}${IMAGE_FRONTEND:-}${IMAGE_OPERATOR:-}${IMAGE_RUNNER:-}${IMAGE_STATE_SYNC:-}${DEFAULT_API_SERVER_IMAGE:-}" ]; then
     echo "   Image overrides from .env:"
     [ -n "${IMAGE_BACKEND:-}" ] && echo "      Backend: ${IMAGE_BACKEND}"
     [ -n "${IMAGE_FRONTEND:-}" ] && echo "      Frontend: ${IMAGE_FRONTEND}"
     [ -n "${IMAGE_OPERATOR:-}" ] && echo "      Operator: ${IMAGE_OPERATOR}"
     [ -n "${IMAGE_RUNNER:-}" ] && echo "      Runner: ${IMAGE_RUNNER}"
     [ -n "${IMAGE_STATE_SYNC:-}" ] && echo "      State-sync: ${IMAGE_STATE_SYNC}"
+    [ -n "${DEFAULT_API_SERVER_IMAGE:-}" ] && echo "      API Server: ${DEFAULT_API_SERVER_IMAGE}"
   fi
 fi
 
@@ -70,7 +71,8 @@ kubectl kustomize ../components/manifests/overlays/kind/ | \
   sed "s|quay.io/ambient_code/vteam_operator:latest|${IMAGE_OPERATOR:-quay.io/ambient_code/vteam_operator:latest}|g" | \
   sed "s|quay.io/ambient_code/vteam_claude_runner:latest|${IMAGE_RUNNER:-quay.io/ambient_code/vteam_claude_runner:latest}|g" | \
   sed "s|quay.io/ambient_code/vteam_state_sync:latest|${IMAGE_STATE_SYNC:-quay.io/ambient_code/vteam_state_sync:latest}|g" | \
-  if [ -n "${IMAGE_BACKEND:-}${IMAGE_FRONTEND:-}${IMAGE_OPERATOR:-}${IMAGE_RUNNER:-}" ]; then
+  sed "s|quay.io/ambient_code/vteam_api_server:latest|${DEFAULT_API_SERVER_IMAGE:-quay.io/ambient_code/vteam_api_server:latest}|g" | \
+  if [ -n "${IMAGE_BACKEND:-}${IMAGE_FRONTEND:-}${IMAGE_OPERATOR:-}${IMAGE_RUNNER:-}${DEFAULT_API_SERVER_IMAGE:-}" ]; then
     sed "s|imagePullPolicy: Always|imagePullPolicy: IfNotPresent|g"
   else
     cat

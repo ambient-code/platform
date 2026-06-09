@@ -33,7 +33,6 @@ func (e *IntegrationTestingEnvImpl) OverrideConfig(c *config.ApplicationConfig) 
 }
 
 func (e *IntegrationTestingEnvImpl) OverrideServices(s *pkgenv.Services) error {
-	s.SetService("RBACMiddleware", nil)
 	return nil
 }
 
@@ -52,7 +51,7 @@ func (e *IntegrationTestingEnvImpl) Flags() map[string]string {
 		"api-base-url":                    "https://api.integration.openshift.com",
 		"enable-https":                    "false",
 		"enable-metrics-https":            "false",
-		"enable-authz":                    "true",
+		"enable-authz":                    "false",
 		"debug":                           "false",
 		"enable-mock":                     "true",
 		"api-server-bindaddress":          "localhost:0",

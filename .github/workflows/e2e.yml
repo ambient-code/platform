@@ -32,6 +32,7 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       operator: ${{ steps.filter.outputs.operator }}
       claude-runner: ${{ steps.filter.outputs.claude-runner }}
+      api-server: ${{ steps.filter.outputs.api-server }}
     steps:
       - name: Checkout PR code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -55,6 +56,8 @@ jobs:
               - 'components/operator/**'
             claude-runner:
               - 'components/runners/**'
+            api-server:
+              - 'components/ambient-api-server/**'
 
   e2e:
     name: End-to-End Tests
@@ -142,6 +145,8 @@ jobs:
            docker tag quay.io/ambient_code/vteam_claude_runner:latest quay.io/ambient_code/vteam_claude_runner:e2e-test) &
           pull_pids+=($!)
         fi
+        # api-server is always built from branch code (no pull fallback)
+        # because RBAC e2e tests require the branch's middleware
         for pid in "${pull_pids[@]}"; do
           wait "$pid" || exit 1
         done
@@ -186,6 +191,18 @@ jobs:
           type=gha,scope=e2e-ambient-runner
         cache-to: type=gha,mode=max,scope=e2e-ambient-runner
 
+    - name: Build api-server image
+      uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
+      with:
+        context: components/ambient-api-server
+        file: components/ambient-api-server/Dockerfile
+        load: true
+        tags: quay.io/ambient_code/vteam_api_server:e2e-test
+        cache-from: |
+          type=gha,scope=api-server-amd64
+          type=gha,scope=e2e-api-server
+        cache-to: type=gha,mode=max,scope=e2e-api-server
+
     - name: Show built images
       run: docker images | grep e2e-test
 
@@ -222,6 +239,7 @@ jobs:
           quay.io/ambient_code/vteam_backend:e2e-test \
           quay.io/ambient_code/vteam_operator:e2e-test \
           quay.io/ambient_code/vteam_claude_runner:e2e-test \
+          quay.io/ambient_code/vteam_api_server:e2e-test \
           | kind load image-archive /dev/stdin --name ambient-local
         echo "All images loaded into kind cluster"
 
@@ -232,6 +250,7 @@ jobs:
         IMAGE_BACKEND: quay.io/ambient_code/vteam_backend:e2e-test
         IMAGE_OPERATOR: quay.io/ambient_code/vteam_operator:e2e-test
         IMAGE_RUNNER: quay.io/ambient_code/vteam_claude_runner:e2e-test
+        DEFAULT_API_SERVER_IMAGE: quay.io/ambient_code/vteam_api_server:e2e-test
       run: ./scripts/deploy.sh
 
     - name: Verify deployment
@@ -316,6 +335,19 @@ jobs:
           sleep 2
         done
         ./scripts/run-tests.sh
+
+    - name: Run RBAC enforcement E2E tests
+      run: |
+        # Port-forward api-server and keycloak for RBAC tests.
+        # The test script (Phase 0.5) handles all deployment patching,
+        # JWT/authz enablement, rollout, and port-forward re-establishment.
+        kubectl port-forward -n ambient-code svc/ambient-api-server 13592:8000 &
+        kubectl port-forward -n ambient-code svc/keycloak-service 18592:8080 &
+        sleep 3
+
+        API_URL=http://localhost:13592/api/ambient/v1 \
+        KC_URL=http://localhost:18592 \
+        bash components/ambient-api-server/test/e2e/rbac_e2e_test.sh
 
     - name: Upload test results
       if: failure()
