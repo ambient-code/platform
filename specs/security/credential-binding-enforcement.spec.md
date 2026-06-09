@@ -84,7 +84,7 @@ The API server SHALL reject creation of duplicate bindings at the same scope lev
 
 **All credential bindings** require the caller to hold `credential:owner` on the target credential. You can only bind credentials you own.
 
-**Project-level and agent-level bindings** additionally require the caller to hold `project:owner` on the target project.
+**Project-level and agent-level bindings** additionally require the caller to hold `project:editor` or higher on the target project.
 
 **Agent-level bindings** additionally require:
 1. The specified agent to belong to the project specified in the binding (`project_id`), validated by the API server
@@ -94,7 +94,7 @@ The API server SHALL reject creation of duplicate bindings at the same scope lev
 
 #### Unbinding (delete)
 
-**Project-level and agent-level bindings** require the caller to hold `project:owner` on the binding's project. The caller does NOT need `credential:owner` — a project owner can remove any credential from their project regardless of who bound it.
+**Project-level and agent-level bindings** require the caller to hold `project:editor` or higher on the binding's project. The caller does NOT need `credential:owner` — a project editor/owner can remove any credential from their project regardless of who bound it.
 
 **Global bindings** require the caller to hold `platform:admin`.
 
@@ -120,10 +120,17 @@ The API server SHALL reject creation of duplicate bindings at the same scope lev
 - WHEN user A creates a RoleBinding with `scope=credential`, `credential_id=C`, `project_id=P`
 - THEN the request returns 403 Forbidden
 
-#### Scenario: Project editor cannot bind credentials
+#### Scenario: Project editor binds own credential to project
 
 - GIVEN user A holds `credential:owner` on credential C
 - AND user A holds `project:editor` on project P
+- WHEN user A creates a RoleBinding with `scope=credential`, `credential_id=C`, `project_id=P`
+- THEN the binding is created (201)
+
+#### Scenario: Project viewer cannot bind credentials
+
+- GIVEN user A holds `credential:owner` on credential C
+- AND user A holds `project:viewer` on project P
 - WHEN user A creates a RoleBinding with `scope=credential`, `credential_id=C`, `project_id=P`
 - THEN the request returns 403 Forbidden
 
@@ -163,17 +170,16 @@ The API server SHALL reject creation of duplicate bindings at the same scope lev
 - WHEN user A creates a RoleBinding with `scope=credential`, `credential_id=C`, `project_id=NULL`, `agent_id=NULL`
 - THEN the request returns 403 Forbidden
 
-#### Scenario: Project owner unbinds credential they don't own
+#### Scenario: Project editor unbinds credential they don't own
 
-- GIVEN user B (not credential owner) holds `project:owner` on project P
+- GIVEN user B (not credential owner) holds `project:editor` on project P
 - AND credential C (owned by user A) is bound to project P
 - WHEN user B deletes the `scope=credential` RoleBinding for credential C on project P
 - THEN the binding is deleted (204)
 
-#### Scenario: Non-project-owner cannot unbind
+#### Scenario: Project viewer cannot unbind
 
-- GIVEN user A holds `credential:owner` on credential C
-- AND user A does NOT hold `project:owner` on project P
+- GIVEN user A holds `project:viewer` on project P
 - AND credential C is bound to project P
 - WHEN user A deletes the `scope=credential` RoleBinding for credential C on project P
 - THEN the request returns 403 Forbidden
@@ -233,7 +239,7 @@ Deleting a `scope=credential` RoleBinding SHALL NOT terminate running sessions t
 | Consumer | Current behavior | Required change |
 |----------|-----------------|-----------------|
 | Control plane `resolveCredentialIDs` | Lists all credentials via `sdk.Credentials().ListAll()`, picks first per provider | Query `scope=credential` RoleBindings filtered by `project_id` and `agent_id`, implement hierarchical resolution |
-| RBAC middleware (credential binding creation) | Validates `credential:owner` + `project:owner` for project-level bindings | Add agent-level validation (verify agent belongs to project), global bindings (require `platform:admin`), reject `agent_id` without `project_id`, and asymmetric unbind auth (project:owner can unbind without credential:owner) |
+| RBAC middleware (credential binding creation) | Validates `credential:owner` + `project:owner` for project-level bindings | Relax bind check to `project:editor`+, add agent-level validation (verify agent belongs to project), global bindings (require `platform:admin`), reject `agent_id` without `project_id`, and asymmetric unbind auth (`project:editor`+ can unbind without `credential:owner`) |
 | Credential sidecar entrypoint | Fetches token via bearer token from CP token exchange | No change — consumes `CREDENTIAL_IDS` produced by CP |
 | Runner `populate_runtime_credentials` | Fetches tokens from `CREDENTIAL_IDS` env var | No change — consumes `CREDENTIAL_IDS` produced by CP |
 | UI binding matrix | Creates RoleBindings with `credential_id` + `project_id` ± `agent_id` | No change — already creates correct binding structure |
@@ -242,5 +248,5 @@ Deleting a `scope=credential` RoleBinding SHALL NOT terminate running sessions t
 
 | Spec | Amendment |
 |------|-----------|
-| `rbac-enforcement.spec.md` | Document bind/unbind authorization asymmetry for credential bindings; update credential binding scenarios to reflect project:owner can unbind without credential:owner |
+| `rbac-enforcement.spec.md` | Relax credential binding from `project:owner` to `project:editor`+; document bind/unbind asymmetry (editors can unbind without `credential:owner`) |
 | `ambient-model.spec.md` | Document global credential binding pattern (`scope=credential` with `project_id=NULL`, `agent_id=NULL`); add credential binding scope terms (agent-level, project-level, global) |
