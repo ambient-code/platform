@@ -26,11 +26,11 @@ func bearerTokenGRPCUnaryInterceptor(expectedToken, serviceAccountUsername strin
 			if authHeader := md.Get("authorization"); len(authHeader) > 0 {
 				if token, err := extractBearerToken(authHeader[0]); err == nil {
 					if subtle.ConstantTimeCompare([]byte(token), []byte(expectedToken)) == 1 {
-						return handler(withCallerType(ctx, CallerTypeService), req)
+						return handler(WithCallerType(ctx, CallerTypeService), req)
 					}
 					if username := usernameFromJWT(token); username != "" {
 						if isServiceAccount(username, serviceAccountUsername) {
-							ctx = withCallerType(ctx, CallerTypeService)
+							ctx = WithCallerType(ctx, CallerTypeService)
 						}
 						return handler(auth.SetUsernameContext(ctx, username), req)
 					}
@@ -52,12 +52,12 @@ func bearerTokenGRPCStreamInterceptor(expectedToken, serviceAccountUsername stri
 			if authHeader := md.Get("authorization"); len(authHeader) > 0 {
 				if token, err := extractBearerToken(authHeader[0]); err == nil {
 					if subtle.ConstantTimeCompare([]byte(token), []byte(expectedToken)) == 1 {
-						return handler(srv, &serviceCallerStream{ServerStream: ss, ctx: withCallerType(ss.Context(), CallerTypeService)})
+						return handler(srv, &serviceCallerStream{ServerStream: ss, ctx: WithCallerType(ss.Context(), CallerTypeService)})
 					}
 					if username := usernameFromJWT(token); username != "" {
 						ctx := auth.SetUsernameContext(ss.Context(), username)
 						if isServiceAccount(username, serviceAccountUsername) {
-							ctx = withCallerType(ctx, CallerTypeService)
+							ctx = WithCallerType(ctx, CallerTypeService)
 						}
 						return handler(srv, &serviceCallerStream{ServerStream: ss, ctx: ctx})
 					}
@@ -91,16 +91,6 @@ func usernameFromJWT(tokenString string) string {
 		}
 	}
 	return ""
-}
-
-const keycloakServiceAccountPrefix = "service-account-"
-
-func isServiceAccount(jwtUsername, configuredAccount string) bool {
-	if configuredAccount == "" {
-		return false
-	}
-	return jwtUsername == configuredAccount ||
-		jwtUsername == keycloakServiceAccountPrefix+configuredAccount
 }
 
 type serviceCallerStream struct {

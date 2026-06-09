@@ -244,7 +244,7 @@ export function ToolCallBlock({ group }: { group: ToolCallGroup }) {
                 <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                   Arguments
                 </div>
-                <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground max-h-[200px] overflow-y-auto">
+                <pre className="whitespace-pre-wrap wrap-break-words font-mono text-xs text-foreground max-h-[200px] overflow-y-auto">
                   {argsText}
                 </pre>
               </div>
