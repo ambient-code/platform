@@ -105,6 +105,7 @@ objects:
               initialDelaySeconds: 30
               periodSeconds: 30
             securityContext:
+              readOnlyRootFilesystem: true
               allowPrivilegeEscalation: false
               capabilities:
                 drop:
@@ -189,6 +190,7 @@ objects:
                 cpu: 500m
                 memory: 512Mi
             securityContext:
+              readOnlyRootFilesystem: true
               allowPrivilegeEscalation: false
               capabilities:
                 drop:
@@ -205,8 +207,6 @@ objects:
                   secretKeyRef:
                     name: ambient-control-plane-token
                     key: token
-              - name: JWK_CERT_URL
-                value: "${KEYCLOAK_REALM_URL}/protocol/openid-connect/certs"
               - name: CREDENTIAL_ENCRYPTION_KEYRING
                 valueFrom:
                   secretKeyRef:
@@ -219,8 +219,6 @@ objects:
                     name: credential-encryption-key
                     key: version
                     optional: true
-              - name: CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT
-                value: "true"
             command:
               - /usr/local/bin/ambient-api-server
               - serve
@@ -232,6 +230,7 @@ objects:
               - --enable-jwt=true
               - --enable-authz=true
               - --jwk-cert-file=/configs/authentication/jwks.json
+              - --jwk-cert-url=${KEYCLOAK_REALM_URL}/protocol/openid-connect/certs
               - --enable-https=false
               - --enable-grpc=true
               - --grpc-enable-tls=false
@@ -295,6 +294,7 @@ objects:
               initialDelaySeconds: 20
               periodSeconds: 10
             securityContext:
+              readOnlyRootFilesystem: true
               allowPrivilegeEscalation: false
               capabilities:
                 drop:
