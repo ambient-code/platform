@@ -8,7 +8,7 @@ This spec defines the resolver algorithm, authorization rules for creating bindi
 
 ### Dependencies
 
-- **`project:admin` role**: This spec requires a new `project:admin` role (level 2) between `project:owner` (level 1) and `project:editor` (level 3). Credential binding authorization requires `project:admin` or higher. The role definition and hierarchy amendment belong in `rbac-enforcement.spec.md`; this spec assumes the role exists.
+- **`project:credentials` permission**: This spec requires a new `project:credentials` permission that gates credential binding operations on a project. Any role can carry this permission — `project:owner` includes it by default, `project:editor` does not. The permission definition belongs in `rbac-enforcement.spec.md`; this spec assumes it exists.
 - **Global credential binding pattern**: The `scope=credential` binding with both `project_id=NULL` and `agent_id=NULL` is a new pattern. `ambient-model.spec.md` SHALL be amended to document this as valid for credential scope.
 - **Session service identity**: The `credential:token-reader` lifecycle uses `user_id` in RoleBindings to represent the session's OIDC service account (e.g., `service-account-ambient-e2e`). This is the same identity the control plane already provisions via OIDC client_credentials grant — no new identity mechanism is required.
 
@@ -25,7 +25,7 @@ For each credential provider (github, jira, kubeconfig, google, gitlab, vertex):
 3. Otherwise, if a `scope=credential` binding exists where `credential_id` references a credential of this provider, `project_id` is NULL, AND `agent_id` is NULL — use that credential (**global binding**).
 4. Otherwise, no credential is injected for this provider.
 
-The API server SHOULD reject creation of duplicate bindings at the same scope level for the same provider (same `credential.provider`, same `project_id`, same `agent_id`). If duplicates exist despite this, the binding with the earliest `created_at` timestamp wins.
+The API server SHALL reject creation of duplicate bindings at the same scope level for the same provider (same `credential.provider`, same `project_id`, same `agent_id`). If duplicates exist despite this (e.g., from prior data), the binding with the earliest `created_at` timestamp wins.
 
 #### Scenario: Agent-level binding overrides project-level
 
@@ -77,34 +77,34 @@ Creating or deleting `scope=credential` RoleBindings SHALL require authorization
 
 **All credential bindings** require the caller to hold `credential:owner` on the target credential.
 
-**Project-level bindings** (`project_id` set, `agent_id` NULL) additionally require the caller to hold `project:admin` or higher (level ≤ 2) on the target project.
+**Project-level bindings** (`project_id` set, `agent_id` NULL) additionally require the caller to hold the `project:credentials` permission on the target project.
 
 **Agent-level bindings** (`project_id` set, `agent_id` set) additionally require:
-1. The caller to hold `project:admin` or higher (level ≤ 2) on the project that owns the agent
-2. The specified agent to belong to the specified project (validated by the API server)
+1. The caller to hold the `project:credentials` permission on the project specified in the binding (`project_id`)
+2. The specified agent to belong to that same project (validated by the API server)
 3. The `project_id` to be non-NULL (agent-credential bindings without a project are invalid)
 
 **Global bindings** (`project_id` NULL, `agent_id` NULL) additionally require the caller to hold `platform:admin`.
 
-#### Scenario: Project admin binds credential to project
+#### Scenario: User with project:credentials permission binds credential to project
 
 - GIVEN user A holds `credential:owner` on credential C
-- AND user A holds `project:admin` on project P
+- AND user A holds a role on project P that includes the `project:credentials` permission
 - WHEN user A creates a RoleBinding with `scope=credential`, `credential_id=C`, `project_id=P`, `agent_id=NULL`
 - THEN the binding is created (201)
 
 #### Scenario: Project owner binds credential to specific agent
 
 - GIVEN user A holds `credential:owner` on credential C
-- AND user A holds `project:owner` on project P
+- AND user A holds `project:owner` on project P (which includes `project:credentials`)
 - AND agent-1 belongs to project P
 - WHEN user A creates a RoleBinding with `scope=credential`, `credential_id=C`, `project_id=P`, `agent_id=agent-1`
 - THEN the binding is created (201)
 
-#### Scenario: Project editor cannot bind credentials
+#### Scenario: User without project:credentials cannot bind credentials
 
 - GIVEN user A holds `credential:owner` on credential C
-- AND user A holds `project:editor` on project P
+- AND user A holds `project:editor` on project P (which does NOT include `project:credentials`)
 - WHEN user A creates a RoleBinding with `scope=credential`, `credential_id=C`, `project_id=P`
 - THEN the request returns 403 Forbidden
 
@@ -199,7 +199,7 @@ Deleting a `scope=credential` RoleBinding SHALL NOT terminate running sessions t
 | Consumer | Current behavior | Required change |
 |----------|-----------------|-----------------|
 | Control plane `resolveCredentialIDs` | Lists all credentials via `sdk.Credentials().ListAll()`, picks first per provider | Query `scope=credential` RoleBindings filtered by `project_id` and `agent_id`, implement hierarchical resolution |
-| RBAC middleware (credential binding creation) | Validates `credential:owner` + `project:owner` for project-level bindings | Add validation for agent-level bindings (verify agent belongs to project, caller has `project:admin`+), global bindings (require `platform:admin`), and reject `agent_id` without `project_id` |
+| RBAC middleware (credential binding creation) | Validates `credential:owner` + `project:owner` for project-level bindings | Check caller holds `project:credentials` permission (not just `project:owner`), add agent-level validation (verify agent belongs to project), global bindings (require `platform:admin`), and reject `agent_id` without `project_id` |
 | Credential sidecar entrypoint | Fetches token via bearer token from CP token exchange | No change — consumes `CREDENTIAL_IDS` produced by CP |
 | Runner `populate_runtime_credentials` | Fetches tokens from `CREDENTIAL_IDS` env var | No change — consumes `CREDENTIAL_IDS` produced by CP |
 | UI binding matrix | Creates RoleBindings with `credential_id` + `project_id` ± `agent_id` | No change — already creates correct binding structure |
@@ -208,5 +208,5 @@ Deleting a `scope=credential` RoleBinding SHALL NOT terminate running sessions t
 
 | Spec | Amendment |
 |------|-----------|
-| `rbac-enforcement.spec.md` | Add `project:admin` role at level 2; update credential binding authorization to require `project:admin`+ instead of `project:owner` |
+| `rbac-enforcement.spec.md` | Add `project:credentials` permission; assign it to `project:owner` by default; update credential binding authorization to check permission instead of role level |
 | `ambient-model.spec.md` | Document global credential binding pattern (`scope=credential` with `project_id=NULL`, `agent_id=NULL`); add credential binding scope terms (agent-level, project-level, global) |
