@@ -16,8 +16,15 @@ spec:
               value: "false"
             - name: CP_TOKEN_URL
               value: "http://ambient-control-plane.ambient-api.svc:8080/token"
-            - name: AMBIENT_API_TOKEN
+            - name: OIDC_TOKEN_URL
+              value: "https://keycloak-ambient-keycloak.apps.rosa.hcmais01ue1.s9m2.p3.openshiftapps.com/realms/ambient-code/protocol/openid-connect/token"
+            - name: OIDC_CLIENT_ID
               valueFrom:
                 secretKeyRef:
-                  name: ambient-control-plane-token
-                  key: token
+                  name: ambient-control-plane-oidc
+                  key: client-id
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ambient-control-plane-oidc
+                  key: client-secret
