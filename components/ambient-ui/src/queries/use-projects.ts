@@ -1,7 +1,7 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
-import type { ProjectsPort } from '@/ports/projects'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import type { ProjectsPort, ProjectCreateInput } from '@/ports/projects'
 import type { ListParams } from '@/domain/types'
 import { createProjectsAdapter } from '@/adapters/sdk-projects'
 import { queryKeys } from './query-keys'
@@ -25,6 +25,17 @@ export function useProjects(
     queryFn: () => adapter.list(params),
     staleTime: 30_000,
     refetchInterval: 30_000,
+  })
+}
+
+export function useCreateProject(port?: ProjectsPort) {
+  const queryClient = useQueryClient()
+  const adapter = port ?? getDefaultPort()
+  return useMutation({
+    mutationFn: (input: ProjectCreateInput) => adapter.create(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.all })
+    },
   })
 }
 
