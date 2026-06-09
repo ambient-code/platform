@@ -202,11 +202,6 @@ objects:
             env:
               - name: AMBIENT_ENV
                 value: production
-              - name: AMBIENT_API_TOKEN
-                valueFrom:
-                  secretKeyRef:
-                    name: ambient-control-plane-token
-                    key: token
               - name: CREDENTIAL_ENCRYPTION_KEYRING
                 valueFrom:
                   secretKeyRef:
@@ -375,11 +370,18 @@ objects:
                 value: standard
               - name: LOG_LEVEL
                 value: info
-              - name: AMBIENT_API_TOKEN
+              - name: OIDC_TOKEN_URL
+                value: "${KEYCLOAK_REALM_URL}/protocol/openid-connect/token"
+              - name: OIDC_CLIENT_ID
                 valueFrom:
                   secretKeyRef:
-                    name: ambient-control-plane-token
-                    key: token
+                    name: ambient-control-plane-oidc
+                    key: client-id
+              - name: OIDC_CLIENT_SECRET
+                valueFrom:
+                  secretKeyRef:
+                    name: ambient-control-plane-oidc
+                    key: client-secret
               - name: AMBIENT_API_SERVER_URL
                 value: "http://ambient-api-server.${NAMESPACE}.svc:8000"
               - name: AMBIENT_GRPC_SERVER_ADDR
