@@ -825,6 +825,20 @@ func (r *SimpleKubeReconciler) resolveCredentialIDs(ctx context.Context, sdk *sd
 		return nil, fmt.Errorf("invalid agent_id: %w", err)
 	}
 
+	// Look up credential:owner role ID to exclude ownership bindings from resolution.
+	// Ownership bindings (auto-created when a credential is created) share the same
+	// shape as global injection bindings but represent management authority, not
+	// injection intent.
+	var ownerRoleID string
+	ownerRoles, err := sdk.Roles().List(ctx, &types.ListOptions{Size: 1, Search: "name = 'credential:owner'"})
+	if err == nil && len(ownerRoles.Items) > 0 {
+		ownerRoleID = ownerRoles.Items[0].ID
+	}
+
+	isInjectionBinding := func(b types.RoleBinding) bool {
+		return ownerRoleID == "" || b.RoleID != ownerRoleID
+	}
+
 	var agentBindings, projectBindings, globalBindings []types.RoleBinding
 
 	// Agent-level bindings (most specific)
@@ -832,7 +846,9 @@ func (r *SimpleKubeReconciler) resolveCredentialIDs(ctx context.Context, sdk *sd
 		search := fmt.Sprintf("scope = 'credential' and project_id = '%s' and agent_id = '%s'", projectID, agent)
 		it := sdk.RoleBindings().ListAll(ctx, &types.ListOptions{Size: 100, Search: search})
 		for it.Next() {
-			agentBindings = append(agentBindings, it.Item())
+			if b := it.Item(); isInjectionBinding(b) {
+				agentBindings = append(agentBindings, b)
+			}
 		}
 		if err := it.Err(); err != nil {
 			return nil, fmt.Errorf("listing agent-level credential bindings: %w", err)
@@ -844,7 +860,7 @@ func (r *SimpleKubeReconciler) resolveCredentialIDs(ctx context.Context, sdk *sd
 	projectIt := sdk.RoleBindings().ListAll(ctx, &types.ListOptions{Size: 100, Search: projectSearch})
 	for projectIt.Next() {
 		b := projectIt.Item()
-		if b.AgentID == nil {
+		if b.AgentID == nil && isInjectionBinding(b) {
 			projectBindings = append(projectBindings, b)
 		}
 	}
@@ -856,7 +872,7 @@ func (r *SimpleKubeReconciler) resolveCredentialIDs(ctx context.Context, sdk *sd
 	globalIt := sdk.RoleBindings().ListAll(ctx, &types.ListOptions{Size: 100, Search: "scope = 'credential'"})
 	for globalIt.Next() {
 		b := globalIt.Item()
-		if b.ProjectID == nil && b.AgentID == nil {
+		if b.ProjectID == nil && b.AgentID == nil && isInjectionBinding(b) {
 			globalBindings = append(globalBindings, b)
 		}
 	}
