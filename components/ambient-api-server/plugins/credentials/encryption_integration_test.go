@@ -42,6 +42,7 @@ func newEncryptedCredential(t *testing.T, name string, token string) *credential
 		credentials.NewCredentialDao(&environments.Environment().Database.SessionFactory),
 		nil,
 		kr,
+		nil,
 	)
 
 	// Advisory locks need the lock factory; use a simpler approach via DAO directly
@@ -81,6 +82,7 @@ func TestEncryptedCredentialRoundtrip(t *testing.T) {
 		dao,
 		nil,
 		kr,
+		nil,
 	)
 	decrypted, svcErr := svc.Get(context.Background(), created.ID)
 	Expect(svcErr).NotTo(HaveOccurred())
@@ -94,10 +96,9 @@ func TestEncryptedCredentialViaAPI(t *testing.T) {
 	ctx := h.NewAuthenticatedContext(account)
 
 	credentialInput := openapi.Credential{
-		ProjectId: openapi.PtrString(testProjectID),
-		Name:      h.NewID(),
-		Provider:  "github",
-		Token:     openapi.PtrString("ghp_apiTestToken456"),
+		Name:     h.NewID(),
+		Provider: "github",
+		Token:    openapi.PtrString("ghp_apiTestToken456"),
 	}
 
 	credentialOutput, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsIdCredentialsPost(ctx, testProjectID).Credential(credentialInput).Execute()
@@ -133,6 +134,7 @@ func TestPlaintextTokenPassthrough(t *testing.T) {
 		credentials.NewCredentialDao(&environments.Environment().Database.SessionFactory),
 		nil,
 		nil,
+		nil,
 	)
 
 	plaintext := "ghp_plaintext_no_encryption"
@@ -152,6 +154,7 @@ func TestPlaintextTokenPassthrough(t *testing.T) {
 		credentials.NewCredentialDao(&environments.Environment().Database.SessionFactory),
 		nil,
 		kr,
+		nil,
 	)
 
 	got, svcErr := encSvc.Get(context.Background(), created.ID)
@@ -218,7 +221,7 @@ func TestEncryptedLargeKubeconfig(t *testing.T) {
 	kr := testKeyring(t)
 	dao := credentials.NewCredentialDao(&environments.Environment().Database.SessionFactory)
 
-	svc := credentials.NewCredentialService(nil, dao, nil, kr)
+	svc := credentials.NewCredentialService(nil, dao, nil, kr, nil)
 	got, svcErr := svc.Get(context.Background(), created.ID)
 	Expect(svcErr).NotTo(HaveOccurred())
 	Expect(*got.Token).To(Equal(kubeconfig))
