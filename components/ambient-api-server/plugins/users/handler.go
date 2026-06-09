@@ -6,7 +6,9 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
@@ -90,6 +92,20 @@ func (h userHandler) List(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 
 			listArgs := services.NewListArguments(r.URL.Query())
+
+			// RBAC: non-admin callers can only see their own user record
+			authResult := pkgrbac.GetAuthResult(ctx)
+			if authResult != nil && !authResult.IsGlobalAdmin {
+				username := auth.GetUsernameFromContext(ctx)
+				if username != "" {
+					scopeFilter, err := pkgrbac.TSLEqual("username", username)
+					if err != nil {
+						return nil, errors.Forbidden("invalid username")
+					}
+					pkgrbac.AppendTSLFilter(listArgs, scopeFilter)
+				}
+			}
+
 			var users []User
 			paging, err := h.generic.List(ctx, "id", listArgs, &users)
 			if err != nil {

@@ -11,6 +11,8 @@ import (
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api"
 	localgrpc "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc"
 	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/middleware"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/server"
 	"github.com/openshift-online/rh-trex-ai/pkg/server/grpcutil"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
@@ -112,6 +114,12 @@ func (h *projectSettingsGRPCHandler) ListProjectSettings(ctx context.Context, re
 		Size: int64(size),
 	}
 
+	if !middleware.IsServiceCaller(ctx) {
+		if !rbac.ApplyListFilter(ctx, &listArgs, "project_id", false) {
+			return &pb.ListProjectSettingsResponse{Items: []*pb.ProjectSettings{}, Metadata: &pb.ListMeta{Page: int32(page), Size: int32(size), Total: 0}}, nil
+		}
+	}
+
 	var psList []ProjectSettings
 	paging, svcErr := h.generic.List(ctx, "id", &listArgs, &psList)
 	if svcErr != nil {
@@ -140,6 +148,10 @@ func (h *projectSettingsGRPCHandler) WatchProjectSettings(req *pb.WatchProjectSe
 	}
 
 	ctx := stream.Context()
+	authResult := rbac.GetAuthResult(ctx)
+	isPrivileged := middleware.IsServiceCaller(ctx) ||
+		(authResult != nil && authResult.IsGlobalAdmin)
+
 	sub, err := broker.Subscribe(ctx)
 	if err != nil {
 		return status.Errorf(codes.Internal, "failed to subscribe to event broker: %v", err)
@@ -169,7 +181,14 @@ func (h *projectSettingsGRPCHandler) WatchProjectSettings(req *pb.WatchProjectSe
 					glog.Errorf("WatchProjectSettings: failed to get project settings %s: %v", event.SourceID, svcErr)
 					continue
 				}
+
+				if !isPrivileged && !rbac.IsProjectAuthorized(authResult, ps.ProjectId) {
+					continue
+				}
+
 				watchEvent.ProjectSettings = projectSettingsToProto(ps)
+			} else if !isPrivileged {
+				continue
 			}
 
 			if err := stream.Send(watchEvent); err != nil {

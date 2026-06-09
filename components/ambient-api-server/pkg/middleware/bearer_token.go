@@ -4,39 +4,15 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/golang/glog"
-	pkgserver "github.com/openshift-online/rh-trex-ai/pkg/server"
-)
-
-const (
-	ambientAPITokenEnv    = "AMBIENT_API_TOKEN"
-	grpcServiceAccountEnv = "GRPC_SERVICE_ACCOUNT"
 )
 
 var httpBypassPaths = map[string]bool{
 	"/healthcheck": true,
 	"/health":      true,
 	"/metrics":     true,
-}
-
-func init() {
-	token := os.Getenv(ambientAPITokenEnv)
-	serviceAccount := os.Getenv(grpcServiceAccountEnv)
-	if token == "" && serviceAccount == "" {
-		glog.Infof("Service token auth disabled: neither %s nor %s set", ambientAPITokenEnv, grpcServiceAccountEnv)
-		return
-	}
-	if token != "" {
-		glog.Infof("Service token auth enabled via %s (gRPC only)", ambientAPITokenEnv)
-	}
-	if serviceAccount != "" {
-		glog.Infof("OIDC service account username: %s", serviceAccount)
-	}
-	pkgserver.RegisterPreAuthGRPCUnaryInterceptor(bearerTokenGRPCUnaryInterceptor(token, serviceAccount))
-	pkgserver.RegisterPreAuthGRPCStreamInterceptor(bearerTokenGRPCStreamInterceptor(token, serviceAccount))
 }
 
 func extractBearerToken(header string) (string, error) {

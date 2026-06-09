@@ -1,5 +1,5 @@
 import type { ProjectAPI } from 'ambient-sdk'
-import type { ProjectsPort } from '@/ports/projects'
+import type { ProjectsPort, ProjectCreateInput } from '@/ports/projects'
 import type { DomainProject, ListParams, PaginatedResult } from '@/domain/types'
 import { mapSdkProjectToDomain } from './mappers'
 import { getProjectAPI } from './sdk-client'
@@ -32,6 +32,11 @@ function createSdkProjectsAdapter(api: ProjectAPI): ProjectsPort {
 
     async get(projectId: string): Promise<DomainProject> {
       const project = await api.get(projectId)
+      return mapSdkProjectToDomain(project)
+    },
+
+    async create(input: ProjectCreateInput): Promise<DomainProject> {
+      const project = await api.create({ name: input.name, description: input.description })
       return mapSdkProjectToDomain(project)
     },
   }
