@@ -3,14 +3,31 @@ package credentials
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/crypto"
+	"github.com/golang/glog"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/db"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/logger"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
 )
+
+// credRoleBindingRow is a local struct for creating role_bindings rows via
+// GORM, avoiding circular imports with the roleBindings plugin package.
+type credRoleBindingRow struct {
+	ID           string  `gorm:"primaryKey"`
+	RoleId       string  `gorm:"column:role_id;not null"`
+	Scope        string  `gorm:"not null"`
+	UserId       *string `gorm:"column:user_id"`
+	CredentialId *string `gorm:"column:credential_id"`
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+func (credRoleBindingRow) TableName() string { return "role_bindings" }
 
 const credentialsLockType db.LockType = "credentials"
 
@@ -32,22 +49,24 @@ type CredentialService interface {
 	OnDelete(ctx context.Context, id string) error
 }
 
-func NewCredentialService(lockFactory db.LockFactory, credentialDao CredentialDao, events services.EventService, keyring *crypto.Keyring) CredentialService {
+func NewCredentialService(lockFactory db.LockFactory, credentialDao CredentialDao, events services.EventService, keyring *crypto.Keyring, sessionFactory *db.SessionFactory) CredentialService {
 	return &sqlCredentialService{
-		lockFactory:   lockFactory,
-		credentialDao: credentialDao,
-		events:        events,
-		keyring:       keyring,
+		lockFactory:    lockFactory,
+		credentialDao:  credentialDao,
+		events:         events,
+		keyring:        keyring,
+		sessionFactory: sessionFactory,
 	}
 }
 
 var _ CredentialService = &sqlCredentialService{}
 
 type sqlCredentialService struct {
-	lockFactory   db.LockFactory
-	credentialDao CredentialDao
-	events        services.EventService
-	keyring       *crypto.Keyring
+	lockFactory    db.LockFactory
+	credentialDao  CredentialDao
+	events         services.EventService
+	keyring        *crypto.Keyring
+	sessionFactory *db.SessionFactory
 }
 
 func (s *sqlCredentialService) encryptToken(credential *Credential) *errors.ServiceError {
@@ -128,6 +147,8 @@ func (s *sqlCredentialService) Create(ctx context.Context, credential *Credentia
 		return nil, services.HandleCreateError("Credential", err)
 	}
 
+	s.createOwnerBinding(ctx, credential.ID)
+
 	if s.events != nil {
 		_, evErr := s.events.Create(ctx, &api.Event{
 			Source:    "Credentials",
@@ -140,6 +161,39 @@ func (s *sqlCredentialService) Create(ctx context.Context, credential *Credentia
 	}
 
 	return credential, nil
+}
+
+func (s *sqlCredentialService) createOwnerBinding(ctx context.Context, credentialID string) {
+	if s.sessionFactory == nil {
+		return
+	}
+	username := auth.GetUsernameFromContext(ctx)
+	if username == "" {
+		return
+	}
+	g := (*s.sessionFactory).New(ctx)
+
+	var roleID string
+	if err := g.Table("roles").Select("id").
+		Where("name = ? AND deleted_at IS NULL", "credential:owner").
+		Limit(1).Scan(&roleID).Error; err != nil || roleID == "" {
+		glog.Warningf("failed to find credential:owner role for credential %s: %v", credentialID, err)
+		return
+	}
+
+	now := time.Now()
+	row := credRoleBindingRow{
+		ID:           api.NewID(),
+		RoleId:       roleID,
+		Scope:        "credential",
+		UserId:       &username,
+		CredentialId: &credentialID,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := g.Create(&row).Error; err != nil {
+		glog.Warningf("failed to create owner binding for credential %s: %v", credentialID, err)
+	}
 }
 
 func (s *sqlCredentialService) Replace(ctx context.Context, credential *Credential) (*Credential, *errors.ServiceError) {
