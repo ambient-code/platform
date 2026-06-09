@@ -124,6 +124,32 @@ Components are opt-in kustomize modules included via the `components:` block in 
 | `ambient-api-server-db` | Same RHEL patch for the ambient-api-server's dedicated DB | `production`, `local-dev` |
 | `postgresql-init-scripts` | ConfigMap + volume for DB init SQL (vanilla postgres only) | `kind`, `e2e` |
 
+## Prerequisites for New Deployments
+
+Before deploying, create these secrets in the target namespace:
+
+### Control-plane OIDC credentials
+
+The control-plane authenticates to the api-server using Keycloak client credentials (OAuth2 `client_credentials` grant). Create a **confidential** Keycloak client with only the **Service accounts roles** flow enabled, then:
+
+```bash
+oc create secret generic ambient-control-plane-oidc \
+  -n <namespace> \
+  --from-literal=client-id=<keycloak-client-id> \
+  --from-literal=client-secret=<keycloak-client-secret>
+```
+
+### API server auth ConfigMap
+
+The api-server validates JWTs using keys from the Keycloak JWKS endpoint (configured via `--jwk-cert-url`). A local fallback is also loaded from a ConfigMap:
+
+```bash
+oc create configmap ambient-api-server-auth \
+  -n <namespace> \
+  --from-file=jwks.json=<(curl -s <KEYCLOAK_REALM_URL>/protocol/openid-connect/certs) \
+  --from-file=acl.yml=<(echo '- claim: email\n  pattern: ^.*$')
+```
+
 ## Building and Validating
 
 ```bash
