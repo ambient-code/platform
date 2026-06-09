@@ -46,16 +46,19 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 			if h.sessionFactory == nil {
 				return nil, errors.Forbidden("authorization not available")
 			}
+
+			validScopes := map[string]bool{"global": true, "project": true, "agent": true, "session": true, "credential": true}
+			if !validScopes[roleBinding.Scope] {
+				return nil, errors.BadRequest("invalid scope")
+			}
+
 			{
 				g := (*h.sessionFactory).New(ctx)
 
-				// a) Look up target role name and reject internal roles
+				// a) Look up target role name
 				var targetRoleName string
 				if err := g.Table("roles").Select("name").Where("id = ? AND deleted_at IS NULL", roleBinding.RoleId).Scan(&targetRoleName).Error; err != nil || targetRoleName == "" {
 					return nil, errors.Forbidden("target role not found")
-				}
-				if pkgrbac.InternalRoles[targetRoleName] {
-					return nil, errors.Forbidden("cannot assign internal role")
 				}
 
 				// b) Level hierarchy check — scoped to the target resource
@@ -76,9 +79,12 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 					scanErr = baseQuery(g).Scan(&callerRoleNames).Error
 				}
 				if scanErr != nil {
-					return nil, errors.GeneralError("failed to query caller roles: %v", scanErr)
+					return nil, errors.GeneralError("authorization check failed")
 				}
 				callerLevel := pkgrbac.HighestLevel(callerRoleNames)
+				if pkgrbac.InternalRoles[targetRoleName] && callerLevel != 0 {
+					return nil, errors.Forbidden("cannot assign internal role")
+				}
 				if !pkgrbac.CanGrant(callerLevel, targetRoleName) {
 					return nil, errors.Forbidden("insufficient privileges to grant this role")
 				}
@@ -95,37 +101,76 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 						Where("user_id = ? AND (project_id = ? OR scope = 'global') AND deleted_at IS NULL",
 							username, *roleBinding.ProjectId.Get()).
 						Count(&projCount).Error; dbErr != nil {
-						return nil, errors.GeneralError("failed to check project access: %v", dbErr)
+						return nil, errors.GeneralError("authorization check failed")
 					}
 					if projCount == 0 {
 						return nil, errors.Forbidden("caller has no access to this project")
 					}
 				}
 
-				// c) Credential scope: caller must be credential:owner AND project:owner
+				// c) Credential scope authorization
 				if roleBinding.Scope == "credential" && roleBinding.CredentialId.IsSet() {
+					hasProjectID := roleBinding.ProjectId.IsSet() && roleBinding.ProjectId.Get() != nil
+					hasAgentID := roleBinding.AgentId.IsSet() && roleBinding.AgentId.Get() != nil
+
+					if hasProjectID && *roleBinding.ProjectId.Get() == "" {
+						return nil, errors.BadRequest("project_id must not be empty")
+					}
+					if hasAgentID && *roleBinding.AgentId.Get() == "" {
+						return nil, errors.BadRequest("agent_id must not be empty")
+					}
+
+					// c1) agent_id requires project_id
+					if hasAgentID && !hasProjectID {
+						return nil, errors.BadRequest("agent-scoped credential bindings require a project_id")
+					}
+
+					// c2) Validate agent belongs to the specified project
+					if hasAgentID && hasProjectID {
+						var agentProjectID string
+						if dbErr := g.Table("agents").Select("project_id").
+							Where("id = ? AND deleted_at IS NULL", *roleBinding.AgentId.Get()).
+							Scan(&agentProjectID).Error; dbErr != nil || agentProjectID == "" {
+							return nil, errors.BadRequest("agent not found")
+						}
+						if agentProjectID != *roleBinding.ProjectId.Get() {
+							return nil, errors.BadRequest("agent does not belong to the specified project")
+						}
+					}
+
+					// c3) Caller must be credential:owner
 					var credOwnerCount int64
 					if dbErr := g.Table("role_bindings").
 						Joins("JOIN roles ON roles.id = role_bindings.role_id").
 						Where("role_bindings.user_id = ? AND roles.name = ? AND role_bindings.credential_id = ? AND role_bindings.deleted_at IS NULL AND roles.deleted_at IS NULL",
 							username, pkgrbac.RoleCredentialOwner, *roleBinding.CredentialId.Get()).
 						Count(&credOwnerCount).Error; dbErr != nil {
-						return nil, errors.GeneralError("failed to check credential ownership: %v", dbErr)
+						return nil, errors.GeneralError("authorization check failed")
 					}
 					if credOwnerCount == 0 {
 						return nil, errors.Forbidden("caller must be credential owner to grant credential-scoped bindings")
 					}
-					if roleBinding.ProjectId.IsSet() {
-						var projOwnerCount int64
+
+					// c4) Project-level or agent-level: caller needs project:editor or higher
+					if hasProjectID && callerLevel != 0 {
+						var projEditorCount int64
 						if dbErr := g.Table("role_bindings").
 							Joins("JOIN roles ON roles.id = role_bindings.role_id").
-							Where("role_bindings.user_id = ? AND roles.name = ? AND role_bindings.project_id = ? AND role_bindings.deleted_at IS NULL AND roles.deleted_at IS NULL",
-								username, pkgrbac.RoleProjectOwner, *roleBinding.ProjectId.Get()).
-							Count(&projOwnerCount).Error; dbErr != nil {
-							return nil, errors.GeneralError("failed to check project ownership: %v", dbErr)
+							Where("role_bindings.user_id = ? AND role_bindings.project_id = ? AND role_bindings.deleted_at IS NULL AND roles.deleted_at IS NULL",
+								username, *roleBinding.ProjectId.Get()).
+							Where("roles.name IN ?", []string{pkgrbac.RoleProjectOwner, pkgrbac.RoleProjectEditor}).
+							Count(&projEditorCount).Error; dbErr != nil {
+							return nil, errors.GeneralError("authorization check failed")
 						}
-						if projOwnerCount == 0 {
-							return nil, errors.Forbidden("caller must be project owner to bind credentials to a project")
+						if projEditorCount == 0 {
+							return nil, errors.Forbidden("caller must be project editor or higher to bind credentials to a project")
+						}
+					}
+
+					// c5) Global credential binding: requires platform:admin
+					if !hasProjectID && !hasAgentID {
+						if callerLevel != 0 {
+							return nil, errors.Forbidden("only platform admins can create global credential bindings")
 						}
 					}
 				}
@@ -173,7 +218,7 @@ func (h roleBindingHandler) Patch(w http.ResponseWriter, r *http.Request) {
 					Joins("JOIN roles r ON r.id = rb.role_id").
 					Where("rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", username).
 					Scan(&callerRoleNames).Error; dbErr != nil {
-					return nil, errors.GeneralError("failed to query caller roles: %v", dbErr)
+					return nil, errors.GeneralError("authorization check failed")
 				}
 				callerLevel := pkgrbac.HighestLevel(callerRoleNames)
 
@@ -198,9 +243,12 @@ func (h roleBindingHandler) Patch(w http.ResponseWriter, r *http.Request) {
 				}
 
 				// Prevent changing user_id (ownership transfer).
-				if patch.UserId.IsSet() && (found.UserId == nil || *patch.UserId.Get() != *found.UserId) {
-					if callerLevel != 0 {
-						return nil, errors.Forbidden("Forbidden")
+				if patch.UserId.IsSet() {
+					patchVal := patch.UserId.Get()
+					if found.UserId == nil || patchVal == nil || *patchVal != *found.UserId {
+						if callerLevel != 0 {
+							return nil, errors.Forbidden("Forbidden")
+						}
 					}
 				}
 
@@ -209,17 +257,29 @@ func (h roleBindingHandler) Patch(w http.ResponseWriter, r *http.Request) {
 					if patch.Scope != nil && *patch.Scope != found.Scope {
 						return nil, errors.Forbidden("Forbidden")
 					}
-					if patch.ProjectId.IsSet() && (found.ProjectId == nil || *patch.ProjectId.Get() != *found.ProjectId) {
-						return nil, errors.Forbidden("Forbidden")
+					if patch.ProjectId.IsSet() {
+						patchVal := patch.ProjectId.Get()
+						if found.ProjectId == nil || patchVal == nil || *patchVal != *found.ProjectId {
+							return nil, errors.Forbidden("Forbidden")
+						}
 					}
-					if patch.AgentId.IsSet() && (found.AgentId == nil || *patch.AgentId.Get() != *found.AgentId) {
-						return nil, errors.Forbidden("Forbidden")
+					if patch.AgentId.IsSet() {
+						patchVal := patch.AgentId.Get()
+						if found.AgentId == nil || patchVal == nil || *patchVal != *found.AgentId {
+							return nil, errors.Forbidden("Forbidden")
+						}
 					}
-					if patch.SessionId.IsSet() && (found.SessionId == nil || *patch.SessionId.Get() != *found.SessionId) {
-						return nil, errors.Forbidden("Forbidden")
+					if patch.SessionId.IsSet() {
+						patchVal := patch.SessionId.Get()
+						if found.SessionId == nil || patchVal == nil || *patchVal != *found.SessionId {
+							return nil, errors.Forbidden("Forbidden")
+						}
 					}
-					if patch.CredentialId.IsSet() && (found.CredentialId == nil || *patch.CredentialId.Get() != *found.CredentialId) {
-						return nil, errors.Forbidden("Forbidden")
+					if patch.CredentialId.IsSet() {
+						patchVal := patch.CredentialId.Get()
+						if found.CredentialId == nil || patchVal == nil || *patchVal != *found.CredentialId {
+							return nil, errors.Forbidden("Forbidden")
+						}
 					}
 				}
 			}
@@ -364,7 +424,7 @@ func (h roleBindingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 				var roleName string
 				g := (*h.sessionFactory).New(ctx)
 				if dbErr := g.Table("roles").Select("name").Where("id = ? AND deleted_at IS NULL", binding.RoleId).Scan(&roleName).Error; dbErr != nil {
-					return nil, errors.GeneralError("failed to look up role: %v", dbErr)
+					return nil, errors.GeneralError("authorization check failed")
 				}
 
 				if roleName == pkgrbac.RoleProjectOwner && binding.ProjectId != nil {
@@ -373,7 +433,7 @@ func (h roleBindingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 						Where("role_id = ? AND project_id = ? AND deleted_at IS NULL",
 							binding.RoleId, *binding.ProjectId).
 						Count(&count).Error; dbErr != nil {
-						return nil, errors.GeneralError("failed to count owner bindings: %v", dbErr)
+						return nil, errors.GeneralError("authorization check failed")
 					}
 					if count <= 1 {
 						return nil, errors.New(errors.ErrorConflict, "cannot delete the last owner binding")
@@ -385,31 +445,67 @@ func (h roleBindingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 						Where("role_id = ? AND credential_id = ? AND deleted_at IS NULL",
 							binding.RoleId, *binding.CredentialId).
 						Count(&count).Error; dbErr != nil {
-						return nil, errors.GeneralError("failed to count owner bindings: %v", dbErr)
+						return nil, errors.GeneralError("authorization check failed")
 					}
 					if count <= 1 {
 						return nil, errors.New(errors.ErrorConflict, "cannot delete the last owner binding")
 					}
 				}
 
-				// --- Hierarchy check: caller must outrank the binding's role ---
+				// --- Authorization check ---
 				username := auth.GetUsernameFromContext(ctx)
-				var callerRoleNames []string
-				baseQuery := g.Table("role_bindings rb").
-					Select("r.name").
-					Joins("JOIN roles r ON r.id = rb.role_id").
-					Where("rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", username)
-				if binding.Scope == "project" && binding.ProjectId != nil {
-					baseQuery = baseQuery.Where("rb.project_id = ? OR rb.scope = 'global'", *binding.ProjectId)
-				} else if binding.Scope == "credential" && binding.CredentialId != nil {
-					baseQuery = baseQuery.Where("rb.credential_id = ? OR rb.scope = 'global'", *binding.CredentialId)
-				}
-				if dbErr := baseQuery.Scan(&callerRoleNames).Error; dbErr != nil {
-					return nil, errors.GeneralError("failed to query caller roles: %v", dbErr)
-				}
-				callerLevel := pkgrbac.HighestLevel(callerRoleNames)
-				if !pkgrbac.CanGrant(callerLevel, roleName) {
-					return nil, errors.Forbidden("insufficient privileges to delete this binding")
+
+				if binding.Scope == "credential" {
+					// Asymmetric unbind: project:editor+ can remove credential bindings
+					// from their project without needing credential:owner.
+					// platform:admin can always unbind.
+					var callerAllRoles []string
+					if dbErr := g.Table("role_bindings rb").
+						Select("r.name").
+						Joins("JOIN roles r ON r.id = rb.role_id").
+						Where("rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", username).
+						Scan(&callerAllRoles).Error; dbErr != nil {
+						return nil, errors.GeneralError("authorization check failed")
+					}
+					callerLevel := pkgrbac.HighestLevel(callerAllRoles)
+
+					if callerLevel == 0 {
+						// platform:admin can always unbind
+					} else if binding.ProjectId != nil {
+						var projEditorCount int64
+						if dbErr := g.Table("role_bindings").
+							Joins("JOIN roles ON roles.id = role_bindings.role_id").
+							Where("role_bindings.user_id = ? AND role_bindings.project_id = ? AND role_bindings.deleted_at IS NULL AND roles.deleted_at IS NULL",
+								username, *binding.ProjectId).
+							Where("roles.name IN ?", []string{pkgrbac.RoleProjectOwner, pkgrbac.RoleProjectEditor}).
+							Count(&projEditorCount).Error; dbErr != nil {
+							return nil, errors.GeneralError("authorization check failed")
+						}
+						if projEditorCount == 0 {
+							return nil, errors.Forbidden("insufficient privileges to delete this binding")
+						}
+					} else {
+						// Global credential binding: requires platform:admin (already checked above)
+						return nil, errors.Forbidden("insufficient privileges to delete this binding")
+					}
+				} else {
+					// Non-credential scopes: caller must outrank the binding's role
+					// AND be at least project:owner (level 1)
+					var callerRoleNames []string
+					baseQuery := g.Table("role_bindings rb").
+						Select("r.name").
+						Joins("JOIN roles r ON r.id = rb.role_id").
+						Where("rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", username)
+					if binding.Scope == "project" && binding.ProjectId != nil {
+						baseQuery = baseQuery.Where("rb.project_id = ? OR rb.scope = 'global'", *binding.ProjectId)
+					}
+					if dbErr := baseQuery.Scan(&callerRoleNames).Error; dbErr != nil {
+						return nil, errors.GeneralError("authorization check failed")
+					}
+					callerLevel := pkgrbac.HighestLevel(callerRoleNames)
+					if callerLevel > 1 || !pkgrbac.CanGrant(callerLevel, roleName) {
+						return nil, errors.Forbidden("insufficient privileges to delete this binding")
+					}
 				}
 			}
 
