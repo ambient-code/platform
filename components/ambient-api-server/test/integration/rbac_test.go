@@ -26,13 +26,14 @@ func ensureBuiltInRoles(t *testing.T) {
 		{"platform:admin", `["*:*"]`},
 		{"platform:viewer", `["project:read","project:list","session:read","session:list","agent:read","agent:list"]`},
 		{"project:owner", `["project:read","project:update","project:delete","agent:*","session:*","session_message:*","role_binding:*"]`},
-		{"project:editor", `["project:read","agent:create","agent:read","agent:update","agent:list","agent:start","session:create","session:read","session:update","session:list","session_message:*"]`},
+		{"project:editor", `["project:read","agent:create","agent:read","agent:update","agent:list","agent:start","session:create","session:read","session:update","session:list","session_message:*","role_binding:delete"]`},
 		{"project:viewer", `["project:read","agent:read","agent:list","session:read","session:list","session_message:read","session_message:list"]`},
 		{"agent:operator", `["agent:read","agent:update","agent:start","agent:list","session:read","session:list"]`},
 		{"agent:observer", `["agent:read","agent:list","session:read","session:list"]`},
 		{"agent:runner", `["session:read","session_message:*"]`},
 		{"agent:editor", `["agent:read","agent:update"]`},
 		{"credential:owner", `["credential:create","credential:read","credential:update","credential:delete","credential:list","credential:fetch_token","role_binding:create","role_binding:delete"]`},
+		{"credential:reader", `["credential:read","credential:list"]`},
 		{"credential:token-reader", `["credential:fetch_token"]`},
 	}
 	for _, r := range roles {
