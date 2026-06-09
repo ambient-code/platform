@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"ambient-code-backend/git"
+	"ambient-code-backend/gitlab"
 	"ambient-code-backend/pathutil"
 	"ambient-code-backend/types"
 
@@ -1368,7 +1369,7 @@ func MintSessionGitHubToken(c *gin.Context) {
 	// Get GitHub token (GitHub App or PAT fallback via project runner secret)
 	tokenStr, err := GetGitHubToken(c.Request.Context(), K8sClient, DynamicClient, project, userID)
 	if err != nil {
-		log.Printf("Failed to get GitHub token for project %s: %v", project, err)
+		log.Printf("Failed to get GitHub token for project %s: %s", project, gitlab.SanitizeErrorMessage(err))
 		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to retrieve GitHub token"})
 		return
 	}
