@@ -226,6 +226,24 @@ jobs:
           working-directory: components/ambient-api-server
           args: --timeout=5m
 
+      - name: Check OpenAPI generated code is up to date
+        run: |
+          cd components/ambient-api-server
+          make generate
+          if ! git diff --quiet pkg/api/openapi/; then
+            echo ""
+            echo "============================================"
+            echo "ERROR: Generated OpenAPI code is out of date"
+            echo "============================================"
+            echo ""
+            echo "The following files differ from what 'make generate' produces:"
+            git diff --name-only pkg/api/openapi/
+            echo ""
+            echo "Run 'cd components/ambient-api-server && make generate' and commit the result."
+            exit 1
+          fi
+          echo "OpenAPI generated code is up to date."
+
   go-cli:
     runs-on: ubuntu-latest
     needs: detect-changes
