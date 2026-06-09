@@ -49,8 +49,8 @@ func TestRoleBindingPost(t *testing.T) {
 	roleBindingInput := openapi.RoleBinding{
 		RoleId: "test-role_id",
 		Scope:  "project",
-		UserId: openapi.PtrString("test-user_id"),
 	}
+	roleBindingInput.SetUserId("test-user_id")
 
 	roleBindingOutput, resp, err := client.DefaultAPI.ApiAmbientV1RoleBindingsPost(ctx).RoleBinding(roleBindingInput).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error posting object:  %v", err)

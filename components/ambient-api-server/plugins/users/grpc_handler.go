@@ -11,6 +11,8 @@ import (
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api"
 	localgrpc "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc"
 	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/middleware"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/server"
 	"github.com/openshift-online/rh-trex-ai/pkg/server/grpcutil"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
@@ -143,6 +145,14 @@ func (h *userGRPCHandler) WatchUsers(req *pb.WatchUsersRequest, stream grpc.Serv
 	}
 
 	ctx := stream.Context()
+	authResult := rbac.GetAuthResult(ctx)
+	isPrivileged := middleware.IsServiceCaller(ctx) ||
+		(authResult != nil && authResult.IsGlobalAdmin)
+
+	if !isPrivileged {
+		return status.Error(codes.PermissionDenied, "user watch requires admin privileges")
+	}
+
 	sub, err := broker.Subscribe(ctx)
 	if err != nil {
 		return status.Errorf(codes.Internal, "failed to subscribe to event broker: %v", err)
