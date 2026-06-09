@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -15,6 +17,18 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
+
+var safeTSLPattern = regexp.MustCompile(`^[a-zA-Z0-9_.@:\-]+$`)
+
+func validateTSLValue(value string) error {
+	if value == "" {
+		return nil
+	}
+	if !safeTSLPattern.MatchString(value) {
+		return fmt.Errorf("unsafe value for TSL query: %q", value)
+	}
+	return nil
+}
 
 const (
 	mcpSidecarPort = int64(8090)
@@ -74,6 +88,7 @@ type KubeReconcilerConfig struct {
 	ImagePullSecret       string
 	PlatformMode          string
 	MPPConfigNamespace    string
+	ServiceIdentity       string
 }
 
 type SimpleKubeReconciler struct {
@@ -182,10 +197,14 @@ func (r *SimpleKubeReconciler) provisionSession(ctx context.Context, session typ
 		return fmt.Errorf("ensuring service account: %w", err)
 	}
 
-	credentialIDs, err := r.resolveCredentialIDs(ctx, sdk, session.ProjectID)
+	credentialIDs, err := r.resolveCredentialIDs(ctx, sdk, session.ProjectID, session.AgentID)
 	if err != nil {
 		r.logger.Warn().Err(err).Str("session_id", session.ID).Msg("credential resolution failed; continuing without credentials")
 		credentialIDs = map[string]string{}
+	}
+
+	if err := r.grantTokenReaderBindings(ctx, sdk, credentialIDs, session.ID); err != nil {
+		r.logger.Warn().Err(err).Str("session_id", session.ID).Msg("failed to create credential:token-reader bindings; continuing")
 	}
 
 	if err := r.ensurePod(ctx, namespace, session, sessionLabel, sdk, credentialIDs); err != nil {
@@ -206,6 +225,16 @@ func (r *SimpleKubeReconciler) deprovisionSession(ctx context.Context, session t
 
 	r.logger.Info().Str("session_id", session.ID).Str("namespace", namespace).Msg("deprovisioning session")
 
+	if session.ProjectID != "" {
+		if sdk, err := r.factory.ForProject(ctx, session.ProjectID); err == nil {
+			if revokeErr := r.revokeTokenReaderBindings(ctx, sdk, session.ID); revokeErr != nil {
+				r.logger.Error().Err(revokeErr).Str("session_id", session.ID).Msg("token-reader binding revocation failed; bindings may be orphaned")
+			}
+		} else {
+			r.logger.Error().Err(err).Str("session_id", session.ID).Msg("failed to get SDK client for token-reader cleanup; bindings may be orphaned")
+		}
+	}
+
 	if err := r.nsKube().DeletePodsByLabel(ctx, namespace, selector); err != nil && !k8serrors.IsNotFound(err) {
 		r.logger.Warn().Err(err).Msg("deleting pods")
 	}
@@ -219,6 +248,16 @@ func (r *SimpleKubeReconciler) cleanupSession(ctx context.Context, session types
 	selector := sessionLabelSelector(session.ID)
 
 	r.logger.Info().Str("session_id", session.ID).Str("namespace", namespace).Msg("cleaning up session resources")
+
+	if session.ProjectID != "" {
+		if sdk, err := r.factory.ForProject(ctx, session.ProjectID); err == nil {
+			if revokeErr := r.revokeTokenReaderBindings(ctx, sdk, session.ID); revokeErr != nil {
+				r.logger.Error().Err(revokeErr).Str("session_id", session.ID).Msg("token-reader binding revocation failed; bindings may be orphaned")
+			}
+		} else {
+			r.logger.Error().Err(err).Str("session_id", session.ID).Msg("failed to get SDK client for token-reader cleanup; bindings may be orphaned")
+		}
+	}
 
 	if err := r.nsKube().DeletePodsByLabel(ctx, namespace, selector); err != nil && !k8serrors.IsNotFound(err) {
 		r.logger.Warn().Err(err).Msg("deleting pods")
@@ -773,25 +812,183 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 	return env
 }
 
-func (r *SimpleKubeReconciler) resolveCredentialIDs(ctx context.Context, sdk *sdkclient.Client, projectID string) (map[string]string, error) {
-	result := map[string]string{}
+func (r *SimpleKubeReconciler) resolveCredentialIDs(ctx context.Context, sdk *sdkclient.Client, projectID string, agentID ...string) (map[string]string, error) {
+	agent := ""
+	if len(agentID) > 0 {
+		agent = agentID[0]
+	}
 
-	it := sdk.Credentials().ListAll(ctx, &types.ListOptions{Size: 100})
-	for it.Next() {
-		cred := it.Item()
-		if cred.Provider == "" || cred.ID == "" {
+	if err := validateTSLValue(projectID); err != nil {
+		return nil, fmt.Errorf("invalid project_id: %w", err)
+	}
+	if err := validateTSLValue(agent); err != nil {
+		return nil, fmt.Errorf("invalid agent_id: %w", err)
+	}
+
+	var agentBindings, projectBindings, globalBindings []types.RoleBinding
+
+	// Agent-level bindings (most specific)
+	if agent != "" {
+		search := fmt.Sprintf("scope = 'credential' and project_id = '%s' and agent_id = '%s'", projectID, agent)
+		it := sdk.RoleBindings().ListAll(ctx, &types.ListOptions{Size: 100, Search: search})
+		for it.Next() {
+			agentBindings = append(agentBindings, it.Item())
+		}
+		if err := it.Err(); err != nil {
+			return nil, fmt.Errorf("listing agent-level credential bindings: %w", err)
+		}
+	}
+
+	// Project-level bindings (filter out agent-level client-side since TSL lacks IS NULL)
+	projectSearch := fmt.Sprintf("scope = 'credential' and project_id = '%s'", projectID)
+	projectIt := sdk.RoleBindings().ListAll(ctx, &types.ListOptions{Size: 100, Search: projectSearch})
+	for projectIt.Next() {
+		b := projectIt.Item()
+		if b.AgentID == nil {
+			projectBindings = append(projectBindings, b)
+		}
+	}
+	if err := projectIt.Err(); err != nil {
+		return nil, fmt.Errorf("listing project-level credential bindings: %w", err)
+	}
+
+	// Global bindings (filter for NULL project_id and agent_id client-side)
+	globalIt := sdk.RoleBindings().ListAll(ctx, &types.ListOptions{Size: 100, Search: "scope = 'credential'"})
+	for globalIt.Next() {
+		b := globalIt.Item()
+		if b.ProjectID == nil && b.AgentID == nil {
+			globalBindings = append(globalBindings, b)
+		}
+	}
+	if err := globalIt.Err(); err != nil {
+		return nil, fmt.Errorf("listing global credential bindings: %w", err)
+	}
+
+	// If no bindings found, return empty result (no credentials injected)
+	totalBindings := len(agentBindings) + len(projectBindings) + len(globalBindings)
+	if totalBindings == 0 {
+		r.logger.Info().Str("project_id", projectID).Msg("no credential bindings found for project; no credentials will be injected")
+		return map[string]string{}, nil
+	}
+
+	// Look up credential providers
+	allBindings := make([]types.RoleBinding, 0, totalBindings)
+	allBindings = append(allBindings, agentBindings...)
+	allBindings = append(allBindings, projectBindings...)
+	allBindings = append(allBindings, globalBindings...)
+
+	credProviders := map[string]string{}
+	for _, b := range allBindings {
+		if b.CredentialID == nil {
 			continue
 		}
-		if _, already := result[cred.Provider]; !already {
-			result[cred.Provider] = cred.ID
+		if _, seen := credProviders[*b.CredentialID]; seen {
+			continue
+		}
+		cred, err := sdk.Credentials().Get(ctx, *b.CredentialID)
+		if err != nil {
+			r.logger.Warn().Err(err).Str("credential_id", *b.CredentialID).Msg("failed to look up credential; skipping")
+			continue
+		}
+		credProviders[cred.ID] = cred.Provider
+	}
+
+	// Sort each tier by CreatedAt ascending so earliest wins for same provider
+	sortByCreatedAt := func(bindings []types.RoleBinding) {
+		sort.Slice(bindings, func(i, j int) bool {
+			if bindings[i].CreatedAt == nil {
+				return true
+			}
+			if bindings[j].CreatedAt == nil {
+				return false
+			}
+			return bindings[i].CreatedAt.Before(*bindings[j].CreatedAt)
+		})
+	}
+	sortByCreatedAt(globalBindings)
+	sortByCreatedAt(projectBindings)
+	sortByCreatedAt(agentBindings)
+
+	// Build result: layer global → project → agent (later tiers override)
+	result := map[string]string{}
+	applyTier := func(bindings []types.RoleBinding) {
+		seen := map[string]bool{}
+		for _, b := range bindings {
+			if b.CredentialID == nil {
+				continue
+			}
+			provider := credProviders[*b.CredentialID]
+			if provider == "" || seen[provider] {
+				continue
+			}
+			seen[provider] = true
+			result[provider] = *b.CredentialID
+		}
+	}
+	applyTier(globalBindings)
+	applyTier(projectBindings)
+	applyTier(agentBindings)
+
+	r.logger.Info().Int("count", len(result)).Msg("resolved credential IDs via hierarchical bindings")
+	return result, nil
+}
+
+func (r *SimpleKubeReconciler) grantTokenReaderBindings(ctx context.Context, sdk *sdkclient.Client, credentialIDs map[string]string, sessionID string) error {
+	if len(credentialIDs) == 0 || r.cfg.ServiceIdentity == "" {
+		return nil
+	}
+
+	roleList, err := sdk.Roles().List(ctx, &types.ListOptions{Size: 1, Search: "name = 'credential:token-reader'"})
+	if err != nil || len(roleList.Items) == 0 {
+		return fmt.Errorf("credential:token-reader role not found: %w", err)
+	}
+	roleID := roleList.Items[0].ID
+
+	for provider, credID := range credentialIDs {
+		rb, err := types.NewRoleBindingBuilder().
+			RoleID(roleID).
+			Scope("credential").
+			CredentialID(credID).
+			UserID(r.cfg.ServiceIdentity).
+			SessionID(sessionID).
+			Build()
+		if err != nil {
+			r.logger.Warn().Err(err).Str("provider", provider).Msg("failed to build token-reader binding")
+			continue
+		}
+		if _, err := sdk.RoleBindings().Create(ctx, rb); err != nil {
+			r.logger.Warn().Err(err).Str("provider", provider).Str("credential_id", credID).Msg("failed to create token-reader binding")
+			continue
+		}
+		r.logger.Info().Str("provider", provider).Str("credential_id", credID).Msg("granted credential:token-reader for session")
+	}
+	return nil
+}
+
+func (r *SimpleKubeReconciler) revokeTokenReaderBindings(ctx context.Context, sdk *sdkclient.Client, sessionID string) error {
+	if err := validateTSLValue(sessionID); err != nil {
+		return fmt.Errorf("invalid session_id: %w", err)
+	}
+	search := fmt.Sprintf("scope = 'credential' and session_id = '%s'", sessionID)
+	it := sdk.RoleBindings().ListAll(ctx, &types.ListOptions{Size: 100, Search: search})
+	var errs []error
+	for it.Next() {
+		b := it.Item()
+		if err := sdk.RoleBindings().Delete(ctx, b.ID); err != nil {
+			r.logger.Warn().Err(err).Str("binding_id", b.ID).Msg("failed to delete token-reader binding")
+			errs = append(errs, err)
+		} else {
+			r.logger.Info().Str("binding_id", b.ID).Str("session_id", sessionID).Msg("revoked credential:token-reader binding")
 		}
 	}
 	if err := it.Err(); err != nil {
-		return nil, fmt.Errorf("listing credentials: %w", err)
+		r.logger.Warn().Err(err).Str("session_id", sessionID).Msg("error listing token-reader bindings for cleanup")
+		errs = append(errs, err)
 	}
-
-	r.logger.Info().Int("count", len(result)).Msg("resolved credential IDs for session")
-	return result, nil
+	if len(errs) > 0 {
+		return fmt.Errorf("failed to revoke %d token-reader binding(s)", len(errs))
+	}
+	return nil
 }
 
 func (r *SimpleKubeReconciler) assembleInitialPrompt(ctx context.Context, session types.Session, sdk *sdkclient.Client) string {
