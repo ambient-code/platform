@@ -202,6 +202,11 @@ objects:
             env:
               - name: AMBIENT_ENV
                 value: production
+              - name: GRPC_SERVICE_ACCOUNT
+                valueFrom:
+                  secretKeyRef:
+                    name: ambient-control-plane-oidc
+                    key: client-id
               - name: CREDENTIAL_ENCRYPTION_KEYRING
                 valueFrom:
                   secretKeyRef:
