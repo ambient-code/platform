@@ -21,7 +21,7 @@ func RedactToken(s string) string {
 	s = gitlabCIPattern.ReplaceAllString(s, "gitlab-ci-token: "+TokenRedactionPlaceholder)
 
 	// Bearer tokens in Authorization headers
-	bearerPattern := regexp.MustCompile(`Bearer\s+[a-zA-Z0-9_-]+`)
+	bearerPattern := regexp.MustCompile(`Bearer\s+\S+`)
 	s = bearerPattern.ReplaceAllString(s, "Bearer "+TokenRedactionPlaceholder)
 
 	// OAuth2 tokens in URLs: oauth2:TOKEN@
