@@ -10,26 +10,20 @@ import (
 // TokenRedactionPlaceholder is used to replace sensitive tokens in logs
 const TokenRedactionPlaceholder = "[REDACTED]"
 
+var (
+	gitlabPATPattern = regexp.MustCompile(`glpat-[a-zA-Z0-9_-]+`)
+	gitlabCIPattern  = regexp.MustCompile(`gitlab-ci-token:\s*[a-zA-Z0-9_-]+`)
+	bearerPattern    = regexp.MustCompile(`Bearer\s+\S+`)
+	oauthURLPattern  = regexp.MustCompile(`oauth2:[^@]+@`)
+	tokenURLPattern  = regexp.MustCompile(`://[^:]+:[^@]+@`)
+)
+
 // RedactToken removes sensitive token information from a string
 func RedactToken(s string) string {
-	// GitLab PAT format: glpat-xxxxxxxxxxxxx
-	gitlabPATPattern := regexp.MustCompile(`glpat-[a-zA-Z0-9_-]+`)
 	s = gitlabPATPattern.ReplaceAllString(s, TokenRedactionPlaceholder)
-
-	// GitLab CI token format: gitlab-ci-token
-	gitlabCIPattern := regexp.MustCompile(`gitlab-ci-token:\s*[a-zA-Z0-9_-]+`)
 	s = gitlabCIPattern.ReplaceAllString(s, "gitlab-ci-token: "+TokenRedactionPlaceholder)
-
-	// Bearer tokens in Authorization headers
-	bearerPattern := regexp.MustCompile(`Bearer\s+[a-zA-Z0-9_-]+`)
 	s = bearerPattern.ReplaceAllString(s, "Bearer "+TokenRedactionPlaceholder)
-
-	// OAuth2 tokens in URLs: oauth2:TOKEN@
-	oauthURLPattern := regexp.MustCompile(`oauth2:[^@]+@`)
 	s = oauthURLPattern.ReplaceAllString(s, "oauth2:"+TokenRedactionPlaceholder+"@")
-
-	// Generic token pattern in URLs
-	tokenURLPattern := regexp.MustCompile(`://[^:]+:[^@]+@`)
 	s = tokenURLPattern.ReplaceAllString(s, "://"+TokenRedactionPlaceholder+":"+TokenRedactionPlaceholder+"@")
 
 	return s
