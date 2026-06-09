@@ -230,7 +230,7 @@ objects:
               - --db-password-file=/secrets/db/db.password
               - --db-name-file=/secrets/db/db.name
               - --enable-jwt=true
-              - --enable-authz=false
+              - --enable-authz=true
               - --jwk-cert-file=/configs/authentication/jwks.json
               - --enable-https=false
               - --enable-grpc=true
