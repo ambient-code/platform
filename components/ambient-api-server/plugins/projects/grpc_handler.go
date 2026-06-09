@@ -11,6 +11,8 @@ import (
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api"
 	localgrpc "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc"
 	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/middleware"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/server"
 	"github.com/openshift-online/rh-trex-ai/pkg/server/grpcutil"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
@@ -119,6 +121,12 @@ func (h *projectGRPCHandler) ListProjects(ctx context.Context, req *pb.ListProje
 		Size: int64(size),
 	}
 
+	if !middleware.IsServiceCaller(ctx) {
+		if !rbac.ApplyListFilter(ctx, &listArgs, "id", false) {
+			return &pb.ListProjectsResponse{Items: []*pb.Project{}, Metadata: &pb.ListMeta{Page: int32(page), Size: int32(size), Total: 0}}, nil
+		}
+	}
+
 	var projects []Project
 	paging, svcErr := h.generic.List(ctx, "id", &listArgs, &projects)
 	if svcErr != nil {
@@ -147,6 +155,10 @@ func (h *projectGRPCHandler) WatchProjects(req *pb.WatchProjectsRequest, stream 
 	}
 
 	ctx := stream.Context()
+	authResult := rbac.GetAuthResult(ctx)
+	isPrivileged := middleware.IsServiceCaller(ctx) ||
+		(authResult != nil && authResult.IsGlobalAdmin)
+
 	sub, err := broker.Subscribe(ctx)
 	if err != nil {
 		return status.Errorf(codes.Internal, "failed to subscribe to event broker: %v", err)
@@ -176,7 +188,14 @@ func (h *projectGRPCHandler) WatchProjects(req *pb.WatchProjectsRequest, stream 
 					glog.Errorf("WatchProjects: failed to get project %s: %v", event.SourceID, svcErr)
 					continue
 				}
+
+				if !isPrivileged && !rbac.IsProjectAuthorized(authResult, project.ID) {
+					continue
+				}
+
 				watchEvent.Project = projectToProto(project)
+			} else if !isPrivileged {
+				continue
 			}
 
 			if err := stream.Send(watchEvent); err != nil {

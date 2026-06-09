@@ -1,12 +1,12 @@
 package agents
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/ambient-code/platform/components/ambient-api-server/plugins/roleBindings"
 	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
 	pkgerrors "github.com/openshift-online/rh-trex-ai/pkg/errors"
@@ -56,12 +56,11 @@ func (h *agentSubresourceHandler) ListRoleBindings(w http.ResponseWriter, r *htt
 			}
 
 			listArgs := services.NewListArguments(r.URL.Query())
-			scopeFilter := fmt.Sprintf("scope_id = '%s'", agentID)
-			if listArgs.Search != "" {
-				listArgs.Search = scopeFilter + " and (" + listArgs.Search + ")"
-			} else {
-				listArgs.Search = scopeFilter
+			scopeFilter, valErr := pkgrbac.TSLEqual("scope_id", agentID)
+			if valErr != nil {
+				return nil, pkgerrors.Validation("invalid agent id")
 			}
+			pkgrbac.PrependTSLFilter(listArgs, scopeFilter)
 
 			var rbList []roleBindings.RoleBinding
 			paging, err := h.genericSvc.List(ctx, "id", listArgs, &rbList)
@@ -106,12 +105,11 @@ func (h *agentSubresourceHandler) ListSessions(w http.ResponseWriter, r *http.Re
 			}
 
 			listArgs := services.NewListArguments(r.URL.Query())
-			agentFilter := fmt.Sprintf("agent_id = '%s'", agentID)
-			if listArgs.Search != "" {
-				listArgs.Search = agentFilter + " and (" + listArgs.Search + ")"
-			} else {
-				listArgs.Search = agentFilter
+			agentFilter, valErr := pkgrbac.TSLEqual("agent_id", agentID)
+			if valErr != nil {
+				return nil, pkgerrors.Validation("invalid agent id")
 			}
+			pkgrbac.PrependTSLFilter(listArgs, agentFilter)
 
 			var sessList []sessions.Session
 			paging, err := h.genericSvc.List(ctx, "id", listArgs, &sessList)

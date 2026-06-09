@@ -6,6 +6,7 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
@@ -99,6 +100,9 @@ func (h projectHandler) List(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 
 			listArgs := services.NewListArguments(r.URL.Query())
+			if !pkgrbac.ApplyListFilter(ctx, listArgs, "id", false) {
+				return openapi.ProjectList{Kind: "ProjectList", Page: 1, Size: 0, Total: 0, Items: []openapi.Project{}}, nil
+			}
 			var projects []Project
 			paging, err := h.generic.List(ctx, "id", listArgs, &projects)
 			if err != nil {
