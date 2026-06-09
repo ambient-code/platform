@@ -92,7 +92,7 @@ func Load() (*ControlPlaneConfig, error) {
 		HTTPSProxy:            os.Getenv("HTTPS_PROXY"),
 		NoProxy:               os.Getenv("NO_PROXY"),
 		ImagePullSecret:       os.Getenv("IMAGE_PULL_SECRET"),
-		ServiceIdentity:       os.Getenv("GRPC_SERVICE_ACCOUNT"),
+		ServiceIdentity:       strings.TrimSpace(os.Getenv("GRPC_SERVICE_ACCOUNT")),
 	}
 
 	if cfg.MCPAPIServerURL == "" {

@@ -203,11 +203,13 @@ func (r *SimpleKubeReconciler) provisionSession(ctx context.Context, session typ
 		credentialIDs = map[string]string{}
 	}
 
-	if err := r.grantTokenReaderBindings(ctx, sdk, credentialIDs, session.ID); err != nil {
-		r.logger.Warn().Err(err).Str("session_id", session.ID).Msg("failed to create credential:token-reader bindings; continuing")
+	grantedIDs, grantErr := r.grantTokenReaderBindings(ctx, sdk, credentialIDs, session.ID)
+	if grantErr != nil {
+		r.logger.Warn().Err(grantErr).Str("session_id", session.ID).Msg("failed to create credential:token-reader bindings; continuing without credentials")
+		grantedIDs = map[string]string{}
 	}
 
-	if err := r.ensurePod(ctx, namespace, session, sessionLabel, sdk, credentialIDs); err != nil {
+	if err := r.ensurePod(ctx, namespace, session, sessionLabel, sdk, grantedIDs); err != nil {
 		return fmt.Errorf("ensuring pod: %w", err)
 	}
 
@@ -225,13 +227,12 @@ func (r *SimpleKubeReconciler) deprovisionSession(ctx context.Context, session t
 
 	r.logger.Info().Str("session_id", session.ID).Str("namespace", namespace).Msg("deprovisioning session")
 
+	var revokeErr error
 	if session.ProjectID != "" {
 		if sdk, err := r.factory.ForProject(ctx, session.ProjectID); err == nil {
-			if revokeErr := r.revokeTokenReaderBindings(ctx, sdk, session.ID); revokeErr != nil {
-				r.logger.Error().Err(revokeErr).Str("session_id", session.ID).Msg("token-reader binding revocation failed; bindings may be orphaned")
-			}
+			revokeErr = r.revokeTokenReaderBindings(ctx, sdk, session.ID)
 		} else {
-			r.logger.Error().Err(err).Str("session_id", session.ID).Msg("failed to get SDK client for token-reader cleanup; bindings may be orphaned")
+			revokeErr = fmt.Errorf("failed to get SDK client for token-reader cleanup: %w", err)
 		}
 	}
 
@@ -240,6 +241,9 @@ func (r *SimpleKubeReconciler) deprovisionSession(ctx context.Context, session t
 	}
 
 	r.updateSessionPhase(ctx, session, nextPhase)
+	if revokeErr != nil {
+		return fmt.Errorf("session %s deprovisioned but token-reader cleanup failed: %w", session.ID, revokeErr)
+	}
 	return nil
 }
 
@@ -249,13 +253,12 @@ func (r *SimpleKubeReconciler) cleanupSession(ctx context.Context, session types
 
 	r.logger.Info().Str("session_id", session.ID).Str("namespace", namespace).Msg("cleaning up session resources")
 
+	var revokeErr error
 	if session.ProjectID != "" {
 		if sdk, err := r.factory.ForProject(ctx, session.ProjectID); err == nil {
-			if revokeErr := r.revokeTokenReaderBindings(ctx, sdk, session.ID); revokeErr != nil {
-				r.logger.Error().Err(revokeErr).Str("session_id", session.ID).Msg("token-reader binding revocation failed; bindings may be orphaned")
-			}
+			revokeErr = r.revokeTokenReaderBindings(ctx, sdk, session.ID)
 		} else {
-			r.logger.Error().Err(err).Str("session_id", session.ID).Msg("failed to get SDK client for token-reader cleanup; bindings may be orphaned")
+			revokeErr = fmt.Errorf("failed to get SDK client for token-reader cleanup: %w", err)
 		}
 	}
 
@@ -278,6 +281,9 @@ func (r *SimpleKubeReconciler) cleanupSession(ctx context.Context, session types
 		r.logger.Info().Str("namespace", namespace).Msg("namespace deprovisioned")
 	}
 
+	if revokeErr != nil {
+		return fmt.Errorf("session %s cleaned up but token-reader cleanup failed: %w", session.ID, revokeErr)
+	}
 	return nil
 }
 
@@ -949,17 +955,18 @@ func (r *SimpleKubeReconciler) resolveCredentialIDs(ctx context.Context, sdk *sd
 	return result, nil
 }
 
-func (r *SimpleKubeReconciler) grantTokenReaderBindings(ctx context.Context, sdk *sdkclient.Client, credentialIDs map[string]string, sessionID string) error {
+func (r *SimpleKubeReconciler) grantTokenReaderBindings(ctx context.Context, sdk *sdkclient.Client, credentialIDs map[string]string, sessionID string) (map[string]string, error) {
 	if len(credentialIDs) == 0 || r.cfg.ServiceIdentity == "" {
-		return nil
+		return credentialIDs, nil
 	}
 
 	roleList, err := sdk.Roles().List(ctx, &types.ListOptions{Size: 1, Search: "name = 'credential:token-reader'"})
 	if err != nil || len(roleList.Items) == 0 {
-		return fmt.Errorf("credential:token-reader role not found: %w", err)
+		return nil, fmt.Errorf("credential:token-reader role not found: %w", err)
 	}
 	roleID := roleList.Items[0].ID
 
+	granted := make(map[string]string, len(credentialIDs))
 	for provider, credID := range credentialIDs {
 		rb, err := types.NewRoleBindingBuilder().
 			RoleID(roleID).
@@ -976,9 +983,10 @@ func (r *SimpleKubeReconciler) grantTokenReaderBindings(ctx context.Context, sdk
 			r.logger.Warn().Err(err).Str("provider", provider).Str("credential_id", credID).Msg("failed to create token-reader binding")
 			continue
 		}
+		granted[provider] = credID
 		r.logger.Info().Str("provider", provider).Str("credential_id", credID).Msg("granted credential:token-reader for session")
 	}
-	return nil
+	return granted, nil
 }
 
 func (r *SimpleKubeReconciler) revokeTokenReaderBindings(ctx context.Context, sdk *sdkclient.Client, sessionID string) error {
