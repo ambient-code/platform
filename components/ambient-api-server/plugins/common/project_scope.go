@@ -2,15 +2,12 @@
 package common
 
 import (
-	"fmt"
 	"net/http"
-	"regexp"
 
+	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
 )
-
-var safeProjectIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 // ApplyProjectScope reads the project ID from the query parameter or the
 // X-Ambient-Project header (query param takes precedence) and injects a
@@ -24,14 +21,10 @@ func ApplyProjectScope(r *http.Request, listArgs *services.ListArguments) *error
 	if projectID == "" {
 		return nil
 	}
-	if !safeProjectIDPattern.MatchString(projectID) {
+	projectFilter, err := pkgrbac.TSLEqual("project_id", projectID)
+	if err != nil {
 		return errors.Validation("invalid project_id format")
 	}
-	projectFilter := fmt.Sprintf("project_id = '%s'", projectID)
-	if listArgs.Search != "" {
-		listArgs.Search = fmt.Sprintf("%s and (%s)", projectFilter, listArgs.Search)
-	} else {
-		listArgs.Search = projectFilter
-	}
+	pkgrbac.PrependTSLFilter(listArgs, projectFilter)
 	return nil
 }
