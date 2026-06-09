@@ -1,0 +1,84 @@
+version: 1
+
+filesystem_policy:
+  include_workdir: true
+  read_only:
+    - /usr
+    - /lib
+    - /proc
+    - /dev/urandom
+    - /app
+    - /etc
+    - /var/log
+    - /home/sandbox
+  read_write:
+    - /workspace
+    - /tmp
+    - /dev/null
+    - /app/.claude
+
+landlock:
+  compatibility: best_effort
+
+process:
+  run_as_user: sandbox
+  run_as_group: sandbox
+
+network_policies:
+  anthropic_api:
+    name: anthropic-api
+    endpoints:
+      - { host: api.anthropic.com, port: 443 }
+      - { host: statsig.anthropic.com, port: 443 }
+    binaries:
+      - { path: /usr/local/bin/claude }
+      - { path: /usr/bin/node }
+      - { path: /usr/bin/curl }
+
+  vertex_ai:
+    name: vertex-ai
+    endpoints:
+      - { host: us-east5-aiplatform.googleapis.com, port: 443 }
+      - { host: europe-west1-aiplatform.googleapis.com, port: 443 }
+      - { host: us-central1-aiplatform.googleapis.com, port: 443 }
+      - { host: oauth2.googleapis.com, port: 443 }
+    binaries:
+      - { path: /usr/local/bin/claude }
+      - { path: /usr/bin/node }
+      - { path: /usr/bin/curl }
+
+  github:
+    name: github
+    endpoints:
+      - { host: github.com, port: 443 }
+      - { host: api.github.com, port: 443 }
+    binaries:
+      - { path: /usr/bin/git }
+      - { path: /usr/local/bin/gh }
+      - { path: /usr/bin/curl }
+
+  npm_registry:
+    name: npm-registry
+    endpoints:
+      - { host: registry.npmjs.org, port: 443 }
+    binaries:
+      - { path: /usr/bin/npm }
+      - { path: /usr/bin/node }
+      - { path: /usr/bin/npx }
+
+  pypi:
+    name: pypi
+    endpoints:
+      - { host: pypi.org, port: 443 }
+      - { host: files.pythonhosted.org, port: 443 }
+    binaries:
+      - { path: /usr/bin/pip3 }
+      - { path: /usr/bin/python3 }
+
+  gitlab:
+    name: gitlab
+    endpoints:
+      - { host: gitlab.com, port: 443 }
+    binaries:
+      - { path: /usr/bin/git }
+      - { path: /usr/local/bin/glab }

@@ -64,6 +64,12 @@ var NetworkPolicyGVR = schema.GroupVersionResource{
 	Resource: "networkpolicies",
 }
 
+var ConfigMapGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "configmaps",
+}
+
 type KubeClient struct {
 	dynamic dynamic.Interface
 	logger  zerolog.Logger
@@ -325,6 +331,14 @@ func (kc *KubeClient) ListTenantNamespaces(ctx context.Context, namespace, label
 		opts.LabelSelector = labelSelector
 	}
 	return kc.dynamic.Resource(gvr).Namespace(namespace).List(ctx, opts)
+}
+
+func (kc *KubeClient) GetConfigMap(ctx context.Context, namespace, name string) (*unstructured.Unstructured, error) {
+	return kc.dynamic.Resource(ConfigMapGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+}
+
+func (kc *KubeClient) CreateConfigMap(ctx context.Context, obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	return kc.dynamic.Resource(ConfigMapGVR).Namespace(obj.GetNamespace()).Create(ctx, obj, metav1.CreateOptions{})
 }
 
 func (kc *KubeClient) GetResource(ctx context.Context, gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {

@@ -47,6 +47,8 @@ type ControlPlaneConfig struct {
 	HTTPSProxy            string
 	NoProxy               string
 	ImagePullSecret       string
+	OpenShellEnabled      bool
+	OpenShellPolicyName   string
 }
 
 func Load() (*ControlPlaneConfig, error) {
@@ -91,6 +93,8 @@ func Load() (*ControlPlaneConfig, error) {
 		HTTPSProxy:            os.Getenv("HTTPS_PROXY"),
 		NoProxy:               os.Getenv("NO_PROXY"),
 		ImagePullSecret:       os.Getenv("IMAGE_PULL_SECRET"),
+		OpenShellEnabled:      os.Getenv("OPENSHELL_ENABLED") == "true",
+		OpenShellPolicyName:   envOrDefault("OPENSHELL_POLICY_CONFIGMAP", "openshell-policy"),
 	}
 
 	if cfg.MCPAPIServerURL == "" {

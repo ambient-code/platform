@@ -158,6 +158,8 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		ImagePullSecret:       cfg.ImagePullSecret,
 		PlatformMode:          cfg.PlatformMode,
 		MPPConfigNamespace:    cfg.MPPConfigNamespace,
+		OpenShellEnabled:      cfg.OpenShellEnabled,
+		OpenShellPolicyName:   cfg.OpenShellPolicyName,
 	}
 
 	conn, err := grpc.NewClient(cfg.GRPCServerAddr, grpc.WithTransportCredentials(grpcCredentials(cfg.GRPCUseTLS)))
