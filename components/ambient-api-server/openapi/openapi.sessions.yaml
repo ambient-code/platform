@@ -310,7 +310,7 @@ paths:
   /api/ambient/v1/sessions/{id}/events:
     get:
       summary: Stream live AG-UI events from the runner pod
-      description: SSE stream proxied from the runner pod. Only available during an active session run. Returns 404 if the runner has not been scheduled yet; 502 if the runner is unreachable.
+      description: SSE stream proxied from the runner pod. Only available during an active session run. Returns 502 if the runner has not been scheduled yet or is unreachable.
       security:
         - Bearer: []
       responses:
@@ -333,13 +333,13 @@ paths:
               schema:
                 $ref: 'openapi.yaml#/components/schemas/Error'
         '404':
-          description: Session not found or runner not yet scheduled
+          description: Session not found
           content:
             application/json:
               schema:
                 $ref: 'openapi.yaml#/components/schemas/Error'
         '502':
-          description: Runner pod is not reachable
+          description: Runner pod is not scheduled or not reachable
           content:
             application/json:
               schema:

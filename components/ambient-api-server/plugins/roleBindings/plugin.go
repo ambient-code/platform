@@ -19,7 +19,10 @@ import (
 
 type ServiceLocator func() RoleBindingService
 
+var registeredSessionFactory *db.SessionFactory
+
 func NewServiceLocator(env *environments.Env) ServiceLocator {
+	registeredSessionFactory = &env.Database.SessionFactory
 	return func() RoleBindingService {
 		return NewRoleBindingService(
 			db.NewAdvisoryLockFactory(env.Database.SessionFactory),
@@ -50,7 +53,7 @@ func init() {
 		if dbAuthz := pkgrbac.Middleware(envServices); dbAuthz != nil {
 			authzMiddleware = dbAuthz
 		}
-		roleBindingHandler := NewRoleBindingHandler(Service(envServices), generic.Service(envServices))
+		roleBindingHandler := NewRoleBindingHandler(Service(envServices), generic.Service(envServices), registeredSessionFactory)
 
 		roleBindingsRouter := apiV1Router.PathPrefix("/role_bindings").Subrouter()
 		roleBindingsRouter.HandleFunc("", roleBindingHandler.List).Methods(http.MethodGet)
@@ -82,4 +85,5 @@ func init() {
 
 	db.RegisterMigration(migration())
 	db.RegisterMigration(typedFKMigration())
+	db.RegisterMigration(uniqueBindingMigration())
 }
