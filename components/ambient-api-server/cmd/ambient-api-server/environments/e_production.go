@@ -37,7 +37,6 @@ func (e *ProductionEnvImpl) OverrideConfig(c *config.ApplicationConfig) error {
 		c.Auth.JwkCertURL = defaultJwkCertURL
 	}
 
-	c.Auth.JwkCertFile = ""
 	return nil
 }
 
