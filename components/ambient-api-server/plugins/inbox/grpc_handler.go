@@ -7,6 +7,7 @@ import (
 
 	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/middleware"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"google.golang.org/grpc"
 )
 
@@ -26,8 +27,13 @@ func (h *inboxGRPCHandler) WatchInboxMessages(req *pb.WatchInboxMessagesRequest,
 
 	ctx := stream.Context()
 
+	// Service callers (legacy token) and global admins (platform:admin
+	// binding) may watch inbox streams.
 	if !middleware.IsServiceCaller(ctx) {
-		return status.Error(codes.PermissionDenied, "only service callers may watch inbox streams")
+		authResult := rbac.GetAuthResult(ctx)
+		if authResult == nil || !authResult.IsGlobalAdmin {
+			return status.Error(codes.PermissionDenied, "only service callers may watch inbox streams")
+		}
 	}
 
 	ch, cancel := h.watchSvc.Subscribe(ctx, req.GetAgentId())

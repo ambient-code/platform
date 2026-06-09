@@ -13,6 +13,7 @@ import (
 	localgrpc "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc"
 	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/middleware"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/server"
 	"github.com/openshift-online/rh-trex-ai/pkg/server/grpcutil"
@@ -227,6 +228,12 @@ func (h *sessionGRPCHandler) ListSessions(ctx context.Context, req *pb.ListSessi
 		Size: int64(size),
 	}
 
+	if !middleware.IsServiceCaller(ctx) {
+		if !rbac.ApplyListFilter(ctx, &listArgs, "project_id", false) {
+			return &pb.ListSessionsResponse{Items: []*pb.Session{}, Metadata: &pb.ListMeta{Page: int32(page), Size: int32(size), Total: 0}}, nil
+		}
+	}
+
 	var sessions []Session
 	paging, svcErr := h.generic.List(ctx, "id", &listArgs, &sessions)
 	if svcErr != nil {
@@ -284,17 +291,25 @@ func (h *sessionGRPCHandler) WatchSessionMessages(req *pb.WatchSessionMessagesRe
 
 	ctx := stream.Context()
 
+	// Service callers (legacy token) and global admins (platform:admin binding)
+	// may watch any session. Other callers need a project-scoped binding.
 	if !middleware.IsServiceCaller(ctx) {
-		username := auth.GetUsernameFromContext(ctx)
-		if username == "" {
+		authResult := rbac.GetAuthResult(ctx)
+		if authResult == nil || authResult.Username == "" {
 			return status.Error(codes.PermissionDenied, "not authorized to watch this session")
 		}
-		session, svcErr := h.service.Get(ctx, req.GetSessionId())
-		if svcErr != nil {
-			return grpcutil.ServiceErrorToGRPC(svcErr)
-		}
-		if session.CreatedByUserId == nil || *session.CreatedByUserId != username {
-			return status.Error(codes.PermissionDenied, "not authorized to watch this session")
+		if !authResult.IsGlobalAdmin {
+			session, svcErr := h.service.Get(ctx, req.GetSessionId())
+			if svcErr != nil {
+				return grpcutil.ServiceErrorToGRPC(svcErr)
+			}
+			projectID := ""
+			if session.ProjectId != nil {
+				projectID = *session.ProjectId
+			}
+			if !rbac.IsProjectAuthorized(authResult, projectID) {
+				return status.Error(codes.PermissionDenied, "not authorized to watch this session")
+			}
 		}
 	}
 
@@ -341,6 +356,12 @@ func (h *sessionGRPCHandler) WatchSessions(req *pb.WatchSessionsRequest, stream 
 	}
 
 	ctx := stream.Context()
+	authResult := rbac.GetAuthResult(ctx)
+	// Service callers (legacy token) and global admins (platform:admin
+	// binding) may watch all sessions without project filtering.
+	isPrivileged := middleware.IsServiceCaller(ctx) ||
+		(authResult != nil && authResult.IsGlobalAdmin)
+
 	sub, err := broker.Subscribe(ctx)
 	if err != nil {
 		return status.Errorf(codes.Internal, "failed to subscribe to event broker: %v", err)
@@ -370,7 +391,22 @@ func (h *sessionGRPCHandler) WatchSessions(req *pb.WatchSessionsRequest, stream 
 					glog.Errorf("WatchSessions: failed to get session %s: %v", event.SourceID, svcErr)
 					continue
 				}
+
+				if !isPrivileged {
+					projectID := ""
+					if session.ProjectId != nil {
+						projectID = *session.ProjectId
+					}
+					if !rbac.IsProjectAuthorized(authResult, projectID) {
+						continue
+					}
+				}
+
 				watchEvent.Session = sessionToProto(session)
+			} else if !isPrivileged {
+				// Delete events: can't verify project scope (session gone),
+				// so suppress for non-privileged watchers to prevent ID leakage
+				continue
 			}
 
 			if err := stream.Send(watchEvent); err != nil {
