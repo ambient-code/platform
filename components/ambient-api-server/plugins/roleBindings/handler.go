@@ -14,7 +14,6 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 var _ handlers.RestHandler = roleBindingHandler{}
@@ -431,7 +430,6 @@ func (h roleBindingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 				if roleName == pkgrbac.RoleProjectOwner && binding.ProjectId != nil {
 					var count int64
 					if dbErr := g.Table("role_bindings").
-						Clauses(clause.Locking{Strength: "UPDATE"}).
 						Where("role_id = ? AND project_id = ? AND deleted_at IS NULL",
 							binding.RoleId, *binding.ProjectId).
 						Count(&count).Error; dbErr != nil {
@@ -444,7 +442,6 @@ func (h roleBindingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 				if roleName == pkgrbac.RoleCredentialOwner && binding.CredentialId != nil {
 					var count int64
 					if dbErr := g.Table("role_bindings").
-						Clauses(clause.Locking{Strength: "UPDATE"}).
 						Where("role_id = ? AND credential_id = ? AND deleted_at IS NULL",
 							binding.RoleId, *binding.CredentialId).
 						Count(&count).Error; dbErr != nil {
@@ -492,7 +489,8 @@ func (h roleBindingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 						return nil, errors.Forbidden("insufficient privileges to delete this binding")
 					}
 				} else {
-					// Non-credential scopes: only project:owner or platform:admin can delete
+					// Non-credential scopes: caller must outrank the binding's role
+					// AND be at least project:owner (level 1)
 					var callerRoleNames []string
 					baseQuery := g.Table("role_bindings rb").
 						Select("r.name").
@@ -505,7 +503,7 @@ func (h roleBindingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 						return nil, errors.GeneralError("authorization check failed")
 					}
 					callerLevel := pkgrbac.HighestLevel(callerRoleNames)
-					if callerLevel > 1 {
+					if callerLevel > 1 || !pkgrbac.CanGrant(callerLevel, roleName) {
 						return nil, errors.Forbidden("insufficient privileges to delete this binding")
 					}
 				}
