@@ -17,7 +17,7 @@ const redHatMono = Red_Hat_Mono({
 
 export const metadata: Metadata = {
   title: "ACP",
-  description: "ACP operations console",
+  description: "Agent Control Plane operations console",
 }
 
 export default function RootLayout({
