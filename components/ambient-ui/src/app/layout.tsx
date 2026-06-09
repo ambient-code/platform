@@ -16,8 +16,8 @@ const redHatMono = Red_Hat_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "Ambient UI",
-  description: "Ambient Code Platform operations console",
+  title: "ACP",
+  description: "Agent Control Plane operations console",
 }
 
 export default function RootLayout({

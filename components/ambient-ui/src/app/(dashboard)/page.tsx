@@ -63,7 +63,7 @@ export default function ProjectPickerPage() {
         <EmptyState
           icon={FolderOpen}
           title="No projects found"
-          description="Create a project to get started with the Ambient Code Platform."
+          description="Create a project to get started with ACP."
         />
         <div className="flex justify-center">
           <CreateProjectDialog />
