@@ -148,7 +148,7 @@ export function AppSidebar({ projectId }: AppSidebarProps) {
       <SidebarHeader>
         <div className="flex items-center gap-2 px-2 py-1.5">
           <Bot className="size-5 text-primary" />
-          <span className="text-sm font-semibold tracking-tight">Ambient</span>
+          <span className="text-sm font-semibold tracking-tight">ACP</span>
         </div>
         <ProjectSelector projectId={projectId} />
       </SidebarHeader>
