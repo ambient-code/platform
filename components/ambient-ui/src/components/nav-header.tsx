@@ -122,7 +122,7 @@ export function NavHeader({ projectId, projectName, pageName, sessionName, detai
           <BreadcrumbItem>
             <BreadcrumbLink asChild>
               <Link href="/">
-                <span>Ambient</span>
+                <span>ACP</span>
               </Link>
             </BreadcrumbLink>
           </BreadcrumbItem>
