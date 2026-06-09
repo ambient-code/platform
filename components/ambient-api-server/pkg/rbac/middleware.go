@@ -97,9 +97,6 @@ func (m *DBAuthorizationMiddleware) AuthorizeApi(next http.Handler) http.Handler
 
 		m.autoProvisionUser(ctx)
 
-		glog.Infof("RBAC middleware: method=%s path=%s isAuthExempt=%v enableAuthz=%v isServiceCaller=%v",
-			r.Method, r.URL.Path, isAuthExempt(r.Method, r.URL.Path), m.enableAuthz, middleware.IsServiceCaller(ctx))
-
 		if isAuthExempt(r.Method, r.URL.Path) {
 			username := auth.GetUsernameFromContext(ctx)
 			ctx = SetAuthResult(ctx, &AuthResult{Username: username})
