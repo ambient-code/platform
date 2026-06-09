@@ -81,4 +81,5 @@ func init() {
 	presenters.RegisterKind(&Role{}, "Role")
 
 	db.RegisterMigration(migration())
+	db.RegisterMigration(editorCredentialUnbindMigration())
 }
