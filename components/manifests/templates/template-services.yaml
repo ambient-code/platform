@@ -105,6 +105,7 @@ objects:
               initialDelaySeconds: 30
               periodSeconds: 30
             securityContext:
+              readOnlyRootFilesystem: true
               allowPrivilegeEscalation: false
               capabilities:
                 drop:
@@ -189,6 +190,7 @@ objects:
                 cpu: 500m
                 memory: 512Mi
             securityContext:
+              readOnlyRootFilesystem: true
               allowPrivilegeEscalation: false
               capabilities:
                 drop:
@@ -200,13 +202,11 @@ objects:
             env:
               - name: AMBIENT_ENV
                 value: production
-              - name: AMBIENT_API_TOKEN
+              - name: GRPC_SERVICE_ACCOUNT
                 valueFrom:
                   secretKeyRef:
-                    name: ambient-control-plane-token
-                    key: token
-              - name: JWK_CERT_URL
-                value: "${KEYCLOAK_REALM_URL}/protocol/openid-connect/certs"
+                    name: ambient-control-plane-oidc
+                    key: client-id
               - name: CREDENTIAL_ENCRYPTION_KEYRING
                 valueFrom:
                   secretKeyRef:
@@ -219,8 +219,6 @@ objects:
                     name: credential-encryption-key
                     key: version
                     optional: true
-              - name: CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT
-                value: "true"
             command:
               - /usr/local/bin/ambient-api-server
               - serve
@@ -230,8 +228,9 @@ objects:
               - --db-password-file=/secrets/db/db.password
               - --db-name-file=/secrets/db/db.name
               - --enable-jwt=true
-              - --enable-authz=false
+              - --enable-authz=true
               - --jwk-cert-file=/configs/authentication/jwks.json
+              - --jwk-cert-url=${KEYCLOAK_REALM_URL}/protocol/openid-connect/certs
               - --enable-https=false
               - --enable-grpc=true
               - --grpc-enable-tls=false
@@ -295,6 +294,7 @@ objects:
               initialDelaySeconds: 20
               periodSeconds: 10
             securityContext:
+              readOnlyRootFilesystem: true
               allowPrivilegeEscalation: false
               capabilities:
                 drop:
@@ -375,11 +375,18 @@ objects:
                 value: standard
               - name: LOG_LEVEL
                 value: info
-              - name: AMBIENT_API_TOKEN
+              - name: OIDC_TOKEN_URL
+                value: "${KEYCLOAK_REALM_URL}/protocol/openid-connect/token"
+              - name: OIDC_CLIENT_ID
                 valueFrom:
                   secretKeyRef:
-                    name: ambient-control-plane-token
-                    key: token
+                    name: ambient-control-plane-oidc
+                    key: client-id
+              - name: OIDC_CLIENT_SECRET
+                valueFrom:
+                  secretKeyRef:
+                    name: ambient-control-plane-oidc
+                    key: client-secret
               - name: AMBIENT_API_SERVER_URL
                 value: "http://ambient-api-server.${NAMESPACE}.svc:8000"
               - name: AMBIENT_GRPC_SERVER_ADDR
