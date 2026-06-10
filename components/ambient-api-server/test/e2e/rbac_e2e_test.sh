@@ -1466,6 +1466,125 @@ else
 fi
 
 # ============================================================
+echo ""
+echo -e "${BOLD}Phase 26: Credential Binding Enforcement (spec: credential-binding-enforcement)${NC}"
+
+# This phase tests the hierarchical credential binding authorization rules:
+#   - project:editor can bind credentials (not just owner)
+#   - project:viewer cannot bind credentials
+#   - agent_id without project_id is rejected (400)
+#   - agent not belonging to project is rejected (400)
+#   - global credential bindings require platform:admin
+#   - project:editor can unbind without credential:owner (asymmetric)
+#   - non-admin users cannot create internal role bindings (credential:token-reader)
+
+# Setup: give User B project:editor on proj-alpha for this phase
+api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_PROJECT_EDITOR}\",\"scope\":\"project\",\"user_id\":\"rbac-user-b\",\"project_id\":\"rbac-proj-alpha\"}"
+CB_EDITOR_BIND_ID=$(echo "$HTTP_BODY" | jq -r '.id // empty')
+
+# --- Scenario: project:editor can bind credential to project ---
+# User A owns cred-a and proj-alpha. User B has project:editor on proj-alpha.
+# User A (credential:owner + project:editor-via-ownership) binds cred-a to proj-alpha.
+# But the spec says project:editor is enough — test User A who has project:owner (level 1 ≤ 2, passes).
+api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_CREDENTIAL_VIEWER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-b\",\"credential_id\":\"${CRED_A_ID}\",\"project_id\":\"rbac-proj-alpha\"}"
+assert_status "201" "$HTTP_STATUS" "CB: credential owner + project owner can bind credential to project"
+CB_BIND_1=$(echo "$HTTP_BODY" | jq -r '.id // empty')
+
+# Clean up binding for next test
+[[ -n "$CB_BIND_1" ]] && api DELETE "/role_bindings/${CB_BIND_1}" "$TOKEN_A"
+
+# --- Scenario: project:viewer cannot bind credentials ---
+# Give User C project:viewer on proj-alpha
+api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_PROJECT_VIEWER}\",\"scope\":\"project\",\"user_id\":\"rbac-user-c\",\"project_id\":\"rbac-proj-alpha\"}"
+CB_VIEWER_BIND_ID=$(echo "$HTTP_BODY" | jq -r '.id // empty')
+
+# Give User C credential:owner on cred-c (they created it in Phase 12)
+# User C tries to bind their credential to proj-alpha where they're only viewer
+if [[ -n "$CRED_C_ID" ]]; then
+  api POST "/role_bindings" "$TOKEN_C" "{\"role_id\":\"${ROLE_CREDENTIAL_VIEWER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-c\",\"credential_id\":\"${CRED_C_ID}\",\"project_id\":\"rbac-proj-alpha\"}"
+  assert_status "403" "$HTTP_STATUS" "CB: project:viewer cannot bind credential to project"
+else
+  skip "CB: project:viewer bind test (no cred_c_id)"
+fi
+
+# Clean up viewer binding
+[[ -n "$CB_VIEWER_BIND_ID" ]] && api DELETE "/role_bindings/${CB_VIEWER_BIND_ID}" "$TOKEN_A"
+
+# --- Scenario: agent_id without project_id is rejected (400) ---
+api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_CREDENTIAL_VIEWER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-a\",\"credential_id\":\"${CRED_A_ID}\",\"agent_id\":\"${AGENT_A_ID}\"}"
+assert_status "400" "$HTTP_STATUS" "CB: agent_id without project_id returns 400"
+
+# --- Scenario: agent not belonging to project is rejected (400) ---
+# AGENT_B_ID belongs to proj-beta. Binding it to proj-alpha should fail.
+if [[ -n "$AGENT_B_ID" ]]; then
+  api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_CREDENTIAL_VIEWER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-a\",\"credential_id\":\"${CRED_A_ID}\",\"project_id\":\"rbac-proj-alpha\",\"agent_id\":\"${AGENT_B_ID}\"}"
+  assert_status "400" "$HTTP_STATUS" "CB: agent not in project returns 400"
+else
+  skip "CB: agent-project mismatch test (no agent_b_id)"
+fi
+
+# --- Scenario: valid agent-level binding accepted ---
+if [[ -n "$AGENT_A_ID" ]]; then
+  api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_CREDENTIAL_VIEWER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-a\",\"credential_id\":\"${CRED_A_ID}\",\"project_id\":\"rbac-proj-alpha\",\"agent_id\":\"${AGENT_A_ID}\"}"
+  assert_status "201" "$HTTP_STATUS" "CB: agent-level binding with correct project accepted"
+  CB_AGENT_BIND=$(echo "$HTTP_BODY" | jq -r '.id // empty')
+  [[ -n "$CB_AGENT_BIND" ]] && api DELETE "/role_bindings/${CB_AGENT_BIND}" "$TOKEN_A"
+else
+  skip "CB: agent-level binding test (no agent_a_id)"
+fi
+
+# --- Scenario: global credential binding requires platform:admin ---
+# User A has credential:owner on cred-a but is NOT platform:admin
+api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_CREDENTIAL_VIEWER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-a\",\"credential_id\":\"${CRED_A_ID}\"}"
+assert_status "403" "$HTTP_STATUS" "CB: non-admin cannot create global credential binding"
+
+# --- Scenario: non-credential-owner cannot bind ---
+# User B owns cred-b but NOT cred-a. User B is project:editor on proj-alpha.
+api POST "/role_bindings" "$TOKEN_B" "{\"role_id\":\"${ROLE_CREDENTIAL_VIEWER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-b\",\"credential_id\":\"${CRED_A_ID}\",\"project_id\":\"rbac-proj-alpha\"}"
+assert_status "403" "$HTTP_STATUS" "CB: non-credential-owner cannot bind (editor on project but not cred owner)"
+
+# --- Scenario: asymmetric unbind — project:editor can remove binding without credential:owner ---
+# First, User A (cred owner + proj owner) creates a binding
+api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_CREDENTIAL_VIEWER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-a\",\"credential_id\":\"${CRED_A_ID}\",\"project_id\":\"rbac-proj-alpha\"}"
+CB_UNBIND_ID=$(echo "$HTTP_BODY" | jq -r '.id // empty')
+
+if [[ -n "$CB_UNBIND_ID" ]]; then
+  # User B (project:editor, NOT credential:owner) deletes the binding
+  api DELETE "/role_bindings/${CB_UNBIND_ID}" "$TOKEN_B"
+  assert_status "204" "$HTTP_STATUS" "CB: project:editor can unbind credential without credential:owner"
+else
+  fail "CB: asymmetric unbind setup" "could not create binding to test unbind"
+fi
+
+# --- Scenario: project:viewer cannot unbind ---
+# Re-create binding, give User C viewer, test they cannot unbind
+api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_CREDENTIAL_VIEWER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-a\",\"credential_id\":\"${CRED_A_ID}\",\"project_id\":\"rbac-proj-alpha\"}"
+CB_UNBIND_ID2=$(echo "$HTTP_BODY" | jq -r '.id // empty')
+api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_PROJECT_VIEWER}\",\"scope\":\"project\",\"user_id\":\"rbac-user-c\",\"project_id\":\"rbac-proj-alpha\"}"
+CB_VIEWER_BIND_2=$(echo "$HTTP_BODY" | jq -r '.id // empty')
+
+if [[ -n "$CB_UNBIND_ID2" ]]; then
+  api DELETE "/role_bindings/${CB_UNBIND_ID2}" "$TOKEN_C"
+  assert_status "403" "$HTTP_STATUS" "CB: project:viewer cannot unbind credential"
+  # Clean up
+  api DELETE "/role_bindings/${CB_UNBIND_ID2}" "$TOKEN_A"
+else
+  fail "CB: viewer unbind test setup" "could not create binding"
+fi
+[[ -n "$CB_VIEWER_BIND_2" ]] && api DELETE "/role_bindings/${CB_VIEWER_BIND_2}" "$TOKEN_A"
+
+# --- Scenario: non-admin user cannot create credential:token-reader binding (internal role) ---
+if [[ -n "$ROLE_CRED_TOKEN_READER" ]]; then
+  api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_CRED_TOKEN_READER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-a\",\"credential_id\":\"${CRED_A_ID}\"}"
+  assert_status "403" "$HTTP_STATUS" "CB: non-admin cannot create credential:token-reader binding"
+else
+  skip "CB: token-reader internal role test (role not found)"
+fi
+
+# Cleanup phase bindings
+[[ -n "$CB_EDITOR_BIND_ID" ]] && api DELETE "/role_bindings/${CB_EDITOR_BIND_ID}" "$TOKEN_A"
+
+# ============================================================
 # Cleanup is handled by the EXIT trap (clean_db + Keycloak user deletion)
 # ============================================================
 echo ""
