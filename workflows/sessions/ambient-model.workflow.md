@@ -60,7 +60,7 @@ Checklist:
 - [ ]  Read this document top to bottom
 - [ ]  Read the spec (`ambient-model.spec.md`) header to check the Last Updated date
 - [ ]  Confirm you are working on the correct branch and project
-- [ ]  Verify the kind cluster name: `podman ps | grep kind` (do not assume — cluster name drifts)
+- [ ]  Verify the target cluster: `kubectl config current-context` and confirm the namespace (kind cluster: `podman ps | grep kind`; UAT/staging: check `kubectl get ns`)
 
 ### Step 2 — Read the Spec
 
@@ -133,11 +133,20 @@ Decompose the gap table into per-agent work items, sequenced by pipeline order:
 
 **Wave 3 — SDK** (gates BE, CLI, FE)
 
-- Run SDK generator against updated `openapi.yaml`
+- Run SDK generator: `cd components/ambient-sdk && make generate-sdk`
+- The generator reads `components/ambient-api-server/openapi/openapi.yaml` and produces Go, Python, and TypeScript clients
 - Commit generated types, builders, client methods
 - **Verify TS and Python client paths** for any nested resource — the generator uses the first path segment as base path; nested resources require hand-written extension files
-- **Implementation detail:** see `.claude/context/sdk-development.md`
-- **Acceptance:** `go build ./...` in go-sdk clean; Python SDK `python -m pytest tests/` passes
+- For top-level resources (like Application at `/applications`), the generator handles paths correctly — no extension files needed for standard CRUD
+- For sub-resource actions (`/sync`, `/refresh`, `/status`), hand-written extension methods are required in `go-sdk/client/<kind>_extensions.go`
+- **Build commands:**
+  ```bash
+  cd components/ambient-sdk
+  make build-generator     # compile generator binary
+  make generate-sdk        # generate all three SDKs
+  make verify-sdk          # generate + verify Go/Python/TS compile
+  ```
+- **Acceptance:** `make verify-sdk` passes (Go `go build ./...`, Python import check, TS `npm run build`)
 
 **Wave 4 — BE + CP** (parallel after Wave 3)
 
@@ -597,3 +606,77 @@ A route existing in openapi.yaml is necessary but not sufficient. Field-level dr
 **Rule:** Integration tests for a resource must use the route the spec defines, not a route that happens to work in the current implementation. For a global resource (no project scope), the factory and every integration test must call the global path. If the test is written against a nested path for a resource the spec defines as global, the test is wrong — fix the test, not just the implementation.
 
 **Corollary:** Factory test `Provider` values must use valid enum values. A factory that passes `"test-provider"` will compile and run even if the API rejects it — use `"github"` or another value from the spec's provider enum table.
+
+## Lessons Learned (Run Log — 2026-06-11)
+
+### Generator `--project` Flag Controls API Path Prefix
+
+The `scripts/generator.go` `--project` flag is used to construct the API path prefix: `/api/{project}/v1/{kind}`. Using `--project ambient-api-server` produces paths like `/api/ambient-api-server/v1/applications` instead of the correct `/api/ambient/v1/applications`. The flag value should match the desired URL path segment, not the component directory name.
+
+**Rule:** Always use `--project ambient` (not `--project ambient-api-server`) when running the generator. The workflow's Step 5 command already specifies this correctly.
+
+### Generator Output Requires `make generate` Before Build
+
+The generator's `--skip-generate` flag (used when the generator itself runs) means the OpenAPI Go client types (`openapi.Application`, `openapi.ApplicationList`, `openapi.ApplicationPatchRequest`) are not created. After running the generator, `make generate` must run before `go build ./...` will succeed.
+
+**Rule:** After `scripts/generator.go` runs, always run `make generate` in the api-server directory to regenerate `pkg/api/openapi/` from the updated specs.
+
+### Generator Omits DELETE from OpenAPI Spec
+
+The generator creates GET, LIST, POST, and PATCH endpoints in the OpenAPI spec but does NOT generate a DELETE endpoint. If the Kind needs delete support, the DELETE endpoint must be manually added to `openapi.{kind}.yaml`.
+
+**Rule:** After running the generator, check whether the Kind requires DELETE. If so, add the delete section to the `/{id}:` path in the OpenAPI spec following the session/credential pattern.
+
+### Generator Misses `time` Import for `*time.Time` Fields
+
+When the model has `*time.Time` fields (e.g., `LastSyncedAt`), the generator adds the field correctly but sometimes omits the `"time"` import in `migration.go` and adds an unused `"time"` import in `presenter.go`.
+
+**Rule:** After running the generator, check imports in `migration.go` (needs `"time"` if `*time.Time` is used) and `presenter.go` (remove unused `"time"` import).
+
+### Test `testmain_test.go` Must Import All Plugin Dependencies
+
+Generated `testmain_test.go` only imports the test helper. If the plugin's migration seeds roles or references tables from other plugins, those plugins must be imported via side-effect imports. Without them, testcontainer initialization crashes with `pq: relation "roles" does not exist`.
+
+**Rule:** Copy the full side-effect import block from `plugins/credentials/testmain_test.go` into any new plugin's `testmain_test.go`. This ensures all migrations run in the correct order.
+
+### POST Sub-Resource Handlers Without Body Must Use `HandleGet`
+
+`handlers.Handle()` expects a request body and will return 400 if the POST has no body. Sub-resource actions like `/sync` and `/refresh` that don't need a request body should use `handlers.HandleGet()` instead.
+
+**Rule:** For POST handlers that perform an action without request body input, use `handlers.HandleGet(w, r, cfg)`, not `handlers.Handle(w, r, cfg, http.StatusOK)`. The session `Start` and `Stop` handlers follow this pattern.
+
+### Deployment: Migration Init Container Image Must Be Updated Separately
+
+`kubectl set image` only updates the main container. The migration init container uses a separate image reference and must be updated via a JSON patch or `kubectl get/apply` roundtrip.
+
+**Rule:** When deploying a new api-server image, update BOTH the main container (`api-server`) and the migration init container (`migration`). The migration init container runs `ambient-api-server migrate` and must contain the new migration code.
+
+### RBAC: `pathToAction` Must Map Sub-Resource Verbs
+
+The RBAC middleware's `pathToAction()` function maps URL path suffixes to permission actions. Without entries for `sync` and `refresh`, POST requests to those sub-resources map to `create` instead of `update`.
+
+**Rule:** When adding sub-resource endpoints with non-CRUD semantics, add their path suffixes to `pathToAction()` in `pkg/rbac/middleware.go`.
+
+### RBAC: `isListEndpoint` Must Include New Resource Plural Names
+
+The RBAC middleware's `isListEndpoint()` function has a hardcoded list of plural resource names used to distinguish list vs singleton GET requests. New resources must be added to this list.
+
+**Rule:** When adding a new resource, add its plural name to the `isListEndpoint()` switch case in `pkg/rbac/scope.go`.
+
+### UAT Deployment: `CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT` Required
+
+The current branch includes credential encryption checks that the production v0.2.13 image did not have. When deploying to a cluster without a configured keyring, set `CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT=true` as an environment variable on the deployment.
+
+### Integration Test Method Names Follow API Path Prefix
+
+The generated integration tests use method names derived from the API path (e.g., `ApiAmbientV1ApplicationsGet`). If the generator was run with the wrong `--project` flag, the test method names will reference non-existent methods. After fixing the OpenAPI paths, regenerate with `make generate` and update the test method names accordingly.
+
+### CI Runs `golangci-lint` — Must Pass Before PR Merge
+
+The CI pipeline runs `golangci-lint` (v2.x) on both `ambient-api-server` and `ambient-cli` with `--timeout=5m`. Common issues caught:
+
+- **`ineffassign`**: Assigning to `err` without checking it. In integration tests where you send a malformed body and only care about the HTTP status code, use `restyResp, _ := resty.R()...` (blank identifier) instead of `restyResp, err := resty.R()...`.
+- **`staticcheck` ST1000**: Every Go package must have a package comment. New command packages (e.g., `package application`) need `// Package application implements...` above the `package` declaration.
+- **`unused`**: Package-level variables that are declared but never referenced anywhere in the package. Remove them or use blank identifier `_`.
+
+**Rule:** Run `gofmt -w .` and `golangci-lint run --timeout=5m` in each changed Go component before pushing. The CI checks `gofmt` separately from `golangci-lint` — both must pass. The CI config uses `only-new-issues: false`, so pre-existing lint issues in unchanged files will also block the PR.
