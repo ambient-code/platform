@@ -437,6 +437,8 @@ func pathToAction(method, path string) string {
 				return "fetch_token"
 			case "start", "stop":
 				return last
+			case "sync", "refresh":
+				return "update"
 			}
 		}
 	}

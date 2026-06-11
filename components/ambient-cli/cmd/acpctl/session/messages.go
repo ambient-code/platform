@@ -24,20 +24,20 @@ import (
 var (
 	sseColorDim     = lipgloss.Color("240")
 	sseColorCyan    = lipgloss.Color("36")
-	sseColorBlue    = lipgloss.Color("69")
+	_               = lipgloss.Color("69") // sseColorBlue reserved for agent message rendering
 	sseColorGreen   = lipgloss.Color("28")
 	sseColorRed     = lipgloss.Color("196")
-	sseColorYellow  = lipgloss.Color("214")
+	_               = lipgloss.Color("214") // sseColorYellow reserved for agent message rendering
 	sseColorMagenta = lipgloss.Color("134")
 
 	sseThinkTag   = lipgloss.NewStyle().Foreground(sseColorDim).Bold(true)
 	sseThinkText  = lipgloss.NewStyle().Foreground(sseColorDim).Italic(true)
 	sseToolTag    = lipgloss.NewStyle().Foreground(sseColorCyan).Bold(true)
 	sseToolResult = lipgloss.NewStyle().Foreground(sseColorDim)
-	sseAssistant  = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
+	_             = lipgloss.NewStyle().Foreground(lipgloss.Color("255")) // sseAssistant reserved for agent message rendering
 	sseRunTag     = lipgloss.NewStyle().Foreground(sseColorGreen).Bold(true)
 	sseErrorTag   = lipgloss.NewStyle().Foreground(sseColorRed).Bold(true)
-	sseAgentTag   = lipgloss.NewStyle().Foreground(sseColorYellow).Bold(true)
+	_             = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true) // sseAgentTag reserved for agent message rendering
 	sseStepTag    = lipgloss.NewStyle().Foreground(sseColorMagenta).Bold(true)
 	sseArrow      = lipgloss.NewStyle().Foreground(sseColorDim)
 )
