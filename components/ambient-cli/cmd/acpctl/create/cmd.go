@@ -27,6 +27,7 @@ Valid resource types:
   agent           Create an agent
   role            Create a role
   role-binding    Create a role binding
+  application     Create a GitOps application
 `,
 	Args: cobra.MinimumNArgs(1),
 	RunE: run,
@@ -56,6 +57,19 @@ var createArgs struct {
 	bindSessionID string
 	bindCredID    string
 	scopeID       string
+
+	sourceRepoURL        string
+	sourcePath           string
+	sourceTargetRevision string
+	destinationProject   string
+	destinationURL       string
+	credentialID         string
+	autoSync             bool
+	autoPrune            bool
+	selfHeal             bool
+	retryLimit           int32
+	labels               string
+	annotations          string
 }
 
 func init() {
@@ -82,6 +96,19 @@ func init() {
 	Cmd.Flags().StringVar(&createArgs.bindSessionID, "session-id-fk", "", "Session FK for role-binding")
 	Cmd.Flags().StringVar(&createArgs.bindCredID, "credential-id-fk", "", "Credential FK for role-binding")
 	Cmd.Flags().StringVar(&createArgs.scopeID, "scope-id", "", "Scope target ID for role-binding (shorthand for --{scope}-id-fk)")
+
+	Cmd.Flags().StringVar(&createArgs.sourceRepoURL, "source-repo-url", "", "Git repository URL (application)")
+	Cmd.Flags().StringVar(&createArgs.sourcePath, "source-path", "", "Path within the repository (application)")
+	Cmd.Flags().StringVar(&createArgs.sourceTargetRevision, "source-target-revision", "", "Git branch, tag, or commit (application)")
+	Cmd.Flags().StringVar(&createArgs.destinationProject, "destination-project", "", "Target project (application)")
+	Cmd.Flags().StringVar(&createArgs.destinationURL, "destination-url", "", "Target Ambient instance URL (application)")
+	Cmd.Flags().StringVar(&createArgs.credentialID, "credential-id", "", "Credential ID for private repos (application)")
+	Cmd.Flags().BoolVar(&createArgs.autoSync, "auto-sync", false, "Enable automatic sync (application)")
+	Cmd.Flags().BoolVar(&createArgs.autoPrune, "auto-prune", false, "Enable automatic pruning (application)")
+	Cmd.Flags().BoolVar(&createArgs.selfHeal, "self-heal", false, "Enable self-healing (application)")
+	Cmd.Flags().Int32Var(&createArgs.retryLimit, "retry-limit", 0, "Maximum retry attempts (application)")
+	Cmd.Flags().StringVar(&createArgs.labels, "labels", "", "Labels JSON string (application)")
+	Cmd.Flags().StringVar(&createArgs.annotations, "annotations", "", "Annotations JSON string (application)")
 }
 
 func run(cmd *cobra.Command, cmdArgs []string) error {
@@ -113,8 +140,10 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		return createRole(cmd, ctx, client)
 	case "role-binding", "rolebinding", "rb":
 		return createRoleBinding(cmd, ctx, client)
+	case "application", "app":
+		return createApplication(cmd, ctx, client)
 	default:
-		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-agent, agent, role, role-binding", cmdArgs[0])
+		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-agent, agent, role, role-binding, application", cmdArgs[0])
 	}
 }
 
@@ -289,6 +318,72 @@ func createRole(cmd *cobra.Command, ctx context.Context, client *sdkclient.Clien
 	}
 
 	return printCreated(cmd, "role", created.ID, created)
+}
+
+func createApplication(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
+	warnUnusedFlags(cmd, "prompt", "model", "max-tokens", "temperature", "timeout", "display-name", "project-id", "agent-id", "owner-user-id", "permissions", "user-id", "role-id", "scope", "project-id-fk", "agent-id-fk", "session-id-fk", "credential-id-fk", "scope-id")
+
+	if createArgs.name == "" {
+		return fmt.Errorf("--name is required")
+	}
+	if createArgs.sourceRepoURL == "" {
+		return fmt.Errorf("--source-repo-url is required")
+	}
+	if createArgs.sourcePath == "" {
+		return fmt.Errorf("--source-path is required")
+	}
+	if createArgs.destinationProject == "" {
+		return fmt.Errorf("--destination-project is required")
+	}
+
+	builder := sdktypes.NewApplicationBuilder().
+		Name(createArgs.name).
+		SourceRepoURL(createArgs.sourceRepoURL).
+		SourcePath(createArgs.sourcePath).
+		DestinationProject(createArgs.destinationProject)
+
+	if createArgs.sourceTargetRevision != "" {
+		builder = builder.SourceTargetRevision(createArgs.sourceTargetRevision)
+	}
+	if createArgs.destinationURL != "" {
+		builder = builder.DestinationAmbientURL(createArgs.destinationURL)
+	}
+	if createArgs.credentialID != "" {
+		builder = builder.CredentialID(createArgs.credentialID)
+	}
+	if createArgs.autoSync {
+		builder = builder.AutoSync(true)
+	}
+	if createArgs.autoPrune {
+		builder = builder.AutoPrune(true)
+	}
+	if createArgs.selfHeal {
+		builder = builder.SelfHeal(true)
+	}
+	if cmd.Flags().Changed("retry-limit") {
+		builder = builder.RetryLimit(createArgs.retryLimit)
+	}
+	if createArgs.labels != "" {
+		builder = builder.Labels(createArgs.labels)
+	}
+	if createArgs.annotations != "" {
+		builder = builder.Annotations(createArgs.annotations)
+	}
+	if createArgs.description != "" {
+		builder = builder.Conditions(createArgs.description)
+	}
+
+	app, err := builder.Build()
+	if err != nil {
+		return fmt.Errorf("build application: %w", err)
+	}
+
+	created, err := client.Applications().Create(ctx, app)
+	if err != nil {
+		return fmt.Errorf("create application: %w", err)
+	}
+
+	return printCreated(cmd, "application", created.ID, created)
 }
 
 func createRoleBinding(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {

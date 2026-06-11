@@ -11,6 +11,9 @@ docs/AgentList.md
 docs/AgentPatchRequest.md
 docs/AgentSessionList.md
 docs/ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response.md
+docs/Application.md
+docs/ApplicationList.md
+docs/ApplicationPatchRequest.md
 docs/Credential.md
 docs/CredentialList.md
 docs/CredentialPatchRequest.md
@@ -58,6 +61,9 @@ model_agent.go
 model_agent_list.go
 model_agent_patch_request.go
 model_agent_session_list.go
+model_application.go
+model_application_list.go
+model_application_patch_request.go
 model_credential.go
 model_credential_list.go
 model_credential_patch_request.go
