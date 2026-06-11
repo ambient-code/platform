@@ -5,6 +5,7 @@ var RoleLevel = map[string]int{
 
 	RoleProjectOwner:    1,
 	RoleCredentialOwner: 1,
+	RoleGitOpsAdmin:     1,
 
 	RolePlatformViewer:        2,
 	RoleProjectEditor:         2,
@@ -16,6 +17,7 @@ var RoleLevel = map[string]int{
 
 	RoleProjectViewer: 3,
 	RoleAgentObserver: 3,
+	RoleGitOpsViewer:  3,
 }
 
 var InternalRoles = map[string]bool{
