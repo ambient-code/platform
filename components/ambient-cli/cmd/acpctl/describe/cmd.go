@@ -25,7 +25,8 @@ Valid resource types:
   agent             (aliases: agents)
   role
   role-binding      (aliases: rb)
-  credential        (aliases: cred)`,
+  credential        (aliases: cred)
+  application       (aliases: app)`,
 	Args: cobra.ExactArgs(2),
 	RunE: run,
 }
@@ -106,7 +107,14 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		}
 		return printer.PrintJSON(cred)
 
+	case "application", "applications", "app", "apps":
+		app, err := client.Applications().Get(ctx, name)
+		if err != nil {
+			return fmt.Errorf("describe application %q: %w", name, err)
+		}
+		return printer.PrintJSON(app)
+
 	default:
-		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-settings, user, agent, role, role-binding, credential", cmdArgs[0])
+		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-settings, user, agent, role, role-binding, credential, application", cmdArgs[0])
 	}
 }
