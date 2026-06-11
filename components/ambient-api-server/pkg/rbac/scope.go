@@ -138,7 +138,7 @@ func isListEndpoint(method, path string) bool {
 	last := segments[len(segments)-1]
 	switch last {
 	case "projects", "agents", "sessions", "credentials", "roles", "role_bindings",
-		"users", "inbox", "session_messages", "scheduled-sessions", "messages":
+		"users", "inbox", "session_messages", "scheduled-sessions", "messages", "applications":
 		return true
 	}
 	return false
