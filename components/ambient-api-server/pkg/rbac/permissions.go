@@ -13,6 +13,7 @@ const (
 	ResourceRole            Resource = "role"
 	ResourceRoleBinding     Resource = "role_binding"
 	ResourceCredential      Resource = "credential"
+	ResourceApplication     Resource = "application"
 )
 
 type Action string
@@ -54,6 +55,9 @@ const (
 	RoleCredentialOwner       = "credential:owner"
 	RoleCredentialReader      = "credential:reader"
 	RoleCredentialTokenReader = "credential:token-reader"
+
+	RoleGitOpsAdmin  = "gitops:admin"
+	RoleGitOpsViewer = "gitops:viewer"
 )
 
 var (
@@ -104,4 +108,10 @@ var (
 	PermCredentialDelete     = Permission{ResourceCredential, ActionDelete}
 	PermCredentialList       = Permission{ResourceCredential, ActionList}
 	PermCredentialFetchToken = Permission{ResourceCredential, ActionFetchToken}
+
+	PermApplicationCreate = Permission{ResourceApplication, ActionCreate}
+	PermApplicationRead   = Permission{ResourceApplication, ActionRead}
+	PermApplicationUpdate = Permission{ResourceApplication, ActionUpdate}
+	PermApplicationDelete = Permission{ResourceApplication, ActionDelete}
+	PermApplicationList   = Permission{ResourceApplication, ActionList}
 )
