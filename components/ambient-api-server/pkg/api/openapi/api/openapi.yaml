@@ -2707,6 +2707,330 @@ paths:
       security:
       - Bearer: []
       summary: Mark an inbox message as read
+  /api/ambient/v1/credentials:
+    get:
+      parameters:
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Filter credentials by provider
+        in: query
+        name: provider
+        required: false
+        schema:
+          enum:
+          - github
+          - gitlab
+          - jira
+          - google
+          - vertex
+          - kubeconfig
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CredentialList"
+          description: A JSON array of credential objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of credentials
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Credential"
+        description: Credential data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Credential"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Credential already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the credential
+      security:
+      - Bearer: []
+      summary: Create a new credential
+  /api/ambient/v1/credentials/{cred_id}:
+    delete:
+      parameters:
+      - description: The id of the credential
+        in: path
+        name: cred_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Credential deleted successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No credential with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error deleting credential
+      security:
+      - Bearer: []
+      summary: Delete a credential
+    get:
+      parameters:
+      - description: The id of the credential
+        in: path
+        name: cred_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Credential"
+          description: Credential found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No credential with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get a credential by id
+    patch:
+      parameters:
+      - description: The id of the credential
+        in: path
+        name: cred_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CredentialPatchRequest"
+        description: Updated credential data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Credential"
+          description: Credential updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No credential with specified id exists
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Credential already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating credential
+      security:
+      - Bearer: []
+      summary: Update a credential
+  /api/ambient/v1/credentials/{cred_id}/token:
+    get:
+      description: Returns the decrypted token value for the given credential. Requires
+        token-reader role.
+      parameters:
+      - description: The id of the credential
+        in: path
+        name: cred_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CredentialTokenResponse"
+          description: Credential token retrieved successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No credential with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error retrieving token
+      security:
+      - Bearer: []
+      summary: Get a decrypted token for a credential
   /api/ambient/v1/projects/{id}/credentials:
     get:
       parameters:
@@ -2773,6 +3097,7 @@ paths:
           - gitlab
           - jira
           - google
+          - vertex
           - kubeconfig
           type: string
       responses:
@@ -2802,7 +3127,7 @@ paths:
           description: Unexpected error occurred
       security:
       - Bearer: []
-      summary: Returns a list of credentials in a project
+      summary: Returns a list of credentials for a project
     post:
       parameters:
       - description: The id of record
@@ -2906,7 +3231,7 @@ paths:
           description: Unexpected error deleting credential
       security:
       - Bearer: []
-      summary: Delete a credential
+      summary: Delete a project credential
     get:
       parameters:
       - description: The id of record
@@ -2956,7 +3281,7 @@ paths:
           description: Unexpected error occurred
       security:
       - Bearer: []
-      summary: Get a credential by id
+      summary: Get a project credential by id
     patch:
       parameters:
       - description: The id of record
@@ -3025,7 +3350,7 @@ paths:
           description: Unexpected error updating credential
       security:
       - Bearer: []
-      summary: Update a credential
+      summary: Update a project credential
   /api/ambient/v1/projects/{id}/credentials/{cred_id}/token:
     get:
       description: Returns the decrypted token value for the given credential. Requires
@@ -3078,7 +3403,7 @@ paths:
           description: Unexpected error retrieving token
       security:
       - Bearer: []
-      summary: Get a decrypted token for a credential
+      summary: Get a decrypted token for a project credential
   /api/ambient/v1/projects/{id}/scheduled-sessions:
     get:
       parameters:
@@ -3611,6 +3936,278 @@ paths:
       security:
       - Bearer: []
       summary: List sessions triggered by this scheduled session
+  /api/ambient/v1/applications:
+    get:
+      parameters:
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplicationList"
+          description: A JSON array of application objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of applications
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Application"
+        description: Application data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Application already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the application
+      security:
+      - Bearer: []
+      summary: Create a new application
+  /api/ambient/v1/applications/{id}:
+    delete:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: Application deleted successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No application with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error deleting application
+      security:
+      - Bearer: []
+      summary: Delete an application by id
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+          description: Application found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No application with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get an application by id
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplicationPatchRequest"
+        description: Updated application data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+          description: Application updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No application with specified id exists
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Application already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating application
+      security:
+      - Bearer: []
+      summary: Update an application
 components:
   parameters:
     id:
@@ -3777,10 +4374,6 @@ components:
           agent_id:
             description: The Agent that owns this session. Immutable after creation.
             type: string
-          triggered_by_user_id:
-            description: User who started the agent
-            readOnly: true
-            type: string
           project_id:
             description: Immutable after creation. Set at creation time only.
             type: string
@@ -3832,7 +4425,6 @@ components:
         timeout: 5
         environment_variables: environment_variables
         kube_cr_uid: kube_cr_uid
-        triggered_by_user_id: triggered_by_user_id
         sdk_restart_count: 7
         updated_at: 2000-01-23T04:56:07.000+00:00
         project_id: project_id
@@ -3883,7 +4475,6 @@ components:
           timeout: 5
           environment_variables: environment_variables
           kube_cr_uid: kube_cr_uid
-          triggered_by_user_id: triggered_by_user_id
           sdk_restart_count: 7
           updated_at: 2000-01-23T04:56:07.000+00:00
           project_id: project_id
@@ -3919,7 +4510,6 @@ components:
           timeout: 5
           environment_variables: environment_variables
           kube_cr_uid: kube_cr_uid
-          triggered_by_user_id: triggered_by_user_id
           sdk_restart_count: 7
           updated_at: 2000-01-23T04:56:07.000+00:00
           project_id: project_id
@@ -4041,8 +4631,6 @@ components:
       - properties:
           name:
             type: string
-          display_name:
-            type: string
           description:
             type: string
           labels:
@@ -4073,7 +4661,6 @@ components:
         annotations: annotations
         id: id
         href: href
-        display_name: display_name
         prompt: prompt
         labels: labels
         status: status
@@ -4100,7 +4687,6 @@ components:
           annotations: annotations
           id: id
           href: href
-          display_name: display_name
           prompt: prompt
           labels: labels
           status: status
@@ -4112,7 +4698,6 @@ components:
           annotations: annotations
           id: id
           href: href
-          display_name: display_name
           prompt: prompt
           labels: labels
           status: status
@@ -4121,14 +4706,11 @@ components:
         name: name
         description: description
         annotations: annotations
-        display_name: display_name
         prompt: prompt
         labels: labels
         status: status
       properties:
         name:
-          type: string
-        display_name:
           type: string
         description:
           type: string
@@ -4366,29 +4948,54 @@ components:
       allOf:
       - $ref: "#/components/schemas/ObjectReference"
       - properties:
-          user_id:
-            type: string
           role_id:
             type: string
           scope:
+            enum:
+            - global
+            - project
+            - agent
+            - session
+            - credential
             type: string
-          scope_id:
+          user_id:
+            description: Nullable — set when the binding is user-specific
+            nullable: true
+            type: string
+          project_id:
+            description: Nullable — set when scope=project or when binding a credential
+              to a project
+            nullable: true
+            type: string
+          agent_id:
+            description: Nullable — set when scope=agent
+            nullable: true
+            type: string
+          session_id:
+            description: Nullable — set when scope=session
+            nullable: true
+            type: string
+          credential_id:
+            description: Nullable — set when scope=credential
+            nullable: true
             type: string
         required:
         - role_id
         - scope
-        - user_id
         type: object
       example:
         updated_at: 2000-01-23T04:56:07.000+00:00
-        user_id: user_id
+        agent_id: agent_id
         role_id: role_id
-        scope_id: scope_id
+        user_id: user_id
+        project_id: project_id
         kind: kind
-        scope: scope
+        scope: global
         created_at: 2000-01-23T04:56:07.000+00:00
+        session_id: session_id
         id: id
         href: href
+        credential_id: credential_id
     RoleBindingList:
       allOf:
       - $ref: "#/components/schemas/List"
@@ -4405,37 +5012,63 @@ components:
         page: 0
         items:
         - updated_at: 2000-01-23T04:56:07.000+00:00
-          user_id: user_id
+          agent_id: agent_id
           role_id: role_id
-          scope_id: scope_id
+          user_id: user_id
+          project_id: project_id
           kind: kind
-          scope: scope
+          scope: global
           created_at: 2000-01-23T04:56:07.000+00:00
+          session_id: session_id
           id: id
           href: href
+          credential_id: credential_id
         - updated_at: 2000-01-23T04:56:07.000+00:00
-          user_id: user_id
+          agent_id: agent_id
           role_id: role_id
-          scope_id: scope_id
+          user_id: user_id
+          project_id: project_id
           kind: kind
-          scope: scope
+          scope: global
           created_at: 2000-01-23T04:56:07.000+00:00
+          session_id: session_id
           id: id
           href: href
+          credential_id: credential_id
     RoleBindingPatchRequest:
       example:
-        user_id: user_id
+        agent_id: agent_id
         role_id: role_id
-        scope_id: scope_id
-        scope: scope
+        user_id: user_id
+        project_id: project_id
+        scope: global
+        session_id: session_id
+        credential_id: credential_id
       properties:
-        user_id:
-          type: string
         role_id:
           type: string
         scope:
+          enum:
+          - global
+          - project
+          - agent
+          - session
+          - credential
           type: string
-        scope_id:
+        user_id:
+          nullable: true
+          type: string
+        project_id:
+          nullable: true
+          type: string
+        agent_id:
+          nullable: true
+          type: string
+        session_id:
+          nullable: true
+          type: string
+        credential_id:
+          nullable: true
           type: string
       type: object
     SessionMessage:
@@ -4693,7 +5326,6 @@ components:
           timeout: 5
           environment_variables: environment_variables
           kube_cr_uid: kube_cr_uid
-          triggered_by_user_id: triggered_by_user_id
           sdk_restart_count: 7
           updated_at: 2000-01-23T04:56:07.000+00:00
           project_id: project_id
@@ -4729,7 +5361,6 @@ components:
           timeout: 5
           environment_variables: environment_variables
           kube_cr_uid: kube_cr_uid
-          triggered_by_user_id: triggered_by_user_id
           sdk_restart_count: 7
           updated_at: 2000-01-23T04:56:07.000+00:00
           project_id: project_id
@@ -4776,7 +5407,6 @@ components:
           timeout: 5
           environment_variables: environment_variables
           kube_cr_uid: kube_cr_uid
-          triggered_by_user_id: triggered_by_user_id
           sdk_restart_count: 7
           updated_at: 2000-01-23T04:56:07.000+00:00
           project_id: project_id
@@ -4933,9 +5563,6 @@ components:
       allOf:
       - $ref: "#/components/schemas/ObjectReference"
       - properties:
-          project_id:
-            description: ID of the project this credential belongs to
-            type: string
           name:
             type: string
           description:
@@ -4946,6 +5573,7 @@ components:
             - gitlab
             - jira
             - google
+            - vertex
             - kubeconfig
             type: string
           token:
@@ -5002,7 +5630,6 @@ components:
           token: token
           labels: labels
           updated_at: 2000-01-23T04:56:07.000+00:00
-          project_id: project_id
           provider: github
           name: name
           id: id
@@ -5016,7 +5643,6 @@ components:
           token: token
           labels: labels
           updated_at: 2000-01-23T04:56:07.000+00:00
-          project_id: project_id
           provider: github
           name: name
           id: id
@@ -5043,6 +5669,7 @@ components:
           - gitlab
           - jira
           - google
+          - vertex
           - kubeconfig
           type: string
         token:
@@ -5075,6 +5702,7 @@ components:
           - gitlab
           - jira
           - google
+          - vertex
           - kubeconfig
           type: string
         token:
@@ -5247,6 +5875,231 @@ components:
         stop_on_run_finished:
           type: boolean
         runner_type:
+          type: string
+      type: object
+    Application:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          name:
+            type: string
+          source_repo_url:
+            type: string
+          source_target_revision:
+            type: string
+          source_path:
+            type: string
+          destination_ambient_url:
+            type: string
+          destination_project:
+            type: string
+          credential_id:
+            type: string
+          auto_sync:
+            type: boolean
+          auto_prune:
+            type: boolean
+          self_heal:
+            type: boolean
+          sync_options:
+            type: string
+          retry_limit:
+            format: int32
+            type: integer
+          sync_status:
+            type: string
+          health_status:
+            type: string
+          sync_revision:
+            type: string
+          operation_phase:
+            type: string
+          operation_message:
+            type: string
+          resource_status:
+            type: string
+          conditions:
+            type: string
+          labels:
+            type: string
+          annotations:
+            type: string
+          last_synced_at:
+            format: date-time
+            type: string
+        required:
+        - destination_project
+        - name
+        - source_path
+        - source_repo_url
+        type: object
+      example:
+        last_synced_at: 2000-01-23T04:56:07.000+00:00
+        destination_project: destination_project
+        created_at: 2000-01-23T04:56:07.000+00:00
+        annotations: annotations
+        source_target_revision: source_target_revision
+        source_repo_url: source_repo_url
+        retry_limit: 5
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        self_heal: true
+        operation_message: operation_message
+        id: id
+        href: href
+        health_status: health_status
+        resource_status: resource_status
+        operation_phase: operation_phase
+        kind: kind
+        sync_revision: sync_revision
+        auto_prune: true
+        auto_sync: true
+        labels: labels
+        name: name
+        sync_status: sync_status
+        source_path: source_path
+        sync_options: sync_options
+        destination_ambient_url: destination_ambient_url
+        conditions: conditions
+        credential_id: credential_id
+    ApplicationList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/Application"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - last_synced_at: 2000-01-23T04:56:07.000+00:00
+          destination_project: destination_project
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          source_target_revision: source_target_revision
+          source_repo_url: source_repo_url
+          retry_limit: 5
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          self_heal: true
+          operation_message: operation_message
+          id: id
+          href: href
+          health_status: health_status
+          resource_status: resource_status
+          operation_phase: operation_phase
+          kind: kind
+          sync_revision: sync_revision
+          auto_prune: true
+          auto_sync: true
+          labels: labels
+          name: name
+          sync_status: sync_status
+          source_path: source_path
+          sync_options: sync_options
+          destination_ambient_url: destination_ambient_url
+          conditions: conditions
+          credential_id: credential_id
+        - last_synced_at: 2000-01-23T04:56:07.000+00:00
+          destination_project: destination_project
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          source_target_revision: source_target_revision
+          source_repo_url: source_repo_url
+          retry_limit: 5
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          self_heal: true
+          operation_message: operation_message
+          id: id
+          href: href
+          health_status: health_status
+          resource_status: resource_status
+          operation_phase: operation_phase
+          kind: kind
+          sync_revision: sync_revision
+          auto_prune: true
+          auto_sync: true
+          labels: labels
+          name: name
+          sync_status: sync_status
+          source_path: source_path
+          sync_options: sync_options
+          destination_ambient_url: destination_ambient_url
+          conditions: conditions
+          credential_id: credential_id
+    ApplicationPatchRequest:
+      example:
+        last_synced_at: 2000-01-23T04:56:07.000+00:00
+        operation_phase: operation_phase
+        sync_revision: sync_revision
+        destination_project: destination_project
+        auto_prune: true
+        annotations: annotations
+        source_target_revision: source_target_revision
+        source_repo_url: source_repo_url
+        auto_sync: true
+        retry_limit: 0
+        labels: labels
+        self_heal: true
+        operation_message: operation_message
+        name: name
+        sync_status: sync_status
+        source_path: source_path
+        sync_options: sync_options
+        health_status: health_status
+        destination_ambient_url: destination_ambient_url
+        conditions: conditions
+        resource_status: resource_status
+        credential_id: credential_id
+      properties:
+        name:
+          type: string
+        source_repo_url:
+          type: string
+        source_target_revision:
+          type: string
+        source_path:
+          type: string
+        destination_ambient_url:
+          type: string
+        destination_project:
+          type: string
+        credential_id:
+          type: string
+        auto_sync:
+          type: boolean
+        auto_prune:
+          type: boolean
+        self_heal:
+          type: boolean
+        sync_options:
+          type: string
+        retry_limit:
+          format: int32
+          type: integer
+        sync_status:
+          type: string
+        health_status:
+          type: string
+        sync_revision:
+          type: string
+        operation_phase:
+          type: string
+        operation_message:
+          type: string
+        resource_status:
+          type: string
+        conditions:
+          type: string
+        labels:
+          type: string
+        annotations:
+          type: string
+        last_synced_at:
+          format: date-time
           type: string
       type: object
     _api_ambient_v1_projects__id__scheduled_sessions__ss_id__trigger_post_200_response:

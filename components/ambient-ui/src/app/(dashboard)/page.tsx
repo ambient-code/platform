@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { FolderOpen } from 'lucide-react'
 import { useProjects } from '@/queries/use-projects'
+import { CreateProjectDialog } from './_components/create-project-dialog'
 import {
   Card,
   CardContent,
@@ -58,17 +59,25 @@ export default function ProjectPickerPage() {
 
   if (projects.length === 0) {
     return (
-      <EmptyState
-        icon={FolderOpen}
-        title="No projects found"
-        description="Create a project to get started with the Ambient Code Platform."
-      />
+      <div className="space-y-6">
+        <EmptyState
+          icon={FolderOpen}
+          title="No projects found"
+          description="Create a project to get started with ACP."
+        />
+        <div className="flex justify-center">
+          <CreateProjectDialog />
+        </div>
+      </div>
     )
   }
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Projects</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Projects</h1>
+        <CreateProjectDialog />
+      </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {projects.map((project) => (
           <Card

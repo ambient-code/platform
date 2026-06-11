@@ -1,6 +1,6 @@
-# Ambient UI
+# ACP UI
 
-Operations console for the Ambient Code Platform. Next.js BFF with OIDC authentication (Keycloak), shadcn/ui components, and Red Hat design system.
+Operations console for ACP. Next.js BFF with OIDC authentication (Keycloak), shadcn/ui components, and Red Hat design system.
 
 ## Local Development
 

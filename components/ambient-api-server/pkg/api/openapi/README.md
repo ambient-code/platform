@@ -78,6 +78,17 @@ All URIs are relative to *http://localhost:8000*
 
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
+*DefaultAPI* | [**ApiAmbientV1ApplicationsGet**](docs/DefaultAPI.md#apiambientv1applicationsget) | **Get** /api/ambient/v1/applications | Returns a list of applications
+*DefaultAPI* | [**ApiAmbientV1ApplicationsIdDelete**](docs/DefaultAPI.md#apiambientv1applicationsiddelete) | **Delete** /api/ambient/v1/applications/{id} | Delete an application by id
+*DefaultAPI* | [**ApiAmbientV1ApplicationsIdGet**](docs/DefaultAPI.md#apiambientv1applicationsidget) | **Get** /api/ambient/v1/applications/{id} | Get an application by id
+*DefaultAPI* | [**ApiAmbientV1ApplicationsIdPatch**](docs/DefaultAPI.md#apiambientv1applicationsidpatch) | **Patch** /api/ambient/v1/applications/{id} | Update an application
+*DefaultAPI* | [**ApiAmbientV1ApplicationsPost**](docs/DefaultAPI.md#apiambientv1applicationspost) | **Post** /api/ambient/v1/applications | Create a new application
+*DefaultAPI* | [**ApiAmbientV1CredentialsCredIdDelete**](docs/DefaultAPI.md#apiambientv1credentialscrediddelete) | **Delete** /api/ambient/v1/credentials/{cred_id} | Delete a credential
+*DefaultAPI* | [**ApiAmbientV1CredentialsCredIdGet**](docs/DefaultAPI.md#apiambientv1credentialscredidget) | **Get** /api/ambient/v1/credentials/{cred_id} | Get a credential by id
+*DefaultAPI* | [**ApiAmbientV1CredentialsCredIdPatch**](docs/DefaultAPI.md#apiambientv1credentialscredidpatch) | **Patch** /api/ambient/v1/credentials/{cred_id} | Update a credential
+*DefaultAPI* | [**ApiAmbientV1CredentialsCredIdTokenGet**](docs/DefaultAPI.md#apiambientv1credentialscredidtokenget) | **Get** /api/ambient/v1/credentials/{cred_id}/token | Get a decrypted token for a credential
+*DefaultAPI* | [**ApiAmbientV1CredentialsGet**](docs/DefaultAPI.md#apiambientv1credentialsget) | **Get** /api/ambient/v1/credentials | Returns a list of credentials
+*DefaultAPI* | [**ApiAmbientV1CredentialsPost**](docs/DefaultAPI.md#apiambientv1credentialspost) | **Post** /api/ambient/v1/credentials | Create a new credential
 *DefaultAPI* | [**ApiAmbientV1ProjectSettingsGet**](docs/DefaultAPI.md#apiambientv1projectsettingsget) | **Get** /api/ambient/v1/project_settings | Returns a list of project settings
 *DefaultAPI* | [**ApiAmbientV1ProjectSettingsIdDelete**](docs/DefaultAPI.md#apiambientv1projectsettingsiddelete) | **Delete** /api/ambient/v1/project_settings/{id} | Delete a project settings by id
 *DefaultAPI* | [**ApiAmbientV1ProjectSettingsIdGet**](docs/DefaultAPI.md#apiambientv1projectsettingsidget) | **Get** /api/ambient/v1/project_settings/{id} | Get a project settings by id
@@ -96,11 +107,11 @@ Class | Method | HTTP request | Description
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsAgentIdStartPost**](docs/DefaultAPI.md#apiambientv1projectsidagentsagentidstartpost) | **Post** /api/ambient/v1/projects/{id}/agents/{agent_id}/start | Start an agent — creates a Session (idempotent)
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsGet**](docs/DefaultAPI.md#apiambientv1projectsidagentsget) | **Get** /api/ambient/v1/projects/{id}/agents | Returns a list of agents in a project
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdAgentsPost**](docs/DefaultAPI.md#apiambientv1projectsidagentspost) | **Post** /api/ambient/v1/projects/{id}/agents | Create an agent in a project
-*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsCredIdDelete**](docs/DefaultAPI.md#apiambientv1projectsidcredentialscrediddelete) | **Delete** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Delete a credential
-*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsCredIdGet**](docs/DefaultAPI.md#apiambientv1projectsidcredentialscredidget) | **Get** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Get a credential by id
-*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsCredIdPatch**](docs/DefaultAPI.md#apiambientv1projectsidcredentialscredidpatch) | **Patch** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Update a credential
-*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsCredIdTokenGet**](docs/DefaultAPI.md#apiambientv1projectsidcredentialscredidtokenget) | **Get** /api/ambient/v1/projects/{id}/credentials/{cred_id}/token | Get a decrypted token for a credential
-*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsGet**](docs/DefaultAPI.md#apiambientv1projectsidcredentialsget) | **Get** /api/ambient/v1/projects/{id}/credentials | Returns a list of credentials in a project
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsCredIdDelete**](docs/DefaultAPI.md#apiambientv1projectsidcredentialscrediddelete) | **Delete** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Delete a project credential
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsCredIdGet**](docs/DefaultAPI.md#apiambientv1projectsidcredentialscredidget) | **Get** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Get a project credential by id
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsCredIdPatch**](docs/DefaultAPI.md#apiambientv1projectsidcredentialscredidpatch) | **Patch** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Update a project credential
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsCredIdTokenGet**](docs/DefaultAPI.md#apiambientv1projectsidcredentialscredidtokenget) | **Get** /api/ambient/v1/projects/{id}/credentials/{cred_id}/token | Get a decrypted token for a project credential
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsGet**](docs/DefaultAPI.md#apiambientv1projectsidcredentialsget) | **Get** /api/ambient/v1/projects/{id}/credentials | Returns a list of credentials for a project
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsPost**](docs/DefaultAPI.md#apiambientv1projectsidcredentialspost) | **Post** /api/ambient/v1/projects/{id}/credentials | Create a new credential in a project
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdDelete**](docs/DefaultAPI.md#apiambientv1projectsiddelete) | **Delete** /api/ambient/v1/projects/{id} | Delete a project by id
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdGet**](docs/DefaultAPI.md#apiambientv1projectsidget) | **Get** /api/ambient/v1/projects/{id} | Get a project by id
@@ -149,6 +160,9 @@ Class | Method | HTTP request | Description
  - [AgentPatchRequest](docs/AgentPatchRequest.md)
  - [AgentSessionList](docs/AgentSessionList.md)
  - [ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response](docs/ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response.md)
+ - [Application](docs/Application.md)
+ - [ApplicationList](docs/ApplicationList.md)
+ - [ApplicationPatchRequest](docs/ApplicationPatchRequest.md)
  - [Credential](docs/Credential.md)
  - [CredentialList](docs/CredentialList.md)
  - [CredentialPatchRequest](docs/CredentialPatchRequest.md)
@@ -224,3 +238,4 @@ Each of these functions takes a value of the given basic type and returns a poin
 ## Author
 
 ambient-code@redhat.com
+

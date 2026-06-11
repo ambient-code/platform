@@ -92,3 +92,24 @@ func typedFKMigration() *gormigrate.Migration {
 		},
 	}
 }
+
+func uniqueBindingMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202606050010",
+		Migrate: func(tx *gorm.DB) error {
+			return tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_role_bindings_unique
+				ON role_bindings (
+					role_id,
+					COALESCE(user_id, ''),
+					COALESCE(project_id, ''),
+					COALESCE(agent_id, ''),
+					COALESCE(session_id, ''),
+					COALESCE(credential_id, '')
+				)
+				WHERE deleted_at IS NULL`).Error
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return tx.Exec(`DROP INDEX IF EXISTS idx_role_bindings_unique`).Error
+		},
+	}
+}

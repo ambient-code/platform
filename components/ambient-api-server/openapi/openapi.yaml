@@ -64,6 +64,12 @@ paths:
     $ref: 'openapi.inbox.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents~1{agent_id}~1inbox'
   /api/ambient/v1/projects/{id}/agents/{agent_id}/inbox/{msg_id}:
     $ref: 'openapi.inbox.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1agents~1{agent_id}~1inbox~1{msg_id}'
+  /api/ambient/v1/credentials:
+    $ref: 'openapi.credentials.yaml#/paths/~1api~1ambient~1v1~1credentials'
+  /api/ambient/v1/credentials/{cred_id}:
+    $ref: 'openapi.credentials.yaml#/paths/~1api~1ambient~1v1~1credentials~1{cred_id}'
+  /api/ambient/v1/credentials/{cred_id}/token:
+    $ref: 'openapi.credentials.yaml#/paths/~1api~1ambient~1v1~1credentials~1{cred_id}~1token'
   /api/ambient/v1/projects/{id}/credentials:
     $ref: 'openapi.credentials.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1credentials'
   /api/ambient/v1/projects/{id}/credentials/{cred_id}:
@@ -82,6 +88,10 @@ paths:
     $ref: 'openapi.scheduledSessions.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1scheduled-sessions~1{ss_id}~1trigger'
   /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/runs:
     $ref: 'openapi.scheduledSessions.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1scheduled-sessions~1{ss_id}~1runs'
+  /api/ambient/v1/applications:
+    $ref: 'openapi.applications.yaml#/paths/~1api~1ambient~1v1~1applications'
+  /api/ambient/v1/applications/{id}:
+    $ref: 'openapi.applications.yaml#/paths/~1api~1ambient~1v1~1applications~1{id}'
   # AUTO-ADD NEW PATHS
 components:
   securitySchemes:
@@ -241,6 +251,12 @@ components:
       $ref: 'openapi.scheduledSessions.yaml#/components/schemas/ScheduledSessionList'
     ScheduledSessionPatchRequest:
       $ref: 'openapi.scheduledSessions.yaml#/components/schemas/ScheduledSessionPatchRequest'
+    Application:
+      $ref: 'openapi.applications.yaml#/components/schemas/Application'
+    ApplicationList:
+      $ref: 'openapi.applications.yaml#/components/schemas/ApplicationList'
+    ApplicationPatchRequest:
+      $ref: 'openapi.applications.yaml#/components/schemas/ApplicationPatchRequest'
     # AUTO-ADD NEW SCHEMAS
   parameters:
     id:

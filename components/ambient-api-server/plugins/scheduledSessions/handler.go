@@ -58,14 +58,31 @@ func (h *scheduledSessionHandler) Get(w http.ResponseWriter, r *http.Request) {
 	handlers.HandleGet(w, r, cfg)
 }
 
+// scheduledSessionCreateRequest is a lenient request body for Create.
+// The generated openapi.ScheduledSession requires project_id in the JSON body,
+// but the handler sources it from the URL path. This struct avoids that
+// strict UnmarshalJSON validation while accepting all valid create fields.
+type scheduledSessionCreateRequest struct {
+	Name              string  `json:"name"`
+	Description       *string `json:"description,omitempty"`
+	AgentId           *string `json:"agent_id,omitempty"`
+	Schedule          string  `json:"schedule"`
+	Timezone          *string `json:"timezone,omitempty"`
+	Enabled           *bool   `json:"enabled,omitempty"`
+	SessionPrompt     *string `json:"session_prompt,omitempty"`
+	Timeout           *int32  `json:"timeout,omitempty"`
+	InactivityTimeout *int32  `json:"inactivity_timeout,omitempty"`
+	StopOnRunFinished *bool   `json:"stop_on_run_finished,omitempty"`
+	RunnerType        *string `json:"runner_type,omitempty"`
+}
+
 // Create — POST /api/ambient/v1/projects/{project_id}/scheduled-sessions
 func (h *scheduledSessionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	projectId := mux.Vars(r)["project_id"]
-	var body openapi.ScheduledSession
+	var body scheduledSessionCreateRequest
 	cfg := &handlers.HandlerConfig{
 		Body: &body,
 		Validators: []handlers.Validate{
-			handlers.ValidateEmpty(&body, "Id", "id"),
 			func() *errors.ServiceError {
 				if body.Name == "" {
 					return errors.Validation("name is required")
@@ -77,8 +94,21 @@ func (h *scheduledSessionHandler) Create(w http.ResponseWriter, r *http.Request)
 			},
 		},
 		Action: func() (interface{}, *errors.ServiceError) {
-			body.ProjectId = projectId
-			ss := ConvertScheduledSession(body)
+			oaBody := openapi.ScheduledSession{
+				Name:              body.Name,
+				Description:       body.Description,
+				ProjectId:         projectId,
+				AgentId:           body.AgentId,
+				Schedule:          body.Schedule,
+				Timezone:          body.Timezone,
+				Enabled:           body.Enabled,
+				SessionPrompt:     body.SessionPrompt,
+				Timeout:           body.Timeout,
+				InactivityTimeout: body.InactivityTimeout,
+				StopOnRunFinished: body.StopOnRunFinished,
+				RunnerType:        body.RunnerType,
+			}
+			ss := ConvertScheduledSession(oaBody)
 			created, err := h.svc.Create(r.Context(), ss)
 			if err != nil {
 				return nil, err

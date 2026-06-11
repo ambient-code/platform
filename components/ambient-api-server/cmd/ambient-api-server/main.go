@@ -16,6 +16,7 @@ import (
 
 	// Backend-compatible plugins only
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/agents"
+	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/applications"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/credentials"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/inbox"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/projectSettings"
@@ -36,6 +37,7 @@ func main() {
 		pkgcmd.NewMigrateCommand("ambient-api-server"),
 		pkgcmd.NewServeCommand(localapi.GetOpenAPISpec),
 		localcmd.NewEncryptCredentialsCommand(),
+		localcmd.NewSeedAdminCommand(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
