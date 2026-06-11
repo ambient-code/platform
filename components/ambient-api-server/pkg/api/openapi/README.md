@@ -78,6 +78,11 @@ All URIs are relative to *http://localhost:8000*
 
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
+*DefaultAPI* | [**ApiAmbientV1ApplicationsGet**](docs/DefaultAPI.md#apiambientv1applicationsget) | **Get** /api/ambient/v1/applications | Returns a list of applications
+*DefaultAPI* | [**ApiAmbientV1ApplicationsIdDelete**](docs/DefaultAPI.md#apiambientv1applicationsiddelete) | **Delete** /api/ambient/v1/applications/{id} | Delete an application by id
+*DefaultAPI* | [**ApiAmbientV1ApplicationsIdGet**](docs/DefaultAPI.md#apiambientv1applicationsidget) | **Get** /api/ambient/v1/applications/{id} | Get an application by id
+*DefaultAPI* | [**ApiAmbientV1ApplicationsIdPatch**](docs/DefaultAPI.md#apiambientv1applicationsidpatch) | **Patch** /api/ambient/v1/applications/{id} | Update an application
+*DefaultAPI* | [**ApiAmbientV1ApplicationsPost**](docs/DefaultAPI.md#apiambientv1applicationspost) | **Post** /api/ambient/v1/applications | Create a new application
 *DefaultAPI* | [**ApiAmbientV1CredentialsCredIdDelete**](docs/DefaultAPI.md#apiambientv1credentialscrediddelete) | **Delete** /api/ambient/v1/credentials/{cred_id} | Delete a credential
 *DefaultAPI* | [**ApiAmbientV1CredentialsCredIdGet**](docs/DefaultAPI.md#apiambientv1credentialscredidget) | **Get** /api/ambient/v1/credentials/{cred_id} | Get a credential by id
 *DefaultAPI* | [**ApiAmbientV1CredentialsCredIdPatch**](docs/DefaultAPI.md#apiambientv1credentialscredidpatch) | **Patch** /api/ambient/v1/credentials/{cred_id} | Update a credential
@@ -155,6 +160,9 @@ Class | Method | HTTP request | Description
  - [AgentPatchRequest](docs/AgentPatchRequest.md)
  - [AgentSessionList](docs/AgentSessionList.md)
  - [ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response](docs/ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response.md)
+ - [Application](docs/Application.md)
+ - [ApplicationList](docs/ApplicationList.md)
+ - [ApplicationPatchRequest](docs/ApplicationPatchRequest.md)
  - [Credential](docs/Credential.md)
  - [CredentialList](docs/CredentialList.md)
  - [CredentialPatchRequest](docs/CredentialPatchRequest.md)
