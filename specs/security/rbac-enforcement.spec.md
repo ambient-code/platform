@@ -112,6 +112,60 @@ The response is filtered to resources within their authorized scope.
 - THEN an empty list is returned with HTTP 200
 - AND the response is not 403
 
+### Requirement: Project Preview Policy Authorization
+
+Project preview policy SHALL be authorized as a field-level Project update.
+Project reads include `spec.preview` for callers who can read the Project. A
+caller can create or update Project `spec.preview` when their effective bindings
+grant `project:owner` or `project:editor` for the owning Project. A caller with
+`project:viewer` can read the policy but cannot modify it.
+
+Project creation with `spec.preview` SHALL use the same bootstrap contract as
+`POST /projects`: any authenticated caller may create a new Project, and the
+Project plus caller `project:owner` RoleBinding are committed atomically. Because
+the caller becomes owner in that same transaction, the create MAY persist
+`spec.preview` when validation succeeds. Anonymous requests SHALL be rejected,
+and compatibility paths SHALL NOT silently drop or persist preview trust unless
+the Project create and owner binding both commit. Once the Project exists,
+`spec.preview` changes require `project:owner` or `project:editor`.
+
+Project patches SHALL be authorized against every field they modify. A patch that
+updates only `spec.preview` MAY be accepted for `project:editor`. A patch that
+updates `spec.preview` and owner-only Project fields SHALL require authorization
+for all modified fields; partial application is forbidden.
+
+Project preview policy is cleared by updating `spec.preview.allowedHosts` to
+`[]`, not by deleting a separate settings resource.
+
+#### Scenario: Project editor updates preview policy
+
+- GIVEN user A has `project:editor` on proj-1
+- WHEN user A calls `PATCH /projects/proj-1` with only `spec.preview.allowedHosts`
+- THEN the request is authorized
+- AND the Project preview policy for proj-1 is updated
+
+#### Scenario: Bootstrap Project create can set preview policy atomically
+
+- GIVEN authenticated user A has no Project binding for project `proj-new`
+- WHEN user A calls `POST /projects` with `metadata.name: "proj-new"` and `spec.preview.allowedHosts`
+- THEN the Project is created
+- AND a `project:owner` RoleBinding for user A is created in the same transaction
+- AND the request persists `spec.preview` only if Project creation, owner binding creation, and preview policy validation all succeed
+
+#### Scenario: Project viewer cannot update preview policy
+
+- GIVEN user A has `project:viewer` on proj-1
+- WHEN user A calls `PATCH /projects/proj-1` with `spec.preview.allowedHosts`
+- THEN the request returns 403 Forbidden
+- AND the error body is generic
+
+#### Scenario: Mixed Project patch requires all field permissions
+
+- GIVEN user A has `project:editor` on proj-1
+- WHEN user A calls `PATCH /projects/proj-1` with `spec.preview.allowedHosts` and an owner-only Project field
+- THEN the request returns 403 Forbidden
+- AND neither field is updated
+
 ### Requirement: User Auto-Provisioning
 
 The system SHALL automatically create a User record when a JWT-authenticated caller
