@@ -179,12 +179,23 @@ func forwardedIdentityMiddleware() gin.HandlerFunc {
 			c.Set("forwardedAccessToken", v)
 		}
 
-		// Fallback: if userID is still empty, verify the Bearer token via
-		// TokenReview to securely resolve the ServiceAccount identity, then
-		// read the created-by-user-id annotation. This enables API key-
-		// authenticated requests to inherit the creating user's identity
-		// so that integration credentials (GitHub, Jira, GitLab) are accessible.
-		if c.GetString("userID") == "" && K8sClient != nil {
+		// Resolve the creating user's identity for ServiceAccount tokens.
+		// The OAuth proxy sets X-Forwarded-User to the SA subject
+		// (e.g. "system:serviceaccount:ns:sa-name"), which the code above
+		// sanitizes into a synthetic userID. That synthetic ID doesn't match
+		// the session owner, breaking credential RBAC. We resolve the SA's
+		// created-by-user-id annotation to get the real human identity.
+		//
+		// This runs in two cases:
+		// 1. X-Forwarded-User was a SA subject (set by OAuth proxy for API key requests)
+		// 2. No X-Forwarded-User at all (direct API key requests bypassing proxy)
+		resolveNeeded := c.GetString("userID") == ""
+		if !resolveNeeded {
+			if orig := c.GetString("userIDOriginal"); strings.HasPrefix(orig, "system:serviceaccount:") {
+				resolveNeeded = true
+			}
+		}
+		if resolveNeeded && K8sClient != nil {
 			if ns, saName, ok := resolveServiceAccountFromToken(c); ok {
 				sa, err := K8sClient.CoreV1().ServiceAccounts(ns).Get(c.Request.Context(), saName, v1.GetOptions{})
 				if err == nil && sa.Annotations != nil {
