@@ -371,6 +371,237 @@ class TestClaudeBridgeLifecycle:
 
 
 @pytest.mark.asyncio
+class TestClaudeBridgeFirstRunMCPRebuild:
+    """Verify MCP servers and system prompt are rebuilt on first run after credential refresh."""
+
+    async def test_first_run_rebuilds_mcp_servers_and_clears_adapter(self):
+        """On first run, MCP servers and system prompt must be rebuilt after
+        populate_runtime_credentials so credential-based servers (e.g. Jira via
+        session endpoint) that were absent during _setup_platform() due to transient
+        backend latency are captured with the now-populated env vars."""
+        bridge = ClaudeBridge()
+        ctx = RunnerContext(session_id="s1", workspace_path="/w")
+        bridge.set_context(ctx)
+        bridge._ready = True
+        bridge._first_run = True
+        bridge._cwd_path = "/w"
+        bridge._session_manager = MagicMock()
+        bridge._session_manager.get_existing.return_value = None
+        bridge._adapter = MagicMock()
+
+        with (
+            patch(
+                "ambient_runner.platform.auth.populate_runtime_credentials",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "ambient_runner.platform.auth.populate_mcp_server_credentials",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "ambient_runner.platform.auth.clear_runtime_credentials",
+            ),
+            patch.object(bridge, "_ensure_ready", new_callable=AsyncMock),
+            patch.object(bridge, "_rebuild_mcp_servers") as mock_rebuild,
+            patch.object(bridge, "_rebuild_system_prompt") as mock_rebuild_prompt,
+            patch.object(bridge, "_ensure_adapter"),
+        ):
+            await bridge._initialize_run(
+                thread_id="t1",
+                current_user_id="user1",
+                current_user_name="User One",
+                caller_token="tok",
+            )
+
+        mock_rebuild.assert_called_once()
+        mock_rebuild_prompt.assert_called_once()
+        assert bridge._adapter is None
+
+    async def test_subsequent_run_does_not_rebuild_when_same_user(self):
+        """After first run, MCP servers and system prompt must NOT be rebuilt when
+        the user is unchanged."""
+        bridge = ClaudeBridge()
+        ctx = RunnerContext(session_id="s1", workspace_path="/w")
+        ctx.set_current_user("user1", "User One", "tok")
+        bridge.set_context(ctx)
+        bridge._ready = True
+        bridge._first_run = False
+        bridge._cwd_path = "/w"
+        bridge._session_manager = MagicMock()
+        bridge._session_manager.get_existing.return_value = None
+        original_adapter = MagicMock()
+        bridge._adapter = original_adapter
+
+        with (
+            patch(
+                "ambient_runner.platform.auth.populate_runtime_credentials",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "ambient_runner.platform.auth.populate_mcp_server_credentials",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "ambient_runner.platform.auth.clear_runtime_credentials",
+            ),
+            patch.object(bridge, "_ensure_ready", new_callable=AsyncMock),
+            patch.object(bridge, "_rebuild_mcp_servers") as mock_rebuild,
+            patch.object(bridge, "_rebuild_system_prompt") as mock_rebuild_prompt,
+            patch.object(bridge, "_ensure_adapter"),
+        ):
+            await bridge._initialize_run(
+                thread_id="t1",
+                current_user_id="user1",
+                current_user_name="User One",
+                caller_token="tok",
+            )
+
+        mock_rebuild.assert_not_called()
+        mock_rebuild_prompt.assert_not_called()
+        assert bridge._adapter is original_adapter
+
+
+class TestBuildIntegrationsPrompt:
+    """Verify _build_integrations_prompt is conditional on credential state for all integrations."""
+
+    _CLEAN_VARS = (
+        "JIRA_URL", "JIRA_API_TOKEN",
+        "USER_GOOGLE_EMAIL", "CREDENTIAL_MCP_URLS",
+        "GITHUB_TOKEN", "GITLAB_TOKEN",
+    )
+
+    def _clean_env(self, monkeypatch):
+        for var in self._CLEAN_VARS:
+            monkeypatch.delenv(var, raising=False)
+
+    def _prompt(self):
+        from ambient_runner.platform.prompts import _build_integrations_prompt
+        return _build_integrations_prompt()
+
+    # ------------------------------------------------------------------
+    # No credentials — all integrations show setup instructions
+    # ------------------------------------------------------------------
+
+    def test_no_creds_shows_missing_prompts_for_all(self, monkeypatch):
+        self._clean_env(monkeypatch)
+        result = self._prompt()
+        assert "configure Jira credentials" in result
+        assert "mcp-atlassian" not in result
+        assert "Google Workspace is not connected" in result
+        assert "google-workspace" not in result
+        assert "GitHub is not connected" in result
+        assert "GitLab is not connected" in result
+
+    # ------------------------------------------------------------------
+    # GitHub
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize("use_sidecar", [True, False])
+    def test_github_configured_tells_claude_to_use_mcp_or_token(self, monkeypatch, use_sidecar):
+        self._clean_env(monkeypatch)
+        if use_sidecar:
+            monkeypatch.setenv("CREDENTIAL_MCP_URLS", '{"github": "http://sidecar:8080"}')
+        else:
+            monkeypatch.setenv("GITHUB_TOKEN", "ghp_token123")
+
+        result = self._prompt()
+        assert "GitHub is not connected" not in result
+        # Sidecar uses MCP tools; token uses git/gh CLI
+        if use_sidecar:
+            assert "mcp__github__" in result
+        else:
+            assert "GITHUB_TOKEN" in result
+
+    def test_github_not_configured_shows_missing_prompt(self, monkeypatch):
+        self._clean_env(monkeypatch)
+        result = self._prompt()
+        assert "GitHub is not connected" in result
+
+    # ------------------------------------------------------------------
+    # GitLab
+    # ------------------------------------------------------------------
+
+    def test_gitlab_token_configured_tells_claude_to_use_token(self, monkeypatch):
+        self._clean_env(monkeypatch)
+        monkeypatch.setenv("GITLAB_TOKEN", "glpat_token123")
+        result = self._prompt()
+        assert "GITLAB_TOKEN" in result
+        assert "GitLab is not connected" not in result
+
+    def test_gitlab_not_configured_shows_missing_prompt(self, monkeypatch):
+        self._clean_env(monkeypatch)
+        result = self._prompt()
+        assert "GitLab is not connected" in result
+
+    # ------------------------------------------------------------------
+    # Jira
+    # ------------------------------------------------------------------
+
+    def test_jira_creds_present_tells_claude_to_use_mcp(self, monkeypatch):
+        self._clean_env(monkeypatch)
+        monkeypatch.setenv("JIRA_URL", "https://jira.example.com")
+        monkeypatch.setenv("JIRA_API_TOKEN", "tok123")
+        result = self._prompt()
+        assert "mcp-atlassian" in result
+        assert "Do NOT tell the user to configure Jira" in result
+        assert "configure Jira credentials" not in result
+
+    def test_jira_url_without_token_shows_missing_prompt(self, monkeypatch):
+        self._clean_env(monkeypatch)
+        monkeypatch.setenv("JIRA_URL", "https://jira.example.com")
+        result = self._prompt()
+        assert "configure Jira credentials" in result
+
+    # ------------------------------------------------------------------
+    # Google Workspace
+    # ------------------------------------------------------------------
+
+    def test_google_oauth_email_tells_claude_to_use_mcp(self, monkeypatch):
+        self._clean_env(monkeypatch)
+        monkeypatch.setenv("USER_GOOGLE_EMAIL", "alice@example.com")
+        result = self._prompt()
+        assert "google-workspace" in result
+        assert "Google Workspace is not connected" not in result
+        assert "Do NOT tell the user to set up Google" in result
+
+    def test_google_placeholder_email_shows_missing_prompt(self, monkeypatch):
+        self._clean_env(monkeypatch)
+        monkeypatch.setenv("USER_GOOGLE_EMAIL", "user@example.com")
+        result = self._prompt()
+        assert "Google Workspace is not connected" in result
+
+    def test_google_sidecar_via_credential_mcp_urls(self, monkeypatch):
+        self._clean_env(monkeypatch)
+        monkeypatch.setenv("CREDENTIAL_MCP_URLS", '{"google": "http://sidecar:8080"}')
+        result = self._prompt()
+        assert "google-workspace" in result
+        assert "Google Workspace is not connected" not in result
+
+    # ------------------------------------------------------------------
+    # All integrations configured
+    # ------------------------------------------------------------------
+
+    def test_all_configured_shows_available_prompts_for_all(self, monkeypatch):
+        self._clean_env(monkeypatch)
+        monkeypatch.setenv("GITHUB_TOKEN", "ghp_token123")
+        monkeypatch.setenv("GITLAB_TOKEN", "glpat_token123")
+        monkeypatch.setenv("JIRA_URL", "https://jira.example.com")
+        monkeypatch.setenv("JIRA_API_TOKEN", "tok123")
+        monkeypatch.setenv("USER_GOOGLE_EMAIL", "alice@example.com")
+        result = self._prompt()
+        # Each integration shows its available prompt
+        assert "GITHUB_TOKEN" in result          # GitHub token mode
+        assert "GITLAB_TOKEN" in result           # GitLab token mode
+        assert "mcp-atlassian" in result          # Jira MCP
+        assert "google-workspace" in result       # Google MCP
+        # No missing prompts
+        assert "GitHub is not connected" not in result
+        assert "GitLab is not connected" not in result
+        assert "configure Jira credentials" not in result
+        assert "Google Workspace is not connected" not in result
+
+
+@pytest.mark.asyncio
 class TestClaudeBridgeRunGuards:
     """Test run() and interrupt() guard conditions."""
 

@@ -32,13 +32,13 @@ WORKSPACE_FIXED_PATHS_PROMPT = (
     "- `/workspace/artifacts/` AI writes all output here\n\n"
 )
 
-MCP_INTEGRATIONS_PROMPT = (
-    "## MCP Integrations\n"
-    "If you need Google Drive access: Ask user to go to Integrations page "
-    "in Ambient and authenticate with Google Drive.\n"
-    "If you need Jira access: Ask user to go to Workspace Settings in Ambient "
-    "and configure Jira credentials there.\n\n"
-)
+# ---------------------------------------------------------------------------
+# Integration prompt constants
+# Each integration has an "available" prompt and a "missing" prompt.
+# Add new prompts here when adding a new integration to _INTEGRATION_REGISTRY.
+# ---------------------------------------------------------------------------
+
+_PLACEHOLDER_EMAIL = "user@example.com"
 
 GITHUB_TOKEN_PROMPT = (
     "## GitHub Access\n"
@@ -60,12 +60,162 @@ GITHUB_MCP_PROMPT = (
     "All GitHub write operations must go through MCP tools.\n\n"
 )
 
+GITHUB_MISSING_PROMPT = (
+    "## GitHub Access\n"
+    "GitHub is not connected. If you need to push code, create PRs, or access "
+    "GitHub APIs, ask the user to connect GitHub on the Integrations page in Ambient.\n\n"
+)
+
 GITLAB_TOKEN_PROMPT = (
     "## GitLab Access\n"
     "A `GITLAB_TOKEN` environment variable is set in this session. "
     "You can use `git` commands to interact with GitLab repositories. "
     "The token is automatically used for git operations.\n\n"
 )
+
+GITLAB_MISSING_PROMPT = (
+    "## GitLab Access\n"
+    "GitLab is not connected. If you need to push code or access GitLab APIs, "
+    "ask the user to connect GitLab on the Integrations page in Ambient.\n\n"
+)
+
+JIRA_MCP_PROMPT = (
+    "## Jira Access\n"
+    "Jira is configured and available via the **mcp-atlassian** MCP server. "
+    "Use `mcp__mcp-atlassian__*` tools to read issues, add comments, update "
+    "status, and more. Do NOT tell the user to configure Jira — it is already set up.\n\n"
+)
+
+JIRA_MISSING_PROMPT = (
+    "## Jira Access\n"
+    "Jira is not configured. If you need Jira access, ask the user to go to "
+    "Workspace Settings in Ambient and configure Jira credentials there.\n\n"
+)
+
+GOOGLE_MCP_PROMPT = (
+    "## Google Workspace Access\n"
+    "Google Workspace is configured and available via the **google-workspace** MCP server. "
+    "Use `mcp__google-workspace__*` tools to interact with Google Drive, Gmail, etc. "
+    "Do NOT tell the user to set up Google integration — it is already set up.\n\n"
+)
+
+GOOGLE_MISSING_PROMPT = (
+    "## Google Workspace Access\n"
+    "Google Workspace is not connected. If you need Google Drive, Gmail, or other "
+    "Google services, ask the user to go to the Integrations page in Ambient and "
+    "authenticate with Google.\n\n"
+)
+
+# Legacy alias kept for backward compatibility — use _build_integrations_prompt() instead.
+MCP_INTEGRATIONS_PROMPT = JIRA_MISSING_PROMPT + GOOGLE_MISSING_PROMPT
+
+
+# ---------------------------------------------------------------------------
+# Integration registry
+# ---------------------------------------------------------------------------
+
+from dataclasses import dataclass
+from typing import Callable
+
+
+@dataclass(frozen=True)
+class _Integration:
+    """Registry entry for a platform integration.
+
+    To add a new integration:
+    1. Add prompt constants above (available + missing states).
+    2. Implement a detect callable: (cmu: dict) -> str | None.
+       Return a mode string ("mcp", "token") when configured, None when not.
+    3. Add an _Integration entry to _INTEGRATION_REGISTRY below.
+    """
+
+    label: str
+    detect: Callable[[dict], str | None]
+    prompts: dict[str, str]  # mode -> prompt text; "missing" for unconfigured state
+
+
+def _detect_github(cmu: dict) -> str | None:
+    if "github" in cmu:
+        return "mcp"
+    if os.getenv("GITHUB_TOKEN"):
+        return "token"
+    return None
+
+
+def _detect_gitlab(cmu: dict) -> str | None:
+    if os.getenv("GITLAB_TOKEN"):
+        return "token"
+    return None
+
+
+def _detect_jira(cmu: dict) -> str | None:
+    if os.getenv("JIRA_URL", "").strip() and os.getenv("JIRA_API_TOKEN", "").strip():
+        return "mcp"
+    return None
+
+
+def _detect_google(cmu: dict) -> str | None:
+    if "google" in cmu:
+        return "mcp"
+    email = os.getenv("USER_GOOGLE_EMAIL", "").strip()
+    if email and email != _PLACEHOLDER_EMAIL:
+        return "mcp"
+    return None
+
+
+_INTEGRATION_REGISTRY: list[_Integration] = [
+    _Integration(
+        label="GitHub",
+        detect=_detect_github,
+        prompts={"mcp": GITHUB_MCP_PROMPT, "token": GITHUB_TOKEN_PROMPT, "missing": GITHUB_MISSING_PROMPT},
+    ),
+    _Integration(
+        label="GitLab",
+        detect=_detect_gitlab,
+        prompts={"token": GITLAB_TOKEN_PROMPT, "missing": GITLAB_MISSING_PROMPT},
+    ),
+    _Integration(
+        label="Jira",
+        detect=_detect_jira,
+        prompts={"mcp": JIRA_MCP_PROMPT, "missing": JIRA_MISSING_PROMPT},
+    ),
+    _Integration(
+        label="Google Workspace",
+        detect=_detect_google,
+        prompts={"mcp": GOOGLE_MCP_PROMPT, "missing": GOOGLE_MISSING_PROMPT},
+    ),
+]
+
+
+def _build_integrations_prompt() -> str:
+    """Build the integrations status section for the system prompt.
+
+    Iterates _INTEGRATION_REGISTRY and emits the appropriate prompt for each
+    integration based on current credential state (env vars + CREDENTIAL_MCP_URLS).
+    When an integration is configured, Claude is told to use its MCP server/tools.
+    When not configured, Claude is told to ask the user to set it up.
+    """
+    credential_mcp_urls_raw = os.getenv("CREDENTIAL_MCP_URLS", "").strip()
+    cmu: dict = {}
+    if credential_mcp_urls_raw:
+        try:
+            parsed = json.loads(credential_mcp_urls_raw)
+            if isinstance(parsed, dict):
+                cmu = parsed
+        except (ValueError, TypeError):
+            pass
+
+    return "".join(
+        integration.prompts.get(
+            integration.detect(cmu) or "missing",
+            integration.prompts.get("missing", ""),
+        )
+        for integration in _INTEGRATION_REGISTRY
+    )
+
+
+# Keep the old name as an alias for any call sites that haven't migrated.
+_build_mcp_integrations_prompt = _build_integrations_prompt
 
 GIT_PUSH_INSTRUCTIONS_HEADER = "## Git Push Instructions\n\n"
 
@@ -256,21 +406,8 @@ def build_workspace_context_prompt(
     # Human-in-the-loop instructions
     prompt += HUMAN_INPUT_INSTRUCTIONS
 
-    # MCP integration setup instructions
-    prompt += MCP_INTEGRATIONS_PROMPT
-
-    # Token visibility — tell Claude what credentials are available
-    if credential_mcp_urls:
-        try:
-            urls = json.loads(credential_mcp_urls)
-            if "github" in urls:
-                prompt += GITHUB_MCP_PROMPT
-        except (ValueError, TypeError):
-            pass
-    elif os.getenv("GITHUB_TOKEN"):
-        prompt += GITHUB_TOKEN_PROMPT
-    if not credential_mcp_urls and os.getenv("GITLAB_TOKEN"):
-        prompt += GITLAB_TOKEN_PROMPT
+    # Integration status — conditional on actual credential state for all providers
+    prompt += _build_integrations_prompt()
 
     # Workflow instructions
     if ambient_config.get("systemPrompt"):

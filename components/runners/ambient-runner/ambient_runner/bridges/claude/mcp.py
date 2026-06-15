@@ -140,6 +140,22 @@ def build_mcp_servers(
             "Added credential MCP servers: %s", list(credential_mcp_servers.keys())
         )
 
+    # Fallback: add Jira MCP server from env vars when credentials are available but
+    # no credential binding exists
+    jira_server_name = _CREDENTIAL_MCP_REGISTRY["jira"]["server_name"]
+    if (
+        jira_server_name not in mcp_servers
+        and os.getenv("JIRA_URL", "").strip()
+        and os.getenv("JIRA_API_TOKEN", "").strip()
+    ):
+        jira_entry = _CREDENTIAL_MCP_REGISTRY["jira"]
+        mcp_servers[jira_server_name] = {
+            "command": jira_entry["command"],
+            "args": list(jira_entry["args"]),
+            "env": {k: _expand_env_vars(v) for k, v in jira_entry["env"].items()},
+        }
+        logger.info("Added Jira MCP server (credentials available via session endpoint)")
+
     # Gerrit MCP server (only if credentials are configured)
     gerrit_config = os.environ.get("GERRIT_CONFIG_PATH", "")
     if gerrit_config and Path(gerrit_config).exists():

@@ -117,13 +117,11 @@ def _build_system_prompt(cwd_path: str) -> str:
     """Build the full system.md content string."""
     from ambient_runner.platform.config import get_repos_config, load_ambient_config
     from ambient_runner.platform.prompts import (
-        GITHUB_TOKEN_PROMPT,
-        GITLAB_TOKEN_PROMPT,
         GIT_PUSH_INSTRUCTIONS_BODY,
         GIT_PUSH_INSTRUCTIONS_HEADER,
         GIT_PUSH_STEPS,
-        MCP_INTEGRATIONS_PROMPT,
         WORKSPACE_FIXED_PATHS_PROMPT,
+        _build_integrations_prompt,
     )
     from ambient_runner.platform.utils import derive_workflow_name
 
@@ -200,14 +198,8 @@ def _build_system_prompt(cwd_path: str) -> str:
         except Exception as exc:
             logger.warning("Could not list uploaded files in %s: %s", uploads, exc)
 
-    # ---- MCP integration hints ----
-    sections.append(MCP_INTEGRATIONS_PROMPT)
-
-    # ---- Token visibility ----
-    if os.getenv("GITHUB_TOKEN"):
-        sections.append(GITHUB_TOKEN_PROMPT)
-    if os.getenv("GITLAB_TOKEN"):
-        sections.append(GITLAB_TOKEN_PROMPT)
+    # ---- Integration status — conditional on actual credential state ----
+    sections.append(_build_integrations_prompt())
 
     # ---- Workflow custom instructions ----
     ambient_config: dict = {}
