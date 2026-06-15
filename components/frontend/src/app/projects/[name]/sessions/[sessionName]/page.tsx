@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { use, useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   Loader2,
   PanelRight,
@@ -117,9 +117,15 @@ export default function ProjectSessionDetailPage({
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [projectName, setProjectName] = useState<string>("");
-  const [sessionName, setSessionName] = useState<string>("");
-  const [backHref, setBackHref] = useState<string | null>(null);
+  const { name: projectName, sessionName } = use(params);
+  const backHref = useMemo(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return new URL(window.location.href).searchParams.get("backHref");
+      } catch {}
+    }
+    return null;
+  }, []);
   const [contextModalOpen, setContextModalOpen] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [repoChanging, setRepoChanging] = useState(false);
@@ -147,18 +153,6 @@ export default function ProjectSessionDetailPage({
   const [remoteDialogOpen, setRemoteDialogOpen] = useState(false);
   const [customWorkflowDialogOpen, setCustomWorkflowDialogOpen] =
     useState(false);
-
-  // Extract params
-  useEffect(() => {
-    params.then(({ name, sessionName: sName }) => {
-      setProjectName(name);
-      setSessionName(sName);
-      try {
-        const url = new URL(window.location.href);
-        setBackHref(url.searchParams.get("backHref"));
-      } catch {}
-    });
-  }, [params]);
 
   // Session queue hook (localStorage-backed)
   const sessionQueue = useSessionQueue(projectName, sessionName);
@@ -208,8 +202,8 @@ export default function ProjectSessionDetailPage({
   // Note: autoConnect is intentionally false to avoid SSR hydration mismatch
   // Connection is triggered manually in useEffect after client hydration
   const aguiStream = useAGUIStream({
-    projectName: projectName || "",
-    sessionName: sessionName || "",
+    projectName,
+    sessionName,
     autoConnect: false, // Manual connection after hydration
     onError: (err) => {
       console.error("AG-UI stream error:", err)
