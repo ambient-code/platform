@@ -10,7 +10,9 @@ bridge layer.
 import json
 import logging
 import os
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -114,9 +116,6 @@ MCP_INTEGRATIONS_PROMPT = JIRA_MISSING_PROMPT + GOOGLE_MISSING_PROMPT
 # Integration registry
 # ---------------------------------------------------------------------------
 
-from dataclasses import dataclass
-from typing import Callable
-
 
 @dataclass(frozen=True)
 class _Integration:
@@ -167,7 +166,11 @@ _INTEGRATION_REGISTRY: list[_Integration] = [
     _Integration(
         label="GitHub",
         detect=_detect_github,
-        prompts={"mcp": GITHUB_MCP_PROMPT, "token": GITHUB_TOKEN_PROMPT, "missing": GITHUB_MISSING_PROMPT},
+        prompts={
+            "mcp": GITHUB_MCP_PROMPT,
+            "token": GITHUB_TOKEN_PROMPT,
+            "missing": GITHUB_MISSING_PROMPT,
+        },
     ),
     _Integration(
         label="GitLab",

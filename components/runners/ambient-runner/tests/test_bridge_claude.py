@@ -465,9 +465,12 @@ class TestBuildIntegrationsPrompt:
     """Verify _build_integrations_prompt is conditional on credential state for all integrations."""
 
     _CLEAN_VARS = (
-        "JIRA_URL", "JIRA_API_TOKEN",
-        "USER_GOOGLE_EMAIL", "CREDENTIAL_MCP_URLS",
-        "GITHUB_TOKEN", "GITLAB_TOKEN",
+        "JIRA_URL",
+        "JIRA_API_TOKEN",
+        "USER_GOOGLE_EMAIL",
+        "CREDENTIAL_MCP_URLS",
+        "GITHUB_TOKEN",
+        "GITLAB_TOKEN",
     )
 
     def _clean_env(self, monkeypatch):
@@ -476,6 +479,7 @@ class TestBuildIntegrationsPrompt:
 
     def _prompt(self):
         from ambient_runner.platform.prompts import _build_integrations_prompt
+
         return _build_integrations_prompt()
 
     # ------------------------------------------------------------------
@@ -497,10 +501,14 @@ class TestBuildIntegrationsPrompt:
     # ------------------------------------------------------------------
 
     @pytest.mark.parametrize("use_sidecar", [True, False])
-    def test_github_configured_tells_claude_to_use_mcp_or_token(self, monkeypatch, use_sidecar):
+    def test_github_configured_tells_claude_to_use_mcp_or_token(
+        self, monkeypatch, use_sidecar
+    ):
         self._clean_env(monkeypatch)
         if use_sidecar:
-            monkeypatch.setenv("CREDENTIAL_MCP_URLS", '{"github": "http://sidecar:8080"}')
+            monkeypatch.setenv(
+                "CREDENTIAL_MCP_URLS", '{"github": "http://sidecar:8080"}'
+            )
         else:
             monkeypatch.setenv("GITHUB_TOKEN", "ghp_token123")
 
@@ -590,10 +598,10 @@ class TestBuildIntegrationsPrompt:
         monkeypatch.setenv("USER_GOOGLE_EMAIL", "alice@example.com")
         result = self._prompt()
         # Each integration shows its available prompt
-        assert "GITHUB_TOKEN" in result          # GitHub token mode
-        assert "GITLAB_TOKEN" in result           # GitLab token mode
-        assert "mcp-atlassian" in result          # Jira MCP
-        assert "google-workspace" in result       # Google MCP
+        assert "GITHUB_TOKEN" in result  # GitHub token mode
+        assert "GITLAB_TOKEN" in result  # GitLab token mode
+        assert "mcp-atlassian" in result  # Jira MCP
+        assert "google-workspace" in result  # Google MCP
         # No missing prompts
         assert "GitHub is not connected" not in result
         assert "GitLab is not connected" not in result
