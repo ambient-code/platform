@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -80,6 +81,9 @@ type messagePollTickMsg struct{ t time.Time }
 
 // infoExpiredMsg signals the ephemeral info line should be cleared.
 type infoExpiredMsg struct{}
+
+// sseReconnectMsg fires after a delay to reconnect the SSE stream.
+type sseReconnectMsg struct{}
 
 // editCompleteMsg is sent when the user's $EDITOR exits after editing a
 // resource as JSON. The handler reads the temp file, diffs against the
@@ -182,6 +186,13 @@ type AppModel struct {
 
 	// Message polling state.
 	messagePollActive bool // true when message poll tick is running
+
+	// SSE stream state for live AG-UI event streaming.
+	sseEventChan  <-chan tea.Msg     // channel of SSEEventMsg from background goroutine
+	sseCancel     context.CancelFunc // cancels the SSE stream context
+	sseActive     bool               // true while SSE stream is connected
+	sseSeqCounter int                // synthetic sequence counter for SSE events
+	sseTextBuf    strings.Builder    // accumulates TEXT_MESSAGE_CONTENT deltas for conversation pane mirroring
 
 	// Errors
 	lastError   string
@@ -367,6 +378,37 @@ func (m *AppModel) messagePollTickCmd() tea.Cmd {
 	})
 }
 
+// startSSEStream opens an SSE connection for live AG-UI events and returns
+// a tea.Cmd that begins pumping events into the Bubbletea runtime.
+func (m *AppModel) startSSEStream(projectID, sessionID string) tea.Cmd {
+	m.stopSSEStream()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ch, err := m.client.OpenSSEStream(ctx, projectID, sessionID)
+	if err != nil {
+		cancel()
+		return m.setInfo("SSE stream failed: " + err.Error())
+	}
+
+	m.sseEventChan = ch
+	m.sseCancel = cancel
+	m.sseActive = true
+	m.sseSeqCounter = 0
+	m.sseTextBuf.Reset()
+
+	return waitForSSEEvent(ch)
+}
+
+// stopSSEStream cancels the SSE stream context and resets state.
+func (m *AppModel) stopSSEStream() {
+	if m.sseCancel != nil {
+		m.sseCancel()
+		m.sseCancel = nil
+	}
+	m.sseActive = false
+	m.sseEventChan = nil
+}
+
 // infoExpireCmd returns a tea.Cmd that clears the info line after infoTimeout.
 func (m *AppModel) infoExpireCmd() tea.Cmd {
 	return tea.Tick(infoTimeout, func(_ time.Time) tea.Msg {
@@ -425,10 +467,10 @@ func (m *AppModel) popView() tea.Cmd {
 	if len(m.navStack) <= 1 {
 		return nil
 	}
-	// If we're leaving the messages view, stop polling.
 	poppedKind := m.navStack[len(m.navStack)-1].Kind
 	if poppedKind == "messages" {
 		m.messagePollActive = false
+		m.stopSSEStream()
 	}
 
 	m.navStack = m.navStack[:len(m.navStack)-1]
@@ -492,7 +534,6 @@ func (m *AppModel) fetchActiveView() tea.Cmd {
 		}
 		return nil
 	case "messages":
-		// Message stream uses SSE, not polling. No fetch command needed yet.
 		return nil
 	default:
 		return nil
@@ -869,17 +910,100 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Inbox message deleted"))
 
-	case SessionMessagesMsg:
-		// Polling: batch of messages from REST ListMessages.
+	case SSEEventMsg:
+		if m.activeView != "messages" || !m.sseActive {
+			return m, nil
+		}
+		m.sseSeqCounter++
+		now := time.Now()
+		if msg.EventType == "MESSAGES_SNAPSHOT" {
+			extracted := views.ExtractAssistantFromSnapshot(msg.Payload, 10000+m.sseSeqCounter, now)
+			for _, e := range extracted {
+				m.messageStream.AddSSEMessage(e)
+			}
+			return m, waitForSSEEvent(m.sseEventChan)
+		}
+		if msg.EventType == "TEXT_MESSAGE_CONTENT" {
+			delta := extractSSETextDelta(msg.Payload)
+			if delta != "" {
+				m.sseTextBuf.WriteString(delta)
+			}
+		}
+		if msg.EventType == "TEXT_MESSAGE_END" {
+			if m.sseTextBuf.Len() > 0 {
+				text := strings.TrimSpace(m.sseTextBuf.String())
+				m.sseTextBuf.Reset()
+				if text != "" {
+					m.messageStream.AddSSEMessage(views.MessageEntry{
+						Seq:       10000 + m.sseSeqCounter,
+						EventType: "assistant",
+						Payload:   text,
+						Timestamp: now,
+					})
+				}
+			}
+		}
+		if msg.EventType == "TEXT_MESSAGE_START" {
+			m.sseTextBuf.Reset()
+		}
+		entry := views.MessageEntry{
+			Seq:       10000 + m.sseSeqCounter,
+			EventType: msg.EventType,
+			Payload:   msg.Payload,
+			Timestamp: now,
+		}
+		if views.IsActivityEvent(msg.EventType) {
+			m.messageStream.AddActivityEvent(entry)
+		} else if views.IsConversationEvent(msg.EventType) {
+			m.messageStream.AddSSEMessage(entry)
+		}
+		return m, waitForSSEEvent(m.sseEventChan)
+
+	case SSEStreamDoneMsg:
+		m.sseActive = false
+		if m.activeView != "messages" || m.currentSession == "" {
+			return m, nil
+		}
+		projectID := m.currentProject
+		if projectID == "" {
+			if s := m.findSessionByShortID(m.currentSession); s != nil {
+				projectID = s.ProjectID
+			}
+		}
+		if projectID == "" {
+			return m, m.setInfo("SSE stream ended")
+		}
+		reconnectCmd := tea.Tick(3*time.Second, func(_ time.Time) tea.Msg {
+			return sseReconnectMsg{}
+		})
 		if msg.Err != nil {
-			// Non-fatal — polling will retry on next tick, but inform user.
+			return m, tea.Batch(reconnectCmd, m.setInfo("SSE reconnecting…"))
+		}
+		return m, reconnectCmd
+
+	case sseReconnectMsg:
+		if m.activeView != "messages" || m.currentSession == "" {
+			return m, nil
+		}
+		projectID := m.currentProject
+		if projectID == "" {
+			if s := m.findSessionByShortID(m.currentSession); s != nil {
+				projectID = s.ProjectID
+			}
+		}
+		if projectID != "" {
+			return m, m.startSSEStream(projectID, m.currentSession)
+		}
+		return m, nil
+
+	case SessionMessagesMsg:
+		if msg.Err != nil {
 			return m, m.setInfo("Message poll error: " + msg.Err.Error())
 		}
 		if m.activeView != "messages" {
 			return m, nil
 		}
 		for _, sm := range msg.Messages {
-			// Simple seq-based dedup.
 			if sm.Seq <= m.messageStream.LastSeq() {
 				continue
 			}
@@ -887,12 +1011,24 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if sm.CreatedAt != nil {
 				ts = *sm.CreatedAt
 			}
-			m.messageStream.AddMessage(views.MessageEntry{
+			if sm.EventType == "MESSAGES_SNAPSHOT" {
+				extracted := views.ExtractAssistantFromSnapshot(sm.Payload, sm.Seq, ts)
+				for _, e := range extracted {
+					m.messageStream.AddMessage(e)
+				}
+				continue
+			}
+			entry := views.MessageEntry{
 				Seq:       sm.Seq,
 				EventType: sm.EventType,
 				Payload:   sm.Payload,
 				Timestamp: ts,
-			})
+			}
+			if views.IsActivityEvent(sm.EventType) {
+				m.messageStream.AddActivityEvent(entry)
+			} else {
+				m.messageStream.AddMessage(entry)
+			}
 		}
 		m.lastFetch = time.Now()
 		return m, nil
@@ -1692,10 +1828,10 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 			}
 
 			if projectID != "" {
-				// Fetch initial messages and start 1-second polling.
 				cmds = append(cmds, m.client.FetchSessionMessages(projectID, fullSessionID, 0))
 				m.messagePollActive = true
 				cmds = append(cmds, m.messagePollTickCmd())
+				cmds = append(cmds, m.startSSEStream(projectID, fullSessionID))
 			}
 
 			return m, tea.Batch(cmds...)
@@ -1963,6 +2099,7 @@ func (m *AppModel) handleAgentsRune(key string) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.client.FetchSessionMessages(m.currentProject, sessionID, 0))
 			m.messagePollActive = true
 			cmds = append(cmds, m.messagePollTickCmd())
+			cmds = append(cmds, m.startSSEStream(m.currentProject, sessionID))
 		}
 
 		return m, tea.Batch(cmds...)
@@ -3206,6 +3343,17 @@ func (m *AppModel) handleEditComplete(msg editCompleteMsg) (tea.Model, tea.Cmd) 
 	default:
 		return m, m.setInfo("Unknown resource kind: " + msg.ResourceKind)
 	}
+}
+
+func extractSSETextDelta(payload string) string {
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(payload), &obj); err != nil {
+		return ""
+	}
+	if d, ok := obj["delta"].(string); ok {
+		return d
+	}
+	return ""
 }
 
 // stripJSONComments removes lines starting with // from the input.

@@ -25,6 +25,8 @@ func NewServiceLocator(env *environments.Env) ServiceLocator {
 			db.NewAdvisoryLockFactory(env.Database.SessionFactory),
 			NewCredentialDao(&env.Database.SessionFactory),
 			events.Service(&env.Services),
+			LoadKeyring(),
+			&env.Database.SessionFactory,
 		)
 	}
 }
@@ -96,4 +98,7 @@ func init() {
 	db.RegisterMigration(addProjectIDMigration())
 	db.RegisterMigration(removeCredentialReaderRoleMigration())
 	db.RegisterMigration(dropProjectIDMigration())
+	db.RegisterMigration(credentialOwnerRoleMigration())
+	db.RegisterMigration(credentialTokenPermMigration())
+	db.RegisterMigration(credentialOwnerRoleBindingPermMigration())
 }

@@ -5,7 +5,6 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **Name** | Pointer to **string** |  | [optional] 
-**DisplayName** | Pointer to **string** |  | [optional] 
 **Description** | Pointer to **string** |  | [optional] 
 **Labels** | Pointer to **string** |  | [optional] 
 **Annotations** | Pointer to **string** |  | [optional] 
@@ -55,31 +54,6 @@ SetName sets Name field to given value.
 `func (o *ProjectPatchRequest) HasName() bool`
 
 HasName returns a boolean if a field has been set.
-
-### GetDisplayName
-
-`func (o *ProjectPatchRequest) GetDisplayName() string`
-
-GetDisplayName returns the DisplayName field if non-nil, zero value otherwise.
-
-### GetDisplayNameOk
-
-`func (o *ProjectPatchRequest) GetDisplayNameOk() (*string, bool)`
-
-GetDisplayNameOk returns a tuple with the DisplayName field if it's non-nil, zero value otherwise
-and a boolean to check if the value has been set.
-
-### SetDisplayName
-
-`func (o *ProjectPatchRequest) SetDisplayName(v string)`
-
-SetDisplayName sets DisplayName field to given value.
-
-### HasDisplayName
-
-`func (o *ProjectPatchRequest) HasDisplayName() bool`
-
-HasDisplayName returns a boolean if a field has been set.
 
 ### GetDescription
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/db"
+	"gorm.io/gorm/clause"
 )
 
 type MessageDao interface {
@@ -28,12 +29,9 @@ func (d *sqlMessageDao) Insert(ctx context.Context, msg *SessionMessage) error {
 	g2 := (*d.sessionFactory).New(ctx)
 	msg.ID = api.NewID()
 	msg.CreatedAt = time.Now().UTC()
-	row := g2.Raw(
-		"INSERT INTO session_messages (id, session_id, event_type, payload, created_at) VALUES (?, ?, ?, ?, ?) RETURNING seq",
-		msg.ID, msg.SessionID, msg.EventType, msg.Payload, msg.CreatedAt,
-	).Row()
-	if err := row.Scan(&msg.Seq); err != nil {
-		return fmt.Errorf("insert session message: %w", err)
+	result := g2.Clauses(clause.Returning{Columns: []clause.Column{{Name: "seq"}}}).Create(msg)
+	if result.Error != nil {
+		return fmt.Errorf("insert session message: %w", result.Error)
 	}
 	return nil
 }

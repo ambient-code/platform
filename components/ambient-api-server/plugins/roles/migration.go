@@ -89,6 +89,12 @@ func seedBuiltInRoles(tx *gorm.DB) error {
 			description: "Runtime identity for agent pods — check in, send messages, update blackboard",
 			permissions: []string{"session:read", "session_message:*", "blackboard:read", "blackboard:watch"},
 		},
+		{
+			name:        "credential:viewer",
+			displayName: "Credential Viewer",
+			description: "View and use credentials bound to a project or agent",
+			permissions: []string{"credential:read", "credential:list"},
+		},
 	}
 
 	for _, r := range builtInRoles {
@@ -104,4 +110,34 @@ func seedBuiltInRoles(tx *gorm.DB) error {
 		}
 	}
 	return nil
+}
+
+func editorCredentialUnbindMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202606091900",
+		Migrate: func(tx *gorm.DB) error {
+			var perms string
+			if err := tx.Raw(`SELECT permissions FROM roles WHERE name = 'project:editor' AND deleted_at IS NULL`).Scan(&perms).Error; err != nil {
+				return err
+			}
+			var permList []string
+			if err := json.Unmarshal([]byte(perms), &permList); err != nil {
+				return err
+			}
+			for _, p := range permList {
+				if p == "role_binding:delete" {
+					return nil
+				}
+			}
+			permList = append(permList, "role_binding:delete")
+			updated, err := json.Marshal(permList)
+			if err != nil {
+				return err
+			}
+			return tx.Exec(`UPDATE roles SET permissions = ?, updated_at = NOW() WHERE name = 'project:editor' AND deleted_at IS NULL`, string(updated)).Error
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return nil
+		},
+	}
 }

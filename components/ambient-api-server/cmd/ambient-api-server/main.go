@@ -4,6 +4,7 @@ import (
 	"github.com/golang/glog"
 
 	localapi "github.com/ambient-code/platform/components/ambient-api-server/pkg/api"
+	localcmd "github.com/ambient-code/platform/components/ambient-api-server/pkg/cmd"
 	pkgcmd "github.com/openshift-online/rh-trex-ai/pkg/cmd"
 
 	_ "github.com/ambient-code/platform/components/ambient-api-server/cmd/ambient-api-server/environments"
@@ -15,6 +16,7 @@ import (
 
 	// Backend-compatible plugins only
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/agents"
+	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/applications"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/credentials"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/inbox"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/projectSettings"
@@ -34,6 +36,8 @@ func main() {
 	rootCmd.AddCommand(
 		pkgcmd.NewMigrateCommand("ambient-api-server"),
 		pkgcmd.NewServeCommand(localapi.GetOpenAPISpec),
+		localcmd.NewEncryptCredentialsCommand(),
+		localcmd.NewSeedAdminCommand(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {

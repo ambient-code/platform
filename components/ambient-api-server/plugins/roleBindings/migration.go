@@ -32,17 +32,21 @@ func migration() *gormigrate.Migration {
 
 func typedFKMigration() *gormigrate.Migration {
 	return &gormigrate.Migration{
-		ID: "202505130001",
+		ID: "202603100139",
 		Migrate: func(tx *gorm.DB) error {
-			// Drop the old unique index that depends on scope_id before altering columns
+			var exists bool
+			if err := tx.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'role_bindings')`).Scan(&exists).Error; err != nil {
+				return err
+			}
+			if !exists {
+				return nil
+			}
 			if err := tx.Exec(`DROP INDEX IF EXISTS idx_binding_lookup`).Error; err != nil {
 				return err
 			}
-			// Make user_id nullable
 			if err := tx.Exec(`ALTER TABLE role_bindings ALTER COLUMN user_id DROP NOT NULL`).Error; err != nil {
 				return err
 			}
-			// Drop scope_id column (replaced by typed FKs)
 			if err := tx.Exec(`ALTER TABLE role_bindings DROP COLUMN IF EXISTS scope_id`).Error; err != nil {
 				return err
 			}
@@ -85,6 +89,27 @@ func typedFKMigration() *gormigrate.Migration {
 			_ = tx.Exec(`ALTER TABLE role_bindings DROP COLUMN IF EXISTS project_id`).Error
 			_ = tx.Exec(`ALTER TABLE role_bindings ALTER COLUMN user_id SET NOT NULL`).Error
 			return tx.Exec(`ALTER TABLE role_bindings ADD COLUMN IF NOT EXISTS scope_id TEXT`).Error
+		},
+	}
+}
+
+func uniqueBindingMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202606050010",
+		Migrate: func(tx *gorm.DB) error {
+			return tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_role_bindings_unique
+				ON role_bindings (
+					role_id,
+					COALESCE(user_id, ''),
+					COALESCE(project_id, ''),
+					COALESCE(agent_id, ''),
+					COALESCE(session_id, ''),
+					COALESCE(credential_id, '')
+				)
+				WHERE deleted_at IS NULL`).Error
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return tx.Exec(`DROP INDEX IF EXISTS idx_role_bindings_unique`).Error
 		},
 	}
 }

@@ -310,6 +310,23 @@ func (kc *KubeClient) CreateNetworkPolicy(ctx context.Context, obj *unstructured
 	return kc.dynamic.Resource(NetworkPolicyGVR).Namespace(obj.GetNamespace()).Create(ctx, obj, metav1.CreateOptions{})
 }
 
+func (kc *KubeClient) UpdateNetworkPolicy(ctx context.Context, obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	return kc.dynamic.Resource(NetworkPolicyGVR).Namespace(obj.GetNamespace()).Update(ctx, obj, metav1.UpdateOptions{})
+}
+
+func (kc *KubeClient) ListTenantNamespaces(ctx context.Context, namespace, labelSelector string) (*unstructured.UnstructuredList, error) {
+	gvr := schema.GroupVersionResource{
+		Group:    "tenant.paas.redhat.com",
+		Version:  "v1alpha1",
+		Resource: "tenantnamespaces",
+	}
+	opts := metav1.ListOptions{}
+	if labelSelector != "" {
+		opts.LabelSelector = labelSelector
+	}
+	return kc.dynamic.Resource(gvr).Namespace(namespace).List(ctx, opts)
+}
+
 func (kc *KubeClient) GetResource(ctx context.Context, gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {
 	return kc.dynamic.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 }

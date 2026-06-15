@@ -20,4 +20,3 @@ export async function getTaskOutput(
     `/projects/${project}/agentic-sessions/${session}/agui/tasks/${taskId}/output`,
   )
 }
-

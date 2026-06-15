@@ -6,6 +6,7 @@ import (
 
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/agent"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/ambient"
+	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/application"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/apply"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/completion"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/config"
@@ -29,7 +30,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var insecureSkipTLSVerify bool
+var (
+	insecureSkipTLSVerify bool
+	apiURLOverride        string
+)
 
 var root = &cobra.Command{
 	Use:           "acpctl",
@@ -42,12 +46,16 @@ var root = &cobra.Command{
 		if insecureSkipTLSVerify {
 			connection.SetInsecureSkipTLSVerify(true)
 		}
+		if apiURLOverride != "" {
+			os.Setenv("AMBIENT_API_URL", apiURLOverride)
+		}
 		return nil
 	},
 }
 
 func init() {
 	root.PersistentFlags().BoolVar(&insecureSkipTLSVerify, "insecure-skip-tls-verify", false, "Skip TLS certificate verification (insecure)")
+	root.PersistentFlags().StringVar(&apiURLOverride, "api-url", "", "Override the API server URL for this invocation")
 	root.AddCommand(login.Cmd)
 	root.AddCommand(logout.Cmd)
 	root.AddCommand(version.Cmd)
@@ -67,6 +75,7 @@ func init() {
 	root.AddCommand(stop.Cmd)
 	root.AddCommand(completion.Cmd)
 	root.AddCommand(ambient.Cmd)
+	root.AddCommand(application.Cmd)
 	root.AddCommand(apply.Cmd)
 }
 

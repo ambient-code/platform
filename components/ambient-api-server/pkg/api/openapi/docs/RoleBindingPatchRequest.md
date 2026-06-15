@@ -4,10 +4,13 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**UserId** | Pointer to **string** |  | [optional] 
 **RoleId** | Pointer to **string** |  | [optional] 
 **Scope** | Pointer to **string** |  | [optional] 
-**ScopeId** | Pointer to **string** |  | [optional] 
+**UserId** | Pointer to **NullableString** |  | [optional] 
+**ProjectId** | Pointer to **NullableString** |  | [optional] 
+**AgentId** | Pointer to **NullableString** |  | [optional] 
+**SessionId** | Pointer to **NullableString** |  | [optional] 
+**CredentialId** | Pointer to **NullableString** |  | [optional] 
 
 ## Methods
 
@@ -27,31 +30,6 @@ will change when the set of required properties is changed
 NewRoleBindingPatchRequestWithDefaults instantiates a new RoleBindingPatchRequest object
 This constructor will only assign default values to properties that have it defined,
 but it doesn't guarantee that properties required by API are set
-
-### GetUserId
-
-`func (o *RoleBindingPatchRequest) GetUserId() string`
-
-GetUserId returns the UserId field if non-nil, zero value otherwise.
-
-### GetUserIdOk
-
-`func (o *RoleBindingPatchRequest) GetUserIdOk() (*string, bool)`
-
-GetUserIdOk returns a tuple with the UserId field if it's non-nil, zero value otherwise
-and a boolean to check if the value has been set.
-
-### SetUserId
-
-`func (o *RoleBindingPatchRequest) SetUserId(v string)`
-
-SetUserId sets UserId field to given value.
-
-### HasUserId
-
-`func (o *RoleBindingPatchRequest) HasUserId() bool`
-
-HasUserId returns a boolean if a field has been set.
 
 ### GetRoleId
 
@@ -103,31 +81,181 @@ SetScope sets Scope field to given value.
 
 HasScope returns a boolean if a field has been set.
 
-### GetScopeId
+### GetUserId
 
-`func (o *RoleBindingPatchRequest) GetScopeId() string`
+`func (o *RoleBindingPatchRequest) GetUserId() string`
 
-GetScopeId returns the ScopeId field if non-nil, zero value otherwise.
+GetUserId returns the UserId field if non-nil, zero value otherwise.
 
-### GetScopeIdOk
+### GetUserIdOk
 
-`func (o *RoleBindingPatchRequest) GetScopeIdOk() (*string, bool)`
+`func (o *RoleBindingPatchRequest) GetUserIdOk() (*string, bool)`
 
-GetScopeIdOk returns a tuple with the ScopeId field if it's non-nil, zero value otherwise
+GetUserIdOk returns a tuple with the UserId field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
-### SetScopeId
+### SetUserId
 
-`func (o *RoleBindingPatchRequest) SetScopeId(v string)`
+`func (o *RoleBindingPatchRequest) SetUserId(v string)`
 
-SetScopeId sets ScopeId field to given value.
+SetUserId sets UserId field to given value.
 
-### HasScopeId
+### HasUserId
 
-`func (o *RoleBindingPatchRequest) HasScopeId() bool`
+`func (o *RoleBindingPatchRequest) HasUserId() bool`
 
-HasScopeId returns a boolean if a field has been set.
+HasUserId returns a boolean if a field has been set.
 
+### SetUserIdNil
+
+`func (o *RoleBindingPatchRequest) SetUserIdNil(b bool)`
+
+ SetUserIdNil sets the value for UserId to be an explicit nil
+
+### UnsetUserId
+`func (o *RoleBindingPatchRequest) UnsetUserId()`
+
+UnsetUserId ensures that no value is present for UserId, not even an explicit nil
+### GetProjectId
+
+`func (o *RoleBindingPatchRequest) GetProjectId() string`
+
+GetProjectId returns the ProjectId field if non-nil, zero value otherwise.
+
+### GetProjectIdOk
+
+`func (o *RoleBindingPatchRequest) GetProjectIdOk() (*string, bool)`
+
+GetProjectIdOk returns a tuple with the ProjectId field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetProjectId
+
+`func (o *RoleBindingPatchRequest) SetProjectId(v string)`
+
+SetProjectId sets ProjectId field to given value.
+
+### HasProjectId
+
+`func (o *RoleBindingPatchRequest) HasProjectId() bool`
+
+HasProjectId returns a boolean if a field has been set.
+
+### SetProjectIdNil
+
+`func (o *RoleBindingPatchRequest) SetProjectIdNil(b bool)`
+
+ SetProjectIdNil sets the value for ProjectId to be an explicit nil
+
+### UnsetProjectId
+`func (o *RoleBindingPatchRequest) UnsetProjectId()`
+
+UnsetProjectId ensures that no value is present for ProjectId, not even an explicit nil
+### GetAgentId
+
+`func (o *RoleBindingPatchRequest) GetAgentId() string`
+
+GetAgentId returns the AgentId field if non-nil, zero value otherwise.
+
+### GetAgentIdOk
+
+`func (o *RoleBindingPatchRequest) GetAgentIdOk() (*string, bool)`
+
+GetAgentIdOk returns a tuple with the AgentId field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetAgentId
+
+`func (o *RoleBindingPatchRequest) SetAgentId(v string)`
+
+SetAgentId sets AgentId field to given value.
+
+### HasAgentId
+
+`func (o *RoleBindingPatchRequest) HasAgentId() bool`
+
+HasAgentId returns a boolean if a field has been set.
+
+### SetAgentIdNil
+
+`func (o *RoleBindingPatchRequest) SetAgentIdNil(b bool)`
+
+ SetAgentIdNil sets the value for AgentId to be an explicit nil
+
+### UnsetAgentId
+`func (o *RoleBindingPatchRequest) UnsetAgentId()`
+
+UnsetAgentId ensures that no value is present for AgentId, not even an explicit nil
+### GetSessionId
+
+`func (o *RoleBindingPatchRequest) GetSessionId() string`
+
+GetSessionId returns the SessionId field if non-nil, zero value otherwise.
+
+### GetSessionIdOk
+
+`func (o *RoleBindingPatchRequest) GetSessionIdOk() (*string, bool)`
+
+GetSessionIdOk returns a tuple with the SessionId field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetSessionId
+
+`func (o *RoleBindingPatchRequest) SetSessionId(v string)`
+
+SetSessionId sets SessionId field to given value.
+
+### HasSessionId
+
+`func (o *RoleBindingPatchRequest) HasSessionId() bool`
+
+HasSessionId returns a boolean if a field has been set.
+
+### SetSessionIdNil
+
+`func (o *RoleBindingPatchRequest) SetSessionIdNil(b bool)`
+
+ SetSessionIdNil sets the value for SessionId to be an explicit nil
+
+### UnsetSessionId
+`func (o *RoleBindingPatchRequest) UnsetSessionId()`
+
+UnsetSessionId ensures that no value is present for SessionId, not even an explicit nil
+### GetCredentialId
+
+`func (o *RoleBindingPatchRequest) GetCredentialId() string`
+
+GetCredentialId returns the CredentialId field if non-nil, zero value otherwise.
+
+### GetCredentialIdOk
+
+`func (o *RoleBindingPatchRequest) GetCredentialIdOk() (*string, bool)`
+
+GetCredentialIdOk returns a tuple with the CredentialId field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetCredentialId
+
+`func (o *RoleBindingPatchRequest) SetCredentialId(v string)`
+
+SetCredentialId sets CredentialId field to given value.
+
+### HasCredentialId
+
+`func (o *RoleBindingPatchRequest) HasCredentialId() bool`
+
+HasCredentialId returns a boolean if a field has been set.
+
+### SetCredentialIdNil
+
+`func (o *RoleBindingPatchRequest) SetCredentialIdNil(b bool)`
+
+ SetCredentialIdNil sets the value for CredentialId to be an explicit nil
+
+### UnsetCredentialId
+`func (o *RoleBindingPatchRequest) UnsetCredentialId()`
+
+UnsetCredentialId ensures that no value is present for CredentialId, not even an explicit nil
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

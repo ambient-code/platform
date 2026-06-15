@@ -27,7 +27,6 @@ Name | Type | Description | Notes
 **Labels** | Pointer to **string** |  | [optional] 
 **Annotations** | Pointer to **string** |  | [optional] 
 **AgentId** | Pointer to **string** | The Agent that owns this session. Immutable after creation. | [optional] 
-**TriggeredByUserId** | Pointer to **string** | User who started the agent | [optional] [readonly] 
 **ProjectId** | Pointer to **string** | Immutable after creation. Set at creation time only. | [optional] 
 **Phase** | Pointer to **string** |  | [optional] [readonly] 
 **StartTime** | Pointer to **time.Time** |  | [optional] [readonly] 
@@ -629,31 +628,6 @@ SetAgentId sets AgentId field to given value.
 `func (o *Session) HasAgentId() bool`
 
 HasAgentId returns a boolean if a field has been set.
-
-### GetTriggeredByUserId
-
-`func (o *Session) GetTriggeredByUserId() string`
-
-GetTriggeredByUserId returns the TriggeredByUserId field if non-nil, zero value otherwise.
-
-### GetTriggeredByUserIdOk
-
-`func (o *Session) GetTriggeredByUserIdOk() (*string, bool)`
-
-GetTriggeredByUserIdOk returns a tuple with the TriggeredByUserId field if it's non-nil, zero value otherwise
-and a boolean to check if the value has been set.
-
-### SetTriggeredByUserId
-
-`func (o *Session) SetTriggeredByUserId(v string)`
-
-SetTriggeredByUserId sets TriggeredByUserId field to given value.
-
-### HasTriggeredByUserId
-
-`func (o *Session) HasTriggeredByUserId() bool`
-
-HasTriggeredByUserId returns a boolean if a field has been set.
 
 ### GetProjectId
 

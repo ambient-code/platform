@@ -4,6 +4,17 @@ All URIs are relative to *http://localhost:8000*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
+[**ApiAmbientV1ApplicationsGet**](DefaultAPI.md#ApiAmbientV1ApplicationsGet) | **Get** /api/ambient/v1/applications | Returns a list of applications
+[**ApiAmbientV1ApplicationsIdDelete**](DefaultAPI.md#ApiAmbientV1ApplicationsIdDelete) | **Delete** /api/ambient/v1/applications/{id} | Delete an application by id
+[**ApiAmbientV1ApplicationsIdGet**](DefaultAPI.md#ApiAmbientV1ApplicationsIdGet) | **Get** /api/ambient/v1/applications/{id} | Get an application by id
+[**ApiAmbientV1ApplicationsIdPatch**](DefaultAPI.md#ApiAmbientV1ApplicationsIdPatch) | **Patch** /api/ambient/v1/applications/{id} | Update an application
+[**ApiAmbientV1ApplicationsPost**](DefaultAPI.md#ApiAmbientV1ApplicationsPost) | **Post** /api/ambient/v1/applications | Create a new application
+[**ApiAmbientV1CredentialsCredIdDelete**](DefaultAPI.md#ApiAmbientV1CredentialsCredIdDelete) | **Delete** /api/ambient/v1/credentials/{cred_id} | Delete a credential
+[**ApiAmbientV1CredentialsCredIdGet**](DefaultAPI.md#ApiAmbientV1CredentialsCredIdGet) | **Get** /api/ambient/v1/credentials/{cred_id} | Get a credential by id
+[**ApiAmbientV1CredentialsCredIdPatch**](DefaultAPI.md#ApiAmbientV1CredentialsCredIdPatch) | **Patch** /api/ambient/v1/credentials/{cred_id} | Update a credential
+[**ApiAmbientV1CredentialsCredIdTokenGet**](DefaultAPI.md#ApiAmbientV1CredentialsCredIdTokenGet) | **Get** /api/ambient/v1/credentials/{cred_id}/token | Get a decrypted token for a credential
+[**ApiAmbientV1CredentialsGet**](DefaultAPI.md#ApiAmbientV1CredentialsGet) | **Get** /api/ambient/v1/credentials | Returns a list of credentials
+[**ApiAmbientV1CredentialsPost**](DefaultAPI.md#ApiAmbientV1CredentialsPost) | **Post** /api/ambient/v1/credentials | Create a new credential
 [**ApiAmbientV1ProjectSettingsGet**](DefaultAPI.md#ApiAmbientV1ProjectSettingsGet) | **Get** /api/ambient/v1/project_settings | Returns a list of project settings
 [**ApiAmbientV1ProjectSettingsIdDelete**](DefaultAPI.md#ApiAmbientV1ProjectSettingsIdDelete) | **Delete** /api/ambient/v1/project_settings/{id} | Delete a project settings by id
 [**ApiAmbientV1ProjectSettingsIdGet**](DefaultAPI.md#ApiAmbientV1ProjectSettingsIdGet) | **Get** /api/ambient/v1/project_settings/{id} | Get a project settings by id
@@ -22,11 +33,11 @@ Method | HTTP request | Description
 [**ApiAmbientV1ProjectsIdAgentsAgentIdStartPost**](DefaultAPI.md#ApiAmbientV1ProjectsIdAgentsAgentIdStartPost) | **Post** /api/ambient/v1/projects/{id}/agents/{agent_id}/start | Start an agent — creates a Session (idempotent)
 [**ApiAmbientV1ProjectsIdAgentsGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdAgentsGet) | **Get** /api/ambient/v1/projects/{id}/agents | Returns a list of agents in a project
 [**ApiAmbientV1ProjectsIdAgentsPost**](DefaultAPI.md#ApiAmbientV1ProjectsIdAgentsPost) | **Post** /api/ambient/v1/projects/{id}/agents | Create an agent in a project
-[**ApiAmbientV1ProjectsIdCredentialsCredIdDelete**](DefaultAPI.md#ApiAmbientV1ProjectsIdCredentialsCredIdDelete) | **Delete** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Delete a credential
-[**ApiAmbientV1ProjectsIdCredentialsCredIdGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdCredentialsCredIdGet) | **Get** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Get a credential by id
-[**ApiAmbientV1ProjectsIdCredentialsCredIdPatch**](DefaultAPI.md#ApiAmbientV1ProjectsIdCredentialsCredIdPatch) | **Patch** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Update a credential
-[**ApiAmbientV1ProjectsIdCredentialsCredIdTokenGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdCredentialsCredIdTokenGet) | **Get** /api/ambient/v1/projects/{id}/credentials/{cred_id}/token | Get a decrypted token for a credential
-[**ApiAmbientV1ProjectsIdCredentialsGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdCredentialsGet) | **Get** /api/ambient/v1/projects/{id}/credentials | Returns a list of credentials in a project
+[**ApiAmbientV1ProjectsIdCredentialsCredIdDelete**](DefaultAPI.md#ApiAmbientV1ProjectsIdCredentialsCredIdDelete) | **Delete** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Delete a project credential
+[**ApiAmbientV1ProjectsIdCredentialsCredIdGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdCredentialsCredIdGet) | **Get** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Get a project credential by id
+[**ApiAmbientV1ProjectsIdCredentialsCredIdPatch**](DefaultAPI.md#ApiAmbientV1ProjectsIdCredentialsCredIdPatch) | **Patch** /api/ambient/v1/projects/{id}/credentials/{cred_id} | Update a project credential
+[**ApiAmbientV1ProjectsIdCredentialsCredIdTokenGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdCredentialsCredIdTokenGet) | **Get** /api/ambient/v1/projects/{id}/credentials/{cred_id}/token | Get a decrypted token for a project credential
+[**ApiAmbientV1ProjectsIdCredentialsGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdCredentialsGet) | **Get** /api/ambient/v1/projects/{id}/credentials | Returns a list of credentials for a project
 [**ApiAmbientV1ProjectsIdCredentialsPost**](DefaultAPI.md#ApiAmbientV1ProjectsIdCredentialsPost) | **Post** /api/ambient/v1/projects/{id}/credentials | Create a new credential in a project
 [**ApiAmbientV1ProjectsIdDelete**](DefaultAPI.md#ApiAmbientV1ProjectsIdDelete) | **Delete** /api/ambient/v1/projects/{id} | Delete a project by id
 [**ApiAmbientV1ProjectsIdGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdGet) | **Get** /api/ambient/v1/projects/{id} | Get a project by id
@@ -67,6 +78,758 @@ Method | HTTP request | Description
 [**ApiAmbientV1UsersIdPatch**](DefaultAPI.md#ApiAmbientV1UsersIdPatch) | **Patch** /api/ambient/v1/users/{id} | Update an user
 [**ApiAmbientV1UsersPost**](DefaultAPI.md#ApiAmbientV1UsersPost) | **Post** /api/ambient/v1/users | Create a new user
 
+
+
+## ApiAmbientV1ApplicationsGet
+
+> ApplicationList ApiAmbientV1ApplicationsGet(ctx).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
+
+Returns a list of applications
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	page := int32(56) // int32 | Page number of record list when record list exceeds specified page size (optional) (default to 1)
+	size := int32(56) // int32 | Maximum number of records to return (optional) (default to 100)
+	search := "search_example" // string | Specifies the search criteria (optional)
+	orderBy := "orderBy_example" // string | Specifies the order by criteria (optional)
+	fields := "fields_example" // string | Supplies a comma-separated list of fields to be returned (optional)
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ApplicationsGet(context.Background()).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ApplicationsGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ApplicationsGet`: ApplicationList
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ApplicationsGet`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ApplicationsGetRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
+ **size** | **int32** | Maximum number of records to return | [default to 100]
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
+
+### Return type
+
+[**ApplicationList**](ApplicationList.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ApplicationsIdDelete
+
+> ApiAmbientV1ApplicationsIdDelete(ctx, id).Execute()
+
+Delete an application by id
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	r, err := apiClient.DefaultAPI.ApiAmbientV1ApplicationsIdDelete(context.Background(), id).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ApplicationsIdDelete``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ApplicationsIdDeleteRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+### Return type
+
+ (empty response body)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ApplicationsIdGet
+
+> Application ApiAmbientV1ApplicationsIdGet(ctx, id).Execute()
+
+Get an application by id
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ApplicationsIdGet(context.Background(), id).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ApplicationsIdGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ApplicationsIdGet`: Application
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ApplicationsIdGet`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ApplicationsIdGetRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+### Return type
+
+[**Application**](Application.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ApplicationsIdPatch
+
+> Application ApiAmbientV1ApplicationsIdPatch(ctx, id).ApplicationPatchRequest(applicationPatchRequest).Execute()
+
+Update an application
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	applicationPatchRequest := *openapiclient.NewApplicationPatchRequest() // ApplicationPatchRequest | Updated application data
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ApplicationsIdPatch(context.Background(), id).ApplicationPatchRequest(applicationPatchRequest).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ApplicationsIdPatch``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ApplicationsIdPatch`: Application
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ApplicationsIdPatch`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ApplicationsIdPatchRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+ **applicationPatchRequest** | [**ApplicationPatchRequest**](ApplicationPatchRequest.md) | Updated application data | 
+
+### Return type
+
+[**Application**](Application.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ApplicationsPost
+
+> Application ApiAmbientV1ApplicationsPost(ctx).Application(application).Execute()
+
+Create a new application
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	application := *openapiclient.NewApplication("Name_example", "SourceRepoUrl_example", "SourcePath_example", "DestinationProject_example") // Application | Application data
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ApplicationsPost(context.Background()).Application(application).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ApplicationsPost``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ApplicationsPost`: Application
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ApplicationsPost`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ApplicationsPostRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **application** | [**Application**](Application.md) | Application data | 
+
+### Return type
+
+[**Application**](Application.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1CredentialsCredIdDelete
+
+> ApiAmbientV1CredentialsCredIdDelete(ctx, credId).Execute()
+
+Delete a credential
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	credId := "credId_example" // string | The id of the credential
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	r, err := apiClient.DefaultAPI.ApiAmbientV1CredentialsCredIdDelete(context.Background(), credId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1CredentialsCredIdDelete``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**credId** | **string** | The id of the credential | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1CredentialsCredIdDeleteRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+### Return type
+
+ (empty response body)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1CredentialsCredIdGet
+
+> Credential ApiAmbientV1CredentialsCredIdGet(ctx, credId).Execute()
+
+Get a credential by id
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	credId := "credId_example" // string | The id of the credential
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1CredentialsCredIdGet(context.Background(), credId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1CredentialsCredIdGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1CredentialsCredIdGet`: Credential
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1CredentialsCredIdGet`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**credId** | **string** | The id of the credential | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1CredentialsCredIdGetRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+### Return type
+
+[**Credential**](Credential.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1CredentialsCredIdPatch
+
+> Credential ApiAmbientV1CredentialsCredIdPatch(ctx, credId).CredentialPatchRequest(credentialPatchRequest).Execute()
+
+Update a credential
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	credId := "credId_example" // string | The id of the credential
+	credentialPatchRequest := *openapiclient.NewCredentialPatchRequest() // CredentialPatchRequest | Updated credential data
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1CredentialsCredIdPatch(context.Background(), credId).CredentialPatchRequest(credentialPatchRequest).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1CredentialsCredIdPatch``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1CredentialsCredIdPatch`: Credential
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1CredentialsCredIdPatch`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**credId** | **string** | The id of the credential | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1CredentialsCredIdPatchRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+ **credentialPatchRequest** | [**CredentialPatchRequest**](CredentialPatchRequest.md) | Updated credential data | 
+
+### Return type
+
+[**Credential**](Credential.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1CredentialsCredIdTokenGet
+
+> CredentialTokenResponse ApiAmbientV1CredentialsCredIdTokenGet(ctx, credId).Execute()
+
+Get a decrypted token for a credential
+
+
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	credId := "credId_example" // string | The id of the credential
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1CredentialsCredIdTokenGet(context.Background(), credId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1CredentialsCredIdTokenGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1CredentialsCredIdTokenGet`: CredentialTokenResponse
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1CredentialsCredIdTokenGet`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**credId** | **string** | The id of the credential | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1CredentialsCredIdTokenGetRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+### Return type
+
+[**CredentialTokenResponse**](CredentialTokenResponse.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1CredentialsGet
+
+> CredentialList ApiAmbientV1CredentialsGet(ctx).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Provider(provider).Execute()
+
+Returns a list of credentials
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	page := int32(56) // int32 | Page number of record list when record list exceeds specified page size (optional) (default to 1)
+	size := int32(56) // int32 | Maximum number of records to return (optional) (default to 100)
+	search := "search_example" // string | Specifies the search criteria (optional)
+	orderBy := "orderBy_example" // string | Specifies the order by criteria (optional)
+	fields := "fields_example" // string | Supplies a comma-separated list of fields to be returned (optional)
+	provider := "provider_example" // string | Filter credentials by provider (optional)
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1CredentialsGet(context.Background()).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Provider(provider).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1CredentialsGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1CredentialsGet`: CredentialList
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1CredentialsGet`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1CredentialsGetRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
+ **size** | **int32** | Maximum number of records to return | [default to 100]
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
+ **provider** | **string** | Filter credentials by provider | 
+
+### Return type
+
+[**CredentialList**](CredentialList.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1CredentialsPost
+
+> Credential ApiAmbientV1CredentialsPost(ctx).Credential(credential).Execute()
+
+Create a new credential
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	credential := *openapiclient.NewCredential("Name_example", "Provider_example") // Credential | Credential data
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1CredentialsPost(context.Background()).Credential(credential).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1CredentialsPost``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1CredentialsPost`: Credential
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1CredentialsPost`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1CredentialsPostRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **credential** | [**Credential**](Credential.md) | Credential data | 
+
+### Return type
+
+[**Credential**](Credential.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
 
 
 ## ApiAmbientV1ProjectSettingsGet
@@ -1363,7 +2126,7 @@ Name | Type | Description  | Notes
 
 > ApiAmbientV1ProjectsIdCredentialsCredIdDelete(ctx, id, credId).Execute()
 
-Delete a credential
+Delete a project credential
 
 ### Example
 
@@ -1432,7 +2195,7 @@ Name | Type | Description  | Notes
 
 > Credential ApiAmbientV1ProjectsIdCredentialsCredIdGet(ctx, id, credId).Execute()
 
-Get a credential by id
+Get a project credential by id
 
 ### Example
 
@@ -1503,7 +2266,7 @@ Name | Type | Description  | Notes
 
 > Credential ApiAmbientV1ProjectsIdCredentialsCredIdPatch(ctx, id, credId).CredentialPatchRequest(credentialPatchRequest).Execute()
 
-Update a credential
+Update a project credential
 
 ### Example
 
@@ -1576,7 +2339,7 @@ Name | Type | Description  | Notes
 
 > CredentialTokenResponse ApiAmbientV1ProjectsIdCredentialsCredIdTokenGet(ctx, id, credId).Execute()
 
-Get a decrypted token for a credential
+Get a decrypted token for a project credential
 
 
 
@@ -1649,7 +2412,7 @@ Name | Type | Description  | Notes
 
 > CredentialList ApiAmbientV1ProjectsIdCredentialsGet(ctx, id).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Provider(provider).Execute()
 
-Returns a list of credentials in a project
+Returns a list of credentials for a project
 
 ### Example
 
@@ -1745,7 +2508,7 @@ import (
 
 func main() {
 	id := "id_example" // string | The id of record
-	credential := *openapiclient.NewCredential("ProjectId_example", "Name_example", "Provider_example") // Credential | Credential data
+	credential := *openapiclient.NewCredential("Name_example", "Provider_example") // Credential | Credential data
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
@@ -3075,7 +3838,7 @@ import (
 )
 
 func main() {
-	roleBinding := *openapiclient.NewRoleBinding("UserId_example", "RoleId_example", "Scope_example") // RoleBinding | RoleBinding data
+	roleBinding := *openapiclient.NewRoleBinding("RoleId_example", "Scope_example") // RoleBinding | RoleBinding data
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)

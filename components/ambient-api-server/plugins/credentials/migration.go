@@ -106,9 +106,165 @@ func rolesMigration() *gormigrate.Migration {
 	}
 }
 
+func credentialOwnerRoleMigration() *gormigrate.Migration {
+	seed := []struct {
+		name        string
+		displayName string
+		description string
+		permissions []string
+	}{
+		{
+			name:        "credential:owner",
+			displayName: "Credential Owner",
+			description: "Full CRUD on owned credentials and bind to projects",
+			permissions: []string{"credential:create", "credential:read", "credential:update", "credential:delete", "credential:list"},
+		},
+		{
+			name:        "agent:editor",
+			displayName: "Agent Editor",
+			description: "Update prompt and metadata on a specific agent",
+			permissions: []string{"agent:read", "agent:update"},
+		},
+	}
+
+	return &gormigrate.Migration{
+		ID: "202606050002",
+		Migrate: func(tx *gorm.DB) error {
+			for _, r := range seed {
+				permsJSON, err := json.Marshal(r.permissions)
+				if err != nil {
+					return err
+				}
+				if err := tx.Exec(
+					`INSERT INTO roles (id, name, display_name, description, permissions, built_in) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (name) DO NOTHING`,
+					api.NewID(), r.name, r.displayName, r.description, string(permsJSON), true,
+				).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return tx.Exec("DELETE FROM roles WHERE name IN ?", []string{"credential:owner", "agent:editor"}).Error
+		},
+	}
+}
+
+func credentialTokenPermMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202606050003",
+		Migrate: func(tx *gorm.DB) error {
+			// Add credential:fetch_token to credential:owner permissions.
+			ownerPerms, _ := json.Marshal([]string{
+				"credential:create", "credential:read", "credential:update",
+				"credential:delete", "credential:list", "credential:fetch_token",
+				"role_binding:create", "role_binding:delete",
+			})
+			if err := tx.Exec(
+				`UPDATE roles SET permissions = ? WHERE name = 'credential:owner' AND deleted_at IS NULL`,
+				string(ownerPerms),
+			).Error; err != nil {
+				return err
+			}
+
+			// Align credential:token-reader with the action returned by
+			// pathToAction ("fetch_token") so the middleware matches.
+			tokenReaderPerms, _ := json.Marshal([]string{"credential:fetch_token"})
+			return tx.Exec(
+				`UPDATE roles SET permissions = ? WHERE name = 'credential:token-reader' AND deleted_at IS NULL`,
+				string(tokenReaderPerms),
+			).Error
+		},
+		Rollback: func(tx *gorm.DB) error {
+			ownerPerms, _ := json.Marshal([]string{
+				"credential:create", "credential:read", "credential:update",
+				"credential:delete", "credential:list",
+			})
+			if err := tx.Exec(
+				`UPDATE roles SET permissions = ? WHERE name = 'credential:owner' AND deleted_at IS NULL`,
+				string(ownerPerms),
+			).Error; err != nil {
+				return err
+			}
+			tokenReaderPerms, _ := json.Marshal([]string{"credential:token"})
+			return tx.Exec(
+				`UPDATE roles SET permissions = ? WHERE name = 'credential:token-reader' AND deleted_at IS NULL`,
+				string(tokenReaderPerms),
+			).Error
+		},
+	}
+}
+
+func credentialOwnerRoleBindingPermMigration() *gormigrate.Migration {
+	newPerms := []string{"role_binding:create", "role_binding:delete"}
+
+	return &gormigrate.Migration{
+		ID: "202606050004",
+		Migrate: func(tx *gorm.DB) error {
+			// Read current permissions, append only the new ones.
+			var current string
+			if err := tx.Raw(
+				`SELECT permissions FROM roles WHERE name = 'credential:owner' AND deleted_at IS NULL`,
+			).Scan(&current).Error; err != nil {
+				return err
+			}
+			var existing []string
+			if current != "" {
+				if err := json.Unmarshal([]byte(current), &existing); err != nil {
+					return err
+				}
+			}
+			have := make(map[string]bool, len(existing))
+			for _, p := range existing {
+				have[p] = true
+			}
+			for _, p := range newPerms {
+				if !have[p] {
+					existing = append(existing, p)
+				}
+			}
+			merged, _ := json.Marshal(existing)
+			return tx.Exec(
+				`UPDATE roles SET permissions = ? WHERE name = 'credential:owner' AND deleted_at IS NULL`,
+				string(merged),
+			).Error
+		},
+		Rollback: func(tx *gorm.DB) error {
+			// Remove only the permissions this migration added.
+			var current string
+			if err := tx.Raw(
+				`SELECT permissions FROM roles WHERE name = 'credential:owner' AND deleted_at IS NULL`,
+			).Scan(&current).Error; err != nil {
+				return err
+			}
+			var existing []string
+			if current != "" {
+				if err := json.Unmarshal([]byte(current), &existing); err != nil {
+					return err
+				}
+			}
+			remove := make(map[string]bool, len(newPerms))
+			for _, p := range newPerms {
+				remove[p] = true
+			}
+			filtered := existing[:0]
+			for _, p := range existing {
+				if !remove[p] {
+					filtered = append(filtered, p)
+				}
+			}
+			perms, _ := json.Marshal(filtered)
+			return tx.Exec(
+				`UPDATE roles SET permissions = ? WHERE name = 'credential:owner' AND deleted_at IS NULL`,
+				string(perms),
+			).Error
+		},
+	}
+}
+
 func dropProjectIDMigration() *gormigrate.Migration {
 	return &gormigrate.Migration{
-		ID: "202505120001",
+		ID: "202605060003",
 		Migrate: func(tx *gorm.DB) error {
 			return tx.Exec(`ALTER TABLE IF EXISTS credentials DROP COLUMN IF EXISTS project_id`).Error
 		},

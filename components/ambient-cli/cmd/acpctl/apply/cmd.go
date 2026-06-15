@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -22,13 +23,13 @@ import (
 
 var Cmd = &cobra.Command{
 	Use:   "apply",
-	Short: "Apply declarative Project, Agent, and Credential manifests",
-	Long: `Apply Projects, Agents, and Credentials from YAML files or a Kustomize directory.
+	Short: "Apply declarative Project, Agent, Credential, and RoleBinding manifests",
+	Long: `Apply Projects, Agents, Credentials, and RoleBindings from YAML files or a Kustomize directory.
 
 Mirrors kubectl apply semantics: resources are created if they do not exist,
 or patched if they do. Output reports created / configured / unchanged per resource.
 
-Supported kinds: Project, Agent, Credential
+Supported kinds: Project, Agent, Credential, RoleBinding
 
 File format (one or more documents separated by ---):
 
@@ -74,6 +75,14 @@ Credential example:
   url: https://gitlab.myco.com
   labels:
     team: platform
+
+RoleBinding example:
+
+  kind: RoleBinding
+  role: credential:token-reader
+  scope: credential
+  scope_id: my-gitlab-pat
+  user_id: lead
 `,
 	RunE: run,
 }
@@ -107,6 +116,10 @@ type resource struct {
 	Token       string            `yaml:"token"`
 	URL         string            `yaml:"url"`
 	Email       string            `yaml:"email"`
+	Role        string            `yaml:"role"`
+	Scope       string            `yaml:"scope"`
+	ScopeID     string            `yaml:"scope_id"`
+	UserID      string            `yaml:"user_id"`
 }
 
 type inboxSeed struct {
@@ -177,18 +190,24 @@ func run(cmd *cobra.Command, _ []string) error {
 			result, err = applyAgent(ctx, client, doc, projectName, factory)
 		case "credential":
 			result, err = applyCredential(ctx, client, doc)
+		case "rolebinding":
+			result, err = applyRoleBinding(ctx, client, doc)
 		default:
 			fmt.Fprintf(cmd.ErrOrStderr(), "warning: unknown kind %q — skipping\n", doc.Kind)
 			continue
 		}
 		if err != nil {
-			return fmt.Errorf("apply %s/%s: %w", strings.ToLower(doc.Kind), doc.Name, err)
+			return fmt.Errorf("apply %s/%s: %w", strings.ToLower(doc.Kind), docDisplayName(doc), err)
 		}
 		results = append(results, result)
 
 		if applyArgs.outputFormat != "json" {
+			displayName := result.Name
+			if displayName == "" {
+				displayName = result.Kind
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "%s/%s %s\n",
-				strings.ToLower(result.Kind), result.Name, result.Status)
+				strings.ToLower(result.Kind), displayName, result.Status)
 		}
 	}
 
@@ -316,6 +335,221 @@ func buildCredentialPatch(existing *sdktypes.Credential, doc resource) (map[stri
 		changed = true
 	}
 	return patch.Build(), changed
+}
+
+// ── RoleBinding ──────────────────────────────────────────────────────────────
+
+func applyRoleBinding(ctx context.Context, client *sdkclient.Client, doc resource) (applyResult, error) {
+	displayName := roleBindingDisplayName(doc)
+
+	if doc.Role == "" {
+		return applyResult{}, fmt.Errorf("role is required")
+	}
+	if doc.Scope == "" {
+		return applyResult{}, fmt.Errorf("scope is required")
+	}
+	if doc.ScopeID == "" {
+		return applyResult{}, fmt.Errorf("scope_id is required")
+	}
+	if doc.UserID == "" {
+		return applyResult{}, fmt.Errorf("user_id is required")
+	}
+
+	roleID, err := resolveRoleID(ctx, client, doc.Role)
+	if err != nil {
+		return applyResult{}, err
+	}
+
+	scopeFK, err := resolveScopeFK(ctx, client, doc.Scope, doc.ScopeID)
+	if err != nil {
+		return applyResult{}, err
+	}
+
+	opts := sdktypes.NewListOptions().Size(100).Build()
+	existing, err := client.RoleBindings().List(ctx, opts)
+	if err != nil {
+		return applyResult{}, fmt.Errorf("list role-bindings: %w", err)
+	}
+
+	for _, rb := range existing.Items {
+		if rb.RoleID == roleID &&
+			rb.Scope == doc.Scope &&
+			ptrEquals(rb.UserID, doc.UserID) &&
+			scopeFKMatches(rb, doc.Scope, scopeFK) {
+			return applyResult{Kind: "RoleBinding", Name: displayName, Status: "unchanged"}, nil
+		}
+	}
+
+	builder := sdktypes.NewRoleBindingBuilder().
+		RoleID(roleID).
+		Scope(doc.Scope).
+		UserID(doc.UserID)
+
+	switch doc.Scope {
+	case "credential":
+		builder = builder.CredentialID(scopeFK)
+	case "project":
+		builder = builder.ProjectID(scopeFK)
+	case "agent":
+		builder = builder.AgentID(scopeFK)
+	case "session":
+		builder = builder.SessionID(scopeFK)
+	}
+
+	rb, buildErr := builder.Build()
+	if buildErr != nil {
+		return applyResult{}, buildErr
+	}
+	if _, createErr := client.RoleBindings().Create(ctx, rb); createErr != nil {
+		return applyResult{}, fmt.Errorf("create role-binding: %w", createErr)
+	}
+	return applyResult{Kind: "RoleBinding", Name: displayName, Status: "created"}, nil
+}
+
+func resolveRoleID(ctx context.Context, client *sdkclient.Client, roleName string) (string, error) {
+	opts := sdktypes.NewListOptions().Size(100).
+		Search(fmt.Sprintf("name = '%s'", roleName)).Build()
+	list, err := client.Roles().List(ctx, opts)
+	if err != nil {
+		return "", fmt.Errorf("search roles for %q: %w", roleName, err)
+	}
+	for _, r := range list.Items {
+		if r.Name == roleName {
+			return r.ID, nil
+		}
+	}
+	return "", fmt.Errorf("role %q not found", roleName)
+}
+
+func resolveScopeFK(ctx context.Context, client *sdkclient.Client, scope, scopeID string) (string, error) {
+	switch scope {
+	case "credential":
+		return resolveCredentialID(ctx, client, scopeID)
+	case "project":
+		proj, err := client.Projects().Get(ctx, scopeID)
+		if err != nil {
+			return "", fmt.Errorf("resolve project %q: %w", scopeID, err)
+		}
+		return proj.ID, nil
+	case "agent":
+		return resolveAgentID(ctx, client, scopeID)
+	case "session":
+		return resolveSessionID(ctx, client, scopeID)
+	default:
+		return "", fmt.Errorf("unsupported scope %q", scope)
+	}
+}
+
+func resolveCredentialID(ctx context.Context, client *sdkclient.Client, nameOrID string) (string, error) {
+	cred, err := client.Credentials().Get(ctx, nameOrID)
+	if err == nil {
+		return cred.ID, nil
+	}
+	var apiErr *sdktypes.APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != 404 {
+		return "", fmt.Errorf("resolve credential %q: %w", nameOrID, err)
+	}
+	opts := sdktypes.NewListOptions().Size(100).
+		Search(fmt.Sprintf("name = '%s'", nameOrID)).Build()
+	list, err := client.Credentials().List(ctx, opts)
+	if err != nil {
+		return "", fmt.Errorf("search credentials for %q: %w", nameOrID, err)
+	}
+	var matches []sdktypes.Credential
+	for _, c := range list.Items {
+		if c.Name == nameOrID {
+			matches = append(matches, c)
+		}
+	}
+	if len(matches) == 0 {
+		return "", fmt.Errorf("credential %q not found", nameOrID)
+	}
+	if len(matches) == 1 {
+		return matches[0].ID, nil
+	}
+	var ids []string
+	for _, m := range matches {
+		ids = append(ids, m.ID)
+	}
+	return "", fmt.Errorf("multiple credentials named %q found (%s); use the credential ID instead", nameOrID, strings.Join(ids, ", "))
+}
+
+func resolveAgentID(ctx context.Context, client *sdkclient.Client, nameOrID string) (string, error) {
+	agent, err := client.Agents().Get(ctx, nameOrID)
+	if err == nil {
+		return agent.ID, nil
+	}
+	var apiErr *sdktypes.APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != 404 {
+		return "", fmt.Errorf("resolve agent %q: %w", nameOrID, err)
+	}
+	opts := sdktypes.NewListOptions().Size(100).
+		Search(fmt.Sprintf("name = '%s'", nameOrID)).Build()
+	list, err := client.Agents().List(ctx, opts)
+	if err != nil {
+		return "", fmt.Errorf("search agents for %q: %w", nameOrID, err)
+	}
+	for _, a := range list.Items {
+		if a.Name == nameOrID {
+			return a.ID, nil
+		}
+	}
+	return "", fmt.Errorf("agent %q not found", nameOrID)
+}
+
+func resolveSessionID(ctx context.Context, client *sdkclient.Client, nameOrID string) (string, error) {
+	sess, err := client.Sessions().Get(ctx, nameOrID)
+	if err == nil {
+		return sess.ID, nil
+	}
+	var apiErr *sdktypes.APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != 404 {
+		return "", fmt.Errorf("resolve session %q: %w", nameOrID, err)
+	}
+	opts := sdktypes.NewListOptions().Size(100).
+		Search(fmt.Sprintf("name = '%s'", nameOrID)).Build()
+	list, err := client.Sessions().List(ctx, opts)
+	if err != nil {
+		return "", fmt.Errorf("search sessions for %q: %w", nameOrID, err)
+	}
+	for _, s := range list.Items {
+		if s.Name == nameOrID {
+			return s.ID, nil
+		}
+	}
+	return "", fmt.Errorf("session %q not found", nameOrID)
+}
+
+func scopeFKMatches(rb sdktypes.RoleBinding, scope, fk string) bool {
+	switch scope {
+	case "credential":
+		return ptrEquals(rb.CredentialID, fk)
+	case "project":
+		return ptrEquals(rb.ProjectID, fk)
+	case "agent":
+		return ptrEquals(rb.AgentID, fk)
+	case "session":
+		return ptrEquals(rb.SessionID, fk)
+	}
+	return false
+}
+
+func ptrEquals(p *string, v string) bool {
+	return p != nil && *p == v
+}
+
+func roleBindingDisplayName(doc resource) string {
+	return doc.UserID + "\u2192" + doc.ScopeID
+}
+
+func docDisplayName(d resource) string {
+	if d.Name != "" {
+		return d.Name
+	}
+	if strings.EqualFold(d.Kind, "RoleBinding") {
+		return roleBindingDisplayName(d)
+	}
+	return d.Kind
 }
 
 func marshalStringMap(m map[string]string) string {
@@ -682,7 +916,7 @@ func printDryRun(cmd *cobra.Command, docs []resource) error {
 	if applyArgs.outputFormat == "json" {
 		results := make([]applyResult, 0, len(docs))
 		for _, d := range docs {
-			results = append(results, applyResult{Kind: d.Kind, Name: d.Name, Status: "dry-run"})
+			results = append(results, applyResult{Kind: d.Kind, Name: docDisplayName(d), Status: "dry-run"})
 		}
 		enc := json.NewEncoder(cmd.OutOrStdout())
 		enc.SetIndent("", "  ")
@@ -691,7 +925,7 @@ func printDryRun(cmd *cobra.Command, docs []resource) error {
 	w := cmd.OutOrStdout()
 	fmt.Fprintln(w, "dry-run: would apply:")
 	for _, d := range docs {
-		fmt.Fprintf(w, "  %s/%s\n", strings.ToLower(d.Kind), d.Name)
+		fmt.Fprintf(w, "  %s/%s\n", strings.ToLower(d.Kind), docDisplayName(d))
 	}
 	return nil
 }

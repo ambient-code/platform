@@ -10,6 +10,7 @@ export type UserProfile = {
   email?: string;
   username?: string;
   displayName?: string;
+  ssoEnabled?: boolean;
 };
 
 /**

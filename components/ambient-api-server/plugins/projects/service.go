@@ -3,13 +3,30 @@ package projects
 import (
 	"context"
 	"regexp"
+	"time"
 
+	"github.com/golang/glog"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/db"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/logger"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
 )
+
+// roleBindingRow is a local struct for creating role_bindings rows via GORM,
+// avoiding circular imports with the roleBindings plugin package.
+type roleBindingRow struct {
+	ID        string  `gorm:"primaryKey"`
+	RoleId    string  `gorm:"column:role_id;not null"`
+	Scope     string  `gorm:"not null"`
+	UserId    *string `gorm:"column:user_id"`
+	ProjectId *string `gorm:"column:project_id"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+func (roleBindingRow) TableName() string { return "role_bindings" }
 
 const projectsLockType db.LockType = "projects"
 
@@ -44,20 +61,22 @@ type ProjectService interface {
 	OnDelete(ctx context.Context, id string) error
 }
 
-func NewProjectService(lockFactory db.LockFactory, projectDao ProjectDao, events services.EventService) ProjectService {
+func NewProjectService(lockFactory db.LockFactory, projectDao ProjectDao, events services.EventService, sessionFactory *db.SessionFactory) ProjectService {
 	return &sqlProjectService{
-		lockFactory: lockFactory,
-		projectDao:  projectDao,
-		events:      events,
+		lockFactory:    lockFactory,
+		projectDao:     projectDao,
+		events:         events,
+		sessionFactory: sessionFactory,
 	}
 }
 
 var _ ProjectService = &sqlProjectService{}
 
 type sqlProjectService struct {
-	lockFactory db.LockFactory
-	projectDao  ProjectDao
-	events      services.EventService
+	lockFactory    db.LockFactory
+	projectDao     ProjectDao
+	events         services.EventService
+	sessionFactory *db.SessionFactory
 }
 
 func (s *sqlProjectService) OnUpsert(ctx context.Context, id string) error {
@@ -97,6 +116,8 @@ func (s *sqlProjectService) Create(ctx context.Context, project *Project) (*Proj
 		return nil, services.HandleCreateError("Project", err)
 	}
 
+	s.createOwnerBinding(ctx, project.ID)
+
 	_, evErr := s.events.Create(ctx, &api.Event{
 		Source:    "Projects",
 		SourceID:  project.ID,
@@ -107,6 +128,36 @@ func (s *sqlProjectService) Create(ctx context.Context, project *Project) (*Proj
 	}
 
 	return project, nil
+}
+
+func (s *sqlProjectService) createOwnerBinding(ctx context.Context, projectID string) {
+	username := auth.GetUsernameFromContext(ctx)
+	if username == "" {
+		return
+	}
+	g := (*s.sessionFactory).New(ctx)
+
+	var roleID string
+	if err := g.Table("roles").Select("id").
+		Where("name = ? AND deleted_at IS NULL", "project:owner").
+		Limit(1).Scan(&roleID).Error; err != nil || roleID == "" {
+		glog.Warningf("failed to find project:owner role for project %s: %v", projectID, err)
+		return
+	}
+
+	now := time.Now()
+	row := roleBindingRow{
+		ID:        api.NewID(),
+		RoleId:    roleID,
+		Scope:     "project",
+		UserId:    &username,
+		ProjectId: &projectID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := g.Create(&row).Error; err != nil {
+		glog.Warningf("failed to create owner binding for project %s: %v", projectID, err)
+	}
 }
 
 func (s *sqlProjectService) Replace(ctx context.Context, project *Project) (*Project, *errors.ServiceError) {

@@ -23,16 +23,14 @@ var _ MappedNullable = &Credential{}
 
 // Credential struct for Credential
 type Credential struct {
-	Id        *string    `json:"id,omitempty"`
-	Kind      *string    `json:"kind,omitempty"`
-	Href      *string    `json:"href,omitempty"`
-	CreatedAt *time.Time `json:"created_at,omitempty"`
-	UpdatedAt *time.Time `json:"updated_at,omitempty"`
-	// ID of the project this credential belongs to
-	ProjectId   *string `json:"project_id,omitempty"`
-	Name        string  `json:"name"`
-	Description *string `json:"description,omitempty"`
-	Provider    string  `json:"provider"`
+	Id          *string    `json:"id,omitempty"`
+	Kind        *string    `json:"kind,omitempty"`
+	Href        *string    `json:"href,omitempty"`
+	CreatedAt   *time.Time `json:"created_at,omitempty"`
+	UpdatedAt   *time.Time `json:"updated_at,omitempty"`
+	Name        string     `json:"name"`
+	Description *string    `json:"description,omitempty"`
+	Provider    string     `json:"provider"`
 	// Credential token value; write-only, never returned in GET/LIST responses
 	Token       *string `json:"token,omitempty"`
 	Url         *string `json:"url,omitempty"`
@@ -220,37 +218,6 @@ func (o *Credential) HasUpdatedAt() bool {
 // SetUpdatedAt gets a reference to the given time.Time and assigns it to the UpdatedAt field.
 func (o *Credential) SetUpdatedAt(v time.Time) {
 	o.UpdatedAt = &v
-}
-
-// GetProjectId returns the ProjectId field value if set, zero value otherwise.
-func (o *Credential) GetProjectId() string {
-	if o == nil || IsNil(o.ProjectId) {
-		var ret string
-		return ret
-	}
-	return *o.ProjectId
-}
-
-// GetProjectIdOk returns a tuple with the ProjectId field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *Credential) GetProjectIdOk() (*string, bool) {
-	if o == nil || IsNil(o.ProjectId) {
-		return nil, false
-	}
-	return o.ProjectId, true
-}
-
-// HasProjectId returns a boolean if a field has been set.
-func (o *Credential) HasProjectId() bool {
-	if o != nil && !IsNil(o.ProjectId) {
-		return true
-	}
-	return false
-}
-
-// SetProjectId gets a reference to the given string and assigns it to the ProjectId field.
-func (o *Credential) SetProjectId(v string) {
-	o.ProjectId = &v
 }
 
 // GetName returns the Name field value
@@ -517,9 +484,6 @@ func (o Credential) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.UpdatedAt) {
 		toSerialize["updated_at"] = o.UpdatedAt
-	}
-	if !IsNil(o.ProjectId) {
-		toSerialize["project_id"] = o.ProjectId
 	}
 	toSerialize["name"] = o.Name
 	if !IsNil(o.Description) {

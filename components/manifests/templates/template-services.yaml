@@ -1,0 +1,687 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: ambient-code-platform
+  annotations:
+    description: "Ambient Code Platform — API server, control plane, UI, and database"
+    tags: "ambient,ai,platform"
+objects:
+
+# --- ServiceAccounts ---
+
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    name: ambient-api-server
+    namespace: ${NAMESPACE}
+    labels:
+      app: ambient-api-server
+
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    name: ambient-control-plane
+    namespace: ${NAMESPACE}
+    labels:
+      app: ambient-control-plane
+
+# --- Database ---
+
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: ambient-api-server-db
+    namespace: ${NAMESPACE}
+    labels:
+      app: ambient-api-server
+      component: database
+  spec:
+    replicas: 1
+    strategy:
+      type: Recreate
+    selector:
+      matchLabels:
+        app: ambient-api-server
+        component: database
+    template:
+      metadata:
+        labels:
+          app: ambient-api-server
+          component: database
+      spec:
+        securityContext:
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        containers:
+          - name: postgresql
+            image: registry.redhat.io/rhel9/postgresql-16:latest
+            imagePullPolicy: IfNotPresent
+            ports:
+              - name: postgresql
+                containerPort: 5432
+                protocol: TCP
+            env:
+              - name: POSTGRESQL_USER
+                valueFrom:
+                  secretKeyRef:
+                    name: ambient-api-server-db
+                    key: db.user
+              - name: POSTGRESQL_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: ambient-api-server-db
+                    key: db.password
+              - name: POSTGRESQL_DATABASE
+                valueFrom:
+                  secretKeyRef:
+                    name: ambient-api-server-db
+                    key: db.name
+            volumeMounts:
+              - name: data
+                mountPath: /var/lib/pgsql/data
+                subPath: pgdata
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                cpu: 500m
+                memory: 512Mi
+            readinessProbe:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - pg_isready -U "$POSTGRESQL_USER"
+              initialDelaySeconds: 10
+              periodSeconds: 10
+            livenessProbe:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - pg_isready -U "$POSTGRESQL_USER"
+              initialDelaySeconds: 30
+              periodSeconds: 30
+            securityContext:
+              readOnlyRootFilesystem: true
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                  - ALL
+        volumes:
+          - name: data
+            emptyDir: {}
+
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: ambient-api-server-db
+    namespace: ${NAMESPACE}
+    labels:
+      app: ambient-api-server
+      component: database
+  spec:
+    selector:
+      app: ambient-api-server
+      component: database
+    ports:
+      - name: postgresql
+        port: 5432
+        targetPort: 5432
+        protocol: TCP
+
+# --- API Server ---
+
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: ambient-api-server
+    namespace: ${NAMESPACE}
+    labels:
+      app: ambient-api-server
+      component: api
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app: ambient-api-server
+        component: api
+    strategy:
+      rollingUpdate:
+        maxSurge: 25%
+        maxUnavailable: 25%
+      type: RollingUpdate
+    template:
+      metadata:
+        labels:
+          app: ambient-api-server
+          component: api
+      spec:
+        serviceAccountName: ambient-api-server
+        securityContext:
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        initContainers:
+          - name: migration
+            image: ${IMAGE_AMBIENT_API_SERVER}:${IMAGE_TAG}
+            imagePullPolicy: Always
+            command:
+              - /usr/local/bin/ambient-api-server
+              - migrate
+              - --db-host-file=/secrets/db/db.host
+              - --db-port-file=/secrets/db/db.port
+              - --db-user-file=/secrets/db/db.user
+              - --db-password-file=/secrets/db/db.password
+              - --db-name-file=/secrets/db/db.name
+              - --db-sslmode=disable
+              - --alsologtostderr
+              - -v=4
+            volumeMounts:
+              - name: db-secrets
+                mountPath: /secrets/db
+            resources:
+              requests:
+                cpu: 50m
+                memory: 128Mi
+              limits:
+                cpu: 500m
+                memory: 512Mi
+            securityContext:
+              readOnlyRootFilesystem: true
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                  - ALL
+        containers:
+          - name: api-server
+            image: ${IMAGE_AMBIENT_API_SERVER}:${IMAGE_TAG}
+            imagePullPolicy: Always
+            env:
+              - name: AMBIENT_ENV
+                value: production
+              - name: GRPC_SERVICE_ACCOUNT
+                valueFrom:
+                  secretKeyRef:
+                    name: ambient-control-plane-oidc
+                    key: client-id
+              - name: CREDENTIAL_ENCRYPTION_KEYRING
+                valueFrom:
+                  secretKeyRef:
+                    name: credential-encryption-key
+                    key: keyring
+                    optional: true
+              - name: CREDENTIAL_ENCRYPTION_KEY_VERSION
+                valueFrom:
+                  secretKeyRef:
+                    name: credential-encryption-key
+                    key: version
+                    optional: true
+            command:
+              - /usr/local/bin/ambient-api-server
+              - serve
+              - --db-host-file=/secrets/db/db.host
+              - --db-port-file=/secrets/db/db.port
+              - --db-user-file=/secrets/db/db.user
+              - --db-password-file=/secrets/db/db.password
+              - --db-name-file=/secrets/db/db.name
+              - --enable-jwt=true
+              - --enable-authz=true
+              - --jwk-cert-file=/configs/authentication/jwks.json
+              - --jwk-cert-url=${KEYCLOAK_REALM_URL}/protocol/openid-connect/certs
+              - --enable-https=false
+              - --enable-grpc=true
+              - --grpc-enable-tls=false
+              - --api-server-bindaddress=:8000
+              - --metrics-server-bindaddress=:4433
+              - --health-check-server-bindaddress=:4434
+              - --enable-health-check-https=false
+              - --db-sslmode=disable
+              - --db-max-open-connections=50
+              - --enable-db-debug=false
+              - --enable-metrics-https=false
+              - --http-read-timeout=5s
+              - --http-write-timeout=30s
+              - --cors-allowed-origins=*
+              - --cors-allowed-headers=X-Ambient-Project
+              - --grpc-server-bindaddress=:9000
+              - --alsologtostderr
+              - -v=10
+            ports:
+              - name: api
+                containerPort: 8000
+                protocol: TCP
+              - name: grpc
+                containerPort: 9000
+                protocol: TCP
+              - name: metrics
+                containerPort: 4433
+                protocol: TCP
+              - name: health
+                containerPort: 4434
+                protocol: TCP
+            volumeMounts:
+              - name: db-secrets
+                mountPath: /secrets/db
+              - name: app-secrets
+                mountPath: /secrets/service
+              - name: auth-config
+                mountPath: /configs/authentication
+            resources:
+              requests:
+                cpu: 200m
+                memory: 512Mi
+              limits:
+                cpu: "1"
+                memory: 1Gi
+            livenessProbe:
+              httpGet:
+                path: /api/ambient
+                port: 8000
+                scheme: HTTP
+              initialDelaySeconds: 15
+              periodSeconds: 5
+            readinessProbe:
+              httpGet:
+                path: /healthcheck
+                port: 4434
+                scheme: HTTP
+                httpHeaders:
+                  - name: User-Agent
+                    value: Probe
+              initialDelaySeconds: 20
+              periodSeconds: 10
+            securityContext:
+              readOnlyRootFilesystem: true
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                  - ALL
+        volumes:
+          - name: db-secrets
+            secret:
+              secretName: ambient-api-server-db
+          - name: app-secrets
+            secret:
+              secretName: ambient-api-server
+          - name: auth-config
+            configMap:
+              name: ambient-api-server-auth
+
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: ambient-api-server
+    namespace: ${NAMESPACE}
+    labels:
+      app: ambient-api-server
+      component: api
+  spec:
+    selector:
+      app: ambient-api-server
+      component: api
+    ports:
+      - name: api
+        port: 8000
+        targetPort: 8000
+        protocol: TCP
+      - name: grpc
+        port: 9000
+        targetPort: 9000
+        protocol: TCP
+      - name: metrics
+        port: 4433
+        targetPort: 4433
+        protocol: TCP
+      - name: health
+        port: 4434
+        targetPort: 4434
+        protocol: TCP
+
+# --- Control Plane ---
+
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: ambient-control-plane
+    namespace: ${NAMESPACE}
+    labels:
+      app: ambient-control-plane
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app: ambient-control-plane
+    template:
+      metadata:
+        labels:
+          app: ambient-control-plane
+      spec:
+        serviceAccountName: ambient-control-plane
+        securityContext:
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        containers:
+          - name: control-plane
+            image: ${IMAGE_AMBIENT_CONTROL_PLANE}:${IMAGE_TAG}
+            imagePullPolicy: Always
+            env:
+              - name: MODE
+                value: kube
+              - name: PLATFORM_MODE
+                value: standard
+              - name: LOG_LEVEL
+                value: info
+              - name: OIDC_TOKEN_URL
+                value: "${KEYCLOAK_REALM_URL}/protocol/openid-connect/token"
+              - name: OIDC_CLIENT_ID
+                valueFrom:
+                  secretKeyRef:
+                    name: ambient-control-plane-oidc
+                    key: client-id
+              - name: OIDC_CLIENT_SECRET
+                valueFrom:
+                  secretKeyRef:
+                    name: ambient-control-plane-oidc
+                    key: client-secret
+              - name: AMBIENT_API_SERVER_URL
+                value: "http://ambient-api-server.${NAMESPACE}.svc:8000"
+              - name: AMBIENT_GRPC_SERVER_ADDR
+                value: "ambient-api-server.${NAMESPACE}.svc:9000"
+              - name: AMBIENT_GRPC_USE_TLS
+                value: "false"
+              - name: MCP_API_SERVER_URL
+                value: "http://ambient-api-server.${NAMESPACE}.svc:8000"
+              - name: CP_TOKEN_URL
+                value: "http://ambient-control-plane.${NAMESPACE}.svc:8080/token"
+              - name: CP_RUNTIME_NAMESPACE
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.namespace
+              - name: RUNNER_IMAGE
+                value: "${IMAGE_AMBIENT_RUNNER}:${IMAGE_TAG}"
+              - name: MCP_IMAGE
+                value: "${IMAGE_AMBIENT_MCP}:${IMAGE_TAG}"
+              - name: GITHUB_MCP_IMAGE
+                value: "${IMAGE_CREDENTIAL_GITHUB}:${IMAGE_TAG}"
+              - name: JIRA_MCP_IMAGE
+                value: "${IMAGE_CREDENTIAL_JIRA}:${IMAGE_TAG}"
+              - name: K8S_MCP_IMAGE
+                value: "${IMAGE_CREDENTIAL_K8S}:${IMAGE_TAG}"
+              - name: GOOGLE_MCP_IMAGE
+                value: "${IMAGE_CREDENTIAL_GOOGLE}:${IMAGE_TAG}"
+              - name: USE_VERTEX
+                value: "1"
+              - name: ANTHROPIC_API_KEY
+                valueFrom:
+                  secretKeyRef:
+                    name: ambient-anthropic
+                    key: ANTHROPIC_API_KEY
+              - name: ANTHROPIC_VERTEX_PROJECT_ID
+                value: ${ANTHROPIC_VERTEX_PROJECT_ID}
+              - name: CLOUD_ML_REGION
+                value: ${CLOUD_ML_REGION}
+              - name: GOOGLE_APPLICATION_CREDENTIALS
+                value: /app/vertex/itpc-gcp-hcm-pe-eng.json
+              - name: VERTEX_SECRET_NAME
+                value: ambient-vertex
+              - name: VERTEX_SECRET_NAMESPACE
+                value: ${NAMESPACE}
+            ports:
+              - name: token
+                containerPort: 8080
+                protocol: TCP
+            volumeMounts:
+              - name: vertex-credentials
+                mountPath: /app/vertex
+                readOnly: true
+            resources:
+              requests:
+                cpu: 50m
+                memory: 64Mi
+              limits:
+                cpu: 200m
+                memory: 256Mi
+            securityContext:
+              readOnlyRootFilesystem: true
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                  - ALL
+        volumes:
+          - name: vertex-credentials
+            secret:
+              secretName: ambient-vertex
+
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: ambient-control-plane
+    namespace: ${NAMESPACE}
+    labels:
+      app: ambient-control-plane
+  spec:
+    selector:
+      app: ambient-control-plane
+    ports:
+      - name: token
+        port: 8080
+        targetPort: 8080
+        protocol: TCP
+
+# --- UI ---
+
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: ambient-ui
+    namespace: ${NAMESPACE}
+    labels:
+      app: ambient-ui
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app: ambient-ui
+    template:
+      metadata:
+        labels:
+          app: ambient-ui
+      spec:
+        securityContext:
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        containers:
+          - name: ambient-ui
+            image: ${IMAGE_AMBIENT_UI}:${IMAGE_TAG}
+            imagePullPolicy: Always
+            env:
+              - name: NODE_ENV
+                value: production
+              - name: API_SERVER_URL
+                value: "http://ambient-api-server:8000"
+              - name: SSO_ISSUER_URL
+                valueFrom:
+                  secretKeyRef:
+                    name: sso-credentials
+                    key: SSO_ISSUER_URL
+              - name: SSO_CLIENT_ID
+                valueFrom:
+                  secretKeyRef:
+                    name: sso-credentials
+                    key: SSO_CLIENT_ID
+              - name: SSO_CLIENT_SECRET
+                valueFrom:
+                  secretKeyRef:
+                    name: sso-credentials
+                    key: SSO_CLIENT_SECRET
+              - name: SESSION_SECRET
+                valueFrom:
+                  secretKeyRef:
+                    name: sso-credentials
+                    key: SESSION_SECRET
+              - name: SSO_REDIRECT_URI
+                value: ${SSO_REDIRECT_URI}
+              - name: NEXT_PUBLIC_PREVIEW_ALLOWED_HOSTS
+                value: ${PREVIEW_ALLOWED_HOSTS}
+            ports:
+              - name: http
+                containerPort: 3000
+                protocol: TCP
+            volumeMounts:
+              - name: next-cache
+                mountPath: /app/.next/cache
+              - name: tmp
+                mountPath: /tmp
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                cpu: 500m
+                memory: 512Mi
+            livenessProbe:
+              httpGet:
+                path: /api/healthz
+                port: 3000
+                scheme: HTTP
+              initialDelaySeconds: 10
+              periodSeconds: 10
+            readinessProbe:
+              httpGet:
+                path: /api/healthz
+                port: 3000
+                scheme: HTTP
+              initialDelaySeconds: 5
+              periodSeconds: 5
+            securityContext:
+              readOnlyRootFilesystem: true
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                  - ALL
+        volumes:
+          - name: next-cache
+            emptyDir: {}
+          - name: tmp
+            emptyDir: {}
+
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: ambient-ui-service
+    namespace: ${NAMESPACE}
+    labels:
+      app: ambient-ui
+  spec:
+    selector:
+      app: ambient-ui
+    ports:
+      - name: http
+        port: 3000
+        targetPort: 3000
+        protocol: TCP
+
+# --- Routes ---
+
+- apiVersion: route.openshift.io/v1
+  kind: Route
+  metadata:
+    name: ambient-api-server
+    namespace: ${NAMESPACE}
+    labels:
+      app: ambient-api-server
+    annotations:
+      haproxy.router.openshift.io/timeout: 10m
+  spec:
+    host: ${ROUTE_HOST_API}
+    to:
+      kind: Service
+      name: ambient-api-server
+      weight: 100
+    port:
+      targetPort: api
+    tls:
+      termination: edge
+      insecureEdgeTerminationPolicy: Redirect
+
+- apiVersion: route.openshift.io/v1
+  kind: Route
+  metadata:
+    name: ambient-ui
+    namespace: ${NAMESPACE}
+    labels:
+      app: ambient-ui
+  spec:
+    host: ${ROUTE_HOST_UI}
+    to:
+      kind: Service
+      name: ambient-ui-service
+      weight: 100
+    port:
+      targetPort: http
+    tls:
+      termination: edge
+      insecureEdgeTerminationPolicy: Redirect
+
+# --- Parameters ---
+
+parameters:
+  - name: IMAGE_TAG
+    description: Image tag for all ambient components
+    required: true
+  - name: IMAGE_AMBIENT_API_SERVER
+    description: API server image
+    value: quay.io/ambient_code/vteam_api_server
+  - name: IMAGE_AMBIENT_CONTROL_PLANE
+    description: Control plane image
+    value: quay.io/ambient_code/vteam_control_plane
+  - name: IMAGE_AMBIENT_UI
+    description: UI image
+    value: quay.io/ambient_code/vteam_ambient_ui
+  - name: IMAGE_AMBIENT_RUNNER
+    description: Runner image (spawned by control plane)
+    value: quay.io/ambient_code/vteam_claude_runner
+  - name: IMAGE_AMBIENT_MCP
+    description: MCP proxy image
+    value: quay.io/ambient_code/vteam_mcp
+  - name: IMAGE_CREDENTIAL_GITHUB
+    description: GitHub credential sidecar image
+    value: quay.io/ambient_code/vteam_credential_github
+  - name: IMAGE_CREDENTIAL_JIRA
+    description: Jira credential sidecar image
+    value: quay.io/ambient_code/vteam_credential_jira
+  - name: IMAGE_CREDENTIAL_K8S
+    description: Kubernetes credential sidecar image
+    value: quay.io/ambient_code/vteam_credential_k8s
+  - name: IMAGE_CREDENTIAL_GOOGLE
+    description: Google credential sidecar image
+    value: quay.io/ambient_code/vteam_credential_google
+  - name: NAMESPACE
+    description: Target namespace
+    value: ambient-api
+  - name: KEYCLOAK_REALM_URL
+    description: Keycloak realm URL (e.g. https://keycloak.example.com/realms/ambient-code)
+    required: true
+  - name: ROUTE_HOST_API
+    description: API server route hostname
+    required: true
+  - name: ROUTE_HOST_UI
+    description: UI route hostname
+    required: true
+  - name: SSO_REDIRECT_URI
+    description: OIDC callback URL for ambient-ui
+    required: true
+  - name: ANTHROPIC_VERTEX_PROJECT_ID
+    description: GCP project ID for Vertex AI
+    value: itpc-gcp-hcm-pe-eng-claude
+  - name: CLOUD_ML_REGION
+    description: Vertex AI region
+    value: global
+  - name: PREVIEW_ALLOWED_HOSTS
+    description: Comma-separated host globs for ambient-ui preview
+    value: "*.openshiftapps.com"
