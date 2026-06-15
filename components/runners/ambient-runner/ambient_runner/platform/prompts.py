@@ -148,6 +148,8 @@ def _detect_gitlab(cmu: dict) -> str | None:
 
 
 def _detect_jira(cmu: dict) -> str | None:
+    if "jira" in cmu:
+        return "mcp"
     if os.getenv("JIRA_URL", "").strip() and os.getenv("JIRA_API_TOKEN", "").strip():
         return "mcp"
     return None

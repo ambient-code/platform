@@ -119,11 +119,28 @@ def _build_system_prompt(cwd_path: str) -> str:
     from ambient_runner.platform.prompts import (
         GIT_PUSH_INSTRUCTIONS_BODY,
         GIT_PUSH_INSTRUCTIONS_HEADER,
+        GIT_PUSH_MCP_STEPS,
         GIT_PUSH_STEPS,
         WORKSPACE_FIXED_PATHS_PROMPT,
         _build_integrations_prompt,
+        _detect_github,
     )
     from ambient_runner.platform.utils import derive_workflow_name
+
+    # Detect GitHub mode once so the git-push step selection is consistent
+    # with what _build_integrations_prompt() will tell the model to use.
+    _cmu: dict = {}
+    _cmu_raw = os.getenv("CREDENTIAL_MCP_URLS", "").strip()
+    if _cmu_raw:
+        try:
+            import json as _json
+
+            _parsed = _json.loads(_cmu_raw)
+            if isinstance(_parsed, dict):
+                _cmu = _parsed
+        except (ValueError, TypeError):
+            pass
+    github_mode = _detect_github(_cmu)
 
     # Pull in Gemini's dynamically-built default sections via variable substitution.
     # These are expanded at runtime by the CLI — no static text to maintain.
@@ -171,7 +188,8 @@ def _build_system_prompt(cwd_path: str) -> str:
             sections.append(GIT_PUSH_INSTRUCTIONS_BODY)
             for r in auto_push:
                 sections.append(f"- **repos/{r.get('name', 'unknown')}/**")
-            sections.append(GIT_PUSH_STEPS.format(branch=branch))
+            push_steps = GIT_PUSH_MCP_STEPS if github_mode == "mcp" else GIT_PUSH_STEPS
+            sections.append(push_steps.format(branch=branch))
 
     # ---- Workflow directory ----
     if active_workflow_url:
