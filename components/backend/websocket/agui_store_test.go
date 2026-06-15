@@ -3,8 +3,10 @@ package websocket
 import (
 	"ambient-code-backend/types"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -446,6 +448,218 @@ func TestLoadEventsForReplay(t *testing.T) {
 		}
 		if !hasRaw {
 			t.Error("Expected RAW event to be preserved during compaction")
+		}
+	})
+}
+
+func TestFastExtractType(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"standard event", `{"type":"RUN_STARTED","runId":"r1"}`, "RUN_STARTED"},
+		{"type not first field", `{"runId":"r1","type":"RUN_FINISHED","ts":123}`, "RUN_FINISHED"},
+		{"messages snapshot", `{"type":"MESSAGES_SNAPSHOT","messages":[]}`, "MESSAGES_SNAPSHOT"},
+		{"no type field", `{"runId":"r1","data":"hello"}`, ""},
+		{"empty object", `{}`, ""},
+		{"empty string", ``, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := fastExtractType([]byte(tt.input))
+			if result != tt.expected {
+				t.Errorf("fastExtractType(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func writeLargeEventFile(t *testing.T, path string, headEvents []map[string]interface{}, paddingCount int, tailEvents []map[string]interface{}) {
+	t.Helper()
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("Failed to create events file: %v", err)
+	}
+	defer f.Close()
+
+	for _, evt := range headEvents {
+		data, err := json.Marshal(evt)
+		if err != nil {
+			t.Fatalf("Failed to marshal head event: %v", err)
+		}
+		if _, err := f.Write(append(data, '\n')); err != nil {
+			t.Fatalf("Failed to write head event: %v", err)
+		}
+	}
+
+	paddingContent := strings.Repeat("x", 200)
+	for i := 0; i < paddingCount; i++ {
+		evt := map[string]interface{}{
+			"type":      types.EventTypeTextMessageContent,
+			"messageId": fmt.Sprintf("msg-pad-%d", i),
+			"delta":     paddingContent,
+			"timestamp": fmt.Sprintf("2025-01-01T00:01:%02dZ", i%60),
+		}
+		data, err := json.Marshal(evt)
+		if err != nil {
+			t.Fatalf("Failed to marshal padding event: %v", err)
+		}
+		if _, err := f.Write(append(data, '\n')); err != nil {
+			t.Fatalf("Failed to write padding event: %v", err)
+		}
+	}
+
+	for _, evt := range tailEvents {
+		data, err := json.Marshal(evt)
+		if err != nil {
+			t.Fatalf("Failed to marshal tail event: %v", err)
+		}
+		if _, err := f.Write(append(data, '\n')); err != nil {
+			t.Fatalf("Failed to write tail event: %v", err)
+		}
+	}
+}
+
+func TestLoadEventsHeadTailMerge(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "agui-headtail-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	origStateBaseDir := StateBaseDir
+	StateBaseDir = tmpDir
+	defer func() { StateBaseDir = origStateBaseDir }()
+
+	t.Run("large file preserves head snapshot events", func(t *testing.T) {
+		sessionID := "test-large-headtail"
+		sessionsDir := filepath.Join(tmpDir, "sessions", sessionID)
+		if err := os.MkdirAll(sessionsDir, 0755); err != nil {
+			t.Fatalf("Failed to create sessions dir: %v", err)
+		}
+
+		eventsFile := filepath.Join(sessionsDir, "agui-events.jsonl")
+		writeLargeEventFile(t, eventsFile,
+			[]map[string]interface{}{
+				{"type": types.EventTypeRunStarted, "runId": "r1", "timestamp": "2025-01-01T00:00:00Z"},
+				{"type": types.EventTypeMessagesSnapshot, "messages": []interface{}{
+					map[string]interface{}{"id": "msg1", "role": "user", "content": "Hello"},
+				}, "timestamp": "2025-01-01T00:00:01Z"},
+			},
+			15000,
+			[]map[string]interface{}{
+				{"type": types.EventTypeTextMessageContent, "messageId": "msg-tail", "delta": "tail event", "timestamp": "2025-01-01T00:02:00Z"},
+			},
+		)
+
+		stat, err := os.Stat(eventsFile)
+		if err != nil {
+			t.Fatalf("Failed to stat events file: %v", err)
+		}
+		if stat.Size() <= replayMaxTailBytes {
+			t.Fatalf("Test file too small (%d bytes), need > %d to trigger head+tail path", stat.Size(), replayMaxTailBytes)
+		}
+
+		result := loadEvents(sessionID)
+		if len(result) == 0 {
+			t.Fatal("Expected events from loadEvents, got none")
+		}
+
+		hasRunStarted := false
+		hasMessagesSnapshot := false
+		for _, evt := range result {
+			evtType, _ := evt["type"].(string)
+			if evtType == types.EventTypeRunStarted {
+				hasRunStarted = true
+			}
+			if evtType == types.EventTypeMessagesSnapshot {
+				hasMessagesSnapshot = true
+			}
+		}
+
+		if !hasRunStarted {
+			t.Error("Expected RUN_STARTED from head scan to be present in merged result")
+		}
+		if !hasMessagesSnapshot {
+			t.Error("Expected MESSAGES_SNAPSHOT from head scan to be present in merged result")
+		}
+
+		if result[0]["type"] != types.EventTypeRunStarted {
+			t.Errorf("Expected first event to be RUN_STARTED, got %v", result[0]["type"])
+		}
+		if result[1]["type"] != types.EventTypeMessagesSnapshot {
+			t.Errorf("Expected second event to be MESSAGES_SNAPSHOT, got %v", result[1]["type"])
+		}
+	})
+
+	t.Run("large file deduplicates overlapping events", func(t *testing.T) {
+		sessionID := "test-large-dedup"
+		sessionsDir := filepath.Join(tmpDir, "sessions", sessionID)
+		if err := os.MkdirAll(sessionsDir, 0755); err != nil {
+			t.Fatalf("Failed to create sessions dir: %v", err)
+		}
+
+		eventsFile := filepath.Join(sessionsDir, "agui-events.jsonl")
+		writeLargeEventFile(t, eventsFile,
+			[]map[string]interface{}{
+				{"type": types.EventTypeRunStarted, "runId": "r1", "timestamp": "2025-01-01T00:00:00Z"},
+			},
+			15000,
+			[]map[string]interface{}{
+				{"type": types.EventTypeRunFinished, "runId": "r1", "timestamp": "2025-01-01T00:03:00Z"},
+			},
+		)
+
+		stat, err := os.Stat(eventsFile)
+		if err != nil {
+			t.Fatalf("Failed to stat events file: %v", err)
+		}
+		if stat.Size() <= replayMaxTailBytes {
+			t.Fatalf("Test file too small (%d bytes), need > %d", stat.Size(), replayMaxTailBytes)
+		}
+
+		result := loadEvents(sessionID)
+
+		runStartedCount := 0
+		for _, evt := range result {
+			if evt["type"] == types.EventTypeRunStarted {
+				runStartedCount++
+			}
+		}
+		if runStartedCount != 1 {
+			t.Errorf("Expected exactly 1 RUN_STARTED (no duplicates), got %d", runStartedCount)
+		}
+	})
+
+	t.Run("large file with no head snapshots returns tail only", func(t *testing.T) {
+		sessionID := "test-large-no-head-snapshot"
+		sessionsDir := filepath.Join(tmpDir, "sessions", sessionID)
+		if err := os.MkdirAll(sessionsDir, 0755); err != nil {
+			t.Fatalf("Failed to create sessions dir: %v", err)
+		}
+
+		eventsFile := filepath.Join(sessionsDir, "agui-events.jsonl")
+		writeLargeEventFile(t, eventsFile, nil, 15000, nil)
+
+		stat, err := os.Stat(eventsFile)
+		if err != nil {
+			t.Fatalf("Failed to stat events file: %v", err)
+		}
+		if stat.Size() <= replayMaxTailBytes {
+			t.Fatalf("Test file too small (%d bytes), need > %d", stat.Size(), replayMaxTailBytes)
+		}
+
+		result := loadEvents(sessionID)
+		if len(result) == 0 {
+			t.Fatal("Expected tail events, got none")
+		}
+
+		for _, evt := range result {
+			if evt["type"] != types.EventTypeTextMessageContent {
+				t.Errorf("Expected only TEXT_MESSAGE_CONTENT events, got %v", evt["type"])
+			}
 		}
 	})
 }
