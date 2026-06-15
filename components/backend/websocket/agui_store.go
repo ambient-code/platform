@@ -222,8 +222,11 @@ const (
 )
 
 // loadEvents reads AG-UI events for a session from the JSONL log.
-// For files larger than replayMaxTailBytes, only the tail is read to
-// keep reconnect latency bounded (129ms at 1M events vs 9.7s full scan).
+// For files larger than replayMaxTailBytes, a head+tail strategy is used:
+// the head is scanned for snapshot/lifecycle events (MESSAGES_SNAPSHOT,
+// STATE_SNAPSHOT, RUN_STARTED, RUN_FINISHED, RUN_ERROR) while the tail
+// provides recent streaming events. This keeps reconnect latency bounded
+// while ensuring the frontend always has complete conversation history.
 // Automatically triggers legacy migration if the log doesn't exist but
 // a pre-AG-UI messages.jsonl file does.
 func loadEvents(sessionID string) []map[string]interface{} {
@@ -265,30 +268,26 @@ func loadEvents(sessionID string) []map[string]interface{} {
 		return scanJSONL(f)
 	}
 
-	// Large file — seek to tail to bound reconnect latency.
-	log.Printf("AGUI Store: large event log for %s (%.1f MB), reading tail only", sessionID, float64(fileSize)/(1024*1024))
-	offset := fileSize - replayMaxTailBytes
-	if _, err := f.Seek(offset, 0); err != nil {
+	log.Printf("AGUI Store: large event log for %s (%.1f MB), using head+tail read", sessionID, float64(fileSize)/(1024*1024))
+
+	headEvents := scanHeadSnapshotEvents(f)
+
+	tailOffset := fileSize - replayMaxTailBytes
+	if _, err := f.Seek(tailOffset, 0); err != nil {
 		log.Printf("AGUI Store: seek failed for %s: %v, falling back to full read", sessionID, err)
 		events, _ := readJSONLFile(path)
 		return events
 	}
 
-	// Read a single byte at the seek position to check if we landed on a
-	// record boundary ('\n' or start-of-file).  If so, the next scanner
-	// line is a complete record and should not be skipped.
 	var boundary [1]byte
 	onBoundary := false
-	if offset == 0 {
+	if tailOffset == 0 {
 		onBoundary = true
 	} else if n, err := f.Read(boundary[:]); err == nil && n == 1 && boundary[0] == '\n' {
 		onBoundary = true
 	}
-	// If we read one byte that wasn't '\n', we're mid-record — the
-	// scanner will pick up from this position and the first line will
-	// be partial (skip it below).
 
-	var events []map[string]interface{}
+	var tailEvents []map[string]interface{}
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, scannerInitialBufferSize), scannerMaxLineSize)
 	skipFirst := !onBoundary
@@ -297,7 +296,6 @@ func loadEvents(sessionID string) []map[string]interface{} {
 		if len(line) == 0 {
 			continue
 		}
-		// Skip the first line only if the seek landed mid-record
 		if skipFirst {
 			skipFirst = false
 			continue
@@ -307,12 +305,38 @@ func loadEvents(sessionID string) []map[string]interface{} {
 			log.Printf("AGUI Store: skipping malformed JSON line in tail scan: %v", err)
 			continue
 		}
-		events = append(events, evt)
+		tailEvents = append(tailEvents, evt)
 	}
 	if err := scanner.Err(); err != nil {
 		log.Printf("AGUI Store: tail scan error for %s: %v", sessionID, err)
 	}
-	return events
+
+	if len(headEvents) == 0 {
+		return tailEvents
+	}
+
+	headTimestamps := make(map[string]bool, len(headEvents))
+	for _, evt := range headEvents {
+		if ts, ok := evt["timestamp"].(string); ok {
+			if evtType, _ := evt["type"].(string); evtType != "" {
+				headTimestamps[evtType+"|"+ts] = true
+			}
+		}
+	}
+
+	merged := make([]map[string]interface{}, 0, len(headEvents)+len(tailEvents))
+	merged = append(merged, headEvents...)
+	for _, evt := range tailEvents {
+		ts, _ := evt["timestamp"].(string)
+		evtType, _ := evt["type"].(string)
+		if ts != "" && evtType != "" && headTimestamps[evtType+"|"+ts] {
+			continue
+		}
+		merged = append(merged, evt)
+	}
+
+	log.Printf("AGUI Store: head+tail merge for %s: %d head + %d tail = %d total events", sessionID, len(headEvents), len(tailEvents), len(merged))
+	return merged
 }
 
 // scanJSONL reads all JSONL events from an already-open file handle.
@@ -336,6 +360,68 @@ func scanJSONL(f *os.File) []map[string]interface{} {
 		log.Printf("AGUI Store: scanner error: %v", err)
 	}
 	return events
+}
+
+var headScanEventTypes = map[string]bool{
+	types.EventTypeMessagesSnapshot: true,
+	types.EventTypeStateSnapshot:    true,
+	types.EventTypeRunStarted:       true,
+	types.EventTypeRunFinished:      true,
+	types.EventTypeRunError:         true,
+}
+
+func scanHeadSnapshotEvents(f *os.File) []map[string]interface{} {
+	if _, err := f.Seek(0, 0); err != nil {
+		return nil
+	}
+
+	reader := bufio.NewReaderSize(f, scannerInitialBufferSize)
+	var result []map[string]interface{}
+	var bytesRead int64
+
+	for bytesRead < replayMaxTailBytes {
+		line, err := reader.ReadBytes('\n')
+		bytesRead += int64(len(line))
+
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
+			if err != nil {
+				break
+			}
+			continue
+		}
+
+		evtType := fastExtractType(line)
+		if headScanEventTypes[evtType] {
+			var evt map[string]interface{}
+			if jsonErr := json.Unmarshal(line, &evt); jsonErr == nil {
+				result = append(result, evt)
+			}
+		}
+
+		if err != nil {
+			break
+		}
+	}
+	return result
+}
+
+func fastExtractType(line []byte) string {
+	idx := bytes.Index(line, []byte(`"type"`))
+	if idx < 0 {
+		return ""
+	}
+	rest := line[idx+6:]
+	start := bytes.IndexByte(rest, '"')
+	if start < 0 {
+		return ""
+	}
+	rest = rest[start+1:]
+	end := bytes.IndexByte(rest, '"')
+	if end < 0 {
+		return ""
+	}
+	return string(rest[:end])
 }
 
 // DeriveAgentStatus reads a session's event log and returns the agent
