@@ -80,6 +80,8 @@ export function useSession(projectName: string, sessionName: string, port: Sessi
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
     refetchInterval: (query) => {
       const session = query.state.data as AgenticSession | undefined;
+      if (!session) return 2000;
+
       const phase = session?.status?.phase;
       const annotations = session?.metadata?.annotations || {};
 
