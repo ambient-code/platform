@@ -13,10 +13,10 @@ dependencies = [
   "uvicorn[standard]>=0.41.0",
   "ag-ui-protocol>=0.1.13",
   "pydantic>=2.12.5",
-  "aiohttp>=3.14.0",
+  "aiohttp>=3.14.1",
   "requests>=2.33.0",
-  "pyjwt>=2.11.0",
-  "cryptography>=42.0.0",
+  "pyjwt>=2.13.0",
+  "cryptography>=48.0.1",
   "grpcio>=1.60.0",
   "protobuf>=4.25.0",
 ]
