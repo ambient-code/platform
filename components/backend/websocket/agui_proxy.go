@@ -1171,7 +1171,7 @@ func listenBetweenRunEvents(projectName, sessionName string) {
 
 	for attempt := 0; attempt < betweenRunMaxRetries; attempt++ {
 		runnerURL := getRunnerEndpoint(projectName, sessionName)
-		eventsURL := strings.TrimSuffix(runnerURL, "/") + "/events"
+		eventsURL := strings.TrimSuffix(runnerURL, "/") + "/events/" + sessionName
 
 		req, err := http.NewRequest("GET", eventsURL, nil)
 		if err != nil {
