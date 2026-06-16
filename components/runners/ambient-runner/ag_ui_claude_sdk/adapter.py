@@ -1310,55 +1310,62 @@ class ClaudeAgentAdapter:
         # Emit MESSAGES_SNAPSHOT with input messages + new messages from this run.
         # Enrich tool result messages with tool names so the frontend can
         # reconstruct parent-child hierarchy with proper display names.
-        if run_messages:
-            enriched: list[Any] = []
-            for msg in run_messages:
-                # Check if this is a tool result message that needs a name
-                msg_role = getattr(msg, "role", None)
-                msg_tcid = getattr(msg, "tool_call_id", None)
-                if msg_role == "tool" and msg_tcid and msg_tcid in tool_name_by_id:
-                    # Convert to dict so we can add the name field
-                    if hasattr(msg, "model_dump"):
-                        d = msg.model_dump(exclude_none=True)
-                    elif hasattr(msg, "dict"):
-                        d = msg.dict(exclude_none=True)
-                    else:
-                        d = {
-                            "id": getattr(msg, "id", ""),
-                            "role": msg_role,
-                            "content": getattr(msg, "content", ""),
-                            "tool_call_id": msg_tcid,
-                        }
-                    d["name"] = tool_name_by_id[msg_tcid]
-                    enriched.append(d)
-                else:
-                    enriched.append(msg)
-
-            # Stamp input messages with the run-start timestamp so they
-            # survive a page refresh (the frontend's local timestamp is
-            # lost when reconnecting to the SSE stream).
-            run_start_iso = (
-                datetime.fromtimestamp(run_start_ts / 1000, tz=timezone.utc).isoformat()
-                if run_start_ts
-                else None
-            )
-            stamped_inputs: list[Any] = []
-            for msg in (input_data.messages if input_data else None) or []:
+        #
+        # Always emit MESSAGES_SNAPSHOT regardless of whether run_messages is
+        # populated — compactFinishedRun requires it to succeed. Runs that
+        # produce no assistant output (interrupted, state-tool-only, halted)
+        # still need a snapshot so the JSONL can be compacted and prior
+        # history is not lost. When run_messages is empty the snapshot is
+        # just the stamped input history.
+        enriched: list[Any] = []
+        for msg in run_messages:
+            # Check if this is a tool result message that needs a name
+            msg_role = getattr(msg, "role", None)
+            msg_tcid = getattr(msg, "tool_call_id", None)
+            if msg_role == "tool" and msg_tcid and msg_tcid in tool_name_by_id:
+                # Convert to dict so we can add the name field
                 if hasattr(msg, "model_dump"):
                     d = msg.model_dump(exclude_none=True)
-                elif isinstance(msg, dict):
-                    d = dict(msg)
+                elif hasattr(msg, "dict"):
+                    d = msg.dict(exclude_none=True)
                 else:
                     d = {
                         "id": getattr(msg, "id", ""),
-                        "role": getattr(msg, "role", ""),
+                        "role": msg_role,
                         "content": getattr(msg, "content", ""),
+                        "tool_call_id": msg_tcid,
                     }
-                if "timestamp" not in d and run_start_iso:
-                    d["timestamp"] = run_start_iso
-                stamped_inputs.append(d)
+                d["name"] = tool_name_by_id[msg_tcid]
+                enriched.append(d)
+            else:
+                enriched.append(msg)
 
-            all_messages = stamped_inputs + enriched
+        # Stamp input messages with the run-start timestamp so they
+        # survive a page refresh (the frontend's local timestamp is
+        # lost when reconnecting to the SSE stream).
+        run_start_iso = (
+            datetime.fromtimestamp(run_start_ts / 1000, tz=timezone.utc).isoformat()
+            if run_start_ts
+            else None
+        )
+        stamped_inputs: list[Any] = []
+        for msg in (input_data.messages if input_data else None) or []:
+            if hasattr(msg, "model_dump"):
+                d = msg.model_dump(exclude_none=True)
+            elif isinstance(msg, dict):
+                d = dict(msg)
+            else:
+                d = {
+                    "id": getattr(msg, "id", ""),
+                    "role": getattr(msg, "role", ""),
+                    "content": getattr(msg, "content", ""),
+                }
+            if "timestamp" not in d and run_start_iso:
+                d["timestamp"] = run_start_iso
+            stamped_inputs.append(d)
+
+        all_messages = stamped_inputs + enriched
+        if all_messages:
             logger.debug(
                 f"MESSAGES_SNAPSHOT: {len(all_messages)} msgs ({message_count} SDK messages processed)"
             )
