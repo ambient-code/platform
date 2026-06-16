@@ -273,6 +273,10 @@ func (kc *KubeClient) CreateRole(ctx context.Context, obj *unstructured.Unstruct
 	return kc.dynamic.Resource(RoleGVR).Namespace(obj.GetNamespace()).Create(ctx, obj, metav1.CreateOptions{})
 }
 
+func (kc *KubeClient) UpdateRole(ctx context.Context, obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	return kc.dynamic.Resource(RoleGVR).Namespace(obj.GetNamespace()).Update(ctx, obj, metav1.UpdateOptions{})
+}
+
 func (kc *KubeClient) DeleteRolesByLabel(ctx context.Context, namespace, labelSelector string) error {
 	return kc.deleteCollectionWithFallback(ctx, RoleGVR, namespace, labelSelector)
 }

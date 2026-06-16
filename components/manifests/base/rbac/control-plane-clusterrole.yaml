@@ -13,7 +13,7 @@ rules:
 # Namespaces (create and label per-project namespaces)
 - apiGroups: [""]
   resources: ["namespaces"]
-  verbs: ["get", "list", "watch", "create", "update", "patch"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 # RoleBindings (reconcile group access from ProjectSettings)
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["roles", "rolebindings"]
@@ -22,6 +22,9 @@ rules:
 - apiGroups: [""]
   resources: ["secrets", "serviceaccounts", "services", "pods"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get"]
 - apiGroups: ["batch"]
   resources: ["jobs"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

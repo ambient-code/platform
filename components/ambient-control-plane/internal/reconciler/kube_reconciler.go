@@ -307,6 +307,9 @@ func (r *SimpleKubeReconciler) ensureNamespaceExists(ctx context.Context, namesp
 		if err := r.ensureImagePullAccess(ctx, namespace); err != nil {
 			r.logger.Warn().Err(err).Str("namespace", namespace).Msg("failed to grant image pull access")
 		}
+		if err := r.ensureImageBuildAccess(ctx, namespace); err != nil {
+			r.logger.Warn().Err(err).Str("namespace", namespace).Msg("failed to grant image build access")
+		}
 	}
 
 	if r.cfg.CPRuntimeNamespace != "" {
@@ -456,6 +459,41 @@ func (r *SimpleKubeReconciler) ensureImagePullAccess(ctx context.Context, namesp
 	return nil
 }
 
+func (r *SimpleKubeReconciler) ensureImageBuildAccess(ctx context.Context, namespace string) error {
+	name := fmt.Sprintf("ambient-image-builder-%s", namespace)
+	rb := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "rbac.authorization.k8s.io/v1",
+			"kind":       "RoleBinding",
+			"metadata": map[string]interface{}{
+				"name":      name,
+				"namespace": r.cfg.RunnerImageNamespace,
+				"labels": map[string]interface{}{
+					LabelManaged:   "true",
+					LabelManagedBy: "ambient-control-plane",
+				},
+			},
+			"roleRef": map[string]interface{}{
+				"apiGroup": "rbac.authorization.k8s.io",
+				"kind":     "ClusterRole",
+				"name":     "system:image-builder",
+			},
+			"subjects": []interface{}{
+				map[string]interface{}{
+					"apiGroup": "rbac.authorization.k8s.io",
+					"kind":     "Group",
+					"name":     fmt.Sprintf("system:serviceaccounts:%s", namespace),
+				},
+			},
+		},
+	}
+	if _, err := r.nsKube().CreateRoleBinding(ctx, r.cfg.RunnerImageNamespace, rb); err != nil && !k8serrors.IsAlreadyExists(err) {
+		return fmt.Errorf("creating image-builder rolebinding in %s for %s: %w", r.cfg.RunnerImageNamespace, namespace, err)
+	}
+	r.logger.Debug().Str("namespace", namespace).Str("image_namespace", r.cfg.RunnerImageNamespace).Msg("image build access granted")
+	return nil
+}
+
 func (r *SimpleKubeReconciler) ensureServiceAccount(ctx context.Context, namespace string, session types.Session, labelSelector string) error {
 	name := serviceAccountName(session.ID)
 
@@ -542,7 +580,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 	credentialSidecarMode := false
 	var credTmpVolumes []interface{}
 	if r.cfg.CPTokenURL != "" && r.cfg.CPTokenPublicKey != "" {
-		credSidecars, credMCPURLs, credTmpVols := r.buildCredentialSidecars(session.ID, namespace, credentialIDs)
+		credSidecars, credMCPURLs, credTmpVols := r.buildCredentialSidecars(session.ID, namespace, credentialIDs, r.cfg.OpenShellEnabled)
 		credTmpVolumes = credTmpVols
 		containers = append(containers, credSidecars...)
 		if len(credMCPURLs) > 0 {
@@ -811,7 +849,12 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 	}
 
 	if useMCPSidecar {
-		env = append(env, envVar("AMBIENT_MCP_URL", mcpSidecarURL))
+		if r.cfg.OpenShellEnabled {
+			env = append(env, envVarFromFieldRef("POD_IP", "status.podIP"))
+			env = append(env, envVar("AMBIENT_MCP_URL", fmt.Sprintf("http://$(POD_IP):%d", mcpSidecarPort)))
+		} else {
+			env = append(env, envVar("AMBIENT_MCP_URL", mcpSidecarURL))
+		}
 	}
 
 	if r.cfg.VertexEnabled {
@@ -1029,6 +1072,17 @@ func envVar(name, value string) interface{} {
 	return map[string]interface{}{"name": name, "value": value}
 }
 
+func envVarFromFieldRef(name, fieldPath string) interface{} {
+	return map[string]interface{}{
+		"name": name,
+		"valueFrom": map[string]interface{}{
+			"fieldRef": map[string]interface{}{
+				"fieldPath": fieldPath,
+			},
+		},
+	}
+}
+
 func appendRunnerEnv(containers *[]interface{}, envEntry interface{}) {
 	for _, c := range *containers {
 		ctr, ok := c.(map[string]interface{})
@@ -1064,7 +1118,7 @@ func (r *SimpleKubeReconciler) credentialSidecarImage(provider string) string {
 	}
 }
 
-func (r *SimpleKubeReconciler) buildCredentialSidecars(sessionID string, namespace string, credentialIDs map[string]string) ([]interface{}, map[string]string, []interface{}) {
+func (r *SimpleKubeReconciler) buildCredentialSidecars(sessionID string, namespace string, credentialIDs map[string]string, openShellEnabled bool) ([]interface{}, map[string]string, []interface{}) {
 	var sidecars []interface{}
 	var tmpVolumes []interface{}
 	mcpURLs := map[string]string{}
@@ -1167,7 +1221,11 @@ func (r *SimpleKubeReconciler) buildCredentialSidecars(sessionID string, namespa
 			"name":     tmpVolName,
 			"emptyDir": map[string]interface{}{"sizeLimit": "10Mi"},
 		})
-		mcpURLs[provider] = fmt.Sprintf("http://localhost:%d", spec.Port)
+		if openShellEnabled {
+			mcpURLs[provider] = fmt.Sprintf("http://$(POD_IP):%d", spec.Port)
+		} else {
+			mcpURLs[provider] = fmt.Sprintf("http://localhost:%d", spec.Port)
+		}
 		r.logger.Debug().Str("provider", provider).Str("image", image).Int64("port", spec.Port).Msg("credential sidecar configured")
 	}
 

@@ -7,7 +7,7 @@ import (
 
 func TestBuildCredentialSidecars_NoCredentials(t *testing.T) {
 	r := &SimpleKubeReconciler{cfg: KubeReconcilerConfig{}}
-	sidecars, urls, _ := r.buildCredentialSidecars("test-session", "test-namespace", map[string]string{})
+	sidecars, urls, _ := r.buildCredentialSidecars("test-session", "test-namespace", map[string]string{}, false)
 	if len(sidecars) != 0 {
 		t.Errorf("expected 0 sidecars, got %d", len(sidecars))
 	}
@@ -19,7 +19,7 @@ func TestBuildCredentialSidecars_NoCredentials(t *testing.T) {
 func TestBuildCredentialSidecars_NoImageConfigured(t *testing.T) {
 	r := &SimpleKubeReconciler{cfg: KubeReconcilerConfig{}}
 	credentialIDs := map[string]string{"github": "cred-123"}
-	sidecars, urls, _ := r.buildCredentialSidecars("test-session", "test-namespace", credentialIDs)
+	sidecars, urls, _ := r.buildCredentialSidecars("test-session", "test-namespace", credentialIDs, false)
 	if len(sidecars) != 0 {
 		t.Errorf("expected 0 sidecars (no image configured), got %d", len(sidecars))
 	}
@@ -40,7 +40,7 @@ func TestBuildCredentialSidecars_GitHubSidecar(t *testing.T) {
 	r.logger = r.logger.With().Logger()
 
 	credentialIDs := map[string]string{"github": "cred-123"}
-	sidecars, urls, _ := r.buildCredentialSidecars("test-session", "test-namespace", credentialIDs)
+	sidecars, urls, _ := r.buildCredentialSidecars("test-session", "test-namespace", credentialIDs, false)
 
 	if len(sidecars) != 1 {
 		t.Fatalf("expected 1 sidecar, got %d", len(sidecars))
@@ -97,7 +97,7 @@ func TestBuildCredentialSidecars_MultipleSidecars(t *testing.T) {
 		"kubeconfig": "cred-3",
 		"google":     "cred-4",
 	}
-	sidecars, urls, _ := r.buildCredentialSidecars("test-session", "test-namespace", credentialIDs)
+	sidecars, urls, _ := r.buildCredentialSidecars("test-session", "test-namespace", credentialIDs, false)
 
 	if len(sidecars) != 4 {
 		t.Fatalf("expected 4 sidecars, got %d", len(sidecars))
@@ -124,7 +124,7 @@ func TestBuildCredentialSidecars_UnknownProvider(t *testing.T) {
 	r.logger = r.logger.With().Logger()
 
 	credentialIDs := map[string]string{"unknown-provider": "cred-999"}
-	sidecars, urls, _ := r.buildCredentialSidecars("test-session", "test-namespace", credentialIDs)
+	sidecars, urls, _ := r.buildCredentialSidecars("test-session", "test-namespace", credentialIDs, false)
 
 	if len(sidecars) != 0 {
 		t.Errorf("expected 0 sidecars for unknown provider, got %d", len(sidecars))
@@ -143,7 +143,7 @@ func TestBuildCredentialSidecars_LocalImagePullPolicy(t *testing.T) {
 	r.logger = r.logger.With().Logger()
 
 	credentialIDs := map[string]string{"github": "cred-123"}
-	sidecars, _, _ := r.buildCredentialSidecars("test-session", "test-namespace", credentialIDs)
+	sidecars, _, _ := r.buildCredentialSidecars("test-session", "test-namespace", credentialIDs, false)
 
 	if len(sidecars) != 1 {
 		t.Fatalf("expected 1 sidecar, got %d", len(sidecars))

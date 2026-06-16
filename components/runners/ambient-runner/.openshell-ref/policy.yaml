@@ -87,3 +87,33 @@ network_policies:
     binaries:
       - { path: /usr/bin/git }
       - { path: /usr/local/bin/glab }
+
+  mcp_sidecars:
+    name: mcp-sidecars
+    endpoints:
+      - allowed_ips: ["10.0.0.0/8"]
+        port: 8090
+      - allowed_ips: ["10.0.0.0/8"]
+        port: 8091
+      - allowed_ips: ["10.0.0.0/8"]
+        port: 8092
+      - allowed_ips: ["10.0.0.0/8"]
+        port: 8093
+      - allowed_ips: ["10.0.0.0/8"]
+        port: 8094
+      - { host: 127.0.0.1, port: 8090 }
+      - { host: 127.0.0.1, port: 8091 }
+      - { host: 127.0.0.1, port: 8092 }
+      - { host: 127.0.0.1, port: 8093 }
+      - { host: 127.0.0.1, port: 8094 }
+      - { host: localhost, port: 8090 }
+      - { host: localhost, port: 8091 }
+      - { host: localhost, port: 8092 }
+      - { host: localhost, port: 8093 }
+      - { host: localhost, port: 8094 }
+    binaries:
+      - { path: /usr/local/bin/claude }
+      - { path: /usr/local/lib/python3.12/site-packages/claude_agent_sdk/_bundled/claude }
+      - { path: /usr/bin/node }
+      - { path: /usr/bin/node-22 }
+      - { path: /usr/bin/curl }

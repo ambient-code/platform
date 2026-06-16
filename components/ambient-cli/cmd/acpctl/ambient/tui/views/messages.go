@@ -536,9 +536,11 @@ func NewMessageStream(sessionID, agentName, phase string) MessageStream {
 		phase:        phase,
 		messages:     make([]MessageEntry, 0, 256),
 		maxMessages:  defaultMaxMessages,
-		autoScroll:   true,
-		composeInput: ci,
-		searchInput:  si,
+		autoScroll:    true,
+		wrapMode:      true,
+		timestampMode: 1,
+		composeInput:  ci,
+		searchInput:   si,
 		splitMode:    true,
 		activityPane: NewActivityPane(),
 		focusTop:     true,
@@ -1007,18 +1009,24 @@ func (ms *MessageStream) View() string {
 	}
 
 	activeIndicator := msgActiveIndicator
-	renderToggle := func(label, value string, on bool) string {
+	renderToggle := func(label, hotkey, value string, on bool) string {
 		s := dimIndicator
 		if on {
 			s = activeIndicator
 		}
-		return dimIndicator.Render(label+":") + s.Render(value)
+		idx := strings.Index(strings.ToLower(label), hotkey)
+		if idx < 0 {
+			return dimIndicator.Render(label+":") + s.Render(value)
+		}
+		before := label[:idx]
+		after := label[idx+len(hotkey):]
+		return dimIndicator.Render(before+"<") + s.Render(hotkey) + dimIndicator.Render(">"+after+":") + s.Render(value)
 	}
 	indicators := fmt.Sprintf("%s     %s     %s     %s     Phase:%s     %s",
-		renderToggle("Autoscroll", autoScrollLabel, ms.autoScroll),
-		renderToggle("Raw", rawLabel, ms.rawMode),
-		renderToggle("Pretty", prettyLabel, ms.wrapMode),
-		renderToggle("Time", tsLabel, ms.timestampMode > 0),
+		renderToggle("Autoscroll", "s", autoScrollLabel, ms.autoScroll),
+		renderToggle("Raw", "r", rawLabel, ms.rawMode),
+		renderToggle("Pretty", "p", prettyLabel, ms.wrapMode),
+		renderToggle("Time", "t", tsLabel, ms.timestampMode > 0),
 		phaseStyle.Render(ms.phase),
 		dimIndicator.Render(scrollPct),
 	)
