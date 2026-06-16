@@ -218,12 +218,16 @@ class ClaudeBridge(PlatformBridge):
         await populate_mcp_server_credentials(self._context)
         self._last_creds_refresh = time.monotonic()
 
-        # If the caller changed, destroy the worker and rebuild MCP servers +
-        # adapter so the new ClaudeSDKClient gets fresh mcp_servers config.
-        # The session ID is preserved — --resume works because each SDK client
-        # is a new CLI subprocess that spawns fresh MCP servers from os.environ.
+        # Rebuild MCP servers when credentials may have changed.
+        # On first run: always rebuild after credential fetch so credential-based servers
+        # (e.g. Jira via session endpoint) that were missed during _setup_platform().
+        # On user change: destroy worker so the new SDK client picks up fresh creds.
         user_changed = current_user_id != prev_user
-        if user_changed and self._session_manager.get_existing(thread_id):
+        if self._first_run:
+            self._rebuild_mcp_servers()
+            self._rebuild_system_prompt()
+            self._adapter = None
+        elif user_changed and self._session_manager.get_existing(thread_id):
             logger.info(
                 f"User changed for thread={thread_id}, "
                 "rebuilding MCP servers and adapter with new credentials"
@@ -718,6 +722,21 @@ class ClaudeBridge(PlatformBridge):
         self._mcp_servers = build_mcp_servers(self._context, self._cwd_path, self._obs)
         self._allowed_tools = build_allowed_tools(self._mcp_servers)
         logger.info("Rebuilt MCP servers with updated credentials")
+
+    def _rebuild_system_prompt(self) -> None:
+        """Rebuild the system prompt with current env vars.
+
+        Called on first run after credential refresh so the prompt accurately
+        reflects which integrations are configured (e.g. Jira via session
+        endpoint). The initial build in _setup_platform() may have run before
+        credentials were fully available.
+        """
+        from ambient_runner.bridges.claude.prompts import build_sdk_system_prompt
+
+        self._system_prompt = build_sdk_system_prompt(
+            self._context.workspace_path, self._cwd_path
+        )
+        logger.info("Rebuilt system prompt with updated credentials")
 
     # ------------------------------------------------------------------
     # Private: adapter lifecycle
