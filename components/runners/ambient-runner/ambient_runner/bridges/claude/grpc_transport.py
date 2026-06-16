@@ -294,6 +294,12 @@ class GRPCSessionListener:
         try:
             runner_input = RunnerInput.model_validate_json(msg.payload)
         except Exception:
+            if not msg.payload or not msg.payload.strip():
+                logger.warning(
+                    "[GRPC LISTENER] Empty payload for seq=%d, skipping to avoid empty-run with no MESSAGES_SNAPSHOT",
+                    msg.seq,
+                )
+                return
             runner_input = RunnerInput(
                 messages=[
                     {"id": str(uuid.uuid4()), "role": "user", "content": msg.payload}
