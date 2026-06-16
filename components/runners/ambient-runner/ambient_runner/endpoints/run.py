@@ -41,11 +41,19 @@ class RunnerInput(BaseModel):
         parent_run_id = self.parentRunId or self.parent_run_id
         context_list = self.context if isinstance(self.context, list) else []
 
+        # Ensure every message dict has an id so upsert_message deduplication
+        # works correctly in the adapter for multi-turn sessions.
+        messages = []
+        for m in self.messages:
+            if isinstance(m, dict) and not m.get("id"):
+                m = {**m, "id": str(uuid.uuid4())}
+            messages.append(m)
+
         return RunAgentInput(
             thread_id=thread_id,
             run_id=run_id,
             parent_run_id=parent_run_id,
-            messages=self.messages,
+            messages=messages,
             state=self.state or {},
             tools=self.tools or [],
             context=context_list,
