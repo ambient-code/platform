@@ -50,11 +50,11 @@ func TestControlPlaneRBACRules_ContainsAllAPIGroups(t *testing.T) {
 	rules := r.controlPlaneRBACRules()
 
 	expectedGroups := map[string]bool{
-		"":                      false,
+		"":                          false,
 		"rbac.authorization.k8s.io": false,
-		"build.openshift.io":    false,
-		"image.openshift.io":    false,
-		"route.openshift.io":    false,
+		"build.openshift.io":        false,
+		"image.openshift.io":        false,
+		"route.openshift.io":        false,
 	}
 
 	for _, rule := range rules {
@@ -99,7 +99,7 @@ func TestControlPlaneRBACRules_OpenShiftBuildResources(t *testing.T) {
 		"buildconfigs":             false,
 		"buildconfigs/instantiate": false,
 		"builds":                   false,
-		"builds/log":              false,
+		"builds/log":               false,
 	}
 	for _, r := range resources {
 		expected[r.(string)] = true

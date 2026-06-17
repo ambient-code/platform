@@ -531,19 +531,19 @@ func NewMessageStream(sessionID, agentName, phase string) MessageStream {
 	si.Width = 40
 
 	return MessageStream{
-		sessionID:    sessionID,
-		agentName:    agentName,
-		phase:        phase,
-		messages:     make([]MessageEntry, 0, 256),
-		maxMessages:  defaultMaxMessages,
+		sessionID:     sessionID,
+		agentName:     agentName,
+		phase:         phase,
+		messages:      make([]MessageEntry, 0, 256),
+		maxMessages:   defaultMaxMessages,
 		autoScroll:    true,
 		wrapMode:      true,
 		timestampMode: 1,
 		composeInput:  ci,
 		searchInput:   si,
-		splitMode:    true,
-		activityPane: NewActivityPane(),
-		focusTop:     true,
+		splitMode:     true,
+		activityPane:  NewActivityPane(),
+		focusTop:      true,
 	}
 }
 
