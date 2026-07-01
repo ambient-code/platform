@@ -584,7 +584,8 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 	credentialSidecarMode := false
 	var credTmpVolumes []interface{}
 	if r.cfg.CPTokenURL != "" && r.cfg.CPTokenPublicKey != "" {
-		credSidecars, credMCPURLs, credTmpVols := r.buildCredentialSidecars(session.ID, namespace, credentialIDs)
+		sessionEnvVars := parseSessionEnvVars(session.EnvironmentVariables)
+		credSidecars, credMCPURLs, credTmpVols := r.buildCredentialSidecars(session.ID, namespace, credentialIDs, sessionEnvVars)
 		credTmpVolumes = credTmpVols
 		containers = append(containers, credSidecars...)
 		if len(credMCPURLs) > 0 {
@@ -1193,7 +1194,21 @@ func (r *SimpleKubeReconciler) credentialSidecarImage(provider string) string {
 	}
 }
 
-func (r *SimpleKubeReconciler) buildCredentialSidecars(sessionID string, namespace string, credentialIDs map[string]string) ([]interface{}, map[string]string, []interface{}) {
+// parseSessionEnvVars deserialises the JSON-encoded environment variables stored
+// on a Session by the ambient-api-server into a plain map.  Returns an empty
+// map on any parse error so callers can proceed safely.
+func parseSessionEnvVars(raw string) map[string]string {
+	if raw == "" {
+		return map[string]string{}
+	}
+	out := map[string]string{}
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return map[string]string{}
+	}
+	return out
+}
+
+func (r *SimpleKubeReconciler) buildCredentialSidecars(sessionID string, namespace string, credentialIDs map[string]string, sessionEnvVars map[string]string) ([]interface{}, map[string]string, []interface{}) {
 	var sidecars []interface{}
 	var tmpVolumes []interface{}
 	mcpURLs := map[string]string{}
@@ -1240,6 +1255,17 @@ func (r *SimpleKubeReconciler) buildCredentialSidecars(sessionID string, namespa
 		}
 		if r.cfg.MPPConfigNamespace != "" {
 			env = append(env, envVar("MPP_CONFIG_NAMESPACE", r.cfg.MPPConfigNamespace))
+		}
+
+		// For the Jira sidecar, propagate JIRA_READ_ONLY_MODE from the session's
+		// environment variables.  The runner sets this to "false" when the
+		// jira-write feature flag is enabled; the mcp-atlassian server honours
+		// READ_ONLY_MODE so write tools (e.g. jira_add_comment) are only
+		// exposed when explicitly enabled.
+		if provider == "jira" {
+			if v, ok := sessionEnvVars["JIRA_READ_ONLY_MODE"]; ok {
+				env = append(env, envVar("JIRA_READ_ONLY_MODE", v))
+			}
 		}
 
 		sidecar := map[string]interface{}{
