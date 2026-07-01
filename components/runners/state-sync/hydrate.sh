@@ -340,11 +340,13 @@ if [ -n "$ACTIVE_WORKFLOW_GIT_URL" ] && [ "$ACTIVE_WORKFLOW_GIT_URL" != "null" ]
                 echo "  Available paths in repo:"
                 find "$WORKFLOW_TEMP" -maxdepth 3 -type d | head -10
                 echo "  Using entire repo instead"
+                mkdir -p "$(dirname "$WORKFLOW_FINAL")"
                 mv "$WORKFLOW_TEMP" "$WORKFLOW_FINAL"
                 echo "  ✓ Workflow ready at /workspace/workflows/${WORKFLOW_NAME}"
             fi
         else
             # No subpath - use entire repo
+            mkdir -p "$(dirname "$WORKFLOW_FINAL")"
             mv "$WORKFLOW_TEMP" "$WORKFLOW_FINAL"
             echo "  ✓ Workflow ready at /workspace/workflows/${WORKFLOW_NAME}"
         fi
