@@ -984,7 +984,10 @@ func CreateSession(c *gin.Context) {
 	}
 
 	// When the jira-write flag is enabled for this workspace, let the Jira MCP server write.
-	overrides, err := getWorkspaceOverrides(c.Request.Context(), reqK8s, project)
+	// Use the backend service-account client (K8sClient) — not the user's token — because
+	// reading the feature-flag ConfigMap is a server-side concern and the user's token may
+	// lack configmaps.get permission, causing intermittent RBAC failures.
+	overrides, err := getWorkspaceOverrides(c.Request.Context(), K8sClient, project)
 	if err != nil {
 		log.Printf("WARNING: failed to read feature flag overrides for project %s: %v", project, err)
 	}
