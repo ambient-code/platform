@@ -149,10 +149,12 @@ async def clone_workflow_at_runtime(
                 logger.warning(f"Subpath '{subpath}' not found, using entire repo")
                 if workflow_final.exists():
                     shutil.rmtree(workflow_final)
+                workflow_final.parent.mkdir(parents=True, exist_ok=True)
                 shutil.move(str(temp_dir), str(workflow_final))
         else:
             if workflow_final.exists():
                 shutil.rmtree(workflow_final)
+            workflow_final.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(temp_dir), str(workflow_final))
 
         logger.info(f"Workflow '{workflow_name}' ready at {workflow_final}")
