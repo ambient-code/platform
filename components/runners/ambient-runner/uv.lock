@@ -211,7 +211,7 @@ requires-dist = [
     { name = "ag-ui-protocol", specifier = ">=0.1.13" },
     { name = "aiohttp", specifier = ">=3.14.1" },
     { name = "ambient-runner", extras = ["claude", "observability", "mlflow-observability", "mcp-atlassian"], marker = "extra == 'all'" },
-    { name = "anthropic", extras = ["vertex"], marker = "extra == 'claude'", specifier = ">=0.113.0" },
+    { name = "anthropic", extras = ["vertex"], marker = "extra == 'claude'", specifier = ">=0.116.0" },
     { name = "claude-agent-sdk", marker = "extra == 'claude'", specifier = ">=0.2.110" },
     { name = "cryptography", specifier = ">=48.0.1" },
     { name = "fastapi", specifier = ">=0.135.1" },
@@ -258,7 +258,7 @@ wheels = [
 
 [[package]]
 name = "anthropic"
-version = "0.113.0"
+version = "0.116.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -270,9 +270,9 @@ dependencies = [
     { name = "sniffio" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a0/2a/f856135e5b055bf8b6f34133b313810dfe1cb848e5ac5ea843e196daefdd/anthropic-0.113.0.tar.gz", hash = "sha256:1830e866430ebd351c4f277d20e4c9b0aa9ad71f6569a23772ae88b33e0abaf8", size = 939444, upload-time = "2026-06-29T14:57:22.257Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/66/a2/d31f14e28d49bae983a3634e38dfb4b31c50110b5e403596c5c6a20b23f8/anthropic-0.116.0.tar.gz", hash = "sha256:5fc248fbb9fe03ef686f8a774f81586bca31a043260aab88b387ea3660f4a396", size = 949149, upload-time = "2026-07-02T19:08:10.534Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3e/4d/ea001c0993b8f48153c5eb74eecf5a3ed120df07fe894757351e8308bbe6/anthropic-0.113.0-py3-none-any.whl", hash = "sha256:9a52ed7a4982e916fa878d1ed3eaec2dcdf98699a39d8fc45b54b3c50f1e7426", size = 937995, upload-time = "2026-06-29T14:57:23.721Z" },
+    { url = "https://files.pythonhosted.org/packages/c7/dd/2a1e81cf1b163acc340afc4ec74ed1d86f5eed1a809fabdeed3e0997b346/anthropic-0.116.0-py3-none-any.whl", hash = "sha256:6c0a7698e8d652455da3499978279bb2588c7264d0a35be3666009a4258c8256", size = 956896, upload-time = "2026-07-02T19:08:08.756Z" },
 ]
 
 [package.optional-dependencies]
