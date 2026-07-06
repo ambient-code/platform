@@ -80,3 +80,4 @@ This project is licensed under the MIT License -- see the [LICENSE](LICENSE) fil
 ---
 
 **Note:** This project was formerly known as "vTeam". Technical artifacts (image names, namespaces, API groups) still use "vteam" for backward compatibility.
+
