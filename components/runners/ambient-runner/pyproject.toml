@@ -34,7 +34,7 @@ mlflow-observability = [
   "opentelemetry-exporter-otlp>=1.40.0",
 ]
 mcp-atlassian = [
-  "mcp-atlassian>=0.21.0",
+  "mcp-atlassian>=0.22.0",
 ]
 # Install everything for the polymorphic runner
 all = [

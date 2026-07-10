@@ -217,7 +217,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.135.1" },
     { name = "grpcio", specifier = ">=1.60.0" },
     { name = "langfuse", marker = "extra == 'observability'", specifier = ">=3.14.5" },
-    { name = "mcp-atlassian", marker = "extra == 'mcp-atlassian'", specifier = ">=0.21.0" },
+    { name = "mcp-atlassian", marker = "extra == 'mcp-atlassian'", specifier = ">=0.22.0" },
     { name = "mlflow", extras = ["kubernetes"], marker = "extra == 'mlflow-observability'", specifier = ">=3.11.0" },
     { name = "opentelemetry-exporter-otlp", marker = "extra == 'mlflow-observability'", specifier = ">=1.40.0" },
     { name = "protobuf", specifier = ">=4.25.0" },
@@ -2123,13 +2123,14 @@ wheels = [
 
 [[package]]
 name = "mcp-atlassian"
-version = "0.21.0"
+version = "0.22.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "atlassian-python-api" },
     { name = "beautifulsoup4" },
     { name = "cachetools" },
     { name = "click" },
+    { name = "fakeredis" },
     { name = "fastmcp" },
     { name = "httpx" },
     { name = "keyring" },
@@ -2152,9 +2153,9 @@ dependencies = [
     { name = "urllib3" },
     { name = "uvicorn" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8c/dd/c086f89ed69b1968a59a3c4d25e4d83b446a0f78a3876bbda30f94957a6a/mcp_atlassian-0.21.0.tar.gz", hash = "sha256:a7dc462c63cbb168c2b3497a1021e47fd7778cfd7e88d55a889e376a6c75fc4c", size = 747658, upload-time = "2026-03-02T07:49:58.253Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bf/90/bfddfaaa14308e633fa25b8f2f2adb26ba5903d51ce08ce7ac93511517a1/mcp_atlassian-0.22.0.tar.gz", hash = "sha256:645522501661c04728cf9075aa3c3391f2073aec9335ea6844afd8dc078f0e3c", size = 865944, upload-time = "2026-07-10T13:40:15.072Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d0/7b/9710dd5f340e2f03ea5c9cf4b52182e581cb6a347d48f93005d98ba8b467/mcp_atlassian-0.21.0-py3-none-any.whl", hash = "sha256:d9aa7b6b523d1001fb5d94d8507b552446c58a308cc0f06b8ba165964e077dac", size = 279985, upload-time = "2026-03-02T07:49:57.198Z" },
+    { url = "https://files.pythonhosted.org/packages/0d/17/c87fc83ddccd1fa103d88c85b930a6ac55badc7372708cd4087035645e3a/mcp_atlassian-0.22.0-py3-none-any.whl", hash = "sha256:1c19db7e2eb3ba67d17a4a2fcfbe42abd97f13dd1c7d6d001d803980e0594d89", size = 332292, upload-time = "2026-07-10T13:40:13.653Z" },
 ]
 
 [[package]]
