@@ -518,7 +518,7 @@ func DeriveAgentStatus(sessionID string) string {
 					return types.AgentStatusIdle
 				}
 			}
-			if toolName, _ := evt["toolCallName"].(string); isAskUserQuestionToolCall(toolName) {
+			if toolName, _ := evt["toolCallName"].(string); isHITLToolCall(toolName) {
 				return types.AgentStatusWaitingInput
 			}
 		}
@@ -613,9 +613,9 @@ func compactFinishedRun(sessionID string) {
 			types.EventTypeStepStarted, types.EventTypeStepFinished:
 			snapshots = append(snapshots, evt)
 		case types.EventTypeToolCallStart:
-			// Preserve AskUserQuestion tool calls — DeriveAgentStatus() needs them
+			// Preserve HITL tool calls — DeriveAgentStatus() needs them
 			// to detect waiting_input status after compaction.
-			if toolName, _ := evt["toolCallName"].(string); isAskUserQuestionToolCall(toolName) {
+			if toolName, _ := evt["toolCallName"].(string); isHITLToolCall(toolName) {
 				snapshots = append(snapshots, evt)
 			}
 		case types.EventTypeRaw, types.EventTypeCustom, types.EventTypeMeta:
