@@ -1,8 +1,12 @@
-# Skill: ambient-api-server
-
-**Activates when:** Working in `components/ambient-api-server/` or asked about API server, REST endpoints, gRPC, OpenAPI, or plugins.
-
 ---
+name: ambient-api-server
+description: >
+  Use when working in components/ambient-api-server/ or on the Ambient API
+  Server's REST endpoints, gRPC streams, OpenAPI generation, plugin resources,
+  auth, migrations, or tests.
+---
+
+# Ambient API Server
 
 ## What This Skill Knows
 
