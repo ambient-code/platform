@@ -2,8 +2,9 @@
 
 **Date:** 2026-03-20
 **Status:** Active
-**Last Updated:** 2026-06-03 — added Application (GitOps continuous sync for agent fleets); addressed review feedback: credential_id FK for remote auth, RoleBinding escalation rules, prune safety, health status semantics, gitops role grantability, sync engine kind filtering
-**Previous:** 2026-05-12 — migrate Credentials from project-scoped to global routes (`/credentials`); remove `project_id` from model, OpenAPI, and SDK; add drop-column migration; update coverage matrix
+**Last Updated:** 2026-06-10 — added Project `session_admission` for declarative session scheduling/admission intent; Applications sync the Project intent but not scheduler infrastructure
+**Previous:** 2026-06-03 — added Application (GitOps continuous sync for agent fleets); addressed review feedback: credential_id FK for remote auth, RoleBinding escalation rules, prune safety, health status semantics, gitops role grantability, sync engine kind filtering
+**Earlier:** 2026-05-12 — migrate Credentials from project-scoped to global routes (`/credentials`); remove `project_id` from model, OpenAPI, and SDK; add drop-column migration; update coverage matrix
 **Workflow:** `../../workflows/sessions/ambient-model.workflow.md` — implementation waves, gap table, build commands, run log
 **Design:** `credentials-session.md` — full Credential Kind design spec and rationale
 
@@ -49,6 +50,7 @@ erDiagram
         string name
         string description
         string prompt "workspace-level context injected into every agent start"
+        jsonb  session_admission "nullable — project-level session admission intent"
         jsonb  labels
         jsonb  annotations
         string status
@@ -132,6 +134,8 @@ erDiagram
         string  labels "JSON map; queryable tags"
         string  annotations "JSON map; freeform metadata"
         string  phase
+        string  admission_profile "nullable — resolved session admission profile"
+        string  admission_queue "nullable — resolved local admission queue"
         time    start_time
         time    completion_time
         string  kube_cr_name "Kubernetes CR / pod name (set to session ID on create)"
@@ -139,7 +143,7 @@ erDiagram
         string  kube_namespace
         string  sdk_session_id
         int32   sdk_restart_count
-        string  conditions
+        jsonb   conditions "condition array with type, status, reason, message, last_transition_time"
         string  reconciled_repos
         string  reconciled_workflow
         time    created_at
@@ -231,6 +235,8 @@ erDiagram
     Application {
         string ID PK "KSUID"
         string name "unique; human-readable"
+        string created_by_user_id FK "creator captured for local sync authorization"
+        string sync_actor_user_id FK "nullable — override actor for local sync authorization"
         string source_repo_url "git repository URL"
         string source_target_revision "branch, tag, or commit SHA"
         string source_path "path within repo to kustomize overlay"
@@ -314,7 +320,7 @@ An Application syncs **project-scoped fleet definitions** — a subset of resour
 
 | Kind | Sync Behavior |
 |---|---|
-| `Project` | Created if `CreateProject=true` in `sync_options`; patched (description, prompt, labels, annotations) on subsequent syncs |
+| `Project` | Created if `CreateProject=true` in `sync_options`; patched (description, prompt, session_admission, labels, annotations) on subsequent syncs |
 | `Agent` | Created or patched within the destination project; prompt, labels, annotations updated |
 | `Credential` | Created if not present; idempotent by name |
 | `RoleBinding` | Created if not present; idempotent by user+role+scope key. **Escalation-bound:** the sync engine can only create RoleBindings at or below the level of the service credential it uses (see Design Decisions). |
@@ -329,16 +335,19 @@ An Application syncs **project-scoped fleet definitions** — a subset of resour
 | `ScheduledSession` | Project-scoped trigger config; future sync candidate. |
 | `User` | Identity record. |
 | `Role` | RBAC definition (platform-scoped, not project-scoped). |
+| Kueue `ClusterQueue`, `LocalQueue`, `ResourceFlavor`, `Workload` | Scheduler infrastructure. Project manifests declare Ambient `session_admission` intent instead. |
 
 ### Field Reference
 
 | Field | Notes |
 |---|---|
 | `name` | Unique, human-readable. The stable address of this sync binding. |
+| `created_by_user_id` | User who created the Application. For local Applications, this user is the default effective sync actor for authorization-sensitive writes. |
+| `sync_actor_user_id` | Nullable FK to User. When set on a local Application, this user is the effective sync actor. The value can only be set to a subject the caller is allowed to delegate. |
 | `source_repo_url` | Git repository URL. HTTPS or SSH. |
 | `source_target_revision` | Branch name, tag, or commit SHA. Default: `main`. |
 | `source_path` | Relative path within the repo to a kustomize directory (must contain `kustomization.yaml`). |
-| `credential_id` | Nullable FK → Credential. The stored credential providing authentication for the destination Ambient's REST API. Required when `destination_ambient_url` is set. Uses the same write-only encrypted storage as all Credentials. The credential's token is resolved at sync time via `GET /credentials/{cred_id}/token` (gated by `credential:token-reader`). Null when targeting the local Ambient (controller uses its own service identity). |
+| `credential_id` | Nullable FK → Credential. The stored credential providing authentication for the destination Ambient's REST API. Required when `destination_ambient_url` is set. Uses the same write-only encrypted storage as all Credentials. The credential's token is resolved at sync time via `GET /credentials/{cred_id}/token` (gated by `credential:token-reader`). Null when targeting the local Ambient, where the sync controller executes locally but must still enforce authorization against the Application's effective sync actor. |
 | `destination_ambient_url` | Nullable. The Ambient API server URL to sync to. Null = local Ambient (this API server). When set, `credential_id` must also be set — async polling controllers have no request context to forward a token from. |
 | `destination_project` | Target project name. The project is created on first sync if `CreateProject=true` is in `sync_options`. |
 | `auto_sync` | If true, the controller polls the git repo and syncs automatically when changes are detected. If false, sync is manual via `POST /sync`. |
@@ -372,13 +381,15 @@ For automated sync (`auto_sync=true`), this lifecycle runs on a configurable pol
 ```
 Application.destination_ambient_url set?
   |── null  ──> local Ambient (this API server's own service layer)
-  |            ──> controller uses its own service identity
+  |            ──> controller executes locally; authorization uses the effective sync actor
   |── set   ──> remote Ambient (SDK client pointed at the URL)
               ──> credential_id MUST be set (FK → Credential)
               ──> token resolved at sync time via GET /credentials/{id}/token
 ```
 
 When targeting a remote Ambient, the sync engine acts as an API client to the remote Ambient's REST API, authenticated via the stored Credential. The credential is resolved at sync time — the controller never caches tokens beyond a single sync cycle. This is different from how Sessions use kubeconfig for direct K8s provisioning — the Application works entirely at the Ambient API layer.
+
+For local Applications, the controller's internal service identity is only an execution mechanism. Authorization-sensitive writes, including Project `session_admission`, are evaluated against the Application's effective sync actor and must not gain extra authority from the controller service identity.
 
 ### Unsupported Kinds in Sync
 
@@ -430,6 +441,26 @@ Promotion is a git operation: merge the dev overlay changes into the release bra
 
 ---
 
+## Project — Workspace And Session Admission Intent
+
+Project is the workspace boundary for Agents, Inbox messages, Sessions, and default runner admission policy. The stable address is `project_name`.
+
+| Field | Notes |
+|-------|-------|
+| `name` | Human-readable DNS-1123 project name. Also used as the Project ID. |
+| `description` | Nullable. Free-text project description. |
+| `prompt` | Workspace-level context injected into every Agent start in the Project. |
+| `session_admission` | Nullable JSON object declaring Ambient session admission intent. Initial field: `profile`, a platform-defined profile name such as `standard`. Stored `null`, `{}`, or `{"profile": null}` inherits the platform default. |
+| `labels` | JSON map for queryable project tags. |
+| `annotations` | JSON map for freeform project metadata. |
+| `status` | Nullable platform status string. |
+
+`session_admission` is an Ambient API abstraction. It does not embed Kueue `ClusterQueue`, `LocalQueue`, `ResourceFlavor`, `Workload`, or other scheduler resource definitions. The control plane resolves the Project's admission profile into platform-owned scheduler infrastructure. See [Kueue Session Admission](../control-plane/kueue-session-admission.spec.md).
+
+Declarative apply treats omitted `session_admission` as unmanaged. Applying `session_admission: null` or `session_admission: {}` clears the stored policy back to default inheritance.
+
+---
+
 ## Agent — Project-Scoped Mutable Definition
 
 Agent is scoped to a Project. The stable address is `{project_name}/{agent_name}`.
@@ -450,7 +481,7 @@ Agent is scoped to a Project. The stable address is `{project_name}/{agent_name}
 | `bot_account_name` | Nullable. Service account name for git operations inside sessions. Copied to `Session.bot_account_name` on ignite. |
 | `resource_overrides` | Nullable. JSON-encoded pod resource requests/limits override for sessions spawned by this agent. Copied to `Session.resource_overrides` on ignite. |
 | `environment_variables` | Nullable. JSON-encoded extra environment variables injected into session pods. Copied to `Session.environment_variables` on ignite. |
-| `current_session_id` | Denormalized FK to the active Session. Null when no session is running. Used by Project Home for fast reads. |
+| `current_session_id` | Denormalized FK to the active Session. Null when the Agent has no non-terminal Session. Used by Project Home for fast reads. |
 
 **Agent is mutable.** PATCH updates in place. There is no versioning. If you need to track prompt history, use `labels`/`annotations` or an external audit log.
 
@@ -476,7 +507,7 @@ Inbox messages are addressed to an Agent (`agent_id`). They are distinct from Se
 | Scope | Agent (persists across sessions) | Session (ephemeral) |
 | Created by | Human or another Agent | LLM turn / runner gRPC push |
 | Drained | At session start | Never — append-only stream |
-| Purpose | Queued intent waiting for next run | Real LLM event stream |
+| Purpose | Persistent intent waiting for next run | Real LLM event stream |
 
 At session start, all unread Inbox messages are drained: marked `read=true` and injected as context into the Session prompt before the first SessionMessage turn.
 
@@ -487,6 +518,10 @@ At session start, all unread Inbox messages are drained: marked `read=true` and 
 Sessions are **not directly creatable**. They are run artifacts created exclusively via `POST /projects/{project_id}/agents/{agent_id}/start`.
 
 `Session.prompt` scopes the task for this specific run — separate from `Agent.prompt` which defines who the agent is.
+
+Session phases are title-case values: `Pending`, `Creating`, `Queued`, `Running`, `Stopping`, `Stopped`, `Completed`, and `Failed`. Active phases are `Pending`, `Creating`, `Queued`, and `Running`; active Sessions block duplicate Agent starts and remain referenced by `Agent.current_session_id`.
+
+`Queued` means the Session has already been created by Agent start and is waiting for runner admission, scheduling, readiness, or reachability. Inbox messages are drained at Agent start time. Messages created while a Session is `Queued` remain unread for a future Agent start.
 
 ```
 Project.prompt  → "This workspace builds the Ambient platform API server in Go."
@@ -553,8 +588,8 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 |---|---|---|
 | `GET /projects` | `acpctl get projects` | ✅ implemented |
 | `GET /projects/{id}` | `acpctl get project <name>` | ✅ implemented |
-| `POST /projects` | `acpctl create project --name <n> [--description <d>]` | ✅ implemented |
-| `PATCH /projects/{id}` | `acpctl project update [--name <n>] [--description <d>] [--prompt <p>]` | ✅ implemented |
+| `POST /projects` | `acpctl create project --name <n> [--description <d>] [--session-admission-profile <p>]` | ✅ existing command; admission flag 🔲 planned |
+| `PATCH /projects/{id}` | `acpctl project update [--name <n>] [--description <d>] [--prompt <p>] [--session-admission-profile <p>]` | ✅ existing command; admission flag 🔲 planned |
 | `DELETE /projects/{id}` | `acpctl delete project <name>` | ✅ implemented |
 | _(context switch)_ | `acpctl project <name>` | ✅ implemented |
 | _(context view)_ | `acpctl project current` | ✅ implemented |
@@ -680,15 +715,16 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 
 ### `acpctl apply` — Declarative Fleet Management
 
-`acpctl apply` reconciles Projects and Agents from declarative YAML files, mirroring `kubectl apply` semantics. It is the primary way to provision and update entire agent fleets from the `.ambient/teams/` directory tree.
+`acpctl apply` reconciles Projects, Agents, Credentials, and RoleBindings from declarative YAML files, mirroring `kubectl apply` semantics. It is the primary way to provision and update entire agent fleets from the `.ambient/teams/` directory tree.
 
 #### Supported Kinds
 
 | Kind | Fields applied |
 |---|---|
-| `Project` | `name`, `description`, `prompt`, `labels`, `annotations` |
+| `Project` | `name`, `description`, `prompt`, `session_admission`, `labels`, `annotations` |
 | `Agent` | `name`, `prompt`, `labels`, `annotations`, `inbox` (seed messages) |
 | `Credential` | `name`, `description`, `provider`, `token` (env var reference), `url`, `email`, `labels`, `annotations` — global resource; use `credential bind` to grant project access |
+| `RoleBinding` | `role`, `scope`, `project_id`, `agent_id`, `session_id`, `credential_id`, `user_id` |
 
 `Agent` resources in `.ambient/teams/` files also carry an `inbox` list of seed messages. On apply, any message in the list is posted to the agent's inbox if an identical message (same `from_name` + `body`) does not already exist there.
 
@@ -703,7 +739,7 @@ acpctl apply -f -                    # read from stdin
 Each file may contain one or more YAML documents separated by `---`. Documents with unrecognised `kind` values are skipped with a warning.
 
 Apply behaviour per resource:
-- **Project**: if a project with `name` already exists, `PATCH` it (description, prompt, labels, annotations). If it does not exist, `POST` to create it.
+- **Project**: if a project with `name` already exists, `PATCH` it (description, prompt, session_admission, labels, annotations). If it does not exist, `POST` to create it.
 - **Agent**: resolved within the current project context. If an agent with `name` already exists in the project, `PATCH` it (prompt, labels, annotations). If it does not exist, `POST` to create it. After upsert, post any inbox seed messages not already present.
 
 Output (default — one line per resource):
@@ -866,7 +902,7 @@ GET    /api/ambient/v1/projects/{id}/agents/{agent_id}/role_bindings    RBAC bin
   "session": {
     "id": "2abc...",
     "agent_id": "1def...",
-    "phase": "pending",
+    "phase": "Pending",
     "created_by_user_id": "...",
     "created_at": "2026-03-20T00:00:00Z"
   },
@@ -1443,6 +1479,8 @@ This structure means you can define and compose bespoke agent suites — entire 
 | `labels` / `annotations` are JSONB, not strings | Enables GIN-indexed key/value queries (`@>` operator) without joins; every row carries its own metadata without a separate EAV table. `labels` = queryable tags; `annotations` = freeform notes. Applied to first-class Kinds: User, Project, Agent, Session. Not applied to Inbox, SessionMessage, Role/RoleBinding. |
 | Credential is global, not project-scoped | Eliminates duplication when the same PAT is used across multiple Projects. Access controlled via RoleBindings with `credential` scope. A single Credential can be shared across Projects without creating copies. |
 | Application syncs fleet definitions, not infrastructure | Application syncs Projects, Agents, Credentials, RoleBindings, and Inbox seeds. Sessions, Users, and Roles are not synced. |
+| Project `session_admission` syncs intent, not scheduler objects | Project manifests can declare the desired session admission profile. Applications sync that Project field through the Ambient API. Kueue queues, flavors, and workloads remain platform-owned scheduler infrastructure and are skipped as unsupported Application sync kinds. |
+| `Queued` is a Session phase, not Inbox state | Inbox stores persistent intent before Agent start. `Queued` is a runtime Session phase after Agent start while the runner waits for admission or scheduling. |
 | Application targets Ambient API, not K8s API | Unlike Sessions (which use kubeconfig for direct K8s provisioning), Application works at the Ambient REST API layer. Remote sync uses the SDK client pointed at `destination_ambient_url`. |
 | Promotion via multiple Applications | Each environment gets its own Application pointing to a different git overlay and destination Ambient URL. Promotion = merge changes between overlay branches. |
 | Kustomize engine shared between CLI and API server | The sync engine reuses the same kustomize rendering logic as `acpctl apply -k`. |
@@ -1523,12 +1561,14 @@ design rationale (storage, rotation, provider serialization, migration).
 
 ## Implementation Coverage Matrix
 
-_Last updated: 2026-04-28. Use this as the authoritative index — click into component source to verify._
+_Last updated: 2026-06-10. Use this as the authoritative index — click into component source to verify._
 
 | Area | API Server | Go SDK | CLI (`acpctl`) | Notes |
 |---|---|---|---|---|
 | **Sessions — CRUD** | ✅ | ✅ `SessionAPI.{Get,List,Create,Update,Delete}` | ✅ `get/create/delete session` | |
 | **Sessions — start/stop** | ✅ `/start` `/stop` | ✅ `SessionAPI.{Start,Stop}` | ✅ `start`/`stop` commands | |
+| **Sessions — `Queued` phase** | 🔲 add validator, OpenAPI, gRPC, active queries, stop support | 🔲 Go/Python/TypeScript SDK phase helpers and generated models | 🔲 CLI/frontend/ambient-ui phase parsing, active checks, action gates | Required by Kueue Session Admission |
+| **Sessions — admission status** | 🔲 add `admission_profile`, `admission_queue`, structured `conditions` migration | 🔲 Go/Python/TypeScript SDK fields and condition types | 🔲 describe/watch output for admission profile, queue, and conditions | Required by Kueue Session Admission |
 | **Sessions — messages (list/push/watch)** | ✅ `/messages` | ✅ `PushMessage`, `ListMessages`, `WatchSessionMessages` (gRPC) | ✅ `session messages`, `session send` | gRPC watch via `session_watch.go` |
 | **Session messages (top-level)** | ✅ `GET /session_messages` | ✅ `SessionMessages().List()` | n/a | SDK/CP-internal; used by CP to resolve max seq on restart |
 | **Sessions — live events (SSE proxy)** | ✅ `/events` → runner pod | ✅ `SessionAPI.StreamEvents` → `io.ReadCloser` | ✅ `session events` | Runner must be Running; 502 if unreachable |
@@ -1546,6 +1586,7 @@ _Last updated: 2026-04-28. Use this as the authoritative index — click into co
 | **Inbox — list/send** | ✅ GET/POST `/inbox` | ✅ `InboxMessageAPI.{ListByAgent,Send}` + `ProjectAgentAPI.{ListInboxInProject,SendInboxInProject}` | ✅ `inbox list`, `inbox send` | |
 | **Inbox — mark-read/delete** | ✅ PATCH/DELETE `/inbox/{id}` | ✅ `InboxMessageAPI.{MarkRead,DeleteMessage}` | ✅ `inbox mark-read`, `inbox delete` | |
 | **Projects — CRUD** | ✅ | ✅ `ProjectAPI.{Get,List,Create,Update,Delete}` | ✅ `get/create/delete project`, `project set/current`, `project update` | |
+| **Projects — session_admission** | 🔲 add DB field, REST, OpenAPI, gRPC, validation | 🔲 Go/Python/TypeScript SDK models/builders | 🔲 create/update/apply flags and drift semantics | Project-level admission intent; Applications sync this field |
 | **Projects — labels/annotations** | ✅ PATCH accepts `labels`/`annotations` | ✅ fields on `Project` type; `ProjectAPI.Update(patch map[string]any)` | ⚠️ no dedicated subcommand | |
 | **RBAC — roles** | ✅ full CRUD | ✅ `RoleAPI` | ✅ `create role`, `get roles`, `get roles <id>`, `delete role` | |
 | **RBAC — role bindings** | ✅ full CRUD | ✅ `RoleBindingAPI` | ✅ `create role-binding`, `get role-bindings`, `get role-bindings <id>`, `delete role-binding` | |
@@ -1554,6 +1595,7 @@ _Last updated: 2026-04-28. Use this as the authoritative index — click into co
 | **Credentials — token fetch** | ✅ `GET /credentials/{cred_id}/token` | ✅ `GetToken()` in `credential_extensions.go` | ✅ `credential token <id>` | Gated by `credential:token-reader`; granted to runner SA by operator |
 | **ScheduledSessions — CRUD** | ✅ scheduledSessions plugin | ✅ `ScheduledSessionAPI.{List,Get,Create,Update,Delete,GetByName}` | ✅ `scheduled-session list/get/create/update/delete` | |
 | **ScheduledSessions — lifecycle** | ✅ suspend/resume/trigger/runs handlers | ✅ `ScheduledSessionAPI.{Suspend,Resume,Trigger,Runs}` | ✅ `scheduled-session suspend/resume/trigger/runs` | |
+| **Applications — sync actor** | 🔲 add `created_by_user_id`, `sync_actor_user_id`, local sync authorization | 🔲 SDK fields when Applications are generated | 🔲 Application create/update/display commands | Required before local Application sync can apply `session_admission` safely |
 | **Generic proxy — project config** | ✅ proxy plugin (`plugins/proxy`); forwards non-`/api/ambient/` paths to `BACKEND_URL` | n/a | 🔲 raw HTTP fallback | Permissions, keys, MCP servers, secrets, feature flags |
 | **Generic proxy — repo operations** | ✅ proxy plugin | n/a | 🔲 raw HTTP fallback | Tree, blob, branches, seed, forks |
 | **Generic proxy — auth integrations** | ✅ proxy plugin | n/a | n/a | GitHub/GitLab/Google/Jira/Gerrit/CodeRabbit/MCP OAuth flows |
