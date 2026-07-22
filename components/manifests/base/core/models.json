@@ -189,6 +189,22 @@
       "provider": "google",
       "available": false,
       "featureGated": true
+    },
+    {
+      "id": "gemini-3.5-flash-lite",
+      "label": "Gemini 3.5 Flash Lite",
+      "vertexId": "gemini-3.5-flash-lite@default",
+      "provider": "google",
+      "available": false,
+      "featureGated": true
+    },
+    {
+      "id": "gemini-3.6-flash",
+      "label": "Gemini 3.6 Flash",
+      "vertexId": "gemini-3.6-flash@default",
+      "provider": "google",
+      "available": false,
+      "featureGated": true
     }
   ]
 }
