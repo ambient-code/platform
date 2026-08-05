@@ -62,7 +62,7 @@ func registerSessionTools(s *server.MCPServer, c *client.Client, transport strin
 			mcp.WithString("agent_id", mcp.Description("Agent ID to execute the session.")),
 			mcp.WithString("model", mcp.Description("LLM model override (e.g. 'claude-sonnet-4-6').")),
 			mcp.WithString("parent_session_id", mcp.Description("Calling session ID for agent-to-agent delegation.")),
-			mcp.WithString("name", mcp.Description("Human-readable session name.")),
+			mcp.WithString("name", mcp.Description("Human-readable session name (max 50 chars). Provide a concise, descriptive title, e.g. 'Debug auth middleware'. Auto-generated from prompt if omitted.")),
 		),
 		tools.CreateSession(c),
 	)
