@@ -82,6 +82,27 @@ spec:
                     description: "List of default MCP server names to disable for all sessions in this project"
                     items:
                       type: string
+              workflowSources:
+                type: array
+                description: "Custom workflow source repositories. Workflows from these repos appear alongside OOTB workflows in session creation."
+                items:
+                  type: object
+                  required:
+                  - name
+                  - gitUrl
+                  properties:
+                    name:
+                      type: string
+                      description: "Display name for this workflow source"
+                    gitUrl:
+                      type: string
+                      description: "Git repository URL containing workflow definitions"
+                    branch:
+                      type: string
+                      description: "Branch to read workflows from (defaults to main)"
+                    path:
+                      type: string
+                      description: "Subdirectory containing workflows (defaults to workflows)"
           status:
             type: object
             properties:
