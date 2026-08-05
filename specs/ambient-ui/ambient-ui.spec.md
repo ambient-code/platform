@@ -830,13 +830,26 @@ Sessions with an `ambient-code.io/ui/preview-url` annotation SHALL offer a live 
 
 The preview iframe SHALL be hardened:
 - The `sandbox` attribute SHALL be set with minimal permissions (`allow-scripts allow-same-origin allow-forms`). Top-level navigation (`allow-top-navigation`) and popups (`allow-popups`) SHALL NOT be granted.
-- The UI SHALL validate the preview URL against a configurable allowlist of trusted host patterns (e.g., `*.apps.rosa.example.com`, `*.apps.cluster.local`). URLs not matching the allowlist SHALL be rejected with an error message instead of rendered.
-- A Content-Security-Policy `frame-src` directive SHALL restrict the iframe to the allowlisted hosts.
+- The UI and BFF preview proxy SHALL validate the preview URL against the active Project's `spec.preview.allowedHosts` policy. URLs not matching the Project allowlist SHALL be rejected with an error message instead of rendered.
+- The iframe SHALL load a session-scoped BFF route, for example `/api/projects/{projectId}/sessions/{sessionId}/preview?url=...`. The BFF SHALL fetch the Session server-side, read `ambient-code.io/ui/preview-url`, and accept the requested URL only when it equals that annotation value or carries a server-issued preview continuation token for the same Project, Session, and target URL. Arbitrary `url` parameters outside the Session preview context SHALL be rejected.
+- The preview proxy SHALL issue continuation tokens only for URLs discovered from a previously authorized preview response or redirect chain. Continuation tokens SHALL be signed or stored server-side, short-lived, bound to Project and Session, and revalidated against the effective preview policy before use.
+- For every proxied request, including redirects and injected-link navigations, the preview proxy SHALL revalidate the target URL against the effective preview policy. Token relay SHALL be recomputed per target host.
+- The preview proxy SHALL forward the BFF's server-side SSO access token to the preview target only when the matching Project preview host entry has `forwardAmbientToken: true` and the platform token-relay policy permits that host. Hosts with `forwardAmbientToken: false` SHALL render without Ambient token relay. Custom connection tokens entered through the status-bar connection controls SHALL NOT be forwarded to preview targets.
+- A Content-Security-Policy `frame-src` directive SHALL restrict iframes to the same-origin preview proxy and any platform-configured direct-frame hosts. Project-specific preview host trust is enforced server-side by the proxy.
+
+The session-scoped BFF route is required for preview rendering. `GET /api/projects/{projectId}/sessions/{sessionId}/preview?url=...` SHALL be the iframe `src`, fetch Session and Project state server-side, evaluate the requested URL against the Session annotation and the Project preview policy, proxy the authorized response, and return a 4xx response for malformed, untrusted, or out-of-session targets. Direct iframe navigation to the annotation URL SHALL NOT bypass this route. Links and redirects discovered inside a proxied preview SHALL be rewritten through the same route with a continuation token, so every subsequent navigation repeats Session binding, Project allowlist validation, and token-relay evaluation.
+
+Preview policy resolution during rollout SHALL be tri-state:
+- If the API/SDK cannot expose Project `spec.preview`, preview trust MAY be read from deployment configuration as a read-only, deployment-scoped fallback.
+- If the API/SDK exposes Project `spec.preview` but a Project has no explicit `spec.preview` field, the deployment fallback MAY be used for that Project.
+- If a Project has explicit `spec.preview.allowedHosts`, including `[]`, Project policy is authoritative and overrides deployment fallback.
+
+Fallback entries imply `forwardAmbientToken: false`.
 
 #### Scenario: Preview mode activation
 
 - GIVEN a session with `ambient-code.io/ui/preview-url: "https://app.example.com"` and `ambient-code.io/ui/preview-title: "SSO Login v2"`
-- AND the URL matches the configured preview host allowlist
+- AND the URL matches the active Project's preview host allowlist
 - WHEN the user clicks "Open Preview" in the session detail
 - THEN a near-fullscreen overlay opens with the URL loaded in a sandboxed iframe
 - AND the overlay header shows the preview title, device size toggles (Desktop/Tablet/Mobile), and a Comment button
@@ -844,10 +857,35 @@ The preview iframe SHALL be hardened:
 #### Scenario: Preview URL rejected (untrusted host)
 
 - GIVEN a session with `ambient-code.io/ui/preview-url: "https://evil.example.com"`
-- AND the URL does not match the configured preview host allowlist
+- AND the URL does not match the active Project's preview host allowlist
 - WHEN the user clicks "Open Preview"
 - THEN the preview does not render
 - AND an error message is displayed: "Preview URL is not on the trusted hosts allowlist"
+
+#### Scenario: Preview renders without Ambient token relay
+
+- GIVEN a session with `ambient-code.io/ui/preview-url: "https://deploy-preview-123.netlify.app"`
+- AND the active Project allowlist contains `pattern: "deploy-preview-*.netlify.app"` with `forwardAmbientToken: false`
+- WHEN the user opens the preview
+- THEN the preview proxy fetches the target without an Ambient `Authorization` header
+- AND the preview renders if the target does not require Ambient authentication
+
+#### Scenario: Preview token relay requires explicit trust
+
+- GIVEN a session with `ambient-code.io/ui/preview-url: "https://pr-123.checkout.apps.rosa.example.com"`
+- AND the active Project allowlist contains `pattern: "pr-*.checkout.apps.rosa.example.com"` with `forwardAmbientToken: true`
+- AND platform token-relay policy permits that host pattern
+- WHEN the user opens the preview
+- THEN the preview proxy forwards the BFF's server-side SSO access token to the preview target
+- AND no custom status-bar connection token is forwarded
+
+#### Scenario: Preview token relay denied by platform policy
+
+- GIVEN a Project preview allowlist entry with `forwardAmbientToken: true`
+- AND the host pattern is outside the platform token-relay policy
+- WHEN the UI or API attempts to save the Project preview entry
+- THEN the save is rejected
+- AND the preview target is not treated as trusted for Ambient token relay
 
 #### Scenario: Device size emulation
 
@@ -966,7 +1004,50 @@ No list-watch endpoint exists for sessions today. Polling is the interim mechani
 
 The Settings view SHALL provide project-scoped configuration management with tabbed sections.
 
-**Tabs:** General (project metadata), Permissions (user/role management), API Keys (key lifecycle), Feature Flags (toggles with confirmation).
+**Tabs:** General (project metadata), Preview (trusted preview hosts), Permissions (user/role management), API Keys (key lifecycle), Feature Flags (toggles with confirmation).
+
+### Requirement: Preview Trust Configuration
+
+The Settings view SHALL expose the active Project's `spec.preview.allowedHosts` policy. The Preview tab SHALL list trusted host patterns, show whether each pattern forwards the BFF's server-side SSO access token, and allow authorized users to add, edit, or remove entries.
+
+The UI SHALL persist Preview tab changes through the Project API by updating Project `spec.preview`. The UI SHALL NOT write preview trust policy to Project labels or annotations.
+
+If Project `spec.preview` API/SDK support is not available in a deployed version, the Preview tab SHALL show the effective deployment-scoped fallback policy as read-only or hide editing controls entirely. Editing becomes available only when Project `spec.preview` writes are supported.
+
+The UI SHALL render the same logical policy that can be applied by YAML:
+
+```yaml
+apiVersion: ambient-code.io/v1alpha1
+kind: Project
+metadata:
+  name: checkout
+spec:
+  preview:
+    allowedHosts:
+      - pattern: "pr-*.checkout.apps.rosa.example.com"
+        forwardAmbientToken: true
+```
+
+#### Scenario: Project editor updates preview allowlist
+
+- GIVEN user A has `project:editor` on Project `checkout`
+- WHEN user A adds `pr-*.checkout.apps.rosa.example.com` in Settings > Preview
+- THEN the UI saves the entry to Project `spec.preview.allowedHosts`
+- AND subsequent previews in Project `checkout` use the updated allowlist
+
+#### Scenario: Project viewer sees read-only preview settings
+
+- GIVEN user B has `project:viewer` on Project `checkout`
+- WHEN user B opens Settings > Preview
+- THEN the current preview host policy is visible
+- AND controls that would create, update, or remove entries are disabled or hidden
+
+#### Scenario: Empty allowlist disables project previews
+
+- GIVEN Project `checkout` has `spec.preview.allowedHosts: []`
+- WHEN a Session in `checkout` has an `ambient-code.io/ui/preview-url` annotation
+- THEN opening the preview is rejected as untrusted
+- AND the UI explains that no trusted preview hosts are configured for the Project
 
 #### Scenario: Feature flag toggle confirmation
 
@@ -1117,6 +1198,7 @@ This section documents API endpoints and capabilities that this spec depends on 
 
 | Dependency | Required By | Status | Interim |
 |------------|-------------|--------|---------|
+| Project `spec.preview.allowedHosts` API and SDK support | Live Preview, Settings > Preview | Specified in Ambient Data Model; implementation planned | Use deployment-level preview env allowlist as read-only fallback until Project preview policy is available; fallback never enables Ambient token relay |
 | Annotation enrichment endpoint (resolve `ambient-code.io/jira/issue` etc. against bound credentials) | Annotation enrichment, Issues view status filtering | Not yet specified | Render raw annotation values as clickable chips |
 | `GET /credentials/{cred_id}/role_bindings` (scoped query) | Credential binding display | Planned, not implemented | Use generic `GET /role_bindings` filtered by `credential_id` |
 | Cross-resource search endpoint | Global search | Not planned | Client-side aggregation across multiple list endpoints |
@@ -1133,6 +1215,8 @@ This section documents API endpoints and capabilities that this spec depends on 
 | Annotation registry is a code enum (not dynamic) | Simplicity. Adding a new annotation type is a PR, not a config change. The set of annotations the UI understands should be deliberate and reviewed. |
 | Enrichment as graceful degradation | UI ships without enrichment API. Raw annotation values are useful on their own (clickable links). Enriched tooltips are additive. |
 | Cost as annotation, not API field | Cost is agent-computed and written as `ambient-code.io/cost/estimate`. No API-level cost computation. |
+| Preview trust as Project spec, not annotation metadata or a singleton settings kind | Preview host trust is security-sensitive Project desired state. It belongs in typed Project `spec.preview` so it can be validated, authorized, edited via UI/API, and reconciled by `acpctl apply`. Session annotations only point to a preview URL; they do not grant trust. |
+| Preview rendering trust separated from Ambient token relay trust | Many preview hosts should be frameable without receiving Ambient bearer tokens. `forwardAmbientToken` is explicit per host entry and may be constrained by platform token-relay policy. |
 | Tool metrics computed client-side | The API stores raw SessionMessages. Aggregating tool call stats is a UI concern, not an API concern. |
 | SSE for sessions, polling for rest | Sessions have real-time SSE streams. Credentials, schedules, and agents change infrequently — polling is sufficient and simpler. |
 | Single interaction pattern per entity | Agent rows: navigate to detail page. Session rows: navigate to detail page. Reduces cognitive load per Krug's "Don't Make Me Think." |
