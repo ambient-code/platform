@@ -205,6 +205,14 @@
       "provider": "google",
       "available": false,
       "featureGated": true
+    },
+    {
+      "id": "gemini-3.7-flash",
+      "label": "Gemini 3.7 Flash",
+      "vertexId": "gemini-3.7-flash@default",
+      "provider": "google",
+      "available": false,
+      "featureGated": true
     }
   ]
 }
