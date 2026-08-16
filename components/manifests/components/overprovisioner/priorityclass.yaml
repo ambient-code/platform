@@ -1,0 +1,12 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: acp-overprovisioning
+  labels:
+    app.kubernetes.io/part-of: acp-overprovisioner
+value: -10
+globalDefault: false
+description: >-
+  Low-priority class for overprovisioning placeholder pods.
+  These pods reserve capacity for agentic session runners and
+  are preempted immediately when real workloads need scheduling.
