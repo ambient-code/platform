@@ -1,0 +1,348 @@
+{
+  "release": "v0.2.10",
+  "date": "2026-06-01",
+  "prs_analyzed": 4,
+  "total_comments": 16,
+  "critical": 2,
+  "major": 14,
+  "by_component": {
+    "other": {
+      "critical": 2,
+      "major": 12,
+      "total": 14
+    },
+    "manifests": {
+      "critical": 0,
+      "major": 2,
+      "total": 2
+    }
+  },
+  "top_patterns": [
+    {
+      "name": "Add explicit trusted-proxy boundary for forwarded identity headers.",
+      "count": 1,
+      "critical": 1,
+      "major": 0,
+      "impact_score": 4,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3320015227,
+          "title": "Add explicit trusted-proxy boundary for forwarded identity headers.",
+          "path": "specs/ambient-ui/ambient-ui.spec.md",
+          "html_url": "https://github.com/ambient-code/platform/pull/1611#discussion_r3320015227",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Fix `sed` replacement escaping for dynamic values (`&`, `\\`, and delimiter `|`)",
+      "count": 1,
+      "critical": 1,
+      "major": 0,
+      "impact_score": 4,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3318626135,
+          "title": "Fix `sed` replacement escaping for dynamic values (`&`, `\\`, and delimiter `|`)",
+          "path": ".specify/scripts/bash/update-agent-context.sh",
+          "html_url": "https://github.com/ambient-code/platform/pull/1569#discussion_r3318626135",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Do not document TLS verification disablement for production.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3334728584,
+          "title": "Do not document TLS verification disablement for production.",
+          "path": "skills/ambient-ui/deploy/SKILL.md",
+          "html_url": "https://github.com/ambient-code/platform/pull/1622#discussion_r3334728584",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Fix `NODE_EXTRA_CA_CERTS` to trust the OpenShift service-ca signer (not the serviceaccount CA).",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "manifests"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3335083707,
+          "title": "Fix `NODE_EXTRA_CA_CERTS` to trust the OpenShift service-ca signer (not the serviceaccount CA).",
+          "path": "components/manifests/overlays/production/ambient-ui-oauth-patch.yaml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1622#discussion_r3335083707",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Distroless-incompatible verification command will fail.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3335117301,
+          "title": "Distroless-incompatible verification command will fail.",
+          "path": "skills/deployments/ambient-ui/SKILL.md",
+          "html_url": "https://github.com/ambient-code/platform/pull/1622#discussion_r3335117301",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Scope postMessage replies to the requester's origin.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3324863132,
+          "title": "Scope postMessage replies to the requester's origin.",
+          "path": "components/ambient-ui/public/preview-bridge.js",
+          "html_url": "https://github.com/ambient-code/platform/pull/1618#discussion_r3324863132",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "User access token forwarded to every allowlisted preview host.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3324863146,
+          "title": "User access token forwarded to every allowlisted preview host.",
+          "path": "components/ambient-ui/src/app/api/preview-proxy/route.ts",
+          "html_url": "https://github.com/ambient-code/platform/pull/1618#discussion_r3324863146",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "10MB limit is bypassable; HTML path buffers unbounded before checking.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3324863155,
+          "title": "10MB limit is bypassable; HTML path buffers unbounded before checking.",
+          "path": "components/ambient-ui/src/app/api/preview-proxy/route.ts",
+          "html_url": "https://github.com/ambient-code/platform/pull/1618#discussion_r3324863155",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Gate `feedback.markAsSent()` on successful feedback delivery",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3324863195,
+          "title": "Gate `feedback.markAsSent()` on successful feedback delivery",
+          "path": "components/ambient-ui/src/components/preview/preview-overlay.tsx",
+          "html_url": "https://github.com/ambient-code/platform/pull/1618#discussion_r3324863195",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Fix iframe sandbox to prevent app-origin script execution for `preview-proxy`.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3324863209,
+          "title": "Fix iframe sandbox to prevent app-origin script execution for `preview-proxy`.",
+          "path": "components/ambient-ui/src/components/preview/preview-overlay.tsx",
+          "html_url": "https://github.com/ambient-code/platform/pull/1618#discussion_r3324863209",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Avoid the nested state setter in `markAsSent` \u2014 risks duplicated `sentItems`.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3324863223,
+          "title": "Avoid the nested state setter in `markAsSent` \u2014 risks duplicated `sentItems`.",
+          "path": "components/ambient-ui/src/hooks/use-feedback.ts",
+          "html_url": "https://github.com/ambient-code/platform/pull/1618#discussion_r3324863223",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Confirm oauth-proxy client-id/secret + OAuthClient redirect wiring (`ambient-ui-oauth-patch.yaml`)",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "manifests"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3324863270,
+          "title": "Confirm oauth-proxy client-id/secret + OAuthClient redirect wiring (`ambient-ui-oauth-patch.yaml`)",
+          "path": "components/manifests/overlays/production/ambient-ui-oauth-patch.yaml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1618#discussion_r3324863270",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Fix framework name typo in workflow standard.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3320015217,
+          "title": "Fix framework name typo in workflow standard.",
+          "path": "skills/ambient-ui/workflow/SKILL.md",
+          "html_url": "https://github.com/ambient-code/platform/pull/1611#discussion_r3320015217",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Define iframe hardening requirements for preview mode.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3320015231,
+          "title": "Define iframe hardening requirements for preview mode.",
+          "path": "specs/ambient-ui/ambient-ui.spec.md",
+          "html_url": "https://github.com/ambient-code/platform/pull/1611#discussion_r3320015231",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Race condition: `timeout: 0` defeats skeleton wait logic.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3318675060,
+          "title": "Race condition: `timeout: 0` defeats skeleton wait logic.",
+          "path": "e2e/cypress/e2e/sessions.cy.ts",
+          "html_url": "https://github.com/ambient-code/platform/pull/1569#discussion_r3318675060",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Avoid hardcoding secret-like values in test source.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3318726598,
+          "title": "Avoid hardcoding secret-like values in test source.",
+          "path": "e2e/cypress/e2e/sessions.cy.ts",
+          "html_url": "https://github.com/ambient-code/platform/pull/1569#discussion_r3318726598",
+          "ai_prompt": ""
+        }
+      ]
+    }
+  ],
+  "coverage_gaps": 16,
+  "pattern_categories": {
+    "security": 11,
+    "error_handling": 4,
+    "validation": 1
+  }
+}
