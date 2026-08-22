@@ -1,8 +1,8 @@
 {
   "description": "Canonical list of Claude Agent SDK ClaudeAgentOptions fields",
   "generatedFrom": "claude-agent-sdk (PyPI)",
-  "generatedAt": "2026-08-13T09:53:14.505332+00:00",
-  "sdkVersion": "0.2.137",
+  "generatedAt": "2026-08-22T09:17:44.866614+00:00",
+  "sdkVersion": "0.2.144",
   "options": {
     "tools": {
       "type": "list[str] | claude_agent_sdk.types.ToolsPreset | None",
@@ -121,6 +121,10 @@
       "required": false
     },
     "include_hook_events": {
+      "type": "<class 'bool'>",
+      "required": false
+    },
+    "forward_subagent_text": {
       "type": "<class 'bool'>",
       "required": false
     },
