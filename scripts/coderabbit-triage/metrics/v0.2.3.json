@@ -1,0 +1,1512 @@
+{
+  "release": "v0.2.3",
+  "date": "2026-04-22",
+  "prs_analyzed": 8,
+  "total_comments": 76,
+  "critical": 18,
+  "major": 58,
+  "by_component": {
+    "ci": {
+      "critical": 0,
+      "major": 2,
+      "total": 2
+    },
+    "api-server": {
+      "critical": 1,
+      "major": 0,
+      "total": 1
+    },
+    "backend": {
+      "critical": 0,
+      "major": 7,
+      "total": 7
+    },
+    "frontend": {
+      "critical": 1,
+      "major": 4,
+      "total": 5
+    },
+    "runner": {
+      "critical": 3,
+      "major": 10,
+      "total": 13
+    },
+    "manifests": {
+      "critical": 2,
+      "major": 10,
+      "total": 12
+    },
+    "docs": {
+      "critical": 0,
+      "major": 1,
+      "total": 1
+    },
+    "operator": {
+      "critical": 0,
+      "major": 1,
+      "total": 1
+    },
+    "cli": {
+      "critical": 2,
+      "major": 13,
+      "total": 15
+    },
+    "sdk": {
+      "critical": 7,
+      "major": 2,
+      "total": 9
+    },
+    "other": {
+      "critical": 2,
+      "major": 6,
+      "total": 8
+    },
+    "scripts": {
+      "critical": 0,
+      "major": 2,
+      "total": 2
+    }
+  },
+  "top_patterns": [
+    {
+      "name": "Critical: InboxMessageAPI endpoints use `/projects` routes instead of inbox-message-specific paths.",
+      "count": 3,
+      "critical": 3,
+      "major": 0,
+      "impact_score": 12,
+      "components": [
+        "sdk"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3117826566,
+          "title": "Critical: InboxMessageAPI endpoints use `/projects` routes instead of inbox-message-specific paths.",
+          "path": "components/ambient-sdk/python-sdk/ambient_platform/_inbox_message_api.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1373#discussion_r3117826566",
+          "ai_prompt": ""
+        },
+        {
+          "id": 3117826569,
+          "title": "Critical: SessionMessageAPI uses wrong endpoints and missing session_id parameter.",
+          "path": "components/ambient-sdk/python-sdk/ambient_platform/_session_message_api.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1373#discussion_r3117826569",
+          "ai_prompt": ""
+        },
+        {
+          "id": 3117826590,
+          "title": "`SessionMessageAPI` endpoints are incorrect (critical bug).",
+          "path": "components/ambient-sdk/ts-sdk/example/js/ambient-sdk.js",
+          "html_url": "https://github.com/ambient-code/platform/pull/1373#discussion_r3117826590",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Add resource limits and pin DB image to immutable digest.",
+      "count": 3,
+      "critical": 1,
+      "major": 2,
+      "impact_score": 10,
+      "components": [
+        "manifests"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119585918,
+          "title": "Add resource limits and pin DB image to immutable digest.",
+          "path": "components/manifests/overlays/mpp-openshift/ambient-api-server-db.yaml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1379#discussion_r3119585918",
+          "ai_prompt": ""
+        },
+        {
+          "id": 3119585930,
+          "title": "Pin `vteam_api_server` images to immutable digests.",
+          "path": "components/manifests/overlays/mpp-openshift/ambient-api-server.yaml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1379#discussion_r3119585930",
+          "ai_prompt": ""
+        },
+        {
+          "id": 3119585937,
+          "title": "Pin container references to immutable versions",
+          "path": "components/manifests/overlays/mpp-openshift/ambient-control-plane.yaml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1379#discussion_r3119585937",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Paginate both project and per-project session fetches.",
+      "count": 2,
+      "critical": 1,
+      "major": 1,
+      "impact_score": 7,
+      "components": [
+        "cli",
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118844452,
+          "title": "Paginate both project and per-project session fetches.",
+          "path": "components/ambient-cli/cmd/acpctl/ambient/tui/fetch.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1377#discussion_r3118844452",
+          "ai_prompt": ""
+        },
+        {
+          "id": 3118386639,
+          "title": "Don't delete the shared project namespace from session cleanup.",
+          "path": "components/ambient-control-plane/internal/reconciler/kube_reconciler.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1375#discussion_r3118386639",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Reject all mixed auth-field combinations, not just `httpToken + gitcookiesContent`.",
+      "count": 2,
+      "critical": 0,
+      "major": 2,
+      "impact_score": 6,
+      "components": [
+        "backend"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119503279,
+          "title": "Reject all mixed auth-field combinations, not just `httpToken + gitcookiesContent`.",
+          "path": "components/backend/handlers/gerrit_auth.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1387#discussion_r3119503279",
+          "ai_prompt": ""
+        },
+        {
+          "id": 3119585470,
+          "title": "Reject mixed auth fields in the test endpoint too.",
+          "path": "components/backend/handlers/integration_validation.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1387#discussion_r3119585470",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Thread the request-scoped K8s client into these Secret helpers.",
+      "count": 2,
+      "critical": 0,
+      "major": 2,
+      "impact_score": 6,
+      "components": [
+        "backend"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119503282,
+          "title": "Thread the request-scoped K8s client into these Secret helpers.",
+          "path": "components/backend/handlers/gerrit_auth.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1387#discussion_r3119503282",
+          "ai_prompt": ""
+        },
+        {
+          "id": 3083510331,
+          "title": "Add the request-scoped auth gate before validating CodeRabbit keys.",
+          "path": "components/backend/handlers/integration_validation.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1315#discussion_r3083510331",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Add NOT NULL constraint to `owner_user_id` column in migration.",
+      "count": 1,
+      "critical": 1,
+      "major": 0,
+      "impact_score": 4,
+      "components": [
+        "api-server"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3124615176,
+          "title": "Add NOT NULL constraint to `owner_user_id` column in migration.",
+          "path": "components/ambient-api-server/plugins/agents/migration.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1428#discussion_r3124615176",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Add explicit timeout to all Gerrit proxy fetch calls",
+      "count": 1,
+      "critical": 1,
+      "major": 0,
+      "impact_score": 4,
+      "components": [
+        "frontend"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119503320,
+          "title": "Add explicit timeout to all Gerrit proxy fetch calls",
+          "path": "components/frontend/src/app/api/auth/gerrit/connect/route.ts",
+          "html_url": "https://github.com/ambient-code/platform/pull/1387#discussion_r3119503320",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Fix Gerrit response-shape parsing (currently breaks instance extraction)",
+      "count": 1,
+      "critical": 1,
+      "major": 0,
+      "impact_score": 4,
+      "components": [
+        "runner"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119503342,
+          "title": "Fix Gerrit response-shape parsing (currently breaks instance extraction)",
+          "path": "components/runners/ambient-runner/ambient_runner/platform/auth.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1387#discussion_r3119503342",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Do not keep stale Gerrit config after fetch failures",
+      "count": 1,
+      "critical": 1,
+      "major": 0,
+      "impact_score": 4,
+      "components": [
+        "runner"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119503350,
+          "title": "Do not keep stale Gerrit config after fetch failures",
+          "path": "components/runners/ambient-runner/ambient_runner/platform/auth.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1387#discussion_r3119503350",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Serialize credential refresh/cleanup across concurrent runs.",
+      "count": 1,
+      "critical": 1,
+      "major": 0,
+      "impact_score": 4,
+      "components": [
+        "runner"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118969487,
+          "title": "Serialize credential refresh/cleanup across concurrent runs.",
+          "path": "components/runners/ambient-runner/ambient_runner/bridges/claude/bridge.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1379#discussion_r3118969487",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Fix namespace mismatch in `CP_TOKEN_URL`",
+      "count": 1,
+      "critical": 1,
+      "major": 0,
+      "impact_score": 4,
+      "components": [
+        "manifests"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119019459,
+          "title": "Fix namespace mismatch in `CP_TOKEN_URL`",
+          "path": "components/manifests/overlays/mpp-openshift/ambient-control-plane.yaml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1379#discussion_r3119019459",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Credential apply fails on create due to missing `ProjectID` in builder",
+      "count": 1,
+      "critical": 1,
+      "major": 0,
+      "impact_score": 4,
+      "components": [
+        "cli"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118634799,
+          "title": "Credential apply fails on create due to missing `ProjectID` in builder",
+          "path": "components/ambient-cli/cmd/acpctl/apply/cmd.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1377#discussion_r3118634799",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Move `GetToken` to `credential_extensions.go`.",
+      "count": 1,
+      "critical": 1,
+      "major": 0,
+      "impact_score": 4,
+      "components": [
+        "sdk"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118634891,
+          "title": "Move `GetToken` to `credential_extensions.go`.",
+          "path": "components/ambient-sdk/go-sdk/client/credential_api.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1377#discussion_r3118634891",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Move `CredentialTokenResponse` to a non-generated file.",
+      "count": 1,
+      "critical": 1,
+      "major": 0,
+      "impact_score": 4,
+      "components": [
+        "sdk"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118634892,
+          "title": "Move `CredentialTokenResponse` to a non-generated file.",
+          "path": "components/ambient-sdk/go-sdk/types/credential.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1377#discussion_r3118634892",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Add height guard for split-detail rendering",
+      "count": 1,
+      "critical": 1,
+      "major": 0,
+      "impact_score": 4,
+      "components": [
+        "cli"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118844462,
+          "title": "Add height guard for split-detail rendering",
+          "path": "components/ambient-cli/cmd/acpctl/ambient/tui/view.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1377#discussion_r3118844462",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Validate required dependencies in `New` to avoid request-time panics.",
+      "count": 1,
+      "critical": 1,
+      "major": 0,
+      "impact_score": 4,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118386697,
+          "title": "Validate required dependencies in `New` to avoid request-time panics.",
+          "path": "components/ambient-control-plane/internal/tokenserver/server.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1375#discussion_r3118386697",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Critical: Same endpoint mismatch as Python SDK.",
+      "count": 1,
+      "critical": 1,
+      "major": 0,
+      "impact_score": 4,
+      "components": [
+        "sdk"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3117826601,
+          "title": "Critical: Same endpoint mismatch as Python SDK.",
+          "path": "components/ambient-sdk/ts-sdk/src/session_message_api.ts",
+          "html_url": "https://github.com/ambient-code/platform/pull/1373#discussion_r3117826601",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Tests call undefined `InboxMessageAPI` methods.",
+      "count": 1,
+      "critical": 1,
+      "major": 0,
+      "impact_score": 4,
+      "components": [
+        "sdk"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3117826608,
+          "title": "Tests call undefined `InboxMessageAPI` methods.",
+          "path": "components/ambient-sdk/ts-sdk/tests/integration.test.ts",
+          "html_url": "https://github.com/ambient-code/platform/pull/1373#discussion_r3117826608",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Add `components/ambient-sdk/",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "ci"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3124615155,
+          "title": "Add `components/ambient-sdk/",
+          "path": ".github/workflows/components-build-deploy.yml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1428#discussion_r3124615155",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Normalize leading-dot cookie domains before matching.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "backend"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119503289,
+          "title": "Normalize leading-dot cookie domains before matching.",
+          "path": "components/backend/handlers/gerrit_auth.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1387#discussion_r3119503289",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Add timeout + upstream failure handling in the proxy route",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "frontend"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119503312,
+          "title": "Add timeout + upstream failure handling in the proxy route",
+          "path": "components/frontend/src/app/api/auth/gerrit/[instanceName]/status/route.ts",
+          "html_url": "https://github.com/ambient-code/platform/pull/1387#discussion_r3119503312",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Test currently locks in the Gerrit omission (`4/5`)",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "frontend"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119503324,
+          "title": "Test currently locks in the Gerrit omission (`4/5`)",
+          "path": "components/frontend/src/app/projects/[name]/sessions/[sessionName]/components/settings/__tests__/integrations-panel.test.tsx",
+          "html_url": "https://github.com/ambient-code/platform/pull/1387#discussion_r3119503324",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "`gerrit.connected` is required in type but not guaranteed by backend payload",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "frontend"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119503326,
+          "title": "`gerrit.connected` is required in type but not guaranteed by backend payload",
+          "path": "components/frontend/src/services/api/integrations.ts",
+          "html_url": "https://github.com/ambient-code/platform/pull/1387#discussion_r3119503326",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Use an isolated per-run secure temp directory for Gerrit secrets",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "runner"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119503331,
+          "title": "Use an isolated per-run secure temp directory for Gerrit secrets",
+          "path": "components/runners/ambient-runner/ambient_runner/bridges/claude/mcp.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1387#discussion_r3119503331",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Pin and verify the CodeRabbit installer before execution.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "runner"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119503354,
+          "title": "Pin and verify the CodeRabbit installer before execution.",
+          "path": "components/runners/ambient-runner/Dockerfile",
+          "html_url": "https://github.com/ambient-code/platform/pull/1387#discussion_r3119503354",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Do not bubble raw dial/resolve errors back to the client.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "backend"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119585447,
+          "title": "Do not bubble raw dial/resolve errors back to the client.",
+          "path": "components/backend/handlers/integration_validation.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1387#discussion_r3119585447",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Unhandled exception if `reconnect()` fails during UNAUTHENTICATED retry.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "runner"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118969477,
+          "title": "Unhandled exception if `reconnect()` fails during UNAUTHENTICATED retry.",
+          "path": "components/runners/ambient-runner/ambient_runner/_session_messages_api.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1379#discussion_r3118969477",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Implement bounded readiness timeout inside `start_grpc_listener`.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "runner"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118969491,
+          "title": "Implement bounded readiness timeout inside `start_grpc_listener`.",
+          "path": "components/runners/ambient-runner/ambient_runner/bridges/claude/bridge.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1379#discussion_r3118969491",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Avoid logging raw `AMBIENT_MCP_URL` values",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "runner"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118969493,
+          "title": "Avoid logging raw `AMBIENT_MCP_URL` values",
+          "path": "components/runners/ambient-runner/ambient_runner/bridges/claude/mcp.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1379#discussion_r3118969493",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Use the same session fallback as `bridge.run()`.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "runner"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118969503,
+          "title": "Use the same session fallback as `bridge.run()`.",
+          "path": "components/runners/ambient-runner/ambient_runner/endpoints/run.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1379#discussion_r3118969503",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Blocking gRPC call on async event loop.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "runner"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118969508,
+          "title": "Blocking gRPC call on async event loop.",
+          "path": "components/runners/ambient-runner/ambient_runner/middleware/grpc_push.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1379#discussion_r3118969508",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Add `metadata.namespace: ambient-code` to Deployment",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "manifests"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119019378,
+          "title": "Add `metadata.namespace: ambient-code` to Deployment",
+          "path": "components/manifests/base/ambient-control-plane-service.yml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1379#discussion_r3119019378",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Cluster-wide secret/service mutation is over-privileged",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "manifests"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119019394,
+          "title": "Cluster-wide secret/service mutation is over-privileged",
+          "path": "components/manifests/base/rbac/control-plane-clusterrole.yaml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1379#discussion_r3119019394",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Add resource requests/limits for the new PostgreSQL container.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "manifests"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119019406,
+          "title": "Add resource requests/limits for the new PostgreSQL container.",
+          "path": "components/manifests/overlays/mpp-openshift/ambient-api-server-db.yaml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1379#discussion_r3119019406",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "`emptyDir` makes this database state ephemeral.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "manifests"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119019447,
+          "title": "`emptyDir` makes this database state ephemeral.",
+          "path": "components/manifests/overlays/mpp-openshift/ambient-api-server-db.yaml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1379#discussion_r3119019447",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Don't remove an SSE queue the listener didn't create.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "runner"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119019472,
+          "title": "Don't remove an SSE queue the listener didn't create.",
+          "path": "components/runners/ambient-runner/ambient_runner/bridges/claude/grpc_transport.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1379#discussion_r3119019472",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Select the latest assistant reply, not the first one in the snapshot.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "runner"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119019478,
+          "title": "Select the latest assistant reply, not the first one in the snapshot.",
+          "path": "components/runners/ambient-runner/ambient_runner/bridges/claude/grpc_transport.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1379#discussion_r3119019478",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Update ordering graph to match PR6+PR7 consolidation",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "docs"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3119019527,
+          "title": "Update ordering graph to match PR6+PR7 consolidation",
+          "path": "docs/internal/proposals/alpha-to-main-migration.md",
+          "html_url": "https://github.com/ambient-code/platform/pull/1379#discussion_r3119019527",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Add Secret `ambient-api-server` to the mpp-openshift overlay.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "manifests"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3120049534,
+          "title": "Add Secret `ambient-api-server` to the mpp-openshift overlay.",
+          "path": "components/manifests/overlays/mpp-openshift/ambient-control-plane.yaml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1379#discussion_r3120049534",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Add explicit pod/container securityContext hardening",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "manifests"
+      ],
+      "covered_by_guardrail": "Restricted SecurityContext",
+      "example_comments": [
+        {
+          "id": 3120049544,
+          "title": "Add explicit pod/container securityContext hardening",
+          "path": "components/manifests/overlays/openshift-dev/ambient-api-server-args-patch.yaml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1379#discussion_r3120049544",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Avoid shipping fully disabled auth with wildcard CORS",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "manifests"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3120049549,
+          "title": "Avoid shipping fully disabled auth with wildcard CORS",
+          "path": "components/manifests/overlays/openshift-dev/ambient-api-server-args-patch.yaml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1379#discussion_r3120049549",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Keep privileged token resolution out of the shared transport.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "backend"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118659827,
+          "title": "Keep privileged token resolution out of the shared transport.",
+          "path": "components/backend/handlers/sessions.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1378#discussion_r3118659827",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Drop the unused `patch` verb from this ClusterRole.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "manifests"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118659844,
+          "title": "Drop the unused `patch` verb from this ClusterRole.",
+          "path": "components/manifests/base/rbac/operator-clusterrole.yaml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1378#discussion_r3118659844",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Don\u2019t hardcode `8001` in the NetworkPolicy.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "operator"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118659872,
+          "title": "Don\u2019t hardcode `8001` in the NetworkPolicy.",
+          "path": "components/operator/internal/handlers/sessions.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1378#discussion_r3118659872",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Agent mutations should use project-scoped API methods",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "cli"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118634762,
+          "title": "Agent mutations should use project-scoped API methods",
+          "path": "components/ambient-cli/cmd/acpctl/ambient/tui/model.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1377#discussion_r3118634762",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Kill failed `kubectl port-forward` processes",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "cli"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118634771,
+          "title": "Kill failed `kubectl port-forward` processes",
+          "path": "components/ambient-cli/cmd/acpctl/ambient/tui/model.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1377#discussion_r3118634771",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Project/agent metadata patches are not idempotent",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "cli"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118634811,
+          "title": "Project/agent metadata patches are not idempotent",
+          "path": "components/ambient-cli/cmd/acpctl/apply/cmd.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1377#discussion_r3118634811",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Propagate command cancellation into the start request.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "cli"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118634844,
+          "title": "Propagate command cancellation into the start request.",
+          "path": "components/ambient-cli/cmd/acpctl/start/cmd.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1377#discussion_r3118634844",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Move the real cleanup into the `EXIT` trap",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "cli"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118634869,
+          "title": "Move the real cleanup into the `EXIT` trap",
+          "path": "components/ambient-cli/demo-remote.sh",
+          "html_url": "https://github.com/ambient-code/platform/pull/1377#discussion_r3118634869",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Session resolution here is brittle across projects and after agent start.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "cli"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118634874,
+          "title": "Session resolution here is brittle across projects and after agent start.",
+          "path": "components/ambient-cli/multi-demo.sh",
+          "html_url": "https://github.com/ambient-code/platform/pull/1377#discussion_r3118634874",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Update this example to the new `acpctl start` contract.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "cli"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118634876,
+          "title": "Update this example to the new `acpctl start` contract.",
+          "path": "components/ambient-cli/README.md",
+          "html_url": "https://github.com/ambient-code/platform/pull/1377#discussion_r3118634876",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Missing pagination silently skips agents in large projects.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "cli"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118678436,
+          "title": "Missing pagination silently skips agents in large projects.",
+          "path": "components/ambient-cli/cmd/acpctl/agent/cmd.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1377#discussion_r3118678436",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Require at least one update field before calling PATCH.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "cli"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118678451,
+          "title": "Require at least one update field before calling PATCH.",
+          "path": "components/ambient-cli/cmd/acpctl/project/cmd.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1377#discussion_r3118678451",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Validate `--name` before sending the update request.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "cli"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118678467,
+          "title": "Validate `--name` before sending the update request.",
+          "path": "components/ambient-cli/cmd/acpctl/project/cmd.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1377#discussion_r3118678467",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Unify split-pane key hints and render the bottom one",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "cli"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118844459,
+          "title": "Unify split-pane key hints and render the bottom one",
+          "path": "components/ambient-cli/cmd/acpctl/ambient/tui/view.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1377#discussion_r3118844459",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Reject `name` when `--project-agent` is used for sessions.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "cli"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118844472,
+          "title": "Reject `name` when `--project-agent` is used for sessions.",
+          "path": "components/ambient-cli/cmd/acpctl/get/cmd.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1377#discussion_r3118844472",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Pin base images by digest to prevent supply-chain drift and non-reproducible builds.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118386626,
+          "title": "Pin base images by digest to prevent supply-chain drift and non-reproducible builds.",
+          "path": "components/ambient-control-plane/Dockerfile",
+          "html_url": "https://github.com/ambient-code/platform/pull/1375#discussion_r3118386626",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Sanitize `projectID` before turning it into a namespace name.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118386636,
+          "title": "Sanitize `projectID` before turning it into a namespace name.",
+          "path": "components/ambient-control-plane/internal/kubeclient/namespace_provisioner.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1375#discussion_r3118386636",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Don't mark the session `Running` before the pod is actually running.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118386648,
+          "title": "Don't mark the session `Running` before the pod is actually running.",
+          "path": "components/ambient-control-plane/internal/reconciler/kube_reconciler.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1375#discussion_r3118386648",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Namespace derivation inconsistent with `ProjectReconciler`.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118386672,
+          "title": "Namespace derivation inconsistent with `ProjectReconciler`.",
+          "path": "components/ambient-control-plane/internal/reconciler/project_settings_reconciler.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1375#discussion_r3118386672",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Partial RoleBinding failures silently swallowed.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": "No silent error swallowing",
+      "example_comments": [
+        {
+          "id": 3118386677,
+          "title": "Partial RoleBinding failures silently swallowed.",
+          "path": "components/ambient-control-plane/internal/reconciler/project_settings_reconciler.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1375#discussion_r3118386677",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Avoid logging raw session IDs in token issuance paths.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3118386691,
+          "title": "Avoid logging raw session IDs in token issuance paths.",
+          "path": "components/ambient-control-plane/internal/tokenserver/handler.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1375#discussion_r3118386691",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Avoid raw interpolation of `agentName` into the search expression.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "sdk"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3117826524,
+          "title": "Avoid raw interpolation of `agentName` into the search expression.",
+          "path": "components/ambient-sdk/go-sdk/client/agent_extensions.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1373#discussion_r3117826524",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "XSS via unescaped IDs in `onclick` handlers.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "sdk"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3117826580,
+          "title": "XSS via unescaped IDs in `onclick` handlers.",
+          "path": "components/ambient-sdk/ts-sdk/example/index.html",
+          "html_url": "https://github.com/ambient-code/platform/pull/1373#discussion_r3117826580",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Do not pass `CODERABBIT_API_KEY` as a command-line argument",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "ci"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3083510330,
+          "title": "Do not pass `CODERABBIT_API_KEY` as a command-line argument",
+          "path": ".github/workflows/coderabbit-smoke-test.yml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1315#discussion_r3083510330",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Guard upstream fetch failures and preserve upstream content-type.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "frontend"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3083510340,
+          "title": "Guard upstream fetch failures and preserve upstream content-type.",
+          "path": "components/frontend/src/app/api/auth/coderabbit/status/route.ts",
+          "html_url": "https://github.com/ambient-code/platform/pull/1315#discussion_r3083510340",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Use a private, non-predictable wrapper path for `gh`",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "runner"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3083510344,
+          "title": "Use a private, non-predictable wrapper path for `gh`",
+          "path": "components/runners/ambient-runner/ambient_runner/platform/auth.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1315#discussion_r3083510344",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Test expectation doesn't match backend contract.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "scripts"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3087395108,
+          "title": "Test expectation doesn't match backend contract.",
+          "path": "scripts/test-coderabbit-integration.sh",
+          "html_url": "https://github.com/ambient-code/platform/pull/1315#discussion_r3087395108",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Missing HTTP status assertion for the 404 runtime-credentials case.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "scripts"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3088014091,
+          "title": "Missing HTTP status assertion for the 404 runtime-credentials case.",
+          "path": "scripts/test-coderabbit-integration.sh",
+          "html_url": "https://github.com/ambient-code/platform/pull/1315#discussion_r3088014091",
+          "ai_prompt": ""
+        }
+      ]
+    }
+  ],
+  "coverage_gaps": 67,
+  "pattern_categories": {
+    "security": 40,
+    "error_handling": 20,
+    "validation": 9,
+    "k8s_resources": 3,
+    "other": 2,
+    "testing": 1,
+    "performance": 1
+  }
+}
