@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { HelpCircle, CheckCircle2, Send, ChevronRight } from "lucide-react";
 import { formatTimestamp } from "@/lib/format-timestamp";
+import { hasToolResult } from "@/lib/hitl-tools";
 import type {
   ToolUseBlock,
   ToolResultBlock,
@@ -31,7 +32,6 @@ function parseQuestions(input: Record<string, unknown>): AskUserQuestionItem[] {
   if (isAskUserQuestionInput(input)) {
     return input.questions;
   }
-  // Handle simple { question: "..." } format (e.g. from Claude Code AskUserQuestion tool)
   if (typeof input.question === 'string' && input.question.trim()) {
     return [{
       question: input.question,
@@ -39,14 +39,6 @@ function parseQuestions(input: Record<string, unknown>): AskUserQuestionItem[] {
     }];
   }
   return [];
-}
-
-function hasResult(resultBlock?: ToolResultBlock): boolean {
-  if (!resultBlock) return false;
-  const content = resultBlock.content;
-  if (!content) return false;
-  if (typeof content === "string" && content.trim() === "") return false;
-  return true;
 }
 
 export const AskUserQuestionMessage: React.FC<AskUserQuestionMessageProps> = ({
@@ -57,7 +49,7 @@ export const AskUserQuestionMessage: React.FC<AskUserQuestionMessageProps> = ({
   isNewest = false,
 }) => {
   const questions = parseQuestions(toolUseBlock.input);
-  const alreadyAnswered = hasResult(resultBlock);
+  const alreadyAnswered = hasToolResult(resultBlock);
   const formattedTime = formatTimestamp(timestamp);
   const isMultiQuestion = questions.length > 1;
 
