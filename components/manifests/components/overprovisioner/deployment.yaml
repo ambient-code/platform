@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: acp-overprovisioner
+  namespace: acp-overprovisioner
+  labels:
+    app: acp-overprovisioner
+    app.kubernetes.io/part-of: acp-overprovisioner
+spec:
+  # ── Tunable: number of spare runner-sized slots to keep warm ──
+  # Each replica reserves capacity equivalent to one agentic session runner pod.
+  # Increase to handle larger bursts; decrease to reduce idle cost.
+  # Quick adjustment: kubectl scale deployment/acp-overprovisioner -n acp-overprovisioner --replicas=<N>
+  replicas: 5
+  selector:
+    matchLabels:
+      app: acp-overprovisioner
+  template:
+    metadata:
+      labels:
+        app: acp-overprovisioner
+      annotations:
+        # Allows the cluster autoscaler to evict these pods when scaling down
+        # idle nodes. Without this, placeholder pods would block scale-down.
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+    spec:
+      # Priority -10: any pod with default (0) or higher priority preempts these.
+      # When a runner pod needs capacity, the scheduler evicts a placeholder
+      # instantly, and the evicted placeholder triggers the autoscaler to
+      # replenish the buffer by adding a new node.
+      priorityClassName: acp-overprovisioning
+      # Evict immediately — no graceful shutdown needed for a pause container.
+      terminationGracePeriodSeconds: 0
+      # Spread placeholders across nodes so spare capacity is distributed.
+      # ScheduleAnyway makes this best-effort — won't block scheduling if
+      # there are fewer nodes than replicas.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: acp-overprovisioner
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.9
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              # ── Tunable: must match runner pod resource requests ──
+              # These values mirror the agentic session runner container requests
+              # (see operator/internal/handlers/sessions.go defaults).
+              # When a placeholder is evicted, the freed capacity is exactly
+              # what a runner pod needs to start immediately.
+              cpu: "500m"
+              memory: "512Mi"
+              # No limits set intentionally — keeps QoS class as Burstable,
+              # making these pods easier to evict. The pause container uses
+              # zero actual CPU/memory; only requests matter for scheduling.
