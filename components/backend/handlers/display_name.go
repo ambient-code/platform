@@ -55,6 +55,29 @@ func sanitizeDisplayName(name string) string {
 	return name
 }
 
+// generateFallbackDisplayName creates a display name from the user's message
+// when AI generation is unavailable. Extracts the first sentence or truncates.
+func generateFallbackDisplayName(userMessage string) string {
+	msg := strings.TrimSpace(userMessage)
+	if msg == "" {
+		return ""
+	}
+
+	// Find first sentence boundary
+	for _, sep := range []string{". ", "! ", "? ", "\n"} {
+		if idx := strings.Index(msg, sep); idx > 0 && idx <= maxDisplayNameLength {
+			msg = msg[:idx]
+			break
+		}
+	}
+
+	runes := []rune(msg)
+	if len(runes) > maxDisplayNameLength {
+		msg = string(runes[:maxDisplayNameLength-3]) + "..."
+	}
+	return sanitizeDisplayName(msg)
+}
+
 // ValidateDisplayName validates a display name for the HTTP handler
 // Returns an error message if invalid, empty string if valid
 func ValidateDisplayName(name string) string {
@@ -99,26 +122,32 @@ func generateAndUpdateDisplayName(projectName, sessionName, userMessage string, 
 	defer cancel()
 
 	// Get Anthropic client (Vertex or API key)
+	var displayName string
 	client, isVertex, err := getAnthropicClient(ctx, projectName)
 	if err != nil {
-		return fmt.Errorf("failed to get Anthropic client: %w", err)
-	}
+		log.Printf("DisplayNameGen: Client init failed for %s/%s, using fallback: %v", projectName, sessionName, err)
+		displayName = generateFallbackDisplayName(userMessage)
+	} else {
+		// Build prompt with context
+		prompt := buildDisplayNamePrompt(userMessage, sessionCtx)
 
-	// Build prompt with context
-	prompt := buildDisplayNamePrompt(userMessage, sessionCtx)
-
-	// Call Claude Haiku with appropriate model name
-	modelName := haiku3Model
-	if isVertex {
-		modelName = haiku3ModelVertex
-	}
-	displayName, err := callClaudeForDisplayName(ctx, client, prompt, modelName)
-	if err != nil {
-		return fmt.Errorf("failed to call Claude: %w", err)
+		// Call Claude Haiku with appropriate model name
+		modelName := haiku3Model
+		if isVertex {
+			modelName = haiku3ModelVertex
+		}
+		displayName, err = callClaudeForDisplayName(ctx, client, prompt, modelName)
+		if err != nil {
+			log.Printf("DisplayNameGen: AI generation failed for %s/%s, using fallback: %v", projectName, sessionName, err)
+			displayName = generateFallbackDisplayName(userMessage)
+		}
 	}
 
 	// Sanitize and validate display name
 	displayName = sanitizeDisplayName(displayName)
+	if displayName == "" {
+		return fmt.Errorf("both AI and fallback generation produced empty display name")
+	}
 
 	// Truncate if too long (using runes for proper Unicode handling)
 	if utf8.RuneCountInString(displayName) > maxDisplayNameLength {
