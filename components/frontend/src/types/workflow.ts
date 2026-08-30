@@ -44,3 +44,20 @@ export type WorkflowSelection = {
   branch: string;
   path?: string;
 };
+
+/**
+ * A custom workflow source — a Git repository containing workflow definitions.
+ */
+export type WorkflowSource = {
+  name: string;
+  gitUrl: string;
+  branch?: string;
+  path?: string;
+};
+
+/**
+ * Configuration containing the list of custom workflow sources for a project.
+ */
+export type WorkflowSourcesConfig = {
+  sources: WorkflowSource[];
+};

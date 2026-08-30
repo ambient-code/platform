@@ -1,4 +1,5 @@
 import { apiClient } from "./client";
+import type { WorkflowSourcesConfig } from "@/types/workflow";
 
 export type OOTBWorkflow = {
   id: string;
@@ -8,6 +9,7 @@ export type OOTBWorkflow = {
   branch: string;
   path?: string;
   enabled: boolean;
+  source?: string;
 };
 
 export type ListOOTBWorkflowsResponse = {
@@ -58,4 +60,18 @@ export async function getWorkflowMetadata(
     `/projects/${projectName}/agentic-sessions/${sessionName}/workflow/metadata`
   );
   return response;
+}
+
+export async function getWorkflowSources(projectName: string): Promise<WorkflowSourcesConfig> {
+  return apiClient.get<WorkflowSourcesConfig>(`/projects/${projectName}/workflow-sources`);
+}
+
+export async function updateWorkflowSources(
+  projectName: string,
+  config: WorkflowSourcesConfig
+): Promise<WorkflowSourcesConfig> {
+  return apiClient.put<WorkflowSourcesConfig, WorkflowSourcesConfig>(
+    `/projects/${projectName}/workflow-sources`,
+    config
+  );
 }
