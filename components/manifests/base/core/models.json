@@ -229,6 +229,14 @@
       "provider": "google",
       "available": false,
       "featureGated": true
+    },
+    {
+      "id": "claude-fable-5-1",
+      "label": "Claude Fable 5.1",
+      "vertexId": "claude-fable-5-1@default",
+      "provider": "anthropic",
+      "available": false,
+      "featureGated": true
     }
   ]
 }
