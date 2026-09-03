@@ -237,6 +237,22 @@
       "provider": "anthropic",
       "available": false,
       "featureGated": true
+    },
+    {
+      "id": "gemini-3.5-live-translate-preview",
+      "label": "Gemini 3.5 Live Translate Preview",
+      "vertexId": "gemini-3.5-live-translate-preview@default",
+      "provider": "google",
+      "available": false,
+      "featureGated": true
+    },
+    {
+      "id": "gemini-3.8-flash",
+      "label": "Gemini 3.8 Flash",
+      "vertexId": "gemini-3.8-flash@default",
+      "provider": "google",
+      "available": false,
+      "featureGated": true
     }
   ]
 }
