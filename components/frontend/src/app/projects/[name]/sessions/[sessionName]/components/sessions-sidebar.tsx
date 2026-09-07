@@ -496,6 +496,10 @@ export function SessionsSidebar({
                                   <span>{formatDistanceToNow(new Date(activityTime), { addSuffix: true })}</span>
                                 </div>
                               )}
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <User className="h-3 w-3" />
+                                <span>{session.spec.userContext?.displayName || session.spec.userContext?.userId || '—'}</span>
+                              </div>
                               {session.spec.initialPrompt && (
                                 <div className="flex items-start gap-1.5 text-xs text-muted-foreground pt-1">
                                   <MessageSquare className="h-3 w-3 mt-0.5 shrink-0" />

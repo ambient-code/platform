@@ -189,7 +189,7 @@ def create_backend_mcp_tools(
                 },
                 "display_name": {
                     "type": "string",
-                    "description": "Human-readable display name",
+                    "description": "Human-readable display name for the session (max 50 chars). Provide a concise, descriptive title based on the task, e.g. 'Debug auth middleware', 'Add user dashboard'. Auto-generated from initial_prompt if omitted.",
                 },
                 "repos": {
                     "type": "string",
