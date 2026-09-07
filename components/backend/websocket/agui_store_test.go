@@ -188,15 +188,46 @@ func TestDeriveAgentStatus(t *testing.T) {
 		}
 	})
 
-	t.Run("case-insensitive AskUserQuestion detection", func(t *testing.T) {
+	t.Run("RUN_FINISHED with same-run ExitPlanMode returns waiting_input", func(t *testing.T) {
+		sessionID := "test-session-exit-plan-mode"
+		sessionsDir := filepath.Join(tmpDir, "sessions", sessionID)
+		if err := os.MkdirAll(sessionsDir, 0755); err != nil {
+			t.Fatalf("Failed to create sessions dir: %v", err)
+		}
+
+		events := []map[string]interface{}{
+			{"type": types.EventTypeRunStarted, "runId": "run-123"},
+			{"type": types.EventTypeToolCallStart, "runId": "run-123", "toolCallName": "ExitPlanMode"},
+			{"type": types.EventTypeRunFinished, "runId": "run-123"},
+		}
+		eventsFile := filepath.Join(sessionsDir, "agui-events.jsonl")
+		f, err := os.Create(eventsFile)
+		if err != nil {
+			t.Fatalf("Failed to create events file: %v", err)
+		}
+		for _, evt := range events {
+			data, _ := json.Marshal(evt)
+			f.Write(append(data, '\n'))
+		}
+		f.Close()
+
+		status := DeriveAgentStatus(sessionID)
+		if status != types.AgentStatusWaitingInput {
+			t.Errorf("Expected %q for same-run ExitPlanMode, got %q", types.AgentStatusWaitingInput, status)
+		}
+	})
+
+	t.Run("case-insensitive HITL tool detection", func(t *testing.T) {
 		sessionID := "test-session-case-insensitive"
 		sessionsDir := filepath.Join(tmpDir, "sessions", sessionID)
 		if err := os.MkdirAll(sessionsDir, 0755); err != nil {
 			t.Fatalf("Failed to create sessions dir: %v", err)
 		}
 
-		// Test various casings of AskUserQuestion
-		testCases := []string{"askuserquestion", "ASKUSERQUESTION", "AskUserQuestion", "AsKuSeRqUeStIoN"}
+		testCases := []string{
+			"askuserquestion", "ASKUSERQUESTION", "AskUserQuestion", "AsKuSeRqUeStIoN",
+			"exitplanmode", "EXITPLANMODE", "ExitPlanMode", "eXiTpLaNmOdE",
+		}
 		for _, toolName := range testCases {
 			events := []map[string]interface{}{
 				{"type": types.EventTypeRunStarted, "runId": "run-123"},
