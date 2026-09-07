@@ -14,6 +14,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { useProject, useUpdateProject } from "@/services/queries/use-projects";
 import { useSecretsValues, useUpdateSecrets, useIntegrationSecrets, useUpdateIntegrationSecrets } from "@/services/queries/use-secrets";
+import { useWorkflowSources, useUpdateWorkflowSources } from "@/services/queries/use-workflows";
+import type { WorkflowSource } from "@/types/workflow";
 import { useClusterInfo } from "@/hooks/use-cluster-info";
 import { FeatureFlagsSection } from "./feature-flags-section";
 import { ProjectMcpSection } from "./project-mcp-section";
@@ -46,6 +48,8 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
   const [s3SecretKey, setS3SecretKey] = useState<string>("");
   const [showS3SecretKey, setShowS3SecretKey] = useState<boolean>(false);
   const [s3Expanded, setS3Expanded] = useState<boolean>(false);
+  const [workflowSources, setWorkflowSources] = useState<WorkflowSource[]>([]);
+  const [workflowSourcesExpanded, setWorkflowSourcesExpanded] = useState<boolean>(false);
 
   // Derive runner API key definitions from the runner-types registry.
   // Falls back to a hardcoded list if the fetch fails.
@@ -96,6 +100,8 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
   const updateProjectMutation = useUpdateProject();
   const updateSecretsMutation = useUpdateSecrets();
   const updateIntegrationSecretsMutation = useUpdateIntegrationSecrets();
+  const { data: workflowSourcesData } = useWorkflowSources(projectName);
+  const updateWorkflowSourcesMutation = useUpdateWorkflowSources(projectName);
 
   // Sync project data to form
   useEffect(() => {
@@ -126,6 +132,36 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
       setSecrets(allSecretsArr.filter(s => !FIXED_KEYS.includes(s.key)));
     }
   }, [runnerSecrets, integrationSecrets, FIXED_KEYS, allRequiredSecrets]);
+
+  // Sync workflow sources from query
+  useEffect(() => {
+    if (workflowSourcesData?.sources) {
+      setWorkflowSources(workflowSourcesData.sources);
+    }
+  }, [workflowSourcesData]);
+
+  const addWorkflowSource = () => {
+    setWorkflowSources(prev => [...prev, { name: '', gitUrl: '', branch: '', path: '' }]);
+  };
+
+  const removeWorkflowSource = (idx: number) => {
+    setWorkflowSources(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const updateWorkflowSource = (idx: number, field: keyof WorkflowSource, value: string) => {
+    setWorkflowSources(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
+  };
+
+  const handleSaveWorkflowSources = () => {
+    const validSources = workflowSources.filter(s => s.name.trim() && s.gitUrl.trim());
+    updateWorkflowSourcesMutation.mutate(
+      { sources: validSources },
+      {
+        onSuccess: () => toast.success("Workflow sources saved successfully"),
+        onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to save workflow sources"),
+      }
+    );
+  };
 
   const handleSave = () => {
     if (!project) return;
@@ -613,6 +649,77 @@ export function SettingsSection({ projectName }: SettingsSectionProps) {
                 </>
               )}
             </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Workflow Sources</CardTitle>
+          <CardDescription>
+            Configure custom Git repositories containing workflow definitions. Workflows from these repos will appear alongside built-in workflows when creating sessions.
+          </CardDescription>
+        </CardHeader>
+        <Separator />
+        <CardContent className="space-y-4">
+          <div className="border rounded-lg">
+            <button
+              type="button"
+              onClick={() => setWorkflowSourcesExpanded(!workflowSourcesExpanded)}
+              className="w-full flex items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg"
+              aria-expanded={workflowSourcesExpanded}
+              aria-controls="workflow-sources-panel"
+            >
+              <div className="flex items-center gap-2">
+                {workflowSourcesExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                <span className="font-semibold">Custom Workflow Repositories</span>
+                {workflowSources.length > 0 && <span className="text-xs text-muted-foreground">({workflowSources.length} configured)</span>}
+              </div>
+            </button>
+            {workflowSourcesExpanded && (
+              <div id="workflow-sources-panel" className="px-3 pb-3 space-y-3 border-t pt-3">
+                {workflowSources.map((source, idx) => (
+                  <div key={idx} className="space-y-3 p-3 border rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Source {idx + 1}</span>
+                      <Button variant="ghost" size="sm" onClick={() => removeWorkflowSource(idx)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Name *</Label>
+                        <Input value={source.name} onChange={(e) => updateWorkflowSource(idx, 'name', e.target.value)} placeholder="My Team Workflows" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Git Repository URL *</Label>
+                        <Input value={source.gitUrl} onChange={(e) => updateWorkflowSource(idx, 'gitUrl', e.target.value)} placeholder="https://github.com/org/workflows.git" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Branch</Label>
+                        <Input value={source.branch || ''} onChange={(e) => updateWorkflowSource(idx, 'branch', e.target.value)} placeholder="main" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Path</Label>
+                        <Input value={source.path || ''} onChange={(e) => updateWorkflowSource(idx, 'path', e.target.value)} placeholder="workflows" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <Button variant="outline" size="sm" onClick={addWorkflowSource}>
+                  <Plus className="w-4 h-4 mr-2" /> Add Workflow Source
+                </Button>
+                <div className="pt-2">
+                  <Button onClick={handleSaveWorkflowSources} disabled={updateWorkflowSourcesMutation.isPending} size="sm">
+                    {updateWorkflowSourcesMutation.isPending ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</>
+                    ) : (
+                      <><Save className="w-4 h-4 mr-2" />Save Workflow Sources</>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
