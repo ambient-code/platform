@@ -401,22 +401,61 @@ def create_backend_mcp_tools(
                 events = api_client.get_session_events(
                     session_name=session_name,
                 )
-                # Extract text messages from AG-UI events
+                # Two event patterns exist depending on session state:
+                #
+                # 1. Streaming deltas (active sessions):
+                #    TEXT_MESSAGE_START  -> role, messageId
+                #    TEXT_MESSAGE_CONTENT -> delta (text chunk), messageId
+                #    TEXT_MESSAGE_END    -> messageId
+                #
+                # 2. MESSAGES_SNAPSHOT (completed sessions):
+                #    Contains a full "messages" array with role + content
+                #
+                # Try streaming deltas first; fall back to snapshots.
+                msg_roles: dict[str, str] = {}
+                msg_deltas: dict[str, list[str]] = {}
                 messages = []
+                last_snapshot = None
                 for event in events:
-                    event_type = event.get("type", "")
-                    if event_type == "TEXT_MESSAGE_CONTENT" and event.get("text"):
-                        messages.append(
-                            {
-                                "role": event.get("role", "assistant"),
-                                "text": event["text"][:500],
-                            }
-                        )
+                    etype = event.get("type", "")
+                    mid = event.get("messageId", "")
+                    if etype == "TEXT_MESSAGE_START" and mid:
+                        msg_roles[mid] = event.get("role", "assistant")
+                        msg_deltas[mid] = []
+                    elif etype == "TEXT_MESSAGE_CONTENT" and mid:
+                        if "delta" in event:
+                            msg_deltas.setdefault(mid, []).append(event["delta"])
+                    elif etype == "TEXT_MESSAGE_END" and mid:
+                        if mid in msg_deltas:
+                            full_text = "".join(msg_deltas.pop(mid))
+                            if full_text.strip():
+                                messages.append(
+                                    {
+                                        "role": msg_roles.pop(mid, "assistant"),
+                                        "text": full_text[:500],
+                                    }
+                                )
+                    elif etype == "MESSAGES_SNAPSHOT":
+                        last_snapshot = event
+
+                # Fall back to MESSAGES_SNAPSHOT if no streaming deltas found
+                if not messages and last_snapshot:
+                    for msg in last_snapshot.get("messages", []):
+                        role = msg.get("role", "")
+                        content = msg.get("content", "")
+                        if role in ("user", "assistant") and isinstance(content, str) and content.strip():
+                            messages.append(
+                                {
+                                    "role": role,
+                                    "text": content[:500],
+                                }
+                            )
+
                 # Return only the last N messages
                 result["recentMessages"] = messages[-max_messages:]
                 result["totalMessages"] = len(messages)
             except Exception as events_err:
-                logger.debug(f"Could not fetch events for {session_name}: {events_err}")
+                logger.warning(f"Could not fetch events for {session_name}: {events_err}")
                 result["recentMessages"] = []
                 result["totalMessages"] = 0
 
