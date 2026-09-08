@@ -1,0 +1,167 @@
+{
+  "release": "v0.2.11",
+  "date": "2026-06-01",
+  "prs_analyzed": 2,
+  "total_comments": 7,
+  "critical": 1,
+  "major": 6,
+  "by_component": {
+    "other": {
+      "critical": 1,
+      "major": 5,
+      "total": 6
+    },
+    "manifests": {
+      "critical": 0,
+      "major": 1,
+      "total": 1
+    }
+  },
+  "top_patterns": [
+    {
+      "name": "Do not keep connection overrides in process-global module state.",
+      "count": 1,
+      "critical": 1,
+      "major": 0,
+      "impact_score": 4,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3335812136,
+          "title": "Do not keep connection overrides in process-global module state.",
+          "path": "components/ambient-ui/src/lib/runtime-config.ts",
+          "html_url": "https://github.com/ambient-code/platform/pull/1626#discussion_r3335812136",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Blank token cannot switch back to SSO once a custom token was set.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3335812142,
+          "title": "Blank token cannot switch back to SSO once a custom token was set.",
+          "path": "components/ambient-ui/src/lib/runtime-config.ts",
+          "html_url": "https://github.com/ambient-code/platform/pull/1626#discussion_r3335812142",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Interaction contract mismatch: spec says double-click, implementation intent says click.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3335812144,
+          "title": "Interaction contract mismatch: spec says double-click, implementation intent says click.",
+          "path": "specs/ambient-ui/ambient-ui.spec.md",
+          "html_url": "https://github.com/ambient-code/platform/pull/1626#discussion_r3335812144",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Spec/implementation mismatch: popover vs inline expansion.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3335903017,
+          "title": "Spec/implementation mismatch: popover vs inline expansion.",
+          "path": "specs/ambient-ui/ambient-ui.spec.md",
+          "html_url": "https://github.com/ambient-code/platform/pull/1626#discussion_r3335903017",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Do not document TLS verification disablement for production.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3334728584,
+          "title": "Do not document TLS verification disablement for production.",
+          "path": "skills/ambient-ui/deploy/SKILL.md",
+          "html_url": "https://github.com/ambient-code/platform/pull/1622#discussion_r3334728584",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Fix `NODE_EXTRA_CA_CERTS` to trust the OpenShift service-ca signer (not the serviceaccount CA).",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "manifests"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3335083707,
+          "title": "Fix `NODE_EXTRA_CA_CERTS` to trust the OpenShift service-ca signer (not the serviceaccount CA).",
+          "path": "components/manifests/overlays/production/ambient-ui-oauth-patch.yaml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1622#discussion_r3335083707",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Distroless-incompatible verification command will fail.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3335117301,
+          "title": "Distroless-incompatible verification command will fail.",
+          "path": "skills/deployments/ambient-ui/SKILL.md",
+          "html_url": "https://github.com/ambient-code/platform/pull/1622#discussion_r3335117301",
+          "ai_prompt": ""
+        }
+      ]
+    }
+  ],
+  "coverage_gaps": 7,
+  "pattern_categories": {
+    "security": 6,
+    "error_handling": 1
+  }
+}
