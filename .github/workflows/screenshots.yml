@@ -111,7 +111,7 @@ jobs:
         gh pr create \
           --title "docs: update screenshots $(date +%Y-%m-%d)" \
           --body "Automated daily screenshot update. Review changed PNGs in the Files tab." \
-          --label "docs,automated"
+          --label "documentation,automated"
 
     - name: Upload screenshots as artifact
       if: always()
