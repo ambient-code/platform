@@ -1,8 +1,8 @@
 {
   "description": "Canonical list of Claude Agent SDK ClaudeAgentOptions fields",
   "generatedFrom": "claude-agent-sdk (PyPI)",
-  "generatedAt": "2026-08-13T09:53:14.505332+00:00",
-  "sdkVersion": "0.2.137",
+  "generatedAt": "2026-09-19T12:46:20.714958+00:00",
+  "sdkVersion": "0.2.157",
   "options": {
     "tools": {
       "type": "list[str] | claude_agent_sdk.types.ToolsPreset | None",
@@ -13,7 +13,7 @@
       "required": false
     },
     "system_prompt": {
-      "type": "str | claude_agent_sdk.types.SystemPromptPreset | claude_agent_sdk.types.SystemPromptFile | None",
+      "type": "str | claude_agent_sdk.types.SystemPromptPreset | claude_agent_sdk.types.SystemPromptCustom | claude_agent_sdk.types.SystemPromptFile | None",
       "required": false
     },
     "mcp_servers": {
@@ -121,6 +121,10 @@
       "required": false
     },
     "include_hook_events": {
+      "type": "<class 'bool'>",
+      "required": false
+    },
+    "forward_subagent_text": {
       "type": "<class 'bool'>",
       "required": false
     },
