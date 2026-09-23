@@ -253,6 +253,14 @@
       "provider": "google",
       "available": false,
       "featureGated": true
+    },
+    {
+      "id": "claude-opus-5-5",
+      "label": "Claude Opus 5.5",
+      "vertexId": "claude-opus-5-5@default",
+      "provider": "anthropic",
+      "available": false,
+      "featureGated": true
     }
   ]
 }
