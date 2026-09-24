@@ -1,0 +1,152 @@
+{
+  "release": "v0.2.7",
+  "date": "2026-05-11",
+  "prs_analyzed": 4,
+  "total_comments": 7,
+  "critical": 2,
+  "major": 5,
+  "by_component": {
+    "runner": {
+      "critical": 0,
+      "major": 2,
+      "total": 2
+    },
+    "operator": {
+      "critical": 0,
+      "major": 1,
+      "total": 1
+    },
+    "manifests": {
+      "critical": 0,
+      "major": 2,
+      "total": 2
+    },
+    "frontend": {
+      "critical": 2,
+      "major": 0,
+      "total": 2
+    }
+  },
+  "top_patterns": [
+    {
+      "name": "Fix TypeScript compilation error in mock typing.",
+      "count": 2,
+      "critical": 2,
+      "major": 0,
+      "impact_score": 8,
+      "components": [
+        "frontend"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3217749388,
+          "title": "Fix TypeScript compilation error in mock typing.",
+          "path": "components/frontend/src/components/__tests__/session-details-modal.test.tsx",
+          "html_url": "https://github.com/ambient-code/platform/pull/1544#discussion_r3217749388",
+          "ai_prompt": ""
+        },
+        {
+          "id": 3217749414,
+          "title": "Fix TypeScript mock typing (same issue as other test file).",
+          "path": "components/frontend/src/components/workspace-sections/__tests__/sessions-section.test.tsx",
+          "html_url": "https://github.com/ambient-code/platform/pull/1544#discussion_r3217749414",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Prefer the current user's credential file before scanning the directory.",
+      "count": 2,
+      "critical": 0,
+      "major": 2,
+      "impact_score": 6,
+      "components": [
+        "runner"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3221945965,
+          "title": "Prefer the current user's credential file before scanning the directory.",
+          "path": "components/runners/ambient-runner/ambient_runner/bridges/claude/mcp.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1557#discussion_r3221945965",
+          "ai_prompt": ""
+        },
+        {
+          "id": 3221945982,
+          "title": "Write the Google credential file atomically.",
+          "path": "components/runners/ambient-runner/ambient_runner/platform/auth.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1557#discussion_r3221945982",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Silently returning `\"\"` on transient errors recreates the 401 this PR is fixing.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "operator"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3221684883,
+          "title": "Silently returning `\"\"` on transient errors recreates the 401 this PR is fixing.",
+          "path": "components/operator/internal/handlers/helpers.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1556#discussion_r3221684883",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Add explicit namespace scoping for this policy",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "manifests"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3221419792,
+          "title": "Add explicit namespace scoping for this policy",
+          "path": "components/manifests/base/runner-networkpolicy.yaml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1553#discussion_r3221419792",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Scope ingress to backend pods, not all pods",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "manifests"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3221419803,
+          "title": "Scope ingress to backend pods, not all pods",
+          "path": "components/manifests/base/runner-networkpolicy.yaml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1553#discussion_r3221419803",
+          "ai_prompt": ""
+        }
+      ]
+    }
+  ],
+  "coverage_gaps": 5,
+  "pattern_categories": {
+    "security": 3,
+    "k8s_resources": 2,
+    "error_handling": 2
+  }
+}
