@@ -1,0 +1,67 @@
+{
+  "release": "v0.2.5",
+  "date": "2026-04-23",
+  "prs_analyzed": 2,
+  "total_comments": 2,
+  "critical": 1,
+  "major": 1,
+  "by_component": {
+    "manifests": {
+      "critical": 1,
+      "major": 0,
+      "total": 1
+    },
+    "api-server": {
+      "critical": 0,
+      "major": 1,
+      "total": 1
+    }
+  },
+  "top_patterns": [
+    {
+      "name": "Critical: referenced Secret keys do not exist in the base `ambient-api-server` Secret",
+      "count": 1,
+      "critical": 1,
+      "major": 0,
+      "impact_score": 4,
+      "components": [
+        "manifests"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3133941687,
+          "title": "Critical: referenced Secret keys do not exist in the base `ambient-api-server` Secret",
+          "path": "components/manifests/base/ambient-control-plane-service.yml",
+          "html_url": "https://github.com/ambient-code/platform/pull/1445#discussion_r3133941687",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Restore required constraints in `agents` DDL",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "api-server"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3133420513,
+          "title": "Restore required constraints in `agents` DDL",
+          "path": "components/ambient-api-server/plugins/agents/migration.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1442#discussion_r3133420513",
+          "ai_prompt": ""
+        }
+      ]
+    }
+  ],
+  "coverage_gaps": 2,
+  "pattern_categories": {
+    "security": 1,
+    "validation": 1
+  }
+}
