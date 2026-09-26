@@ -480,6 +480,549 @@ class TestBackendMCPTools:
 
     @patch("urllib.request.urlopen")
     @pytest.mark.asyncio
+    async def test_get_session_status_reassembles_streaming_deltas(
+        self, mock_urlopen, monkeypatch
+    ):
+        """Test that acp_get_session_status reassembles AG-UI streaming deltas into messages."""
+        from ambient_runner.bridges.claude.backend_tools import (
+            create_backend_mcp_tools,
+        )
+
+        monkeypatch.setenv("BACKEND_API_URL", "http://backend:8080/api")
+        monkeypatch.setenv("PROJECT_NAME", "test-project")
+        monkeypatch.setenv("BOT_TOKEN", "test-token")
+
+        # First call: get_session (session details)
+        session_response = MagicMock()
+        session_response.read.return_value = json.dumps(
+            {
+                "status": {
+                    "phase": "Running",
+                    "agentStatus": "idle",
+                    "startTime": "2026-04-30T08:00:00Z",
+                    "lastActivityTime": "2026-04-30T09:00:00Z",
+                },
+                "spec": {"displayName": "Test Session"},
+            }
+        ).encode("utf-8")
+        session_response.__enter__ = MagicMock(return_value=session_response)
+        session_response.__exit__ = MagicMock(return_value=False)
+
+        # Second call: export (AG-UI events with streaming deltas)
+        export_response = MagicMock()
+        export_response.read.return_value = json.dumps(
+            {
+                "sessionId": "test-session",
+                "projectName": "test-project",
+                "aguiEvents": [
+                    {
+                        "type": "RUN_STARTED",
+                        "runId": "run-1",
+                        "threadId": "thread-1",
+                    },
+                    {
+                        "type": "TEXT_MESSAGE_START",
+                        "messageId": "msg-1",
+                        "role": "assistant",
+                        "runId": "run-1",
+                        "threadId": "thread-1",
+                    },
+                    {
+                        "type": "TEXT_MESSAGE_CONTENT",
+                        "messageId": "msg-1",
+                        "delta": "Hello, ",
+                    },
+                    {
+                        "type": "TEXT_MESSAGE_CONTENT",
+                        "messageId": "msg-1",
+                        "delta": "world!",
+                    },
+                    {
+                        "type": "TEXT_MESSAGE_END",
+                        "messageId": "msg-1",
+                    },
+                    {
+                        "type": "TEXT_MESSAGE_START",
+                        "messageId": "msg-2",
+                        "role": "user",
+                        "runId": "run-1",
+                        "threadId": "thread-1",
+                    },
+                    {
+                        "type": "TEXT_MESSAGE_CONTENT",
+                        "messageId": "msg-2",
+                        "delta": "Thanks!",
+                    },
+                    {
+                        "type": "TEXT_MESSAGE_END",
+                        "messageId": "msg-2",
+                    },
+                ],
+            }
+        ).encode("utf-8")
+        export_response.__enter__ = MagicMock(return_value=export_response)
+        export_response.__exit__ = MagicMock(return_value=False)
+
+        mock_urlopen.side_effect = [session_response, export_response]
+
+        def mock_tool(name, description, schema):
+            def decorator(func):
+                func._tool_name = name
+                return func
+
+            return decorator
+
+        client = BackendAPIClient()
+        tools = create_backend_mcp_tools(sdk_tool_decorator=mock_tool, client=client)
+
+        status_tool = next(
+            t for t in tools if getattr(t, "_tool_name", "") == "acp_get_session_status"
+        )
+        result = await status_tool({"session_name": "test-session", "max_messages": 50})
+
+        result_data = json.loads(result["content"][0]["text"])
+        assert result_data["success"] is True
+        assert result_data["totalMessages"] == 2
+        assert len(result_data["recentMessages"]) == 2
+        assert result_data["recentMessages"][0]["role"] == "assistant"
+        assert result_data["recentMessages"][0]["text"] == "Hello, world!"
+        assert result_data["recentMessages"][1]["role"] == "user"
+        assert result_data["recentMessages"][1]["text"] == "Thanks!"
+
+    @patch("urllib.request.urlopen")
+    @pytest.mark.asyncio
+    async def test_get_session_status_respects_max_messages(
+        self, mock_urlopen, monkeypatch
+    ):
+        """Test that max_messages limits the returned messages."""
+        from ambient_runner.bridges.claude.backend_tools import (
+            create_backend_mcp_tools,
+        )
+
+        monkeypatch.setenv("BACKEND_API_URL", "http://backend:8080/api")
+        monkeypatch.setenv("PROJECT_NAME", "test-project")
+        monkeypatch.setenv("BOT_TOKEN", "test-token")
+
+        session_response = MagicMock()
+        session_response.read.return_value = json.dumps(
+            {
+                "status": {"phase": "Running", "agentStatus": "idle"},
+                "spec": {"displayName": "Test"},
+            }
+        ).encode("utf-8")
+        session_response.__enter__ = MagicMock(return_value=session_response)
+        session_response.__exit__ = MagicMock(return_value=False)
+
+        # Build 5 messages worth of events
+        agui_events = []
+        for i in range(5):
+            agui_events.extend(
+                [
+                    {
+                        "type": "TEXT_MESSAGE_START",
+                        "messageId": f"msg-{i}",
+                        "role": "assistant",
+                    },
+                    {
+                        "type": "TEXT_MESSAGE_CONTENT",
+                        "messageId": f"msg-{i}",
+                        "delta": f"Message {i}",
+                    },
+                    {"type": "TEXT_MESSAGE_END", "messageId": f"msg-{i}"},
+                ]
+            )
+
+        export_response = MagicMock()
+        export_response.read.return_value = json.dumps(
+            {"aguiEvents": agui_events}
+        ).encode("utf-8")
+        export_response.__enter__ = MagicMock(return_value=export_response)
+        export_response.__exit__ = MagicMock(return_value=False)
+
+        mock_urlopen.side_effect = [session_response, export_response]
+
+        def mock_tool(name, description, schema):
+            def decorator(func):
+                func._tool_name = name
+                return func
+
+            return decorator
+
+        client = BackendAPIClient()
+        tools = create_backend_mcp_tools(sdk_tool_decorator=mock_tool, client=client)
+        status_tool = next(
+            t for t in tools if getattr(t, "_tool_name", "") == "acp_get_session_status"
+        )
+
+        result = await status_tool({"session_name": "test-session", "max_messages": 2})
+        result_data = json.loads(result["content"][0]["text"])
+
+        assert result_data["totalMessages"] == 5
+        assert len(result_data["recentMessages"]) == 2
+        # Should return the LAST 2 messages
+        assert result_data["recentMessages"][0]["text"] == "Message 3"
+        assert result_data["recentMessages"][1]["text"] == "Message 4"
+
+    @patch("urllib.request.urlopen")
+    @pytest.mark.asyncio
+    async def test_get_session_status_skips_empty_messages(
+        self, mock_urlopen, monkeypatch
+    ):
+        """Test that whitespace-only messages are skipped."""
+        from ambient_runner.bridges.claude.backend_tools import (
+            create_backend_mcp_tools,
+        )
+
+        monkeypatch.setenv("BACKEND_API_URL", "http://backend:8080/api")
+        monkeypatch.setenv("PROJECT_NAME", "test-project")
+        monkeypatch.setenv("BOT_TOKEN", "test-token")
+
+        session_response = MagicMock()
+        session_response.read.return_value = json.dumps(
+            {
+                "status": {"phase": "Running", "agentStatus": "idle"},
+                "spec": {"displayName": "Test"},
+            }
+        ).encode("utf-8")
+        session_response.__enter__ = MagicMock(return_value=session_response)
+        session_response.__exit__ = MagicMock(return_value=False)
+
+        export_response = MagicMock()
+        export_response.read.return_value = json.dumps(
+            {
+                "aguiEvents": [
+                    {
+                        "type": "TEXT_MESSAGE_START",
+                        "messageId": "msg-empty",
+                        "role": "assistant",
+                    },
+                    {
+                        "type": "TEXT_MESSAGE_CONTENT",
+                        "messageId": "msg-empty",
+                        "delta": "   ",
+                    },
+                    {"type": "TEXT_MESSAGE_END", "messageId": "msg-empty"},
+                    {
+                        "type": "TEXT_MESSAGE_START",
+                        "messageId": "msg-real",
+                        "role": "assistant",
+                    },
+                    {
+                        "type": "TEXT_MESSAGE_CONTENT",
+                        "messageId": "msg-real",
+                        "delta": "Real content",
+                    },
+                    {"type": "TEXT_MESSAGE_END", "messageId": "msg-real"},
+                ],
+            }
+        ).encode("utf-8")
+        export_response.__enter__ = MagicMock(return_value=export_response)
+        export_response.__exit__ = MagicMock(return_value=False)
+
+        mock_urlopen.side_effect = [session_response, export_response]
+
+        def mock_tool(name, description, schema):
+            def decorator(func):
+                func._tool_name = name
+                return func
+
+            return decorator
+
+        client = BackendAPIClient()
+        tools = create_backend_mcp_tools(sdk_tool_decorator=mock_tool, client=client)
+        status_tool = next(
+            t for t in tools if getattr(t, "_tool_name", "") == "acp_get_session_status"
+        )
+
+        result = await status_tool({"session_name": "test-session"})
+        result_data = json.loads(result["content"][0]["text"])
+
+        assert result_data["totalMessages"] == 1
+        assert result_data["recentMessages"][0]["text"] == "Real content"
+
+    @patch("urllib.request.urlopen")
+    @pytest.mark.asyncio
+    async def test_get_session_status_export_failure_returns_empty(
+        self, mock_urlopen, monkeypatch
+    ):
+        """Test graceful degradation when export endpoint fails."""
+        from ambient_runner.bridges.claude.backend_tools import (
+            create_backend_mcp_tools,
+        )
+
+        monkeypatch.setenv("BACKEND_API_URL", "http://backend:8080/api")
+        monkeypatch.setenv("PROJECT_NAME", "test-project")
+        monkeypatch.setenv("BOT_TOKEN", "test-token")
+
+        session_response = MagicMock()
+        session_response.read.return_value = json.dumps(
+            {
+                "status": {"phase": "Stopped", "agentStatus": None},
+                "spec": {"displayName": "Stopped Session"},
+            }
+        ).encode("utf-8")
+        session_response.__enter__ = MagicMock(return_value=session_response)
+        session_response.__exit__ = MagicMock(return_value=False)
+
+        # Export call fails
+        export_error = HTTPError(
+            "http://backend:8080/api/export",
+            404,
+            "Not Found",
+            {},
+            MagicMock(read=lambda: b'{"error": "Not found"}'),
+        )
+        mock_urlopen.side_effect = [session_response, export_error]
+
+        def mock_tool(name, description, schema):
+            def decorator(func):
+                func._tool_name = name
+                return func
+
+            return decorator
+
+        client = BackendAPIClient()
+        tools = create_backend_mcp_tools(sdk_tool_decorator=mock_tool, client=client)
+        status_tool = next(
+            t for t in tools if getattr(t, "_tool_name", "") == "acp_get_session_status"
+        )
+
+        result = await status_tool({"session_name": "test-session"})
+        result_data = json.loads(result["content"][0]["text"])
+
+        # Should still return session metadata, just no messages
+        assert result_data["success"] is True
+        assert result_data["phase"] == "Stopped"
+        assert result_data["recentMessages"] == []
+        assert result_data["totalMessages"] == 0
+
+    @patch("urllib.request.urlopen")
+    @pytest.mark.asyncio
+    async def test_get_session_status_falls_back_to_messages_snapshot(
+        self, mock_urlopen, monkeypatch
+    ):
+        """Test fallback to MESSAGES_SNAPSHOT when no streaming deltas exist."""
+        from ambient_runner.bridges.claude.backend_tools import (
+            create_backend_mcp_tools,
+        )
+
+        monkeypatch.setenv("BACKEND_API_URL", "http://backend:8080/api")
+        monkeypatch.setenv("PROJECT_NAME", "test-project")
+        monkeypatch.setenv("BOT_TOKEN", "test-token")
+
+        session_response = MagicMock()
+        session_response.read.return_value = json.dumps(
+            {
+                "status": {"phase": "Stopped", "agentStatus": None},
+                "spec": {"displayName": "Completed Session"},
+            }
+        ).encode("utf-8")
+        session_response.__enter__ = MagicMock(return_value=session_response)
+        session_response.__exit__ = MagicMock(return_value=False)
+
+        # Completed sessions have MESSAGES_SNAPSHOT instead of streaming deltas
+        export_response = MagicMock()
+        export_response.read.return_value = json.dumps(
+            {
+                "aguiEvents": [
+                    {"type": "RAW", "runId": "run-1"},
+                    {
+                        "type": "MESSAGES_SNAPSHOT",
+                        "messages": [
+                            {"role": "user", "content": "Fix the bug in auth.py"},
+                            {"role": "assistant", "content": "I found the issue in the login handler."},
+                            {"role": "tool", "content": "[tool result]"},
+                            {"role": "user", "content": "Thanks, ship it!"},
+                            {"role": "assistant", "content": "PR created: #1234"},
+                        ],
+                    },
+                    {"type": "RUN_STARTED", "runId": "run-1"},
+                    {
+                        "type": "MESSAGES_SNAPSHOT",
+                        "messages": [
+                            {"role": "user", "content": "Fix the bug in auth.py"},
+                            {"role": "assistant", "content": "I found the issue in the login handler."},
+                            {"role": "user", "content": "Thanks, ship it!"},
+                            {"role": "assistant", "content": "PR created and merged."},
+                        ],
+                    },
+                    {"type": "RUN_FINISHED", "runId": "run-1"},
+                ],
+            }
+        ).encode("utf-8")
+        export_response.__enter__ = MagicMock(return_value=export_response)
+        export_response.__exit__ = MagicMock(return_value=False)
+
+        mock_urlopen.side_effect = [session_response, export_response]
+
+        def mock_tool(name, description, schema):
+            def decorator(func):
+                func._tool_name = name
+                return func
+
+            return decorator
+
+        client = BackendAPIClient()
+        tools = create_backend_mcp_tools(sdk_tool_decorator=mock_tool, client=client)
+        status_tool = next(
+            t for t in tools if getattr(t, "_tool_name", "") == "acp_get_session_status"
+        )
+
+        result = await status_tool({"session_name": "test-session", "max_messages": 50})
+        result_data = json.loads(result["content"][0]["text"])
+
+        # Should use the LAST MESSAGES_SNAPSHOT (most complete)
+        assert result_data["totalMessages"] == 4
+        assert len(result_data["recentMessages"]) == 4
+        # Tool messages should be filtered out
+        assert all(
+            m["role"] in ("user", "assistant") for m in result_data["recentMessages"]
+        )
+        assert result_data["recentMessages"][0]["text"] == "Fix the bug in auth.py"
+        assert result_data["recentMessages"][-1]["text"] == "PR created and merged."
+
+    @patch("urllib.request.urlopen")
+    @pytest.mark.asyncio
+    async def test_get_session_status_prefers_streaming_over_snapshot(
+        self, mock_urlopen, monkeypatch
+    ):
+        """Test that streaming deltas are preferred over MESSAGES_SNAPSHOT."""
+        from ambient_runner.bridges.claude.backend_tools import (
+            create_backend_mcp_tools,
+        )
+
+        monkeypatch.setenv("BACKEND_API_URL", "http://backend:8080/api")
+        monkeypatch.setenv("PROJECT_NAME", "test-project")
+        monkeypatch.setenv("BOT_TOKEN", "test-token")
+
+        session_response = MagicMock()
+        session_response.read.return_value = json.dumps(
+            {
+                "status": {"phase": "Running", "agentStatus": "working"},
+                "spec": {"displayName": "Active Session"},
+            }
+        ).encode("utf-8")
+        session_response.__enter__ = MagicMock(return_value=session_response)
+        session_response.__exit__ = MagicMock(return_value=False)
+
+        # Session has BOTH streaming deltas AND a snapshot (active session mid-run)
+        export_response = MagicMock()
+        export_response.read.return_value = json.dumps(
+            {
+                "aguiEvents": [
+                    {
+                        "type": "MESSAGES_SNAPSHOT",
+                        "messages": [
+                            {"role": "user", "content": "Old snapshot content"},
+                        ],
+                    },
+                    {
+                        "type": "TEXT_MESSAGE_START",
+                        "messageId": "msg-live",
+                        "role": "assistant",
+                    },
+                    {
+                        "type": "TEXT_MESSAGE_CONTENT",
+                        "messageId": "msg-live",
+                        "delta": "Fresh streaming content",
+                    },
+                    {"type": "TEXT_MESSAGE_END", "messageId": "msg-live"},
+                ],
+            }
+        ).encode("utf-8")
+        export_response.__enter__ = MagicMock(return_value=export_response)
+        export_response.__exit__ = MagicMock(return_value=False)
+
+        mock_urlopen.side_effect = [session_response, export_response]
+
+        def mock_tool(name, description, schema):
+            def decorator(func):
+                func._tool_name = name
+                return func
+
+            return decorator
+
+        client = BackendAPIClient()
+        tools = create_backend_mcp_tools(sdk_tool_decorator=mock_tool, client=client)
+        status_tool = next(
+            t for t in tools if getattr(t, "_tool_name", "") == "acp_get_session_status"
+        )
+
+        result = await status_tool({"session_name": "test-session"})
+        result_data = json.loads(result["content"][0]["text"])
+
+        # Should use streaming deltas, NOT the snapshot
+        assert result_data["totalMessages"] == 1
+        assert result_data["recentMessages"][0]["text"] == "Fresh streaming content"
+
+    @patch("urllib.request.urlopen")
+    @pytest.mark.asyncio
+    async def test_get_session_status_truncates_long_messages(
+        self, mock_urlopen, monkeypatch
+    ):
+        """Test that messages longer than 500 chars are truncated."""
+        from ambient_runner.bridges.claude.backend_tools import (
+            create_backend_mcp_tools,
+        )
+
+        monkeypatch.setenv("BACKEND_API_URL", "http://backend:8080/api")
+        monkeypatch.setenv("PROJECT_NAME", "test-project")
+        monkeypatch.setenv("BOT_TOKEN", "test-token")
+
+        session_response = MagicMock()
+        session_response.read.return_value = json.dumps(
+            {
+                "status": {"phase": "Running", "agentStatus": "idle"},
+                "spec": {"displayName": "Test"},
+            }
+        ).encode("utf-8")
+        session_response.__enter__ = MagicMock(return_value=session_response)
+        session_response.__exit__ = MagicMock(return_value=False)
+
+        long_text = "A" * 1000
+        export_response = MagicMock()
+        export_response.read.return_value = json.dumps(
+            {
+                "aguiEvents": [
+                    {
+                        "type": "TEXT_MESSAGE_START",
+                        "messageId": "msg-long",
+                        "role": "assistant",
+                    },
+                    {
+                        "type": "TEXT_MESSAGE_CONTENT",
+                        "messageId": "msg-long",
+                        "delta": long_text,
+                    },
+                    {"type": "TEXT_MESSAGE_END", "messageId": "msg-long"},
+                ],
+            }
+        ).encode("utf-8")
+        export_response.__enter__ = MagicMock(return_value=export_response)
+        export_response.__exit__ = MagicMock(return_value=False)
+
+        mock_urlopen.side_effect = [session_response, export_response]
+
+        def mock_tool(name, description, schema):
+            def decorator(func):
+                func._tool_name = name
+                return func
+
+            return decorator
+
+        client = BackendAPIClient()
+        tools = create_backend_mcp_tools(sdk_tool_decorator=mock_tool, client=client)
+        status_tool = next(
+            t for t in tools if getattr(t, "_tool_name", "") == "acp_get_session_status"
+        )
+
+        result = await status_tool({"session_name": "test-session"})
+        result_data = json.loads(result["content"][0]["text"])
+
+        assert len(result_data["recentMessages"][0]["text"]) == 500
+
+    @patch("urllib.request.urlopen")
+    @pytest.mark.asyncio
     async def test_tool_execution_list_sessions(self, mock_urlopen, monkeypatch):
         """Test executing the acp_list_sessions tool."""
         from ambient_runner.bridges.claude.backend_tools import (
