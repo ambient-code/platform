@@ -261,6 +261,14 @@
       "provider": "anthropic",
       "available": false,
       "featureGated": true
+    },
+    {
+      "id": "claude-sonnet-5-5",
+      "label": "Claude Sonnet 5.5",
+      "vertexId": "claude-sonnet-5-5@default",
+      "provider": "anthropic",
+      "available": false,
+      "featureGated": true
     }
   ]
 }
