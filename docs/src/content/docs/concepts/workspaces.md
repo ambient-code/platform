@@ -14,10 +14,30 @@ Open the platform UI and click **New Workspace**. You will be prompted for:
 
 | Field | Purpose |
 |-------|---------|
-| **Display name** | A human-readable label shown across the UI. |
+| **Workspace Name** | A human-readable label shown across the UI. The platform also derives the internal **project name** from this value (see [Workspace name and project name](#workspace-name-and-project-name) below). |
 | **Description** | Optional notes describing what the workspace is for. |
 
 After creation you land on the workspace dashboard, where you can start sessions, configure integrations, and invite collaborators.
+
+## Workspace name and project name
+
+When you create a workspace the platform derives a **project name** from the workspace name you enter. This project name becomes the Kubernetes namespace for the workspace and is the identifier used in API paths, RBAC bindings, and CLI commands.
+
+The derivation rules (implemented in `generateWorkspaceName` in the frontend) are:
+
+1. Convert to lowercase.
+2. Replace whitespace with hyphens.
+3. Strip characters that are not lowercase alphanumeric or hyphens.
+4. Collapse consecutive hyphens and trim leading/trailing hyphens.
+5. Truncate to 63 characters (the Kubernetes namespace name limit).
+
+For example, a workspace name of **"My Research Workspace"** produces the project name `my-research-workspace`.
+
+:::caution
+The project name must be **globally unique** on the cluster — no two workspaces can share the same derived name. If you try to create a workspace whose name collides with an existing namespace, the platform returns a **409 Conflict** error. Choose a distinctive workspace name to avoid collisions.
+:::
+
+The project name **cannot be changed** after creation because it is the Kubernetes namespace and is referenced by RBAC bindings, secrets, and session resources.
 
 ## Workspace settings
 
@@ -30,7 +50,8 @@ Each workspace carries its own configuration. Open **Settings** from the workspa
 
 ### General
 
-- **Display name and description** -- Update at any time.
+- **Workspace name (display name) and description** -- Update at any time.
+- **Project name** -- The Kubernetes namespace for this workspace. Read-only after creation (see [Workspace name and project name](#workspace-name-and-project-name)).
 
 ### Storage
 
