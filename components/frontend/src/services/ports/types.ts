@@ -13,6 +13,7 @@ export type { WorkspaceItem, GitMergeStatus, GitStatus } from '@/services/api/wo
 export type { ProjectKey, CreateKeyRequest, CreateKeyResponse } from '@/services/api/keys'
 export type { Secret, SecretList, SecretsConfig } from '@/services/api/secrets'
 export type { OOTBWorkflow, WorkflowMetadataResponse, WorkflowCommand, WorkflowAgent, WorkflowConfig } from '@/services/api/workflows'
+export type { WorkflowSourcesConfig } from '@/types/workflow'
 export type { RunnerType, RunnerTypeAuth } from '@/services/api/runner-types'
 export type { FeatureToggle } from '@/services/api/feature-flags-admin'
 export type { LDAPUser, LDAPGroup } from '@/services/api/ldap'

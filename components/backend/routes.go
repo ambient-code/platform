@@ -129,6 +129,10 @@ func registerRoutes(r *gin.Engine) {
 			projectGroup.GET("/mcp-servers", handlers.GetProjectMCPServers)
 			projectGroup.PUT("/mcp-servers", handlers.UpdateProjectMCPServers)
 
+			// Project-level workflow source configuration
+			projectGroup.GET("/workflow-sources", handlers.GetProjectWorkflowSources)
+			projectGroup.PUT("/workflow-sources", handlers.UpdateProjectWorkflowSources)
+
 			projectGroup.GET("/secrets", handlers.ListNamespaceSecrets)
 			projectGroup.GET("/runner-secrets", handlers.ListRunnerSecrets)
 			projectGroup.PUT("/runner-secrets", handlers.UpdateRunnerSecrets)
