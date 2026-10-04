@@ -2,8 +2,9 @@
 
 **Date:** 2026-03-20
 **Status:** Active
-**Last Updated:** 2026-06-03 — added Application (GitOps continuous sync for agent fleets); addressed review feedback: credential_id FK for remote auth, RoleBinding escalation rules, prune safety, health status semantics, gitops role grantability, sync engine kind filtering
-**Previous:** 2026-05-12 — migrate Credentials from project-scoped to global routes (`/credentials`); remove `project_id` from model, OpenAPI, and SDK; add drop-column migration; update coverage matrix
+**Last Updated:** 2026-06-11 — added kube-shaped Project `spec.preview` policy for project preview URL trust
+**Previous:** 2026-06-03 — added Application (GitOps continuous sync for agent fleets); addressed review feedback: credential_id FK for remote auth, RoleBinding escalation rules, prune safety, health status semantics, gitops role grantability, sync engine kind filtering
+**Earlier:** 2026-05-12 — migrate Credentials from project-scoped to global routes (`/credentials`); remove `project_id` from model, OpenAPI, and SDK; add drop-column migration; update coverage matrix
 **Workflow:** `../../workflows/sessions/ambient-model.workflow.md` — implementation waves, gap table, build commands, run log
 **Design:** `credentials-session.md` — full Credential Kind design spec and rationale
 
@@ -13,7 +14,7 @@
 
 The Ambient API server provides a coordination layer for orchestrating fleets of persistent agents across projects. The model is intentionally simple:
 
-- **Project** — a workspace. Groups agents and provides shared context (`prompt`) injected into every agent start.
+- **Project** — a workspace. Groups agents, provides shared context (`prompt`) injected into every agent start, and owns typed project configuration such as preview URL trust policy.
 - **Agent** — a project-scoped, mutable definition. Agents belong to exactly one Project. `prompt` defines who the agent is and is directly editable (subject to RBAC).
 - **Session** — an ephemeral Kubernetes execution run, created exclusively via agent start. Only one active Session per Agent at a time.
 - **Message** — a single AG-UI event in the LLM conversation. Append-only; the canonical record of what happened in a session.
@@ -49,19 +50,10 @@ erDiagram
         string name
         string description
         string prompt "workspace-level context injected into every agent start"
+        jsonb  spec "typed Project spec including preview"
         jsonb  labels
         jsonb  annotations
         string status
-        time   created_at
-        time   updated_at
-        time   deleted_at
-    }
-
-    ProjectSettings {
-        string ID PK
-        string project_id FK
-        string group_access
-        string repositories
         time   created_at
         time   updated_at
         time   deleted_at
@@ -259,7 +251,6 @@ erDiagram
 
     %% ── Relationships ────────────────────────────────────────────────────────
 
-    Project         ||--o{ ProjectSettings  : "has"
     Project         ||--o{ Agent            : "owns"
     RoleBinding     }o--o| Credential       : "credential_id"
     Project         ||--o{ ScheduledSession : "owns"
@@ -314,7 +305,7 @@ An Application syncs **project-scoped fleet definitions** — a subset of resour
 
 | Kind | Sync Behavior |
 |---|---|
-| `Project` | Created if `CreateProject=true` in `sync_options`; patched (description, prompt, labels, annotations) on subsequent syncs |
+| `Project` | Created if `CreateProject=true` in `sync_options`; patched (metadata labels/annotations and declared `spec` fields, including `description`, `prompt`, and `preview`) on subsequent syncs |
 | `Agent` | Created or patched within the destination project; prompt, labels, annotations updated |
 | `Credential` | Created if not present; idempotent by name |
 | `RoleBinding` | Created if not present; idempotent by user+role+scope key. **Escalation-bound:** the sync engine can only create RoleBindings at or below the level of the service credential it uses (see Design Decisions). |
@@ -427,6 +418,70 @@ self_heal: false
 ```
 
 Promotion is a git operation: merge the dev overlay changes into the release branch, then sync the staging Application.
+
+---
+
+## Project — Workspace And Project Configuration
+
+Project is the workspace boundary for Agents, Inbox messages, Sessions, and typed project configuration. The stable address is `metadata.name`, which is also the Ambient Project id today.
+
+Project manifests SHALL use a Kubernetes-style envelope:
+
+```yaml
+apiVersion: ambient-code.io/v1alpha1
+kind: Project
+metadata:
+  name: checkout
+  labels:
+    team: payments
+spec:
+  description: "Checkout automation"
+  prompt: "This workspace owns checkout services."
+  preview:
+    allowedHosts:
+      - pattern: "pr-*.checkout.apps.rosa.example.com"
+        forwardAmbientToken: true
+      - pattern: "deploy-preview-*.netlify.app"
+        forwardAmbientToken: false
+```
+
+| Field | Notes |
+|-------|-------|
+| `apiVersion` | Required in declarative manifests. Initial value: `ambient-code.io/v1alpha1`. |
+| `kind` | Required. Must be `Project`. |
+| `metadata.name` | Required. The stable, unique Project name and Ambient Project id. |
+| `metadata.labels` | Optional map for queryable Project tags. |
+| `metadata.annotations` | Optional map for freeform Project metadata. Preview trust policy SHALL NOT be stored here. |
+| `spec.description` | Nullable. Free-text Project description. Canonical in kube-shaped manifests; mirrored to legacy `description` responses during compatibility transition. |
+| `spec.prompt` | Nullable. Workspace-level context injected into every Agent start in the Project. Canonical in kube-shaped manifests; mirrored to legacy `prompt` responses during compatibility transition. |
+| `spec.preview.allowedHosts` | Optional list of trusted preview host entries for this Project. Omitted `preview` leaves preview settings unmanaged by the apply operation. An empty list clears the Project preview allowlist. |
+| `spec.preview.allowedHosts[].pattern` | Required host glob pattern. The value is matched against URL host with optional port. It SHALL NOT include a URL scheme, path, query, fragment, username, or password. |
+| `spec.preview.allowedHosts[].forwardAmbientToken` | Optional boolean, default `false`. When `true`, the preview proxy MAY forward the BFF's server-side SSO access token to matching preview targets, subject to the platform token relay policy. |
+
+Preview host patterns SHALL be explicit host patterns. The API SHALL reject wildcard-only patterns such as `*` and `*:*`, scheme-bearing patterns, path-scoped entries, and entries that cannot be parsed as host globs. Patterns are matched case-insensitively against normalized `URL.host`; preview URLs themselves MUST be absolute `http:` or `https:` URLs. Pattern validation is a server-side responsibility; UI and CLI validation MAY preflight but SHALL NOT be the only enforcement.
+
+`forwardAmbientToken` is a separate trust decision from allowing the preview to render. A Project MAY allow a host for preview rendering without allowing Ambient token relay. The platform deployment SHALL define a token-relay ceiling; if no ceiling is configured, every `forwardAmbientToken: true` entry SHALL be rejected. Project roles can opt in only within the platform-admin configured ceiling and cannot expand it. Relay SHALL be HTTPS-only, evaluated per request, never use service/internal tokens, and tokens SHALL NOT be logged or persisted. Entries with `forwardAmbientToken: false` do not need to match the token-relay ceiling, but are still subject to SSRF protections and preview host validation.
+
+If multiple `allowedHosts` entries match a preview host, the most-specific host pattern wins for `forwardAmbientToken` evaluation. Equal-specificity conflicts SHALL be rejected at save time.
+
+Project preview policy writes SHALL be authorized by Project role: `project:owner` and `project:editor` can update `spec.preview` for their Project; `project:viewer` can read but cannot modify it. Authenticated Project bootstrap creation MAY include `spec.preview` because Project creation atomically grants the caller `project:owner` for the new Project. Anonymous Project creation SHALL be rejected, and compatibility paths SHALL NOT persist preview trust unless the create succeeds with the owner binding in the same transaction. Clearing preview trust is done by updating `spec.preview.allowedHosts` to `[]`.
+
+### Storage Migration
+
+Project storage SHALL add persisted `spec` support for typed configuration while preserving existing `name`, `description`, `prompt`, `labels`, and `annotations` fields for backward compatibility. The final desired Project row shape SHALL keep Project identity and query fields on the Project row (`id`, `name`, lifecycle timestamps, `labels`, `annotations`) and store typed desired-state configuration in `spec` as JSONB or the database-native equivalent. Existing rows SHALL backfill `spec.description` and `spec.prompt` from the current top-level columns. During compatibility transition, writes to legacy `description` and `prompt` fields SHALL update the corresponding `spec` fields, and reads MAY continue to expose the legacy fields as mirrors of `spec.description` and `spec.prompt`. New typed configuration such as `preview.allowedHosts` SHALL live under Project `spec`, not in Project labels or annotations and not in a separate settings kind.
+
+The Project persistence model after migration SHALL include:
+- `projects.name` as the non-null, immutable Project identity backing `metadata.name`, unique among non-deleted Projects;
+- `projects.spec` as a non-null JSONB or database-native equivalent document backing the Kubernetes-style `spec` field, defaulting to `{}`;
+- existing `projects.description` and `projects.prompt` columns only as compatibility mirrors during transition, with `spec.description` and `spec.prompt` canonical for kube-shaped manifests;
+- no final project-scoped settings table, separate settings Kind, or denormalized settings row keyed by `project_id` for preview policy.
+
+Existing project-scoped settings storage is legacy implementation state, not desired API shape. Migration SHALL move any still-relevant settings into Project `spec` or delete them if they are no longer part of the desired model. Project preview policy SHALL NOT be sourced from legacy `group_access` or `repositories` fields, and no separate settings manifest Kind, REST resource, SDK type, or UI editing surface SHALL be exposed.
+
+The database SHALL enforce:
+- a unique, non-deleted Project `name`;
+- immutable `metadata.name` / Project id after creation;
+- server-side validation of `spec.preview.allowedHosts`.
 
 ---
 
@@ -554,7 +609,7 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | `GET /projects` | `acpctl get projects` | ✅ implemented |
 | `GET /projects/{id}` | `acpctl get project <name>` | ✅ implemented |
 | `POST /projects` | `acpctl create project --name <n> [--description <d>]` | ✅ implemented |
-| `PATCH /projects/{id}` | `acpctl project update [--name <n>] [--description <d>] [--prompt <p>]` | ✅ implemented |
+| `PATCH /projects/{id}` | `acpctl project update [--description <d>] [--prompt <p>]` | ✅ implemented |
 | `DELETE /projects/{id}` | `acpctl delete project <name>` | ✅ implemented |
 | _(context switch)_ | `acpctl project <name>` | ✅ implemented |
 | _(context view)_ | `acpctl project current` | ✅ implemented |
@@ -680,13 +735,13 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 
 ### `acpctl apply` — Declarative Fleet Management
 
-`acpctl apply` reconciles Projects and Agents from declarative YAML files, mirroring `kubectl apply` semantics. It is the primary way to provision and update entire agent fleets from the `.ambient/teams/` directory tree.
+`acpctl apply` reconciles Projects, Agents, Credentials, and RoleBindings from declarative YAML files, mirroring `kubectl apply` semantics. It is the primary way to provision and update entire agent fleets from the `.ambient/teams/` directory tree.
 
 #### Supported Kinds
 
 | Kind | Fields applied |
 |---|---|
-| `Project` | `name`, `description`, `prompt`, `labels`, `annotations` |
+| `Project` | `apiVersion`, `kind`, `metadata.name`, `metadata.labels`, `metadata.annotations`, `spec.description`, `spec.prompt`, `spec.preview.allowedHosts` |
 | `Agent` | `name`, `prompt`, `labels`, `annotations`, `inbox` (seed messages) |
 | `Credential` | `name`, `description`, `provider`, `token` (env var reference), `url`, `email`, `labels`, `annotations` — global resource; use `credential bind` to grant project access |
 
@@ -703,7 +758,7 @@ acpctl apply -f -                    # read from stdin
 Each file may contain one or more YAML documents separated by `---`. Documents with unrecognised `kind` values are skipped with a warning.
 
 Apply behaviour per resource:
-- **Project**: if a project with `name` already exists, `PATCH` it (description, prompt, labels, annotations). If it does not exist, `POST` to create it.
+- **Project**: resolved by `metadata.name`. If a Project with that name already exists, `PATCH` the declared metadata and `spec` fields. If it does not exist, `POST` to create it. Applying `spec.preview.allowedHosts: []` clears the Project preview allowlist. Omitting `spec.preview` leaves preview settings unmanaged by that apply operation.
 - **Agent**: resolved within the current project context. If an agent with `name` already exists in the project, `PATCH` it (prompt, labels, annotations). If it does not exist, `POST` to create it. After upsert, post any inbox seed messages not already present.
 
 Output (default — one line per resource):
@@ -833,6 +888,8 @@ DELETE /api/ambient/v1/projects/{id}                         delete project
 
 GET    /api/ambient/v1/projects/{id}/role_bindings           RBAC bindings scoped to this project
 ```
+
+Project routes SHALL accept and return the Kubernetes-style Project envelope (`apiVersion`, `kind`, `metadata`, `spec`). For project-scoped writes, `metadata.name` SHALL match the `{id}` path parameter when both are present. Mismatches SHALL return `400 Bad Request` with an error body identifying the conflicting fields and provided values; `409 Conflict` is reserved for conflicts with existing stored state. Field-level authorization applies to Project patches: `spec.preview` updates are allowed for `project:owner` and `project:editor`, while other Project fields retain their existing Project update authorization requirements.
 
 ### Agents (Project-Scoped)
 
@@ -1142,9 +1199,9 @@ See [Security Spec — Credential Access via RoleBindings](../security/security.
 |---|---|
 | `platform:admin` | Full access to everything |
 | `platform:viewer` | Read-only across the platform |
-| `project:owner` | Full control of a project and all its agents |
-| `project:editor` | Create/update Agents, ignite, send messages |
-| `project:viewer` | Read-only within a project |
+| `project:owner` | Full control of a project, its preview policy, and all its agents |
+| `project:editor` | Create/update Agents, ignite, send messages, update Project preview policy |
+| `project:viewer` | Read-only within a project, including Project preview policy |
 | `agent:operator` | Ignite and message a specific Agent |
 | `agent:editor` | Update prompt and metadata on a specific Agent |
 | `agent:observer` | Read a specific Agent and its sessions |
@@ -1162,7 +1219,7 @@ See [Security Spec — Credential Access via RoleBindings](../security/security.
 | `platform:admin` | full | full | full | full | full | full | full | full |
 | `platform:viewer` | read/list | read/list | read/list | — | read/list | read/list | read | read/list |
 | `project:owner` | full | full | full | full | manage bindings | local-only (own project) | read | project+agent bindings |
-| `project:editor` | read | create/update/ignite | read/list | send/read | — | — | read | — |
+| `project:editor` | read + update preview policy | create/update/ignite | read/list | send/read | — | — | read | — |
 | `project:viewer` | read | read/list | read/list | — | — | — | read | — |
 | `gitops:admin` | — | — | — | — | — | full (any destination) | — | — |
 | `gitops:viewer` | — | — | — | — | — | read/list | — | — |
@@ -1523,7 +1580,7 @@ design rationale (storage, rotation, provider serialization, migration).
 
 ## Implementation Coverage Matrix
 
-_Last updated: 2026-04-28. Use this as the authoritative index — click into component source to verify._
+_Last updated: 2026-06-11. Use this as the authoritative index — click into component source to verify._
 
 | Area | API Server | Go SDK | CLI (`acpctl`) | Notes |
 |---|---|---|---|---|
@@ -1547,6 +1604,7 @@ _Last updated: 2026-04-28. Use this as the authoritative index — click into co
 | **Inbox — mark-read/delete** | ✅ PATCH/DELETE `/inbox/{id}` | ✅ `InboxMessageAPI.{MarkRead,DeleteMessage}` | ✅ `inbox mark-read`, `inbox delete` | |
 | **Projects — CRUD** | ✅ | ✅ `ProjectAPI.{Get,List,Create,Update,Delete}` | ✅ `get/create/delete project`, `project set/current`, `project update` | |
 | **Projects — labels/annotations** | ✅ PATCH accepts `labels`/`annotations` | ✅ fields on `Project` type; `ProjectAPI.Update(patch map[string]any)` | ⚠️ no dedicated subcommand | |
+| **Projects — preview allowlist** | 🔲 add kube-shaped Project `spec.preview.allowedHosts`, storage migration/backfill, validation, and field-level RBAC for Project preview policy updates | 🔲 Go/Python/TypeScript SDK models/builders for Project `metadata` and `spec.preview` | 🔲 `acpctl apply` support for kube-shaped Project manifests with `spec.preview.allowedHosts` | Persisted project preview URL trust policy |
 | **RBAC — roles** | ✅ full CRUD | ✅ `RoleAPI` | ✅ `create role`, `get roles`, `get roles <id>`, `delete role` | |
 | **RBAC — role bindings** | ✅ full CRUD | ✅ `RoleBindingAPI` | ✅ `create role-binding`, `get role-bindings`, `get role-bindings <id>`, `delete role-binding` | |
 | **RBAC — scoped role_bindings queries** | ✅ agents only; 🔲 users/projects/sessions/credentials | n/a | n/a | `GET /projects/{id}/agents/{agent_id}/role_bindings` implemented; other 4 scoped endpoints not yet |
@@ -1559,6 +1617,7 @@ _Last updated: 2026-04-28. Use this as the authoritative index — click into co
 | **Generic proxy — auth integrations** | ✅ proxy plugin | n/a | n/a | GitHub/GitLab/Google/Jira/Gerrit/CodeRabbit/MCP OAuth flows |
 | **Generic proxy — cluster/platform** | ✅ proxy plugin | n/a | 🔲 `acpctl version`, `acpctl cluster-info` | cluster-info, version, health, LDAP, OOTB workflows |
 | **Declarative apply** | n/a | uses SDK | ✅ `apply -f`, `apply -k` | Upsert semantics; supports inbox seeding |
+| **Declarative apply — Project spec.preview** | n/a | uses SDK | 🔲 `apply -f project.yaml` | Kube-shaped Project manifest with `metadata.name` and `spec.preview.allowedHosts` |
 | **Declarative apply — Credential kind** | n/a | uses SDK | ✅ `apply -f credential.yaml` | Global resource; token sourced from env var in YAML |
 | **Declarative apply — ScheduledSession kind** | n/a | 🔲 | 🔲 | Planned; schedule and agent reference in YAML |
 | **Applications — CRUD** | 🔲 planned | 🔲 planned | 🔲 planned | GitOps sync binding |
