@@ -269,6 +269,14 @@
       "provider": "anthropic",
       "available": false,
       "featureGated": true
+    },
+    {
+      "id": "gemini-nano-banana-2.1",
+      "label": "Gemini Nano Banana 2.1",
+      "vertexId": "gemini-nano-banana-2.1@default",
+      "provider": "google",
+      "available": false,
+      "featureGated": true
     }
   ]
 }
