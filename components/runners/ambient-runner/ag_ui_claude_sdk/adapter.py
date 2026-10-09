@@ -11,6 +11,7 @@ import logging
 import json
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, AsyncIterator, TYPE_CHECKING
 
 # AG-UI Protocol Events
@@ -77,7 +78,38 @@ from .handlers import (
 # These are HITL (human-in-the-loop) tools that require user input before
 # the agent can continue.  The adapter treats them identically to frontend
 # tools registered via ``input_data.tools``.
-BUILTIN_FRONTEND_TOOLS: set[str] = {"AskUserQuestion"}
+BUILTIN_FRONTEND_TOOLS: set[str] = {"AskUserQuestion", "ExitPlanMode"}
+
+
+_PLAN_FILE_MAX_BYTES = 100 * 1024  # 100 KB
+
+
+def _read_plan_file(options: Any) -> str | None:
+    """Read the most recent plan file from .claude/plans/ in the cwd."""
+    cwd = None
+    if isinstance(options, dict):
+        cwd = options.get("cwd")
+    elif hasattr(options, "cwd"):
+        cwd = options.cwd
+    if not cwd:
+        return None
+    plans_dir = Path(cwd) / ".claude" / "plans"
+    if not plans_dir.is_dir():
+        return None
+    plan_files = sorted(
+        plans_dir.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True
+    )
+    if not plan_files:
+        return None
+    try:
+        content = plan_files[0].read_text(encoding="utf-8")
+        content_bytes = content.encode("utf-8")
+        if len(content_bytes) > _PLAN_FILE_MAX_BYTES:
+            content = content_bytes[:_PLAN_FILE_MAX_BYTES].decode("utf-8", errors="ignore") + "\n\n[truncated]"
+        return content
+    except OSError:
+        return None
+
 
 logger = logging.getLogger(__name__)
 
@@ -1048,6 +1080,18 @@ class ClaudeAgentAdapter:
                             )
 
                             if is_frontend_tool:
+                                # Enrich ExitPlanMode with plan file content
+                                if current_tool_display_name == "ExitPlanMode":
+                                    plan_content = _read_plan_file(self._options)
+                                    if plan_content and pending_msg and pending_msg.get("tool_calls"):
+                                        last_tc = pending_msg["tool_calls"][-1]
+                                        try:
+                                            args = json.loads(last_tc.function.arguments) if last_tc.function.arguments else {}
+                                            args["planContent"] = plan_content
+                                            last_tc.function.arguments = json.dumps(args)
+                                        except (json.JSONDecodeError, AttributeError) as e:
+                                            logger.debug("Failed to enrich ExitPlanMode with plan content: %s", e)
+
                                 # Flush before halt (message_stop won't fire after interrupt)
                                 flush_pending_msg()
 
