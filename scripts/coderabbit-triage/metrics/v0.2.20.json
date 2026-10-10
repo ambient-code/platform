@@ -1,0 +1,62 @@
+{
+  "release": "v0.2.20",
+  "date": "2026-06-15",
+  "prs_analyzed": 1,
+  "total_comments": 2,
+  "critical": 0,
+  "major": 2,
+  "by_component": {
+    "runner": {
+      "critical": 0,
+      "major": 2,
+      "total": 2
+    }
+  },
+  "top_patterns": [
+    {
+      "name": "Gemini prompt now has conflicting GitHub instructions in MCP mode.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "runner"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3416445663,
+          "title": "Gemini prompt now has conflicting GitHub instructions in MCP mode.",
+          "path": "components/runners/ambient-runner/ambient_runner/bridges/gemini_cli/system_prompt.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1686#discussion_r3416445663",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Jira sidecar mode is currently misdetected as \u201cnot configured\u201d.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "runner"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3416445673,
+          "title": "Jira sidecar mode is currently misdetected as \u201cnot configured\u201d.",
+          "path": "components/runners/ambient-runner/ambient_runner/platform/prompts.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1686#discussion_r3416445673",
+          "ai_prompt": ""
+        }
+      ]
+    }
+  ],
+  "coverage_gaps": 2,
+  "pattern_categories": {
+    "validation": 1,
+    "security": 1
+  }
+}
