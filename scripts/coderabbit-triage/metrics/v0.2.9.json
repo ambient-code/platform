@@ -1,0 +1,285 @@
+{
+  "release": "v0.2.9",
+  "date": "2026-05-21",
+  "prs_analyzed": 1,
+  "total_comments": 14,
+  "critical": 1,
+  "major": 13,
+  "by_component": {
+    "cli": {
+      "critical": 0,
+      "major": 1,
+      "total": 1
+    },
+    "other": {
+      "critical": 1,
+      "major": 9,
+      "total": 10
+    },
+    "runner": {
+      "critical": 0,
+      "major": 3,
+      "total": 3
+    }
+  },
+  "top_patterns": [
+    {
+      "name": "Credential sidecar authentication mechanism is undefined.",
+      "count": 3,
+      "critical": 0,
+      "major": 3,
+      "impact_score": 9,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3277736061,
+          "title": "Credential sidecar authentication mechanism is undefined.",
+          "path": "specs/integrations/mcp-server.spec.md",
+          "html_url": "https://github.com/ambient-code/platform/pull/1599#discussion_r3277736061",
+          "ai_prompt": ""
+        },
+        {
+          "id": 3277823980,
+          "title": "Credential sidecar auth contract is incomplete for RSA-OAEP flow",
+          "path": "specs/integrations/mcp-server.spec.md",
+          "html_url": "https://github.com/ambient-code/platform/pull/1599#discussion_r3277823980",
+          "ai_prompt": ""
+        },
+        {
+          "id": 3278291811,
+          "title": "Gate credential sidecar injection on token-exchange prerequisites.",
+          "path": "components/ambient-control-plane/internal/reconciler/kube_reconciler.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1599#discussion_r3278291811",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Credential bootstrap wrapper is missing for this sidecar flow (also applies to `google/Dockerfile`).",
+      "count": 1,
+      "critical": 1,
+      "major": 0,
+      "impact_score": 4,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3278291833,
+          "title": "Credential bootstrap wrapper is missing for this sidecar flow (also applies to `google/Dockerfile`).",
+          "path": "components/credential-sidecars/k8s/Dockerfile",
+          "html_url": "https://github.com/ambient-code/platform/pull/1599#discussion_r3278291833",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Stop enforcing plaintext token output in CLI tests.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "cli"
+      ],
+      "covered_by_guardrail": "No tokens in logs",
+      "example_comments": [
+        {
+          "id": 3277711134,
+          "title": "Stop enforcing plaintext token output in CLI tests.",
+          "path": "components/ambient-cli/cmd/acpctl/credential/cmd_test.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1599#discussion_r3277711134",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Document git credential HTTP endpoint in MCP server spec or clarify relation to MCP transport.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3277736057,
+          "title": "Document git credential HTTP endpoint in MCP server spec or clarify relation to MCP transport.",
+          "path": "specs/agents/runner.spec.md",
+          "html_url": "https://github.com/ambient-code/platform/pull/1599#discussion_r3277736057",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Add gitlab-mcp to the MCP Servers table.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3277816091,
+          "title": "Add gitlab-mcp to the MCP Servers table.",
+          "path": "specs/agents/runner.spec.md",
+          "html_url": "https://github.com/ambient-code/platform/pull/1599#discussion_r3277816091",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Update legacy runner credential flow references to match sidecar isolation",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3277823972,
+          "title": "Update legacy runner credential flow references to match sidecar isolation",
+          "path": "specs/agents/runner.spec.md",
+          "html_url": "https://github.com/ambient-code/platform/pull/1599#discussion_r3277823972",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Sidecar transport mode conflicts with earlier MCP transport definition",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3277823975,
+          "title": "Sidecar transport mode conflicts with earlier MCP transport definition",
+          "path": "specs/integrations/mcp-server.spec.md",
+          "html_url": "https://github.com/ambient-code/platform/pull/1599#discussion_r3277823975",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Do not fail open when required bootstrap env vars are missing.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3278291817,
+          "title": "Do not fail open when required bootstrap env vars are missing.",
+          "path": "components/credential-sidecars/entrypoint/main.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1599#discussion_r3278291817",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Avoid including raw credential API response bodies in errors.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "other"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3278291828,
+          "title": "Avoid including raw credential API response bodies in errors.",
+          "path": "components/credential-sidecars/entrypoint/main.go",
+          "html_url": "https://github.com/ambient-code/platform/pull/1599#discussion_r3278291828",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Harden sidecar URL parsing to avoid runtime crashes on malformed config.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "runner"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3278291834,
+          "title": "Harden sidecar URL parsing to avoid runtime crashes on malformed config.",
+          "path": "components/runners/ambient-runner/ambient_runner/bridges/claude/mcp.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1599#discussion_r3278291834",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Don\u2019t activate sidecar mode from a non-empty string alone.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "runner"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3278291837,
+          "title": "Don\u2019t activate sidecar mode from a non-empty string alone.",
+          "path": "components/runners/ambient-runner/ambient_runner/platform/auth.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1599#discussion_r3278291837",
+          "ai_prompt": ""
+        }
+      ]
+    },
+    {
+      "name": "Gate GitHub MCP push instructions on a valid GitHub sidecar entry.",
+      "count": 1,
+      "critical": 0,
+      "major": 1,
+      "impact_score": 3,
+      "components": [
+        "runner"
+      ],
+      "covered_by_guardrail": null,
+      "example_comments": [
+        {
+          "id": 3278291839,
+          "title": "Gate GitHub MCP push instructions on a valid GitHub sidecar entry.",
+          "path": "components/runners/ambient-runner/ambient_runner/platform/prompts.py",
+          "html_url": "https://github.com/ambient-code/platform/pull/1599#discussion_r3278291839",
+          "ai_prompt": ""
+        }
+      ]
+    }
+  ],
+  "coverage_gaps": 11,
+  "pattern_categories": {
+    "security": 14
+  }
+}
