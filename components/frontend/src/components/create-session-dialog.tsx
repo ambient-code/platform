@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import { Fragment, useEffect, useState, useMemo, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -34,6 +34,8 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -153,6 +155,22 @@ export function CreateSessionDialog({
     // above will set the new provider's default model.
     form.resetField("model", { defaultValue: "" });
   };
+
+  const { ootbGroup, customGroups } = useMemo(() => {
+    const enabled = ootbWorkflows.filter(w => w.enabled);
+    const ootb = enabled.filter(w => !w.source || w.source === 'ootb').sort((a, b) => a.name.localeCompare(b.name));
+    const bySource = new Map<string, typeof enabled>();
+    for (const w of enabled) {
+      if (w.source && w.source !== 'ootb') {
+        const arr = bySource.get(w.source) ?? [];
+        arr.push(w);
+        bySource.set(w.source, arr);
+      }
+    }
+    const sorted = Array.from(bySource.entries()).sort(([a], [b]) => a.localeCompare(b));
+    for (const [, wfs] of sorted) wfs.sort((a, b) => a.name.localeCompare(b.name));
+    return { ootbGroup: ootb, customGroups: sorted };
+  }, [ootbWorkflows]);
 
   const selectedWorkflowDescription = useMemo(() => {
     if (selectedWorkflow === "none") return "A general chat session with no structured workflow.";
@@ -394,14 +412,29 @@ export function CreateSessionDialog({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">General chat</SelectItem>
-                      {ootbWorkflows
-                        .filter(w => w.enabled)
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .map((workflow) => (
-                          <SelectItem key={workflow.id} value={workflow.id}>
-                            {workflow.name}
-                          </SelectItem>
-                        ))}
+                      {ootbGroup.length > 0 && (
+                        <>
+                          <SelectSeparator />
+                          <SelectLabel>Built-in Workflows</SelectLabel>
+                          {ootbGroup.map((workflow) => (
+                            <SelectItem key={workflow.id} value={workflow.id}>
+                              {workflow.name}
+                            </SelectItem>
+                          ))}
+                        </>
+                      )}
+                      {customGroups.map(([source, workflows]) => (
+                        <Fragment key={source}>
+                          <SelectSeparator />
+                          <SelectLabel>{source}</SelectLabel>
+                          {workflows.map((workflow) => (
+                            <SelectItem key={workflow.id} value={workflow.id}>
+                              {workflow.name}
+                            </SelectItem>
+                          ))}
+                        </Fragment>
+                      ))}
+                      <SelectSeparator />
                       <SelectItem value="custom">Custom workflow...</SelectItem>
                     </SelectContent>
                   </Select>
