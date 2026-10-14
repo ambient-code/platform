@@ -285,6 +285,14 @@
       "provider": "anthropic",
       "available": false,
       "featureGated": true
+    },
+    {
+      "id": "gemini-4-argon",
+      "label": "Gemini 4 Argon",
+      "vertexId": "gemini-4-argon@default",
+      "provider": "google",
+      "available": false,
+      "featureGated": true
     }
   ]
 }
