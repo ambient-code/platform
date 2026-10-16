@@ -293,6 +293,22 @@
       "provider": "google",
       "available": false,
       "featureGated": true
+    },
+    {
+      "id": "gemini-3.5-transcribe",
+      "label": "Gemini 3.5 Transcribe",
+      "vertexId": "gemini-3.5-transcribe@default",
+      "provider": "google",
+      "available": false,
+      "featureGated": true
+    },
+    {
+      "id": "gemini-3.5-transcribe-live",
+      "label": "Gemini 3.5 Transcribe Live",
+      "vertexId": "gemini-3.5-transcribe-live@default",
+      "provider": "google",
+      "available": false,
+      "featureGated": true
     }
   ]
 }
