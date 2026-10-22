@@ -1,6 +1,5 @@
 queue_rules:
   - name: default
-    autoqueue: true
     merge_method: squash
     queue_conditions:
       - "#changes-requested-reviews-by=0"
